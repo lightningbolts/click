@@ -9,6 +9,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -24,23 +25,32 @@ import androidx.compose.ui.uikit.LocalUIViewController
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.PlatformHapticsPolicy
+import compose.project.click.click.data.AppDataManager
 import compose.project.click.click.navigation.NavigationItem
 import compose.project.click.click.platform.rememberReduceTransparencyEnabled
 import compose.project.click.click.ui.theme.LocalIsDarkMode
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.useContents
+import platform.Foundation.NSData
 import platform.Foundation.NSProcessInfo
+import platform.Foundation.NSURL
+import platform.Foundation.dataWithContentsOfURL
 import platform.Foundation.setValue
 import platform.UIKit.NSLayoutConstraint
 import platform.UIKit.UIBlurEffect
 import platform.UIKit.UIBlurEffectStyle
 import platform.UIKit.UIColor
 import platform.UIKit.UIImage
+import platform.UIKit.UIImageRenderingMode
 import platform.UIKit.UITabBar
 import platform.UIKit.UITabBarAppearance
 import platform.UIKit.UITabBarDelegateProtocol
 import platform.UIKit.UITabBarItem
+import platform.darwin.DISPATCH_QUEUE_PRIORITY_DEFAULT
 import platform.darwin.NSObject
+import platform.darwin.dispatch_async
+import platform.darwin.dispatch_get_global_queue
+import platform.darwin.dispatch_get_main_queue
 
 @OptIn(ExperimentalForeignApi::class)
 @Composable
@@ -57,6 +67,9 @@ actual fun PlatformBottomBar(
     val currentRouteState by rememberUpdatedState(currentRoute)
     val isDarkMode = LocalIsDarkMode.current
     val reduceTransparency = rememberReduceTransparencyEnabled()
+    val currentUser by AppDataManager.currentUser.collectAsState()
+    val meAvatarUrl = currentUser?.image?.trim()?.takeIf { it.isNotEmpty() }
+    var meAvatarImage by remember { mutableStateOf<UIImage?>(null) }
     val usesNativeLiquidGlass =
         remember {
             NSProcessInfo.processInfo.operatingSystemVersion.useContents { majorVersion >= 26 }
@@ -69,6 +82,26 @@ actual fun PlatformBottomBar(
                 setTranslucent(true)
             }
         }
+
+    LaunchedEffect(meAvatarUrl) {
+        meAvatarImage = null
+        val url = meAvatarUrl ?: return@LaunchedEffect
+        IosNavChrome.avatarPhotos[url]?.let {
+            meAvatarImage = it
+            return@LaunchedEffect
+        }
+        val nsUrl = NSURL.URLWithString(url) ?: return@LaunchedEffect
+        dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT.toLong(), 0u)) {
+            val data: NSData? = NSData.dataWithContentsOfURL(nsUrl)
+            val image = data?.let { UIImage.imageWithData(it) }
+            dispatch_async(dispatch_get_main_queue()) {
+                if (image != null && meAvatarUrl == url) {
+                    IosNavChrome.avatarPhotos[url] = image
+                    meAvatarImage = image
+                }
+            }
+        }
+    }
 
     // Appearance is theme-only. Re-applying UITabBarAppearance on every chat-close recomposition
     // remounts Liquid Glass and looks like the whole nav bar restarted.
@@ -177,7 +210,7 @@ actual fun PlatformBottomBar(
                     if (navItem.route == NavigationItem.AddClick.route) {
                         symbol?.imageWithTintColor(
                             selectedColor,
-                            renderingMode = platform.UIKit.UIImageRenderingMode.UIImageRenderingModeAlwaysOriginal,
+                            renderingMode = UIImageRenderingMode.UIImageRenderingModeAlwaysOriginal,
                         ) ?: symbol
                     } else {
                         symbol
@@ -195,6 +228,28 @@ actual fun PlatformBottomBar(
         uiItems.getOrNull(selectedIdx)?.let { tabBar.selectedItem = it }
     }
 
+    // Profile-photo changes retarget only the existing Me item. Do not call setItems here: keeping
+    // the UITabBar and UITabBarItem objects warm prevents Liquid Glass from rematerializing.
+    LaunchedEffect(meAvatarImage, meAvatarUrl, itemSignature) {
+        val meIndex = items.indexOfFirst { it.route == NavigationItem.Settings.route }
+        if (meIndex < 0) return@LaunchedEffect
+        val nativeItems = tabBar.items ?: return@LaunchedEffect
+        if (meIndex >= nativeItems.size.toInt()) return@LaunchedEffect
+        val meItem = nativeItems[meIndex] as? UITabBarItem ?: return@LaunchedEffect
+        val photo =
+            meAvatarImage?.imageWithRenderingMode(
+                UIImageRenderingMode.UIImageRenderingModeAlwaysOriginal,
+            )
+        if (photo != null) {
+            meItem.image = photo
+            meItem.selectedImage = photo
+        } else {
+            val fallback = UIImage.systemImageNamed(NavigationItem.Settings.sfSymbol)
+            meItem.image = fallback
+            meItem.selectedImage = fallback
+        }
+    }
+
     SideEffect {
         val selectedIdx = currentItems.indexOfFirst { it.route == currentRouteState }.coerceAtLeast(0)
         val nativeItems = tabBar.items
@@ -204,10 +259,6 @@ actual fun PlatformBottomBar(
                 tabBar.selectedItem = item
             }
         }
-        // Keep the same UITabBar instance mounted for the whole session, always at alpha 1.
-        // Alpha 0→1 rematerializes Liquid Glass (looks like a remount). Instead, while chat owns
-        // the bottom edge we send the bar behind the opaque Compose host; restoring just brings
-        // the already-warm bar to front — no appearance rebuild, no setItems, no alpha flash.
         tabBar.hidden = false
         tabBar.alpha = 1.0
         tabBar.layer.mask = null
@@ -231,8 +282,6 @@ actual fun PlatformBottomBar(
         onDispose { tabBar.removeFromSuperview() }
     }
 
-    // Measure once on attach — do not restart when `visible` flips (that recomposed the
-    // connections list chrome padding and looked like a nav remount).
     var topLeft by remember { mutableStateOf(DpOffset.Zero) }
     var positionInRoot by remember { mutableStateOf(DpOffset.Zero) }
     var tabBarWidth by remember { mutableStateOf(0.dp) }
@@ -278,8 +327,6 @@ actual fun PlatformBottomBar(
                 }.graphicsLayer {
                     translationX = (topLeft.x - positionInRoot.x).toPx()
                     translationY = (topLeft.y - positionInRoot.y).toPx()
-                    // Spacer only — native UITabBar is always opaque. Hide this Compose mirror while
-                    // the bar is behind the host so it does not paint a second chrome stack.
                     alpha = if (visible) 1f else 0f
                 }.width(tabBarWidth)
                 .height(tabBarHeight),

@@ -24,7 +24,6 @@ import compose.project.click.click.ui.components.ClickCircularIconButton
 import compose.project.click.click.ui.components.platformPressScale
 import compose.project.click.click.ui.theme.LocalPlatformStyle
 import compose.project.click.click.ui.theme.MotionTokens
-import compose.project.click.click.ui.theme.PrimaryBlue
 
 /** Shared horizontal inset for chat header row and composer strip (outer edges align). */
 internal val ChatChromeHorizontalPadding: Dp = 16.dp
@@ -47,8 +46,7 @@ internal fun chatPeerStatusSubtitle(
  * Circular header action for chat / hub threads.
  *
  * Prefer [showBorder]=true only for the primary back control. Trailing actions (edit / call / ⋮)
- * stay borderless so a row of 40dp rings does not crowd the title. Composer +/send keep their
- * own borders in [ConnectionChatMessageComposer] / hub input.
+ * stay borderless so a row of 40dp rings does not crowd the title.
  */
 @Composable
 internal fun ChatHeaderIconButton(
@@ -76,9 +74,7 @@ internal fun ChatHeaderIconButton(
     )
 }
 
-/**
- * Opaque Functional Clarity plate for chat chrome (no blur).
- */
+/** Opaque content plate; native iOS navigation chrome owns actual Liquid Glass. */
 @Composable
 internal fun ChatLiquidGlassPlate(
     modifier: Modifier = Modifier,
@@ -97,9 +93,7 @@ internal fun ChatLiquidGlassPlate(
     )
 }
 
-/**
- * Solid underlay for composer chrome — no gradient fades.
- */
+/** Solid underlay for composer chrome — no decorative gradient fade. */
 @Composable
 internal fun ChatComposerChromeFadeUnderlay(
     modifier: Modifier = Modifier,
@@ -124,21 +118,23 @@ internal fun Modifier.chatSpringPressScale(interactionSource: MutableInteraction
         }
 }
 
-/** Text-field container colors — opaque bordered Functional Clarity fields. */
+/**
+ * Messenger-style composer colors. Focus is communicated by cursor/action state rather than a
+ * bright brand outline around the whole field; that keeps the composer visually quiet while typing.
+ */
 @Composable
 internal fun rememberChatComposerFieldColors(): TextFieldColors {
-    val fieldFill = MaterialTheme.colorScheme.surface
+    val fieldFill = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (LocalPlatformStyle.current.isIOS) 0.78f else 1f)
+    val outline = MaterialTheme.colorScheme.outline
     return OutlinedTextFieldDefaults.colors(
-        focusedBorderColor = PrimaryBlue,
-        unfocusedBorderColor =
-            compose.project.click.click.ui.theme
-                .clickBorderColor(),
+        focusedBorderColor = outline.copy(alpha = if (LocalPlatformStyle.current.isIOS) 0.28f else 0.5f),
+        unfocusedBorderColor = outline.copy(alpha = if (LocalPlatformStyle.current.isIOS) 0.16f else 0.34f),
         focusedContainerColor = fieldFill,
         unfocusedContainerColor = fieldFill,
     )
 }
 
-/** Press scale + null indication; pair with glass border tweaks at call sites for tactile feedback. */
+/** Press scale + null indication; pair with subtle chrome tweaks at call sites for tactile feedback. */
 @Composable
 fun Modifier.bouncingClickable(
     enabled: Boolean = true,

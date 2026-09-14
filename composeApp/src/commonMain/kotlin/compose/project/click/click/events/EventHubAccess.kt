@@ -1,12 +1,16 @@
 package compose.project.click.click.events
 
 /**
- * Event-hub membership policy. Flip [requireRsvp] to also require an RSVP.
- * Host (event or hub creator) always bypasses both flags.
+ * Event-hub membership policy.
+ *
+ * Event chat is part of the RSVP experience: an RSVP member should be able to coordinate before
+ * arriving at the venue, so the shipped policy requires RSVP rather than an active check-in.
+ * Hosts always bypass both requirements. The flags remain configurable for tests/future event
+ * modes where a stricter policy is intentional.
  */
 data class EventHubAccessPolicy(
-    val requireCheckIn: Boolean = true,
-    val requireRsvp: Boolean = false,
+    val requireCheckIn: Boolean = false,
+    val requireRsvp: Boolean = true,
 )
 
 val EVENT_HUB_ACCESS = EventHubAccessPolicy()
@@ -51,4 +55,47 @@ fun canOpenEventHub(
         hasRsvp = hasRsvp,
         policy = policy,
     )
+}
+
+enum class EventHubCtaState {
+    Preparing,
+    Retry,
+    Open,
+    RequiresRsvp,
+}
+
+/**
+ * Pure event-chat CTA state so missing-hub hydration has a bounded terminal state instead of an
+ * indefinite spinner. A creator or accepted RSVP member is eligible to hydrate/retry the hub id;
+ * everyone else sees the RSVP gate immediately.
+ */
+fun eventHubCtaState(
+    hubId: String?,
+    isCreator: Boolean,
+    checkedIn: Boolean,
+    hasRsvp: Boolean,
+    hydrationExhausted: Boolean,
+    policy: EventHubAccessPolicy = EVENT_HUB_ACCESS,
+): EventHubCtaState {
+    if (hubId.isNullOrBlank()) {
+        val eligibleToHydrate = isCreator || hasRsvp
+        return when {
+            !eligibleToHydrate -> EventHubCtaState.RequiresRsvp
+            hydrationExhausted -> EventHubCtaState.Retry
+            else -> EventHubCtaState.Preparing
+        }
+    }
+    return if (
+        canOpenEventHub(
+            hubId = hubId,
+            isCreator = isCreator,
+            checkedIn = checkedIn,
+            hasRsvp = hasRsvp,
+            policy = policy,
+        )
+    ) {
+        EventHubCtaState.Open
+    } else {
+        EventHubCtaState.RequiresRsvp
+    }
 }

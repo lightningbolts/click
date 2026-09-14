@@ -5,14 +5,7 @@
 
 package compose.project.click.click.ui.screens // pragma: allowlist secret
 
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -28,12 +21,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import compose.project.click.click.platform.rememberReduceMotionEnabled // pragma: allowlist secret
 import compose.project.click.click.ui.components.AdaptiveBackground // pragma: allowlist secret
 import compose.project.click.click.ui.components.AppScreenWithFloatingHeader // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickButton // pragma: allowlist secret
@@ -67,7 +58,7 @@ fun AddClickScreen(
     AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
         AppScreenWithFloatingHeader(
             title = "Add Click",
-            subtitle = "Connect with QR or Tap to Connect, or join a venue community hub",
+            subtitle = "Connect in person or join a nearby community",
         ) { contentModifier ->
             if (!isClicked) {
                 AddClickContent(
@@ -108,6 +99,8 @@ fun AddClickContent(
     onCommunityHubCreated: (hubId: String) -> Unit = {},
     onHubCreateError: (String) -> Unit = {},
 ) {
+    @Suppress("UNUSED_VARIABLE")
+    val ignoredSuccessCallback = onClickSuccess
     var showJoinHubSheet by remember { mutableStateOf(false) }
     var showCreateHubModal by remember { mutableStateOf(false) }
 
@@ -133,53 +126,54 @@ fun AddClickContent(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(ClickScreenSpacing.Section),
     ) {
-        val reduceMotion = rememberReduceMotionEnabled()
-        val pulse = rememberInfiniteTransition(label = "tap_to_connect_pulse")
-        val pulseAlpha by pulse.animateFloat(
-            initialValue = 0.72f,
-            targetValue = 1f,
-            animationSpec =
-                infiniteRepeatable(
-                    animation = tween(durationMillis = MotionTokens.Pulse.Gentle, easing = FastOutSlowInEasing),
-                    repeatMode = RepeatMode.Reverse,
-                ),
-            label = "tap_to_connect_pulse_alpha",
-        )
         ClickContentCard(
             modifier = Modifier.fillMaxWidth(),
             onClick = onNavigateToNfc,
             showBorder = false,
-            containerColor = MaterialTheme.colorScheme.primaryContainer,
-            contentPadding = ClickScreenSpacing.Section,
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.58f),
+            contentPadding = 20.dp,
         ) {
-            Column(
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                Icon(
-                    Icons.Filled.BluetoothSearching,
-                    contentDescription = "Tap to Connect",
-                    tint = MaterialTheme.colorScheme.primary,
+                Box(
                     modifier =
                         Modifier
-                            .size(56.dp)
-                            .graphicsLayer { alpha = if (reduceMotion) 1f else pulseAlpha },
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                Text(
-                    "Tap to Connect",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                    fontWeight = FontWeight.Bold,
-                )
-                Spacer(modifier = Modifier.height(ClickScreenSpacing.Compact))
-                Text(
-                    "Nearby handshake with Bluetooth and audio",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.78f),
-                    modifier = Modifier.fillMaxWidth(),
-                    textAlign = TextAlign.Center,
+                            .size(52.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        Icons.Filled.BluetoothSearching,
+                        contentDescription = "Tap to Connect",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(28.dp),
+                    )
+                }
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Text(
+                        "Tap to Connect",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        "Nearby handshake with Bluetooth and audio",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(22.dp),
                 )
             }
         }
@@ -265,33 +259,32 @@ fun ClickedSuccessContent(
             Box(
                 modifier =
                     Modifier
-                        .size(120.dp)
+                        .size(104.dp)
                         .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primaryContainer)
-                        .border(clickBorderWidth(), clickBorderColor(), CircleShape),
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
                     Icons.Filled.Check,
                     contentDescription = "Success",
-                    modifier = Modifier.size(80.dp),
+                    modifier = Modifier.size(58.dp),
                     tint = MaterialTheme.colorScheme.primary,
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(18.dp))
 
             Text(
-                "Clicked with $userName!",
+                "Clicked with $userName",
                 style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
+                fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface,
             )
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(6.dp))
 
             Text(
-                "You're now connected and can start chatting.",
+                "You're connected. Start a conversation when you're ready.",
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
@@ -300,7 +293,7 @@ fun ClickedSuccessContent(
             Spacer(modifier = Modifier.height(24.dp))
 
             ClickButton(onClick = onStartChatting, modifier = Modifier.fillMaxWidth()) {
-                Text("Start Chatting")
+                Text("Open chat")
             }
         }
     }

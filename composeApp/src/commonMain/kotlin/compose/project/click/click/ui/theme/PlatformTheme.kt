@@ -25,8 +25,11 @@ import androidx.compose.ui.unit.dp
 import compose.project.click.click.getPlatform // pragma: allowlist secret
 
 /**
- * Platform deltas for Functional Clarity. Visual language is unified;
- * [useRipple] remains Android-only per platform interaction rules.
+ * Platform deltas for Click's shared visual language.
+ *
+ * iOS intentionally uses a quieter half-point structural hairline, rounder content surfaces, and
+ * no pressed-position jump. UIKit-owned navigation/tab chrome provides the material treatment;
+ * Compose content should not compete with it using heavy outlines or neo-brutalist offsets.
  */
 @Immutable
 data class PlatformStyle(
@@ -66,7 +69,7 @@ val LocalPlatformStyle =
 val LocalIsDarkMode = compositionLocalOf { false }
 
 /**
- * Quiet 1dp structural border: outline-variant on light, muted purple-gray on dark.
+ * Quiet structural border: outline-variant on light, muted purple-gray on dark.
  * When [usePrimary] is true, returns brand primary instead.
  */
 @Composable
@@ -106,16 +109,16 @@ fun clickSheetOnSurfaceMuted(): Color = MaterialTheme.colorScheme.onSurfaceVaria
 private val iOSPlatformStyle =
     PlatformStyle(
         isIOS = true,
-        cardCornerRadius = 16.dp,
-        compactCardCornerRadius = 8.dp,
-        buttonCornerRadius = 8.dp,
-        cardBorderWidth = 1.dp,
+        cardCornerRadius = 20.dp,
+        compactCardCornerRadius = 14.dp,
+        buttonCornerRadius = 14.dp,
+        cardBorderWidth = 0.5.dp,
         glassBackgroundAlpha = 1f,
         glassBorderAlpha = 1f,
         glassBorderPrimaryAlpha = 1f,
         useShadowElevation = false,
         useRipple = false,
-        pressOffset = 2.dp,
+        pressOffset = 0.dp,
     )
 
 private val androidPlatformStyle =
