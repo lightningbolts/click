@@ -171,50 +171,25 @@ internal fun IosHostNavBarLayer.loadIdentityPhoto(url: String?) {
 }
 
 @OptIn(ExperimentalForeignApi::class)
-internal fun IosHostNavBarLayer.syncTrailingButtons(
-    trailingActions: List<NativeChromeAction>,
-    showSearch: Boolean,
-) {
+internal fun IosHostNavBarLayer.syncTrailingButtons(trailingActions: List<NativeChromeAction>) {
     CATransaction.begin()
     CATransaction.setDisableActions(true)
-    val desired = mutableListOf<UIButton>()
-    trailingActions.forEachIndexed { index, action ->
-        val button = actionButtons[index]
-        button.hidden = false
-        bindNativeMenu(button, action, actionIndex = index)
-        paintChromeButton(button, action.sfSymbol, action.contentDescription, clustered = true)
-        desired.add(button)
-    }
-    actionButtons.drop(trailingActions.size).forEach { button ->
-        button.hidden = true
-        button.menu = null
-        button.showsMenuAsPrimaryAction = false
-    }
-    if (showSearch) {
-        searchButton.hidden = false
-        bindNativeMenu(searchButton, null, actionIndex = -1)
-        paintChromeButton(searchButton, "magnifyingglass", "Search", clustered = true)
-        desired.add(searchButton)
-    } else {
-        searchButton.hidden = true
-        searchButton.menu = null
-        searchButton.showsMenuAsPrimaryAction = false
-    }
-    trailingStack.arrangedSubviews.map { it as UIView }.forEach { view ->
-        if (desired.none { it === view }) {
-            trailingStack.removeArrangedSubview(view)
-            view.removeFromSuperview()
+    actionButtons.forEachIndexed { index, button ->
+        val action = trailingActions.getOrNull(index)
+        actionSlotWidths[index].constant = if (action == null) 0.0 else NativeHeaderMetrics.ChromeButtonSizePt
+        button.alpha = if (action == null) 0.0 else 1.0
+        button.userInteractionEnabled = action != null
+        if (action != null) {
+            bindNativeMenu(button, action, actionIndex = index)
+            paintChromeButton(button, action.sfSymbol, action.contentDescription, clustered = true)
+        } else {
+            button.menu = null
+            button.showsMenuAsPrimaryAction = false
         }
     }
-    desired.forEach { button ->
-        if (trailingStack.arrangedSubviews.none { it === button }) {
-            trailingStack.addArrangedSubview(button)
-        }
-    }
-    val hasTrailing = desired.isNotEmpty()
-    if (trailingCluster.hidden != !hasTrailing) {
-        trailingCluster.hidden = !hasTrailing
-    }
+    val hasTrailing = trailingActions.isNotEmpty()
+    trailingCluster.alpha = if (hasTrailing) 1.0 else 0.0
+    trailingCluster.userInteractionEnabled = hasTrailing
     titleTrailingToCluster?.active = hasTrailing
     titleTrailingToBar?.active = !hasTrailing
     CATransaction.commit()
@@ -277,6 +252,21 @@ internal fun IosHostNavBarLayer.installRowIfNeeded() {
     chromeRow.addSubview(titleColumn)
     chromeRow.addSubview(trailingCluster)
     trailingCluster.contentView.addSubview(trailingStack)
+    // Slot zero is always nearest the trailing edge. Adding a secondary control cannot move it.
+    actionSlots.indices.reversed().forEach { index ->
+        val slot = actionSlots[index]
+        val button = actionButtons[index]
+        trailingStack.addArrangedSubview(slot)
+        slot.addSubview(button)
+        NSLayoutConstraint.activateConstraints(
+            listOf(
+                actionSlotWidths[index],
+                slot.heightAnchor.constraintEqualToConstant(NativeHeaderMetrics.ChromeButtonSizePt),
+                button.centerXAnchor.constraintEqualToAnchor(slot.centerXAnchor),
+                button.centerYAnchor.constraintEqualToAnchor(slot.centerYAnchor),
+            ),
+        )
+    }
     backButton.addTarget(
         backTarget,
         action = NSSelectorFromString("didTap"),

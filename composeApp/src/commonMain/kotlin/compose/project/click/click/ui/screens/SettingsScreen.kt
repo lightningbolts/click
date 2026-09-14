@@ -74,6 +74,7 @@ import compose.project.click.click.ui.components.GlassAlertDialog // pragma: all
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.HeaderBackIconButton // pragma: allowlist secret
 import compose.project.click.click.ui.components.InteractiveSwipeBackContainer // pragma: allowlist secret
+import compose.project.click.click.ui.components.NativeChromeTransition
 import compose.project.click.click.ui.components.PlatformBackHandler // pragma: allowlist secret
 import compose.project.click.click.ui.components.PlatformNativeNavigationBarSwipeReveal // pragma: allowlist secret
 import compose.project.click.click.ui.components.SavedEventsSection // pragma: allowlist secret
@@ -317,6 +318,7 @@ fun SettingsScreen(
                     exit = ExitTransition.None,
                     label = "settings_subpage",
                 ) {
+        NativeChromeTransition {
                     InteractiveSwipeBackContainer(
                         enabled = true,
                         opaquePreviousBackground = false,
@@ -708,7 +710,8 @@ fun SettingsScreen(
                             }
                         },
                     )
-                }
+        }
+}
             }
         }
 

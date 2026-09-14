@@ -44,6 +44,7 @@ import compose.project.click.click.ui.components.ConnectionRevealPhase // pragma
 import compose.project.click.click.ui.components.ConnectionRevealUiState // pragma: allowlist secret
 import compose.project.click.click.ui.components.InteractiveSwipeBackContainer // pragma: allowlist secret
 import compose.project.click.click.ui.components.LocalNativeChromeActive // pragma: allowlist secret
+import compose.project.click.click.ui.components.NativeChromeTransition
 import compose.project.click.click.ui.components.PlatformNativeNavigationBarSwipeReveal // pragma: allowlist secret
 import compose.project.click.click.ui.components.UnifiedToastState // pragma: allowlist secret
 import compose.project.click.click.ui.components.interactiveSwipeBackUnderlay // pragma: allowlist secret
@@ -546,104 +547,106 @@ internal fun AppPrimaryTabsHost(
                 },
             label = "add_click_overlay",
         ) {
-            val overlayKey = lastAddClickOverlayKey
-            if (overlayKey != null) {
-                fun dismissAddClickOverlay(mode: NavigationTransitionMode) {
-                    addClickOverlayTransitionMode = mode
-                    transitionMode = mode
-                    when (overlayKey) {
-                        "my_qr" -> showMyQRCode = false
-                        "qr_scanner" -> showQRScanner = false
-                        "nfc" -> showNfcScreen = false
-                    }
-                }
-                InteractiveSwipeBackContainer(
-                    enabled = isIOS,
-                    edgeSwipeWidth = 44.dp,
-                    onBack = { dismissAddClickOverlay(NavigationTransitionMode.GestureBack) },
-                    opaquePreviousBackground = false,
-                    externalDragOffsetPx = addClickSwipeDragPx,
-                    onBehindLayersVisibleChanged = {
-                        addClickBackHost.behindLayersVisible = it
-                    },
-                    previousContent = {},
-                    currentContent = {
+            NativeChromeTransition(if (reduceMotion) 120 else 220) {
+                val overlayKey = lastAddClickOverlayKey
+                if (overlayKey != null) {
+                    fun dismissAddClickOverlay(mode: NavigationTransitionMode) {
+                        addClickOverlayTransitionMode = mode
+                        transitionMode = mode
                         when (overlayKey) {
-                            "my_qr" ->
-                                MyQRCodeScreen(
-                                    userId = currentUser.id,
-                                    username = currentUser.name,
-                                    locationService = locationService,
-                                    onNavigateBack = {
-                                        dismissAddClickOverlay(NavigationTransitionMode.Tap)
-                                    },
-                                )
-                            "qr_scanner" ->
-                                QRScannerScreen(
-                                    onQRCodeScanned = { userId ->
-                                        showQRScanner = false
-                                        if (userId.isNotEmpty() && currentUser.id.isNotEmpty()) {
-                                            connectionViewModel.presentQrContextSheetFromScan(
-                                                scannedUserId = userId,
-                                                qrToken = null,
-                                                venueId = null,
-                                            )
-                                        }
-                                    },
-                                    onQRCodeScannedWithToken = { userId, qrToken, venueId ->
-                                        showQRScanner = false
-                                        if (userId.isNotEmpty() && currentUser.id.isNotEmpty()) {
-                                            connectionViewModel.presentQrContextSheetFromScan(
-                                                scannedUserId = userId,
-                                                qrToken = qrToken,
-                                                venueId = venueId?.takeIf { it.isNotBlank() },
-                                            )
-                                        }
-                                    },
-                                    onCommunityHubScanned = { hubId ->
-                                        showQRScanner = false
-                                        launchCommunityHubJoin(hubId, null)
-                                    },
-                                    onNavigateBack = {
-                                        dismissAddClickOverlay(NavigationTransitionMode.Tap)
-                                    },
-                                )
-                            "nfc" -> {
-                                val userId =
-                                    when (val state = authViewModel.authState) {
-                                        is AuthState.Success -> state.userId
-                                        else -> ""
-                                    }
-                                val authToken by produceState(initialValue = "") {
-                                    value = tokenStorage.getJwt() ?: ""
-                                }
-                                val proximityManager = rememberProximityManager()
-                                NfcScreen(
-                                    userId = userId,
-                                    authToken = authToken,
-                                    httpClient = client,
-                                    proximityManager = proximityManager,
-                                    connectionViewModel = connectionViewModel,
-                                    onConnectionCreated = {
-                                        connectionViewModel.resetConnectionState()
-                                        showNfcScreen = false
-                                        navigateTo(NavigationItem.Connections.route)
-                                    },
-                                    onBackPressed = {
-                                        dismissAddClickOverlay(NavigationTransitionMode.Tap)
-                                    },
-                                    onProximityFinalizeStart = {
-                                        connectionRevealState =
-                                            ConnectionRevealUiState(
-                                                methodLabel = "Tap",
-                                                phase = ConnectionRevealPhase.Connecting,
-                                            )
-                                    },
-                                )
-                            }
+                            "my_qr" -> showMyQRCode = false
+                            "qr_scanner" -> showQRScanner = false
+                            "nfc" -> showNfcScreen = false
                         }
-                    },
-                )
+                    }
+                    InteractiveSwipeBackContainer(
+                        enabled = isIOS,
+                        edgeSwipeWidth = 44.dp,
+                        onBack = { dismissAddClickOverlay(NavigationTransitionMode.GestureBack) },
+                        opaquePreviousBackground = false,
+                        externalDragOffsetPx = addClickSwipeDragPx,
+                        onBehindLayersVisibleChanged = {
+                            addClickBackHost.behindLayersVisible = it
+                        },
+                        previousContent = {},
+                        currentContent = {
+                            when (overlayKey) {
+                                "my_qr" ->
+                                    MyQRCodeScreen(
+                                        userId = currentUser.id,
+                                        username = currentUser.name,
+                                        locationService = locationService,
+                                        onNavigateBack = {
+                                            dismissAddClickOverlay(NavigationTransitionMode.Tap)
+                                        },
+                                    )
+                                "qr_scanner" ->
+                                    QRScannerScreen(
+                                        onQRCodeScanned = { userId ->
+                                            showQRScanner = false
+                                            if (userId.isNotEmpty() && currentUser.id.isNotEmpty()) {
+                                                connectionViewModel.presentQrContextSheetFromScan(
+                                                    scannedUserId = userId,
+                                                    qrToken = null,
+                                                    venueId = null,
+                                                )
+                                            }
+                                        },
+                                        onQRCodeScannedWithToken = { userId, qrToken, venueId ->
+                                            showQRScanner = false
+                                            if (userId.isNotEmpty() && currentUser.id.isNotEmpty()) {
+                                                connectionViewModel.presentQrContextSheetFromScan(
+                                                    scannedUserId = userId,
+                                                    qrToken = qrToken,
+                                                    venueId = venueId?.takeIf { it.isNotBlank() },
+                                                )
+                                            }
+                                        },
+                                        onCommunityHubScanned = { hubId ->
+                                            showQRScanner = false
+                                            launchCommunityHubJoin(hubId, null)
+                                        },
+                                        onNavigateBack = {
+                                            dismissAddClickOverlay(NavigationTransitionMode.Tap)
+                                        },
+                                    )
+                                "nfc" -> {
+                                    val userId =
+                                        when (val state = authViewModel.authState) {
+                                            is AuthState.Success -> state.userId
+                                            else -> ""
+                                        }
+                                    val authToken by produceState(initialValue = "") {
+                                        value = tokenStorage.getJwt() ?: ""
+                                    }
+                                    val proximityManager = rememberProximityManager()
+                                    NfcScreen(
+                                        userId = userId,
+                                        authToken = authToken,
+                                        httpClient = client,
+                                        proximityManager = proximityManager,
+                                        connectionViewModel = connectionViewModel,
+                                        onConnectionCreated = {
+                                            connectionViewModel.resetConnectionState()
+                                            showNfcScreen = false
+                                            navigateTo(NavigationItem.Connections.route)
+                                        },
+                                        onBackPressed = {
+                                            dismissAddClickOverlay(NavigationTransitionMode.Tap)
+                                        },
+                                        onProximityFinalizeStart = {
+                                            connectionRevealState =
+                                                ConnectionRevealUiState(
+                                                    methodLabel = "Tap",
+                                                    phase = ConnectionRevealPhase.Connecting,
+                                                )
+                                        },
+                                    )
+                                }
+                            }
+                        },
+                    )
+                }
             }
         }
     }

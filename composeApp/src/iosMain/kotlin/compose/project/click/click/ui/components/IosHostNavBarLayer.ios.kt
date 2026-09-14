@@ -44,7 +44,6 @@ import platform.UIKit.UIStackView
 import platform.UIKit.UIStackViewAlignmentCenter
 import platform.UIKit.UIStackViewAlignmentLeading
 import platform.UIKit.UIView
-import platform.UIKit.UIViewAnimationOptionTransitionCrossDissolve
 import platform.UIKit.UIViewContentMode
 import platform.UIKit.UIViewController
 import platform.UIKit.UIVisualEffectView
@@ -123,7 +122,15 @@ internal class IosHostNavBarLayer {
     internal var backGlassConfigured = false
     internal val searchButton = makeChromeButton()
     internal val avatarButton = makeChromeButton()
-    internal val actionButtons = List(4) { makeChromeButton() }
+    internal val actionButtons = List(5) { makeChromeButton() }
+    internal val actionSlots =
+        List(5) {
+            UIView().apply {
+                translatesAutoresizingMaskIntoConstraints = false
+                clipsToBounds = true
+            }
+        }
+    internal val actionSlotWidths = actionSlots.map { it.widthAnchor.constraintEqualToConstant(0.0) }
     private var heightConstraint: NSLayoutConstraint? = null
     internal var titleLeadingToBar: NSLayoutConstraint? = null
     internal var titleLeadingToBack: NSLayoutConstraint? = null
@@ -149,7 +156,7 @@ internal class IosHostNavBarLayer {
     internal val searchTarget = IosBarButtonTarget()
     internal val backTarget = IosBarButtonTarget()
     internal val avatarTarget = IosBarButtonTarget()
-    internal val actionTargets = List(4) { IosBarButtonTarget() }
+    internal val actionTargets = List(5) { IosBarButtonTarget() }
     private var lastVisualKey: String? = null
     private var lastButtonSignature: String? = null
     internal val paintedSymbols = mutableMapOf<UIButton, String>()
@@ -467,19 +474,21 @@ internal class IosHostNavBarLayer {
             button.tintColor = titleColor
         }
         applyClusterChrome()
-        val clear = UIColor.clearColor
-        val appearance =
-            UINavigationBarAppearance().apply {
-                configureWithTransparentBackground()
-                backgroundColor = clear
-                backgroundEffect = null
-                shadowColor = clear
-            }
-        bar.standardAppearance = appearance
-        bar.scrollEdgeAppearance = appearance
-        bar.compactAppearance = appearance
-        bar.setShadowImage(UIImage())
-        bar.setBackgroundImage(UIImage(), forBarMetrics = UIBarMetricsDefault)
+        if (!usesNativeLiquidGlass) {
+            val clear = UIColor.clearColor
+            val appearance =
+                UINavigationBarAppearance().apply {
+                    configureWithTransparentBackground()
+                    backgroundColor = clear
+                    backgroundEffect = null
+                    shadowColor = clear
+                }
+            bar.standardAppearance = appearance
+            bar.scrollEdgeAppearance = appearance
+            bar.compactAppearance = appearance
+            bar.setShadowImage(UIImage())
+            bar.setBackgroundImage(UIImage(), forBarMetrics = UIBarMetricsDefault)
+        }
         glassPlate.layer.shadowOpacity = 0f
         glassPlate.layer.borderWidth = 0.0
         glassPlate.layer.shadowRadius = 0.0
@@ -511,7 +520,7 @@ internal class IosHostNavBarLayer {
                     UIBlurEffectStyle.UIBlurEffectStyleSystemThinMaterialLight
                 }
             glassPlate.effect = UIBlurEffect.effectWithStyle(materialStyle)
-            glassPlate.backgroundColor = clear
+            glassPlate.backgroundColor = UIColor.clearColor
         }
         applyVisibility()
     }
@@ -531,6 +540,7 @@ internal class IosHostNavBarLayer {
         trailingActions: List<NativeChromeAction>,
         collapseSearchIntoBar: Boolean,
         leadingClose: Boolean = false,
+        titleContentAlpha: Float = 1f,
     ) {
         if (this === IosNavChrome.overlay) {
             val exclusive = IosNavChrome.overlayExclusiveOwner
@@ -547,13 +557,18 @@ internal class IosHostNavBarLayer {
         ownerToken = owner
         val fraction = collapseFraction.coerceIn(0f, 1f)
         val stackIdentity = identity != null
+        titleColumn.alpha = titleContentAlpha.coerceIn(0f, 1f).toDouble()
         val subtitleText =
-            subtitle?.trim()?.takeIf { it.isNotEmpty() }
-                ?: when (presenceOnline) {
-                    true -> "Online"
-                    false -> "Offline"
-                    null -> ""
-                }
+            if (NativeHeaderMetrics.isCompactTitle(fraction)) {
+                ""
+            } else {
+                subtitle?.trim()?.takeIf { it.isNotEmpty() }
+                    ?: when (presenceOnline) {
+                        true -> "Online"
+                        false -> "Offline"
+                        null -> ""
+                    }
+            }
         val visualKey =
             buildString {
                 append(title)
@@ -639,29 +654,12 @@ internal class IosHostNavBarLayer {
             ),
         )
         titleColumnTopConstraint?.constant = NativeHeaderMetrics.titleColumnTopInsetPt(fraction)
-        titleColumnTopConstraint?.active = !stackTwoLine
-        titleColumnCenterYConstraint?.active = stackTwoLine
+        titleColumnTopConstraint?.active = !NativeHeaderMetrics.isCompactTitle(fraction)
+        titleColumnCenterYConstraint?.active = NativeHeaderMetrics.isCompactTitle(fraction)
         chromeRow.clipsToBounds = false
         titleLabel.font = UIFont.boldSystemFontOfSize(NativeHeaderMetrics.titlePointSize(fraction))
-        val identityUserId = identity?.userId
-        val snapTitle =
-            identityUserId != lastBoundIdentityUserId ||
-                lastTitle == null ||
-                !wantVisible ||
-                bar.hidden
-        lastBoundIdentityUserId = identityUserId
-        if (!snapTitle && title != lastTitle && lastTitle != null) {
-            UIView.transitionWithView(
-                titleLabel,
-                duration = 0.18,
-                options = UIViewAnimationOptionTransitionCrossDissolve,
-                animations = { titleLabel.text = title },
-                completion = null,
-            )
-        } else {
-            titleLabel.layer.removeAllAnimations()
-            titleLabel.text = title
-        }
+        titleLabel.layer.removeAllAnimations()
+        titleLabel.text = title
         lastTitle = title
         val compactTabRoot =
             NativeHeaderMetrics.isCompactTabRootChrome(
@@ -778,12 +776,23 @@ internal class IosHostNavBarLayer {
                     searchPinnedVisible
                 }
             }
+        val slotActions =
+            (
+                trailingActions +
+                    if (showSearch) {
+                        listOf(
+                            NativeChromeAction("magnifyingglass", "Search", onOpenSearch ?: {}),
+                        )
+                    } else {
+                        emptyList()
+                    }
+            ).take(actionButtons.size)
         val signature =
             buildString {
                 append(if (onNavigateBack != null) "B" else "-")
                 append(if (leadingClose) "X" else "C")
                 append(if (showSearch) "S" else "-")
-                trailingActions.forEach { action ->
+                slotActions.forEach { action ->
                     append('|')
                     append(action.sfSymbol)
                     append(':')
@@ -796,7 +805,9 @@ internal class IosHostNavBarLayer {
             }
         backTarget.handler = onNavigateBack
         searchTarget.handler = onOpenSearch
-        trailingActions.forEachIndexed { index, action ->
+        menuClicksByKey.clear()
+        actionTargets.forEach { it.handler = null }
+        slotActions.forEachIndexed { index, action ->
             actionTargets.getOrNull(index)?.handler = action.onClick
             action.menuItems.forEachIndexed { itemIndex, item ->
                 menuClicksByKey["$index:$itemIndex"] = item.onClick
@@ -808,7 +819,7 @@ internal class IosHostNavBarLayer {
                 hasBack = onNavigateBack != null,
                 hasIdentity = false,
             )
-        titleLabel.textAlignment = if (compactTabRoot) NSTextAlignmentCenter else NSTextAlignmentLeft
+        titleLabel.textAlignment = NSTextAlignmentLeft
         subtitleLabel.textAlignment = titleLabel.textAlignment
         if (signature != lastButtonSignature) {
             val previousSignature = lastButtonSignature
@@ -822,7 +833,7 @@ internal class IosHostNavBarLayer {
                 previousSignature == null ||
                     previousSignature.drop(2) != signature.drop(2)
             if (trailingChanged) {
-                syncTrailingButtons(trailingActions, showSearch)
+                syncTrailingButtons(slotActions)
             }
             val previousLeadingClose = previousLeading?.getOrNull(1)?.let { it == 'X' }
             val needsLeadingPaint =
@@ -843,7 +854,7 @@ internal class IosHostNavBarLayer {
                 )
             }
         }
-        applyTitleSlot(onNavigateBack != null, trailingActions.size + if (showSearch) 1 else 0)
+        applyTitleSlot(onNavigateBack != null, slotActions.size)
     }
 
     private fun applyVisibility() {
