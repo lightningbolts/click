@@ -40,18 +40,21 @@ internal fun EventChatResolveDto.toEventChatReady(): EventChatOpenState.Ready =
 /**
  * Maps server authority into bounded UI states. No failure classification can produce another
  * implicit loading loop; retries happen only after an explicit user action.
+ *
+ * Classification primarily uses HTTP status because the shared click-web error reader intentionally
+ * surfaces the human-readable `message` field when present and may omit the machine `error` code.
+ * This endpoint has a narrow contract: 403 means RSVP/host access denied, 409 means the event-hub
+ * relation is not ready, 410 means expired, and 404 means the event/chat target no longer exists.
  */
 internal fun classifyEventChatResolveFailure(error: Throwable): EventChatOpenState {
     if (error is CancellationException) throw error
     val status = (error as? ClickWebRequestException)?.statusCode
-    val code = error.message.orEmpty().trim().uppercase()
-    return when {
-        status == 403 && code.contains("EVENT_HUB_ACCESS_DENIED") -> EventChatOpenState.RequiresRsvp
-        status == 410 || code.contains("HUB_EXPIRED") -> EventChatOpenState.Expired
-        status == 404 -> EventChatOpenState.NotFound
-        status == 409 && code.contains("EVENT_HUB_NOT_READY") ->
-            EventChatOpenState.RetryableError("Event chat isn't ready yet. Try again.")
-        status == 401 -> EventChatOpenState.RetryableError("Your session needs to be refreshed. Try again.")
+    return when (status) {
+        403 -> EventChatOpenState.RequiresRsvp
+        410 -> EventChatOpenState.Expired
+        404 -> EventChatOpenState.NotFound
+        409 -> EventChatOpenState.RetryableError("Event chat isn't ready yet. Try again.")
+        401 -> EventChatOpenState.RetryableError("Your session needs to be refreshed. Try again.")
         else -> EventChatOpenState.RetryableError("Couldn't open event chat. Try again.")
     }
 }
