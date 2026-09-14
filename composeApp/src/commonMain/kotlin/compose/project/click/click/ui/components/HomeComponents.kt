@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Chat
@@ -481,80 +480,43 @@ fun ExploreNearbyBeaconsSection(
  */
 @Composable
 fun ActivityRecapSection(
-    recap: ActivityRecapDto,
+    recap: ActivityRecapDto?,
     window: String,
     onWindowChange: (String) -> Unit,
     modifier: Modifier = Modifier,
     onMakeFirstClick: () -> Unit = {},
 ) {
-    val shape = RoundedCornerShape(16.dp)
-    val empty = recap.isAllZero()
-    val peak = recap.peakValue()
+    val loading = recap == null || recap.since.isBlank()
+    val empty = !loading && recap?.isAllZero() == true
+    val peak = recap?.peakValue() ?: 0
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         SectionHeader(text = "Your recap")
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            RecapWindowChip(
-                label = "Day",
-                selected = window == "day",
-                onClick = { onWindowChange("day") },
-            )
-            RecapWindowChip(
-                label = "Week",
-                selected = window == "week",
-                onClick = { onWindowChange("week") },
-            )
+            RecapWindowChip("Day", window == "day") { onWindowChange("day") }
+            RecapWindowChip("Week", window == "week") { onWindowChange("week") }
         }
-        if (empty) {
-            Column(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .clip(shape)
-                        .background(MaterialTheme.colorScheme.surfaceContainerLow)
-                        .border(clickBorderWidth(), clickBorderColor(), shape)
-                        .padding(horizontal = 8.dp, vertical = 8.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                AppEmptyState(
-                    icon = Icons.Filled.Groups,
-                    title = "No activity yet",
-                    body = "Your first Click starts the recap.",
-                    modifier = Modifier.fillMaxWidth(),
+        // Keep identical rows while loading, empty, and populated; remote data only changes values.
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            RecapStatRow("Connections formed", recap?.connectionsFormed.takeUnless { loading }, peak)
+            RecapStatRow("Messages sent", recap?.messagesSent.takeUnless { loading }, peak)
+            RecapStatRow("Messages received", recap?.messagesReceived.takeUnless { loading }, peak)
+            RecapStatRow("Beacons created", recap?.beaconsCreated.takeUnless { loading }, peak)
+            RecapStatRow("Events RSVP’d", recap?.eventsRsvped.takeUnless { loading }, peak)
+            RecapStatRow("Check-ins", recap?.eventsCheckedIn.takeUnless { loading }, peak)
+            RecapStatRow("Events saved", recap?.eventsSaved.takeUnless { loading }, peak)
+        }
+        Box(modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp), contentAlignment = Alignment.CenterStart) {
+            if (empty) {
+                androidx.compose.material3.TextButton(onClick = onMakeFirstClick) { Text("Make your first Click") }
+            } else {
+                Text(
+                    text = if (loading) "Updating activity…" else "Activity for this ${if (window == "day") "day" else "week"}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                ClickButton(
-                    onClick = onMakeFirstClick,
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                    variant = ClickButtonVariant.Primary,
-                ) {
-                    Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Make your first Click", fontWeight = FontWeight.SemiBold)
-                }
-            }
-        } else {
-            Column(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .clip(shape)
-                        .background(MaterialTheme.colorScheme.surfaceContainerLow)
-                        .border(clickBorderWidth(), clickBorderColor(), shape)
-                        .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                RecapStatRow("Connections formed", recap.connectionsFormed, peak)
-                RecapStatRow("Messages sent", recap.messagesSent, peak)
-                RecapStatRow("Messages received", recap.messagesReceived, peak)
-                RecapStatRow("Beacons created", recap.beaconsCreated, peak)
-                RecapStatRow("Events RSVP’d", recap.eventsRsvped, peak)
-                RecapStatRow("Check-ins", recap.eventsCheckedIn, peak)
-                RecapStatRow("Events saved", recap.eventsSaved, peak)
             }
         }
     }
@@ -590,10 +552,10 @@ private fun RecapWindowChip(
 @Composable
 private fun RecapStatRow(
     label: String,
-    value: Int,
+    value: Int?,
     peak: Int,
 ) {
-    val isPeak = value > 0 && value == peak
+    val isPeak = value != null && value > 0 && value == peak
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -606,7 +568,7 @@ private fun RecapStatRow(
             fontWeight = if (isPeak) FontWeight.SemiBold else FontWeight.Normal,
         )
         Text(
-            text = value.toString(),
+            text = value?.toString() ?: "—",
             style = MaterialTheme.typography.titleSmall,
             fontWeight = if (isPeak) FontWeight.Bold else FontWeight.Normal,
             color = if (isPeak) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,

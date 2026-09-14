@@ -337,15 +337,13 @@ fun HomeScreen(
                         }
                     }
 
-                    activityRecap?.let { recap ->
-                        item(key = "activity_recap") {
-                            ActivityRecapSection( // pragma: allowlist secret
-                                recap = recap,
-                                window = recapWindow,
-                                onWindowChange = { homeViewModel.setRecapWindow(it) },
-                                onMakeFirstClick = onNavigateToAddClick,
-                            )
-                        }
+                    item(key = "activity_recap") {
+                        ActivityRecapSection(
+                            recap = activityRecap,
+                            window = recapWindow,
+                            onWindowChange = { homeViewModel.setRecapWindow(it) },
+                            onMakeFirstClick = onNavigateToAddClick,
+                        )
                     }
 
                     item(key = "saved_events") {
