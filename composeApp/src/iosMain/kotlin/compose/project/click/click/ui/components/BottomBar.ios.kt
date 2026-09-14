@@ -31,26 +31,63 @@ import compose.project.click.click.platform.rememberReduceTransparencyEnabled
 import compose.project.click.click.ui.theme.LocalIsDarkMode
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.useContents
+import platform.CoreGraphics.CGRectMake
+import platform.CoreGraphics.CGSizeMake
 import platform.Foundation.NSData
 import platform.Foundation.NSProcessInfo
 import platform.Foundation.NSURL
 import platform.Foundation.dataWithContentsOfURL
 import platform.Foundation.setValue
 import platform.UIKit.NSLayoutConstraint
+import platform.UIKit.UIBezierPath
 import platform.UIKit.UIBlurEffect
 import platform.UIKit.UIBlurEffectStyle
 import platform.UIKit.UIColor
+import platform.UIKit.UIGraphicsBeginImageContextWithOptions
+import platform.UIKit.UIGraphicsEndImageContext
+import platform.UIKit.UIGraphicsGetImageFromCurrentImageContext
 import platform.UIKit.UIImage
 import platform.UIKit.UIImageRenderingMode
 import platform.UIKit.UITabBar
 import platform.UIKit.UITabBarAppearance
 import platform.UIKit.UITabBarDelegateProtocol
 import platform.UIKit.UITabBarItem
+import platform.UIKit.drawInRect
 import platform.darwin.DISPATCH_QUEUE_PRIORITY_DEFAULT
 import platform.darwin.NSObject
 import platform.darwin.dispatch_async
 import platform.darwin.dispatch_get_global_queue
 import platform.darwin.dispatch_get_main_queue
+import kotlin.math.max
+
+private const val ME_TAB_AVATAR_SIZE_PT = 26.0
+
+@OptIn(ExperimentalForeignApi::class)
+private fun tabAvatarUIImage(image: UIImage): UIImage? {
+    val width = image.size.useContents { width }.coerceAtLeast(1.0)
+    val height = image.size.useContents { height }.coerceAtLeast(1.0)
+    val scale = max(ME_TAB_AVATAR_SIZE_PT / width, ME_TAB_AVATAR_SIZE_PT / height)
+    val drawnWidth = width * scale
+    val drawnHeight = height * scale
+    val originX = (ME_TAB_AVATAR_SIZE_PT - drawnWidth) / 2.0
+    val originY = (ME_TAB_AVATAR_SIZE_PT - drawnHeight) / 2.0
+
+    UIGraphicsBeginImageContextWithOptions(
+        CGSizeMake(ME_TAB_AVATAR_SIZE_PT, ME_TAB_AVATAR_SIZE_PT),
+        false,
+        0.0,
+    )
+    return try {
+        UIBezierPath
+            .bezierPathWithOvalInRect(
+                CGRectMake(0.0, 0.0, ME_TAB_AVATAR_SIZE_PT, ME_TAB_AVATAR_SIZE_PT),
+            ).addClip()
+        image.drawInRect(CGRectMake(originX, originY, drawnWidth, drawnHeight))
+        UIGraphicsGetImageFromCurrentImageContext()
+    } finally {
+        UIGraphicsEndImageContext()
+    }
+}
 
 @OptIn(ExperimentalForeignApi::class)
 @Composable
@@ -237,9 +274,9 @@ actual fun PlatformBottomBar(
         if (meIndex >= nativeItems.size.toInt()) return@LaunchedEffect
         val meItem = nativeItems[meIndex] as? UITabBarItem ?: return@LaunchedEffect
         val photo =
-            meAvatarImage?.imageWithRenderingMode(
-                UIImageRenderingMode.UIImageRenderingModeAlwaysOriginal,
-            )
+            meAvatarImage
+                ?.let(::tabAvatarUIImage)
+                ?.imageWithRenderingMode(UIImageRenderingMode.UIImageRenderingModeAlwaysOriginal)
         if (photo != null) {
             meItem.image = photo
             meItem.selectedImage = photo
