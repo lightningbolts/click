@@ -65,9 +65,7 @@ private data class HubJoinRequestBody(
     @SerialName("hub_id") val hubId: String,
 )
 
-/**
- * Calls the Supabase Edge Function [verify-hub-proximity] with the user's coordinates.
- */
+/** Calls the Supabase proximity gate for standalone/local hubs. */
 object HubConnectionManager {
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -97,9 +95,7 @@ object HubConnectionManager {
                 }
             if (response.status.isSuccess()) {
                 val text = response.bodyAsText()
-                val dto =
-                    runCatching { json.decodeFromString(HubVerifyOkResponse.serializer(), text) }
-                        .getOrNull()
+                val dto = runCatching { json.decodeFromString(HubVerifyOkResponse.serializer(), text) }.getOrNull()
                 if (dto?.success == true && !dto.hubId.isNullOrBlank() && !dto.channel.isNullOrBlank()) {
                     HubVerifyResult.Success(
                         hubId = dto.hubId,
@@ -117,11 +113,16 @@ object HubConnectionManager {
                 when (response.status) {
                     HttpStatusCode.Forbidden ->
                         HubVerifyResult.Failure(
-                            errMsg ?: "Check in to this event to join the hub.",
+                            errMsg ?: "Join this hub before opening chat.",
                             structuredError.code,
                         )
-                    HttpStatusCode.NotFound -> HubVerifyResult.Failure(errMsg ?: "This hub is not available.", structuredError.code)
-                    else -> HubVerifyResult.Failure(errMsg ?: "Could not verify location (${response.status.value}).", structuredError.code)
+                    HttpStatusCode.NotFound ->
+                        HubVerifyResult.Failure(errMsg ?: "This hub is not available.", structuredError.code)
+                    else ->
+                        HubVerifyResult.Failure(
+                            errMsg ?: "Could not verify location (${response.status.value}).",
+                            structuredError.code,
+                        )
                 }
             }
         } catch (_: ClientRequestException) {
@@ -133,9 +134,7 @@ object HubConnectionManager {
         }
     }
 
-    /**
-     * Event hubs skip GPS — click-web checks check-in / host.
-     */
+    /** Event hubs skip GPS. click-web authorizes the host or an accepted RSVP member. */
     suspend fun joinEventHub(
         httpClient: HttpClient,
         hubId: String,
@@ -147,16 +146,12 @@ object HubConnectionManager {
             val response =
                 httpClient.post(url) {
                     contentType(ContentType.Application.Json)
-                    headers {
-                        append(HttpHeaders.Authorization, "Bearer $bearerJwt")
-                    }
+                    headers { append(HttpHeaders.Authorization, "Bearer $bearerJwt") }
                     setBody(HubJoinRequestBody(hubId = hubId))
                 }
             if (response.status.isSuccess()) {
                 val text = response.bodyAsText()
-                val dto =
-                    runCatching { json.decodeFromString(HubVerifyOkResponse.serializer(), text) }
-                        .getOrNull()
+                val dto = runCatching { json.decodeFromString(HubVerifyOkResponse.serializer(), text) }.getOrNull()
                 if (dto?.success == true && !dto.hubId.isNullOrBlank() && !dto.channel.isNullOrBlank()) {
                     HubVerifyResult.Success(
                         hubId = dto.hubId,
@@ -173,12 +168,19 @@ object HubConnectionManager {
                 val errMsg = structuredError.message
                 when (response.status) {
                     HttpStatusCode.Forbidden ->
-                        HubVerifyResult.Failure(errMsg ?: "Check in to this event to join the hub.", structuredError.code)
+                        HubVerifyResult.Failure(
+                            errMsg ?: "RSVP to this event to join the hub.",
+                            structuredError.code,
+                        )
                     HttpStatusCode.Gone ->
                         HubVerifyResult.Failure(errMsg ?: "This hub is no longer active.", structuredError.code)
                     HttpStatusCode.NotFound ->
                         HubVerifyResult.Failure(errMsg ?: "This hub is not available.", structuredError.code)
-                    else -> HubVerifyResult.Failure(errMsg ?: "Could not join hub (${response.status.value}).", structuredError.code)
+                    else ->
+                        HubVerifyResult.Failure(
+                            errMsg ?: "Could not join hub (${response.status.value}).",
+                            structuredError.code,
+                        )
                 }
             }
         } catch (_: ClientRequestException) {
@@ -225,7 +227,8 @@ internal fun parseHubError(
     val message =
         when (code) {
             "HUB_EXPIRED" -> "This hub is no longer active."
-            "EVENT_HUB_ACCESS_DENIED", "NOT_A_PARTICIPANT" -> "Check in to this event to join the hub."
+            "EVENT_HUB_ACCESS_DENIED" -> "RSVP to this event to join the hub."
+            "NOT_A_PARTICIPANT" -> rawMessage?.take(280) ?: "Join this hub before opening chat."
             else -> rawMessage?.take(280)
         }
     return HubStructuredError(code = code, message = message)
