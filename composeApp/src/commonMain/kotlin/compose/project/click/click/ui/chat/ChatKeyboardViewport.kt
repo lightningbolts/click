@@ -15,7 +15,6 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
-import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
@@ -141,6 +140,10 @@ fun Modifier.chatTimelineKeyboardViewport(
  * Pins the composer, typing/reply/edit accessories, and staged-media chrome to the keyboard top.
  * The message viewport is intentionally not part of this modifier; use
  * [chatTimelineKeyboardViewport] for its independent anchoring policy.
+ *
+ * Do not clip this translated dock at its own layout bounds. Its resting layout intentionally
+ * reserves bottom chrome space while its rendered position may travel hundreds of pixels upward;
+ * the chat screen's outer viewport is the correct clipping boundary.
  */
 fun Modifier.chatComposerKeyboardMotion(
     extraBottom: Dp = 0.dp,
@@ -164,7 +167,6 @@ fun Modifier.chatComposerKeyboardMotion(
                 }
             return@composed Modifier
                 .padding(bottom = bottomPad + extraBottom)
-                .clipToBounds()
                 .graphicsLayer {
                     val liftPx = nativeKeyboardLiftPxState?.floatValue?.coerceAtLeast(0f) ?: 0f
                     translationY = -liftPx
@@ -173,7 +175,6 @@ fun Modifier.chatComposerKeyboardMotion(
 
         Modifier
             .padding(bottom = navBottomDp + extraBottom)
-            .clipToBounds()
             .offset {
                 val liftPx =
                     effectiveChatKeyboardLiftPx(
