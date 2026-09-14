@@ -5,7 +5,14 @@ import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableFloatState
+import androidx.compose.runtime.State
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clipToBounds
@@ -16,12 +23,13 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.ui.components.rememberTabBarOverlayHeight
 import compose.project.click.click.ui.theme.LocalPlatformStyle
+import kotlinx.coroutines.flow.collect
 
 /**
  * Keyboard motion for chat is deliberately split into two consumers:
  *
  * 1. The composer/accessory dock always follows the keyboard top.
- * 2. The message timeline follows only while the user is pinned to the newest message.
+ * 2. The message timeline follows only when the keyboard session begins at the newest message.
  *
  * This prevents the old "rigid slab" behavior where the header, history viewport, timeline, and
  * composer all appeared to be pushed upward together. A user reading history keeps the same
@@ -48,12 +56,58 @@ internal fun effectiveChatKeyboardLiftPx(
 ): Int = (imeBottomPx - navigationBottomPx).coerceAtLeast(0)
 
 /**
- * Moves only the message viewport while it is pinned to latest. When the user is reading history,
- * the viewport stays in place and the keyboard simply occludes its lower region as the composer
- * moves above the IME.
+ * Latches the timeline anchoring policy for one keyboard-visible session.
  *
- * [followKeyboard] is evaluated from the graphics/placement phase so scroll position changes do
- * not force the chat subtree to recompose on every keyboard frame.
+ * The decision is made once, when keyboard lift changes from zero to non-zero. This is important:
+ * if the timeline stopped following merely because the user started dragging, it would jump down
+ * by the full keyboard height under their finger. Likewise, a history reader who opens the
+ * keyboard must not suddenly be pulled to the latest message halfway through the animation.
+ */
+@Composable
+fun rememberChatTimelineKeyboardFollow(
+    nativeKeyboardLiftPxState: MutableFloatState? = null,
+    shouldFollowOnKeyboardOpen: () -> Boolean,
+): State<Boolean> {
+    val style = LocalPlatformStyle.current
+    val density = LocalDensity.current
+    val imeInsets = WindowInsets.ime
+    val navInsets = WindowInsets.navigationBars
+    val shouldFollowState = rememberUpdatedState(shouldFollowOnKeyboardOpen)
+    val followState = remember { mutableStateOf(false) }
+
+    LaunchedEffect(style.isIOS, nativeKeyboardLiftPxState, density) {
+        var wasVisible = false
+        snapshotFlow {
+            if (style.isIOS) {
+                nativeKeyboardLiftPxState?.floatValue?.coerceAtLeast(0f) ?: 0f
+            } else {
+                effectiveChatKeyboardLiftPx(
+                    imeBottomPx = imeInsets.getBottom(density),
+                    navigationBottomPx = navInsets.getBottom(density),
+                ).toFloat()
+            }
+        }.collect { liftPx ->
+            val visible = liftPx > KEYBOARD_VISIBLE_EPSILON_PX
+            if (visible && !wasVisible) {
+                followState.value = shouldFollowState.value()
+            } else if (!visible && wasVisible) {
+                // At this point the lift is already zero, so clearing the latch cannot move pixels.
+                followState.value = false
+            }
+            wasVisible = visible
+        }
+    }
+
+    return followState
+}
+
+/**
+ * Moves only the message viewport for keyboard sessions that began at latest. When the user was
+ * reading history at focus time, the viewport stays in place and the keyboard simply occludes its
+ * lower region as the composer moves above the IME.
+ *
+ * [followKeyboard] is evaluated from the graphics/placement phase so keyboard frames do not force
+ * the chat subtree to recompose.
  */
 fun Modifier.chatTimelineKeyboardViewport(
     nativeKeyboardLiftPxState: MutableFloatState? = null,
@@ -129,3 +183,5 @@ fun Modifier.chatComposerKeyboardMotion(
                 IntOffset(0, -liftPx)
             }
     }
+
+private const val KEYBOARD_VISIBLE_EPSILON_PX = 0.5f
