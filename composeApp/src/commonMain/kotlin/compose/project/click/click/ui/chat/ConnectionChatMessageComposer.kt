@@ -10,7 +10,6 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -57,19 +56,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import coil3.compose.AsyncImage
 import compose.project.click.click.PlatformHapticsPolicy
 import compose.project.click.click.data.models.ChatWithDetails
 import compose.project.click.click.data.models.MessageWithUser
 import compose.project.click.click.data.models.replySnippetForMetadata
 import compose.project.click.click.ui.components.ClickButton // pragma: allowlist secret
 import compose.project.click.click.ui.theme.LocalPlatformStyle
-import compose.project.click.click.utils.toImageBitmap // pragma: allowlist secret
 import compose.project.click.click.viewmodel.CHAT_STAGED_MEDIA_MAX // pragma: allowlist secret
 import compose.project.click.click.viewmodel.ChatViewModel // pragma: allowlist secret
 
@@ -275,10 +273,6 @@ internal fun ConnectionChatMessageComposer(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         items(stagedChatImages, key = { it.id }) { item ->
-                            val thumb: ImageBitmap? =
-                                remember(item.id, item.bytes) {
-                                    runCatching { item.bytes.toImageBitmap() }.getOrNull()
-                                }
                             Box {
                                 Box(
                                     modifier =
@@ -287,14 +281,12 @@ internal fun ConnectionChatMessageComposer(
                                             .clip(RoundedCornerShape(10.dp))
                                             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f)),
                                 ) {
-                                    if (thumb != null) {
-                                        Image(
-                                            bitmap = thumb,
-                                            contentDescription = null,
-                                            contentScale = ContentScale.Crop,
-                                            modifier = Modifier.fillMaxSize(),
-                                        )
-                                    }
+                                    AsyncImage(
+                                        model = item.bytes,
+                                        contentDescription = "Selected photo",
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier.fillMaxSize(),
+                                    )
                                 }
                                 Box(
                                     modifier =
