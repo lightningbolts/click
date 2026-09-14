@@ -11,6 +11,8 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
 import kotlinx.cinterop.ExperimentalForeignApi
+import platform.Foundation.NSProcessInfo
+import platform.QuartzCore.CATransaction
 import platform.UIKit.UIButton
 import platform.UIKit.UIMenu
 import platform.UIKit.UIView
@@ -18,8 +20,8 @@ import platform.UIKit.UIViewAnimationOptionTransitionCrossDissolve
 import platform.UIKit.setAccessibilityLabel
 
 /**
- * Snapshot of the route-owned button plane. The glass plate, trailing glass capsule, title column,
- * and their constraints stay mounted; only button meaning changes while media is visible.
+ * Snapshot of the route-owned button plane. The bar, glass plate, title column, trailing glass
+ * capsule, and existing route buttons remain mounted while media temporarily changes their role.
  */
 private data class StableOverlayChromeSnapshot(
     val backHandler: (() -> Unit)?,
@@ -71,18 +73,22 @@ internal actual fun ApplyStableOverlayMediaChrome(
 
     DisposableEffect(layer) {
         val snapshot = layer.captureStableOverlayChrome()
+        layer.logStableChromeIdentity("conversation-before-media")
         layer.installStableMediaChrome(
             onClose = { close() },
             trailing = latestTrailing,
             snapshot = snapshot,
         )
+        layer.logStableChromeIdentity("media-installed")
         onDispose {
             layer.restoreStableOverlayChrome(snapshot)
+            layer.logStableChromeIdentity("conversation-restored")
         }
     }
 
-    // Handler closures can change while the lightbox is open. Refresh them without replacing the
-    // UIView instances, glass effect view, owner token, or title container.
+    // Handler closures and chat presence can change while the lightbox is open. Refresh the media
+    // meaning after composition without replacing the UIView instances, material views, owner
+    // token, or title container. This also wins over a same-frame route refresh from the chat.
     SideEffect {
         layer.refreshStableMediaChrome(
             onClose = { close() },
@@ -142,10 +148,13 @@ private fun IosHostNavBarLayer.installStableMediaChrome(
     trailing: List<NativeChromeAction>,
     snapshot: StableOverlayChromeSnapshot,
 ) {
+    CATransaction.begin()
+    CATransaction.setDisableActions(true)
     backTarget.handler = onClose
     backButton.hidden = false
-    morphLeadingChromeSymbol("xmark", "Close")
     configureStableMediaTrailing(trailing, snapshot)
+    CATransaction.commit()
+    morphLeadingChromeSymbol("xmark", "Close")
 }
 
 @OptIn(ExperimentalForeignApi::class)
@@ -154,20 +163,31 @@ private fun IosHostNavBarLayer.refreshStableMediaChrome(
     trailing: List<NativeChromeAction>,
 ) {
     backTarget.handler = onClose
-    // Do not call the normal bind path here. It owns route identity and its signature cache; media
-    // only retargets the already-mounted anchor buttons.
-    val currentVisible = trailingStack.arrangedSubviews.map { it as UIView }.filter { !it.hidden }
-    if (currentVisible.size != trailing.size.coerceAtMost(actionButtons.size)) return
+    backButton.hidden = false
+    if (paintedSymbols[backButton] != "xmark") {
+        morphLeadingChromeSymbol("xmark", "Close")
+    }
 
-    currentVisible.forEachIndexed { index, view ->
-        val button = view as? UIButton ?: return@forEachIndexed
-        val action = trailing.getOrNull(index) ?: return@forEachIndexed
+    val currentVisible =
+        trailingStack.arrangedSubviews
+            .mapNotNull { it as? UIButton }
+            .filter { !it.hidden }
+    val actions = trailing.take(actionButtons.size)
+    if (currentVisible.size != actions.size) return
+
+    currentVisible.forEachIndexed { index, button ->
+        val action = actions[index]
         setStableTrailingHandler(button, action.onClick)
-        val menuKey = 100 + index
-        action.menuItems.forEachIndexed { itemIndex, item ->
-            menuClicksByKey["$menuKey:$itemIndex"] = item.onClick
+        bindStableMediaMenu(button, action, index)
+        if (paintedSymbols[button] != action.sfSymbol) {
+            morphClusteredChromeSymbol(
+                button = button,
+                symbol = action.sfSymbol,
+                accessibility = action.contentDescription,
+            )
+        } else {
+            button.setAccessibilityLabel(action.contentDescription)
         }
-        bindNativeMenu(button, action, actionIndex = menuKey)
     }
 }
 
@@ -188,18 +208,21 @@ private fun IosHostNavBarLayer.configureStableMediaTrailing(
     val extraButtons =
         actionButtons
             .filter { candidate ->
-                reusableRightAnchors.none { it === candidate }
+                reusableRightAnchors.none { it === candidate } &&
+                    snapshot.arrangedSubviews.none { it === candidate }
             }.take(extraCount)
-    val mediaButtons = extraButtons + reusableRightAnchors
 
-    // Keep the trailing glass effect view itself alive. Only its arranged UIButton children are
-    // retargeted. Choosing the existing right-most buttons keeps their screen-space anchors fixed
-    // when media uses fewer actions than the route underneath.
-    trailingStack.arrangedSubviews.map { it as UIView }.forEach { view ->
-        trailingStack.removeArrangedSubview(view)
-        view.removeFromSuperview()
+    // Extra media controls are inserted to the LEFT of the route-owned controls. The route's
+    // right-most button therefore remains at the exact trailing anchor while the cluster grows
+    // leftward. We intentionally keep these extra UIButtons arranged-but-hidden after dismissal;
+    // UIStackView collapses hidden arranged views, so they cost no geometry but can be reused on the
+    // next media transition without detaching/re-attaching anything.
+    extraButtons.asReversed().forEach { button ->
+        button.hidden = true
+        trailingStack.insertArrangedSubview(button, atIndex = 0uL)
     }
 
+    val mediaButtons = extraButtons + reusableRightAnchors
     val allTrailingButtons = listOf(searchButton) + actionButtons
     allTrailingButtons.forEach { button ->
         button.hidden = true
@@ -212,17 +235,12 @@ private fun IosHostNavBarLayer.configureStableMediaTrailing(
         val action = actions[index]
         button.hidden = false
         setStableTrailingHandler(button, action.onClick)
-        val menuKey = 100 + index
-        action.menuItems.forEachIndexed { itemIndex, item ->
-            menuClicksByKey["$menuKey:$itemIndex"] = item.onClick
-        }
-        bindNativeMenu(button, action, actionIndex = menuKey)
+        bindStableMediaMenu(button, action, index)
         morphClusteredChromeSymbol(
             button = button,
             symbol = action.sfSymbol,
             accessibility = action.contentDescription,
         )
-        trailingStack.addArrangedSubview(button)
     }
 
     val hasTrailing = mediaButtons.isNotEmpty()
@@ -233,16 +251,25 @@ private fun IosHostNavBarLayer.configureStableMediaTrailing(
 }
 
 @OptIn(ExperimentalForeignApi::class)
+private fun IosHostNavBarLayer.bindStableMediaMenu(
+    button: UIButton,
+    action: NativeChromeAction,
+    mediaIndex: Int,
+) {
+    val menuKey = 100 + mediaIndex
+    action.menuItems.forEachIndexed { itemIndex, item ->
+        menuClicksByKey["$menuKey:$itemIndex"] = item.onClick
+    }
+    bindNativeMenu(button, action, actionIndex = menuKey)
+}
+
+@OptIn(ExperimentalForeignApi::class)
 private fun IosHostNavBarLayer.restoreStableOverlayChrome(snapshot: StableOverlayChromeSnapshot) {
+    CATransaction.begin()
+    CATransaction.setDisableActions(true)
+
     backTarget.handler = snapshot.backHandler
-    snapshot.backSymbol?.let { symbol ->
-        morphLeadingChromeSymbol(
-            symbol = symbol,
-            accessibility = snapshot.backAccessibility,
-        )
-    } ?: paintedSymbols.remove(backButton)
     backButton.hidden = snapshot.backHidden
-    backButton.setAccessibilityLabel(snapshot.backAccessibility)
 
     menuClicksByKey.clear()
     menuClicksByKey.putAll(snapshot.menuClicks)
@@ -251,6 +278,28 @@ private fun IosHostNavBarLayer.restoreStableOverlayChrome(snapshot: StableOverla
     searchButton.hidden = snapshot.searchHidden
     searchButton.menu = snapshot.searchMenu
     searchButton.showsMenuAsPrimaryAction = snapshot.searchShowsMenu
+
+    actionButtons.forEachIndexed { index, button ->
+        actionTargets[index].handler = snapshot.actionHandlers[index]
+        button.hidden = snapshot.actionHidden[index]
+        button.menu = snapshot.actionMenus[index]
+        button.showsMenuAsPrimaryAction = snapshot.actionShowsMenu[index]
+    }
+
+    trailingCluster.hidden = snapshot.clusterHidden
+    titleTrailingToCluster?.active = snapshot.titleTrailingToClusterActive
+    titleTrailingToBar?.active = snapshot.titleTrailingToBarActive
+    trailingCluster.superview?.layoutIfNeeded()
+    CATransaction.commit()
+
+    snapshot.backSymbol?.let { symbol ->
+        morphLeadingChromeSymbol(
+            symbol = symbol,
+            accessibility = snapshot.backAccessibility,
+        )
+    } ?: paintedSymbols.remove(backButton)
+    backButton.setAccessibilityLabel(snapshot.backAccessibility)
+
     snapshot.searchSymbol?.let { symbol ->
         morphClusteredChromeSymbol(
             button = searchButton,
@@ -261,10 +310,6 @@ private fun IosHostNavBarLayer.restoreStableOverlayChrome(snapshot: StableOverla
     searchButton.setAccessibilityLabel(snapshot.searchAccessibility)
 
     actionButtons.forEachIndexed { index, button ->
-        actionTargets[index].handler = snapshot.actionHandlers[index]
-        button.hidden = snapshot.actionHidden[index]
-        button.menu = snapshot.actionMenus[index]
-        button.showsMenuAsPrimaryAction = snapshot.actionShowsMenu[index]
         val symbol = snapshot.actionSymbols[index]
         if (symbol != null) {
             morphClusteredChromeSymbol(
@@ -277,18 +322,6 @@ private fun IosHostNavBarLayer.restoreStableOverlayChrome(snapshot: StableOverla
         }
         button.setAccessibilityLabel(snapshot.actionAccessibility[index])
     }
-
-    trailingStack.arrangedSubviews.map { it as UIView }.forEach { view ->
-        trailingStack.removeArrangedSubview(view)
-        view.removeFromSuperview()
-    }
-    snapshot.arrangedSubviews.forEach { view ->
-        trailingStack.addArrangedSubview(view)
-    }
-    trailingCluster.hidden = snapshot.clusterHidden
-    titleTrailingToCluster?.active = snapshot.titleTrailingToClusterActive
-    titleTrailingToBar?.active = snapshot.titleTrailingToBarActive
-    trailingCluster.superview?.layoutIfNeeded()
 }
 
 private fun IosHostNavBarLayer.setStableTrailingHandler(
@@ -353,5 +386,21 @@ private fun IosHostNavBarLayer.morphClusteredChromeSymbol(
             )
         },
         completion = null,
+    )
+}
+
+private fun IosHostNavBarLayer.logStableChromeIdentity(stage: String) {
+    if (NSProcessInfo.processInfo.environment["CLICK_CHROME_IDENTITY_DEBUG"] != "1") return
+    val trailingIds =
+        (listOf(searchButton) + actionButtons)
+            .joinToString(prefix = "[", postfix = "]") { it.hashCode().toString(16) }
+    println(
+        "[ClickChromeIdentity] stage=$stage " +
+            "lead=${backButton.hashCode().toString(16)} " +
+            "center=${titleColumn.hashCode().toString(16)} " +
+            "trail=$trailingIds " +
+            "glass=${glassPlate.hashCode().toString(16)} " +
+            "cluster=${trailingCluster.hashCode().toString(16)} " +
+            "bar=${bar.hashCode().toString(16)}",
     )
 }
