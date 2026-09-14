@@ -55,6 +55,9 @@ import compose.project.click.click.ui.chat.applyTimestampPeekDragStep // pragma:
 import compose.project.click.click.ui.chat.buildChatTimelineEntriesNewestFirst // pragma: allowlist secret
 import compose.project.click.click.ui.chat.chatBubbleReplySnippetStyle // pragma: allowlist secret
 import compose.project.click.click.ui.chat.chatBubbleScaledDp // pragma: allowlist secret
+import compose.project.click.click.ui.chat.chatComposerKeyboardMotion // pragma: allowlist secret
+import compose.project.click.click.ui.chat.chatTimelineKeyboardViewport // pragma: allowlist secret
+import compose.project.click.click.ui.chat.chatTimelineShouldFollowKeyboard // pragma: allowlist secret
 import compose.project.click.click.ui.chat.chatTimestampPeekOnSwipeLeft // pragma: allowlist secret
 import compose.project.click.click.ui.chat.indexOfMessageId // pragma: allowlist secret
 import compose.project.click.click.ui.chat.isTimestampPeekRevealed // pragma: allowlist secret
@@ -65,7 +68,6 @@ import compose.project.click.click.ui.chat.restoreTimestampPeekRawFromDisplay //
 import compose.project.click.click.ui.chat.scrollChatTimelineToMessage // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeftPeek // pragma: allowlist secret
-import compose.project.click.click.ui.components.chatThreadKeyboardDock // pragma: allowlist secret
 import compose.project.click.click.ui.theme.* // pragma: allowlist secret
 import compose.project.click.click.viewmodel.ChatMessagesState // pragma: allowlist secret
 import compose.project.click.click.viewmodel.ChatViewModel // pragma: allowlist secret
@@ -143,13 +145,7 @@ internal fun ColumnScope.ChatViewTimelinePane(
                 .clipToBounds(),
     ) {
         Column(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .chatThreadKeyboardDock(
-                        nativeKeyboardLiftPxState = nativeKeyboardInsets.liftPxState,
-                        clearNativeTabBar = true,
-                    ),
+            modifier = Modifier.fillMaxSize(),
         ) {
             Box(
                 modifier =
@@ -177,13 +173,24 @@ internal fun ColumnScope.ChatViewTimelinePane(
                         }
                     }
 
-                    // Messages
+                    // Messages. The keyboard only moves this viewport while the user is pinned to
+                    // latest; history remains visually stationary while the composer follows IME.
                     Box(
                         modifier =
                             Modifier
                                 .fillMaxSize()
                                 .padding(top = icebreakerTimelineTopReserve)
                                 .clipToBounds()
+                                .chatTimelineKeyboardViewport(
+                                    nativeKeyboardLiftPxState = nativeKeyboardInsets.liftPxState,
+                                    followKeyboard = {
+                                        chatTimelineShouldFollowKeyboard(
+                                            firstVisibleItemIndex = listState.firstVisibleItemIndex,
+                                            initialTimelineScrollDone = initialTimelineScrollDoneState.value,
+                                            userScrollInProgress = listState.isScrollInProgress,
+                                        )
+                                    },
+                                )
                                 .zIndex(1f),
                     ) {
                         if (state.isLoadingMessages && messages.isEmpty()) {
@@ -440,8 +447,15 @@ internal fun ColumnScope.ChatViewTimelinePane(
                 }
             }
 
+            // Composer/accessory chrome tracks the keyboard independently from the timeline.
             Column(
-                modifier = Modifier.fillMaxWidth(),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .chatComposerKeyboardMotion(
+                            nativeKeyboardLiftPxState = nativeKeyboardInsets.liftPxState,
+                            clearNativeTabBar = true,
+                        ),
             ) {
                 // Typing indicator — label + bouncing dots (Realtime Broadcast)
                 AnimatedVisibility(
