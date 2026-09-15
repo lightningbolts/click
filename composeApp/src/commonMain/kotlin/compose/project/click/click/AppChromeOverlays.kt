@@ -116,9 +116,8 @@ internal fun BoxScope.AppBottomChrome(
     var pendingTargetMessageId by pendingTargetMessageIdState
     var pendingBeaconId by pendingBeaconIdState
 
-    // The leading ellipsis is an actual overflow menu, not an alias for Search. Search owns its
-    // dedicated trailing magnifier. Keep these commands shell-level so every root uses the same
-    // semantics and the persistent UIKit button never needs route-specific hacks.
+    // Search already owns its dedicated trailing magnifier. The leading ellipsis is a true
+    // overflow menu with stable app destinations, matching the role users expect from iOS chrome.
     SideEffect {
         NativeRootMenuRegistry.replace(
             buildList {
@@ -142,6 +141,18 @@ internal fun BoxScope.AppBottomChrome(
                             onClick = {
                                 focusManager.clearFocus()
                                 navigateTo(NavigationItem.AddClick.route)
+                            },
+                        ),
+                    )
+                }
+                if (currentRoute != NavigationItem.Connections.route) {
+                    add(
+                        NativeChromeMenuItem(
+                            title = "Clicks",
+                            sfSymbol = "person.2",
+                            onClick = {
+                                focusManager.clearFocus()
+                                navigateTo(NavigationItem.Connections.route)
                             },
                         ),
                     )
