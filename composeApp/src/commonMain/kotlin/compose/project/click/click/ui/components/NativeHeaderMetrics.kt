@@ -29,8 +29,10 @@ object NativeHeaderMetrics {
     const val ClusterIconSpacingPt = 0.0
     const val ClusterContentInsetPt = 0.0
     const val CompactRowBottomPaddingPt = 8.0
+
     // Let the material feather into page content rather than ending like a card/slab.
     const val GlassFadeExtensionPt = 16.0
+
     // Native glass already contributes contrast. A lighter host alpha keeps page color/content
     // visible underneath, closer to iOS system navigation and WhatsApp's integrated treatment.
     const val CollapsedGlassAlphaMax = 0.64f
@@ -107,11 +109,9 @@ object NativeHeaderMetrics {
         statusBarTop +
             barHeightDp(collapseFraction, hasSubtitle, stackSubtitle, growCompactSubtitle)
 
-    fun collapseRangeDp(hasSubtitle: Boolean): Dp =
-        headerClearanceDp(0.dp, 0f, hasSubtitle) - headerClearanceDp(0.dp, 1f, hasSubtitle)
+    fun collapseRangeDp(hasSubtitle: Boolean): Dp = headerClearanceDp(0.dp, 0f, hasSubtitle) - headerClearanceDp(0.dp, 1f, hasSubtitle)
 
-    fun collapsedGlassAlpha(collapseFraction: Float): Float =
-        collapseFraction.coerceIn(0f, 1f) * CollapsedGlassAlphaMax
+    fun collapsedGlassAlpha(collapseFraction: Float): Float = collapseFraction.coerceIn(0f, 1f) * CollapsedGlassAlphaMax
 
     fun titleLeadingInsetPt(
         hasBack: Boolean,
@@ -152,11 +152,9 @@ object NativeHeaderMetrics {
         return expandedTop + (compactTop - expandedTop) * t
     }
 
-    fun overlayUncoverLeadingWidthPt(offsetPt: Double): Double =
-        if (offsetPt <= OverlayUncoverEpsilonPt) 0.0 else offsetPt
+    fun overlayUncoverLeadingWidthPt(offsetPt: Double): Double = if (offsetPt <= OverlayUncoverEpsilonPt) 0.0 else offsetPt
 
-    fun stackedIdentityColumnHeightPt(): Double =
-        CompactTitlePointSize + StackedIdentitySpacingPt + StackedIdentitySubtitlePointSize
+    fun stackedIdentityColumnHeightPt(): Double = CompactTitlePointSize + StackedIdentitySpacingPt + StackedIdentitySubtitlePointSize
 
     fun isCompactTabRootChrome(
         collapseFraction: Float,
@@ -216,8 +214,7 @@ object NativeHeaderMetrics {
 
     fun shouldRematerializeChromeOnUnsuppress(): Boolean = false
 
-    fun shouldReapplyTabBarHeightOnOverlayHide(): Boolean =
-        OverlayExclusiveBindPolicy.shouldReapplyTabBarHeightOnOverlayHide()
+    fun shouldReapplyTabBarHeightOnOverlayHide(): Boolean = OverlayExclusiveBindPolicy.shouldReapplyTabBarHeightOnOverlayHide()
 
     fun hostLeadingClipWidthPt(
         uncoverLeadingPt: Double,
