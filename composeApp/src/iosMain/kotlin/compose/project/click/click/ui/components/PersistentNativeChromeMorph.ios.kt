@@ -39,6 +39,7 @@ private data class NativeTitleSnapshot(
     val subtitleY: Double,
     val subtitleWidth: Double,
     val subtitleHeight: Double,
+    val glassAlpha: Double,
     val centered: Boolean,
 )
 
@@ -184,6 +185,7 @@ private fun IosHostNavBarLayer.captureCurrentTitleSnapshot(): NativeTitleSnapsho
         subtitleY = subtitleY,
         subtitleWidth = subtitleWidth.coerceAtLeast(width),
         subtitleHeight = subtitleHeight.coerceAtLeast(1.0),
+        glassAlpha = glassPlate.alpha,
         centered = titleLabel.textAlignment == NSTextAlignmentCenter,
     )
 }
@@ -231,6 +233,8 @@ private fun IosHostNavBarLayer.applyRouteTitleTransition(progress: Float) {
     val destination = views.destinationSnapshot ?: return
     val hostWidth = chromeRow.bounds.useContents { size.width }.coerceAtLeast(1.0)
     val p = progress.coerceIn(0f, 1f).toDouble()
+    val transitionGlassAlpha =
+        source.glassAlpha + (destination.glassAlpha - source.glassAlpha) * p
 
     CATransaction.begin()
     CATransaction.setDisableActions(true)
@@ -255,6 +259,8 @@ private fun IosHostNavBarLayer.applyRouteTitleTransition(progress: Float) {
     views.destination.alpha = (0.82 + 0.18 * p).coerceIn(0.0, 1.0)
     avatarButton.transform = translationTransform(hostWidth * p)
     avatarButton.alpha = (1.0 - 0.2 * p).coerceIn(0.0, 1.0)
+    glassPlate.alpha = transitionGlassAlpha
+    glassPlate.hidden = transitionGlassAlpha < 0.02
     CATransaction.commit()
 }
 
@@ -312,6 +318,10 @@ private fun IosHostNavBarLayer.clearRouteTitleTransition() {
         avatarButton.transform = identityTransform()
         avatarButton.alpha = 1.0
         return
+    }
+    views.sourceSnapshot?.let { source ->
+        glassPlate.alpha = source.glassAlpha
+        glassPlate.hidden = source.glassAlpha < 0.02
     }
     views.source.removeFromSuperview()
     views.destination.removeFromSuperview()
