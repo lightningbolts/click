@@ -10,11 +10,21 @@ package compose.project.click.click.events
 internal fun beaconCheckInFailureMessage(
     httpStatus: Int?,
     fallback: String? = null,
-): String = when (httpStatus) {
-    403 -> "Move closer to the event to check in"
-    409 -> "Check-in opens when the event starts"
-    400 -> "Location required to check in"
-    else -> fallback ?: "Couldn't check in"
+): String {
+    val msg = fallback?.trim().orEmpty()
+    return when (httpStatus) {
+        403 ->
+            when {
+                msg.contains("RSVP", ignoreCase = true) -> msg
+                msg.isNotEmpty() &&
+                    !msg.equals("Forbidden", ignoreCase = true) &&
+                    !msg.equals("Unauthorized", ignoreCase = true) -> msg
+                else -> "Move closer to the event to check in"
+            }
+        409 -> "Check-in opens when the event starts"
+        400 -> "Location required to check in"
+        else -> msg.ifEmpty { "Couldn't check in" }
+    }
 }
 
 /** Labeled check-in CTA copy (not icon-only). */
@@ -26,4 +36,20 @@ internal fun eventCheckInCtaLabel(
     pending && checkedIn -> "Updating…"
     checkedIn -> "Checked in"
     else -> "Check in here"
+}
+
+/**
+ * Whether the user may attempt check-in (or undo). Hosts bypass RSVP.
+ * Already-checked-in users can always check out.
+ */
+fun canAttemptEventCheckIn(
+    hasRsvp: Boolean,
+    isHost: Boolean,
+    alreadyCheckedIn: Boolean,
+    rsvpEnabled: Boolean = true,
+): Boolean {
+    if (alreadyCheckedIn) return true
+    if (isHost) return true
+    if (!rsvpEnabled) return true
+    return hasRsvp
 }

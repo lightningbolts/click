@@ -81,6 +81,24 @@ class EventListingOptionsTest {
     }
 
     @Test
+    fun parseEventListingOptions_readsRsvpEnabled() {
+        assertTrue(parseEventListingOptions(null).rsvpEnabled)
+        assertTrue(
+            parseEventListingOptions(buildJsonObject { put("title", "x") }).rsvpEnabled,
+        )
+        assertFalse(
+            parseEventListingOptions(
+                buildJsonObject { put("rsvp_enabled", false) },
+            ).rsvpEnabled,
+        )
+        assertFalse(
+            parseEventListingOptions(
+                buildJsonObject { put("rsvpEnabled", "false") },
+            ).rsvpEnabled,
+        )
+    }
+
+    @Test
     fun parseEventCapacity_ignoresInvalidValues() {
         assertNull(parseEventCapacity(JsonPrimitive("")))
         assertNull(parseEventCapacity(JsonPrimitive("0")))

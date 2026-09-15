@@ -70,6 +70,8 @@ data class EventListingOptions(
     val approvalRequired: Boolean = false,
     val guestListVisibility: GuestListVisibility = GuestListVisibility.PUBLIC,
     val coverThemeId: String? = null,
+    /** When false, check-in does not require an RSVP (matches click-web). Default true. */
+    val rsvpEnabled: Boolean = true,
 )
 
 fun defaultEventListingOptions(): EventListingOptions = EventListingOptions()
@@ -98,6 +100,21 @@ fun parseApprovalRequired(raw: JsonElement?): Boolean {
                 raw.content.toBooleanStrictOrNull() == true
         }
         else -> false
+    }
+}
+
+/** Defaults to true (RSVP on) unless metadata explicitly disables it. */
+fun parseRsvpEnabled(raw: JsonElement?): Boolean {
+    if (raw == null) return true
+    return when (raw) {
+        is JsonPrimitive -> {
+            val v = raw.contentOrNull?.trim()?.lowercase()
+            when (v) {
+                "false", "0" -> false
+                else -> raw.content.toBooleanStrictOrNull() != false
+            }
+        }
+        else -> true
     }
 }
 
@@ -136,6 +153,9 @@ fun parseEventListingOptions(metadata: JsonObject?): EventListingOptions {
         coverThemeId =
             parseCoverThemeId(key("cover_theme_id"))
                 ?: parseCoverThemeId(key("coverThemeId")),
+        rsvpEnabled =
+            parseRsvpEnabled(key("rsvp_enabled")) &&
+                parseRsvpEnabled(key("rsvpEnabled")),
     )
 }
 

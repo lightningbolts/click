@@ -18,6 +18,10 @@ class BeaconCheckInOptimismTest {
             beaconCheckInFailureMessage(403),
         )
         assertEquals(
+            "RSVP required to check in",
+            beaconCheckInFailureMessage(403, fallback = "RSVP required to check in"),
+        )
+        assertEquals(
             "Check-in opens when the event starts",
             beaconCheckInFailureMessage(409),
         )
@@ -32,6 +36,30 @@ class BeaconCheckInOptimismTest {
         assertEquals(
             "Custom",
             beaconCheckInFailureMessage(null, fallback = "Custom"),
+        )
+    }
+
+    @Test
+    fun canAttemptCheckIn_requiresRsvpUnlessHostOrAlreadyIn() {
+        assertFalse(
+            canAttemptEventCheckIn(hasRsvp = false, isHost = false, alreadyCheckedIn = false),
+        )
+        assertTrue(
+            canAttemptEventCheckIn(hasRsvp = true, isHost = false, alreadyCheckedIn = false),
+        )
+        assertTrue(
+            canAttemptEventCheckIn(hasRsvp = false, isHost = true, alreadyCheckedIn = false),
+        )
+        assertTrue(
+            canAttemptEventCheckIn(hasRsvp = false, isHost = false, alreadyCheckedIn = true),
+        )
+        assertTrue(
+            canAttemptEventCheckIn(
+                hasRsvp = false,
+                isHost = false,
+                alreadyCheckedIn = false,
+                rsvpEnabled = false,
+            ),
         )
     }
 

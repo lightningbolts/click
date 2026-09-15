@@ -34,6 +34,7 @@ import compose.project.click.click.data.models.withPreservedEventScheduleFrom //
 import compose.project.click.click.events.EventRsvpRequestStatus // pragma: allowlist secret
 import compose.project.click.click.events.buildEventShareText // pragma: allowlist secret
 import compose.project.click.click.events.buildEventShareUrl // pragma: allowlist secret
+import compose.project.click.click.events.canAttemptEventCheckIn // pragma: allowlist secret
 import compose.project.click.click.events.canOpenEventHub // pragma: allowlist secret
 import compose.project.click.click.events.eventCheckInCtaLabel // pragma: allowlist secret
 import compose.project.click.click.notifications.ChatDeepLinkManager // pragma: allowlist secret
@@ -619,13 +620,23 @@ internal fun EventBeaconDetail(
         }
 
         val actionShape = RoundedCornerShape(12.dp)
+        val effectiveIsCreator =
+            isCreator ||
+                (!currentUser?.id.isNullOrBlank() && displayBeacon.createdByUserId == currentUser?.id)
+        val canCheckIn =
+            canAttemptEventCheckIn(
+                hasRsvp = currentUserSignedUp,
+                isHost = effectiveIsCreator,
+                alreadyCheckedIn = checkedIn,
+                rsvpEnabled = listing.rsvpEnabled,
+            )
         val checkInLabel = eventCheckInCtaLabel(checkedIn = checkedIn, pending = checkInPending)
         Button(
             onClick = {
-                if (checkInPending) return@Button
+                if (checkInPending || !canCheckIn) return@Button
                 viewModel.toggleBeaconCheckIn(displayBeacon.id)
             },
-            enabled = !checkInPending,
+            enabled = !checkInPending && canCheckIn,
             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
             shape = actionShape,
             border = BorderStroke(clickBorderWidth(), border),
@@ -665,12 +676,19 @@ internal fun EventBeaconDetail(
             }
             Text(checkInLabel, fontWeight = FontWeight.SemiBold)
         }
+        if (!canCheckIn && !checkedIn && listing.rsvpEnabled) {
+            Text(
+                text = "RSVP to check in",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
+            )
+        }
 
         val eventHubId = displayBeacon.hubId ?: engagement?.hubId
         val canOpenHub =
             canOpenEventHub(
                 hubId = eventHubId,
-                isCreator = isCreator,
+                isCreator = effectiveIsCreator,
                 checkedIn = checkedIn,
                 hasRsvp = currentUserSignedUp,
             )

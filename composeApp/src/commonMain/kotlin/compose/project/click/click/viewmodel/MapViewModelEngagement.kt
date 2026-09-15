@@ -17,8 +17,10 @@ import compose.project.click.click.data.storage.BeaconEngagementPersistence // p
 import compose.project.click.click.data.storage.BeaconRsvpPersistence // pragma: allowlist secret
 import compose.project.click.click.events.EventRsvpRequestStatus // pragma: allowlist secret
 import compose.project.click.click.events.beaconCheckInFailureMessage // pragma: allowlist secret
+import compose.project.click.click.events.canAttemptEventCheckIn // pragma: allowlist secret
 import compose.project.click.click.events.eventSchedule // pragma: allowlist secret
 import compose.project.click.click.events.normalizeEventRsvpErrorMessage // pragma: allowlist secret
+import compose.project.click.click.events.parseEventListingOptions // pragma: allowlist secret
 import compose.project.click.click.events.resolveEventCheckInRadiusMeters // pragma: allowlist secret
 import compose.project.click.click.getPlatform // pragma: allowlist secret
 import compose.project.click.click.ui.utils.displayDynamicTitle // pragma: allowlist secret
@@ -615,6 +617,33 @@ internal fun MapViewModel.toggleBeaconCheckInImpl(beaconId: String) {
                 },
             )
         }
+        return
+    }
+
+    val beaconForGate =
+        _mapBeacons.value.firstOrNull { it.id == id }
+            ?: (_selection.value as? MapSelection.BeaconSelected)?.beacon?.takeIf { it.id == id }
+    val viewerId =
+        AppDataManager.currentUser.value
+            ?.id
+            ?.trim()
+            .orEmpty()
+    val isHost =
+        viewerId.isNotEmpty() &&
+            !beaconForGate?.createdByUserId.isNullOrBlank() &&
+            beaconForGate?.createdByUserId == viewerId
+    val hasRsvp =
+        _beaconRsvpById.value[id]?.currentUserSignedUp == true ||
+            _beaconDirectoryById.value[id]?.currentUserSignedUp == true
+    val rsvpEnabled = parseEventListingOptions(beaconForGate?.metadata?.raw).rsvpEnabled
+    if (!canAttemptEventCheckIn(
+            hasRsvp = hasRsvp,
+            isHost = isHost,
+            alreadyCheckedIn = false,
+            rsvpEnabled = rsvpEnabled,
+        )
+    ) {
+        _engagementSnackbar.value = "RSVP to this event before checking in"
         return
     }
 
