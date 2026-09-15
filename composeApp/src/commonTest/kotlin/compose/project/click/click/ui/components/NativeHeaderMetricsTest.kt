@@ -9,7 +9,7 @@ class NativeHeaderMetricsTest {
     @Test
     fun expandedTitle_isLargeTitlePointSize() {
         assertEquals(34.0, NativeHeaderMetrics.titlePointSize(0f), 0.01)
-        assertEquals(2, NativeHeaderMetrics.titleMaxLines(0f))
+        assertEquals(1, NativeHeaderMetrics.titleMaxLines(0f))
     }
 
     @Test
@@ -19,15 +19,15 @@ class NativeHeaderMetricsTest {
     }
 
     @Test
-    fun barHeight_interpolatesFromTwoLineLargeTitleToCompact() {
-        assertEquals(98.0, NativeHeaderMetrics.barHeightPt(0f), 0.01)
+    fun barHeight_interpolatesFromActionRowPlusLargeTitleToCompact() {
+        assertEquals(109.0, NativeHeaderMetrics.barHeightPt(0f), 0.01)
         assertEquals(52.0, NativeHeaderMetrics.barHeightPt(1f), 0.01)
-        assertEquals(75.0, NativeHeaderMetrics.barHeightPt(0.5f), 0.01)
+        assertEquals(80.5, NativeHeaderMetrics.barHeightPt(0.5f), 0.01)
     }
 
     @Test
     fun barHeight_includesSubtitleInsideExpandedBar() {
-        assertEquals(134.0, NativeHeaderMetrics.barHeightPt(0f, hasSubtitle = true), 0.01)
+        assertEquals(145.0, NativeHeaderMetrics.barHeightPt(0f, hasSubtitle = true), 0.01)
         assertEquals(52.0, NativeHeaderMetrics.barHeightPt(1f, hasSubtitle = true), 0.01)
     }
 
@@ -246,9 +246,18 @@ class NativeHeaderMetricsTest {
     }
 
     @Test
-    fun titleColumnTop_pinsFirstLineToCompactChromePlane() {
-        assertEquals(5.5, NativeHeaderMetrics.titleColumnTopInsetPt(0f), 0.01)
+    fun titleColumnTop_movesFromBelowActionsToCompactCenter() {
+        assertEquals(60.0, NativeHeaderMetrics.titleColumnTopInsetPt(0f), 0.01)
+        assertEquals(38.75, NativeHeaderMetrics.titleColumnTopInsetPt(0.5f), 0.01)
         assertEquals(17.5, NativeHeaderMetrics.titleColumnTopInsetPt(1f), 0.01)
+    }
+
+    @Test
+    fun expandedTitleGeometry_alwaysFitsInsideExpandedBar() {
+        val bottom =
+            NativeHeaderMetrics.titleColumnTopInsetPt(0f) +
+                NativeHeaderMetrics.LargeTitleLineHeightPt * NativeHeaderMetrics.LargeTitleMaxLines
+        assertTrue(bottom < NativeHeaderMetrics.ExpandedBarHeightPt)
     }
 
     @Test
