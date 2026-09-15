@@ -24,9 +24,14 @@ import platform.UIKit.presentationController
  * The overlay is attached to the active UIWindow when possible rather than directly to a
  * UIPresentationController container. Presentation containers do not reliably propagate the
  * window's safe-area geometry to an independently hosted Compose controller; that was placing the
- * event-hub native header inside the status bar. The controller is also enrolled in UIKit child
- * containment for the exact lifetime of the portal so its Compose/native-chrome owners are torn
- * down when the portal leaves instead of continuing to publish stale chrome state off-screen.
+ * event-hub native header inside the status bar.
+ *
+ * On teardown, the shared native chrome is reattached to the caller host before the portal
+ * controller is released. [IosHostNavBarLayer] retains its attached controller, so leaving it on
+ * the temporary portal host can keep that Compose controller (and its event-hub chrome owner)
+ * alive after the overlay view disappears, leaking the malformed hub chrome into the rest of the
+ * app. Reattaching breaks that retention path; normal owner disposal then reconciles the caller's
+ * chrome state.
  */
 @Composable
 actual fun PlatformOverlayAbovePresentedSheets(
@@ -65,8 +70,6 @@ actual fun PlatformOverlayAbovePresentedSheets(
                 ?: topmost.presentationController?.containerView
 
         if (container != null) {
-            topmost.addChildViewController(overlayController)
-
             val overlayView = overlayController.view
             overlayView.translatesAutoresizingMaskIntoConstraints = false
             overlayView.backgroundColor = UIColor.clearColor
@@ -82,17 +85,13 @@ actual fun PlatformOverlayAbovePresentedSheets(
             )
             container.layoutIfNeeded()
             container.bringSubviewToFront(overlayView)
-            overlayController.didMoveToParentViewController(topmost)
         }
 
         onDispose {
-            if (overlayController.parentViewController != null) {
-                overlayController.willMoveToParentViewController(null)
-            }
             overlayController.view.removeFromSuperview()
-            if (overlayController.parentViewController != null) {
-                overlayController.removeFromParentViewController()
-            }
+            // Break the shared chrome -> temporary portal-controller retain path immediately. The
+            // portal composition can then dispose its native-chrome owner and reconcile the caller.
+            IosNavChrome.shared.attach(host)
         }
     }
 }
