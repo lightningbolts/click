@@ -10,17 +10,23 @@ package compose.project.click.click.ui.components // pragma: allowlist secret
  */
 object NativeRootMenuRegistry {
     private var items: List<NativeChromeMenuItem> = emptyList()
+    private var signature: List<Pair<String, String?>> = emptyList()
     internal var onChanged: (() -> Unit)? = null
 
     fun replace(next: List<NativeChromeMenuItem>) {
+        val nextSignature = next.map { it.title to it.sfSymbol }
+        val structuralChange = nextSignature != signature
         items = next
-        onChanged?.invoke()
+        signature = nextSignature
+        if (structuralChange) onChanged?.invoke()
     }
 
     fun snapshot(): List<NativeChromeMenuItem> = items
 
     fun clear() {
+        val hadItems = items.isNotEmpty()
         items = emptyList()
-        onChanged?.invoke()
+        signature = emptyList()
+        if (hadItems) onChanged?.invoke()
     }
 }
