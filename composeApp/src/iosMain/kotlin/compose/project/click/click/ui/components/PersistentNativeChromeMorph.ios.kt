@@ -11,6 +11,7 @@ import kotlinx.cinterop.cValue
 import platform.CoreGraphics.CGAffineTransform
 import platform.QuartzCore.CATransaction
 import platform.UIKit.NSLayoutConstraintAxisVertical
+import platform.UIKit.NSTextAlignmentCenter
 import platform.UIKit.UIView
 
 /**
@@ -34,8 +35,8 @@ internal fun IosHostNavBarLayer.applyPersistentChromeMorphProgress(progress: Flo
     trailingCluster.transform = transform
     backButton.alpha = alpha
     trailingCluster.alpha = alpha
-    // Titles stay readable while controls morph. Route-title handoff must never make the header
-    // disappear in the middle of an interactive gesture.
+    // Never fade the title column out during a back gesture. The previous alpha dip amplified the
+    // source/destination text handoff and made the header look like it disappeared mid-gesture.
     titleColumn.alpha = 1.0
     CATransaction.commit()
 }
@@ -90,10 +91,10 @@ internal fun IosHostNavBarLayer.animatePersistentSemanticSettle(enabled: Boolean
 }
 
 /**
- * Root menu state can leave a UIMenu and ellipsis painted on the persistent leading control.
- * A pushed screen owns the same UIButton, so explicitly clear root-menu semantics as soon as a
- * back handler is bound. This prevents the observed hub header from showing an ellipsis that opens
- * Search where a Back chevron belongs.
+ * The root overflow and pushed Back control are the same UIButton. A root UIMenu can otherwise
+ * survive into a hub/chat bind, leaving an ellipsis that still opens the root menu. `bindRow`
+ * always assigns a back handler for pushed screens while root menu presentation needs no target
+ * handler, so that distinction is stable and does not depend on mount order.
  */
 @OptIn(ExperimentalForeignApi::class)
 private fun IosHostNavBarLayer.repairPersistentLeadingControlIfNeeded() {
@@ -112,10 +113,7 @@ private fun IosHostNavBarLayer.repairPersistentLeadingControlIfNeeded() {
     }
 }
 
-/**
- * Kotlin/Native UIKit exposes UIView.transform as CValue<CGAffineTransform>. Construct the value
- * explicitly instead of relying on CoreGraphics convenience-return bridging.
- */
+/** Kotlin/Native UIKit exposes UIView.transform as CValue<CGAffineTransform>. */
 @OptIn(ExperimentalForeignApi::class)
 private fun scaleTransform(scale: Double): CValue<CGAffineTransform> =
     cValue {
@@ -131,14 +129,15 @@ private fun scaleTransform(scale: Double): CValue<CGAffineTransform> =
 private fun identityTransform(): CValue<CGAffineTransform> = scaleTransform(1.0)
 
 /**
- * Expanded root titles live below the action plane and may use the page width. Compact titles do
- * not: they occupy a protected center lane between the persistent leading and trailing controls.
- * This is the important UIKit invariant the previous symmetric full-width constraints violated.
+ * Expanded root titles live below the action plane and may use the page width. Once the native
+ * title enters compact centered mode, it occupies a protected lane between the leading overflow
+ * control and the trailing search/action cluster. This prevents either glass control from covering
+ * title text at any intermediate collapse fraction.
  */
 @OptIn(ExperimentalForeignApi::class)
 internal fun IosHostNavBarLayer.applyPersistentRootTitleGeometry(isRoot: Boolean) {
     if (!isRoot) return
-    val compact = titleLabel.font.pointSize <= NativeHeaderMetrics.CompactTitlePointSize + 1.5
+    val compact = titleLabel.textAlignment == NSTextAlignmentCenter
 
     titleLeadingToAvatar?.active = false
     avatarLeadingToBack?.active = false
@@ -152,8 +151,7 @@ internal fun IosHostNavBarLayer.applyPersistentRootTitleGeometry(isRoot: Boolean
             titleTrailingToBar?.active = false
             titleTrailingToCluster?.active = true
         }
-        // Root subtitles belong to the expanded hierarchy. Keeping greeting + subtitle inline in a
-        // 52pt compact bar is what produced the overlapping Home header captured on device.
+        // Expanded descriptive copy does not belong in a 52pt compact navigation row.
         subtitleLabel.hidden = true
         titleColumn.axis = UILayoutConstraintAxisVertical
         titleColumn.spacing = 0.0
@@ -168,22 +166,40 @@ internal fun IosHostNavBarLayer.applyPersistentRootTitleGeometry(isRoot: Boolean
 }
 
 /**
- * Root-screen menu anchor. This reuses the exact same leading UIButton later used as Back and
- * Close on pushed/media states. The caller still supplies the menu action; Search must remain a
- * separate trailing control rather than being duplicated as the root menu's only command.
+ * Root-screen overflow menu. Search is deliberately not duplicated here: it remains the dedicated
+ * magnifier on the trailing side. Commands come from the app shell so they are real navigation
+ * actions, not placeholder menu entries.
  */
 @OptIn(ExperimentalForeignApi::class)
 internal fun IosHostNavBarLayer.applyPersistentRootMenu(onClick: (() -> Unit)?) {
-    if (onClick == null) {
+    val items = NativeRootMenuRegistry.snapshot()
+    menuClicksByKey.keys
+        .filter { it.startsWith("-2:") }
+        .forEach(menuClicksByKey::remove)
+
+    if (items.isEmpty()) {
         backButton.hidden = true
         backButton.menu = null
         backButton.showsMenuAsPrimaryAction = false
+        backTarget.handler = null
         return
     }
+
+    items.forEachIndexed { index, item ->
+        menuClicksByKey["-2:$index"] = item.onClick
+    }
+    val menuAction =
+        NativeChromeAction(
+            sfSymbol = "ellipsis",
+            contentDescription = "Menu",
+            onClick = {},
+            menuItems = items,
+        )
     backButton.hidden = false
-    backButton.menu = null
-    backButton.showsMenuAsPrimaryAction = false
-    backTarget.handler = onClick
+    // UIMenu is the primary action; keeping the target empty lets pushed routes reliably detect
+    // that they must retarget this physical button to Back.
+    backTarget.handler = null
+    bindNativeMenu(backButton, menuAction, actionIndex = -2)
     paintChromeButton(
         button = backButton,
         symbol = "ellipsis",
