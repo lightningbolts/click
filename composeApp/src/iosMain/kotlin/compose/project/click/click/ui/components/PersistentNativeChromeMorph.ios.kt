@@ -102,18 +102,24 @@ internal fun IosHostNavBarLayer.applyPersistentRootTitleGeometry(isRoot: Boolean
 
 /**
  * Root-screen menu anchor. This deliberately reuses the exact same leading UIButton later used as
- * Back and Close on pushed/media states. There is no remount and therefore no position jump.
+ * Back and Close on pushed/media states. It is a real native UIMenu rather than a disguised search
+ * button, so the visual anchor and its semantics stay consistent.
  */
 @OptIn(ExperimentalForeignApi::class)
-internal fun IosHostNavBarLayer.applyPersistentRootMenu(onClick: (() -> Unit)?) {
-    if (onClick == null) return
+internal fun IosHostNavBarLayer.applyPersistentRootMenu(action: NativeChromeAction?) {
+    if (action == null) {
+        backButton.hidden = true
+        backButton.menu = null
+        backButton.showsMenuAsPrimaryAction = false
+        return
+    }
     backButton.hidden = false
-    backTarget.handler = onClick
-    bindNativeMenu(backButton, null, actionIndex = -2)
+    backTarget.handler = action.onClick
+    bindNativeMenu(backButton, action, actionIndex = -2)
     paintChromeButton(
         button = backButton,
         symbol = "ellipsis",
-        accessibility = "Menu",
+        accessibility = action.contentDescription,
         clustered = false,
     )
 }
