@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
@@ -36,9 +35,9 @@ val ClickConversationAvatarSize = 48.dp
  * Conversation-specific list row.
  *
  * Chat inbox rows intentionally have more vertical breathing room than generic settings/search
- * rows and always expose an immediate pressed wash on iOS. The generic [ClickListRow] only shows a
- * ripple on platforms that opt into ripple indication, which made iOS conversation taps feel dead
- * after the launch-polish refactor removed the previous highlight.
+ * rows and always expose an immediate pressed wash on iOS. The press state is a flat full-row wash
+ * rather than a card scale animation: conversation lists should feel like native inbox rows, not
+ * individually floating controls.
  */
 @Composable
 fun ClickConversationListRow(
@@ -53,7 +52,6 @@ fun ClickConversationListRow(
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
-    val shape = RoundedCornerShape(LocalPlatformStyle.current.compactCardCornerRadius)
     val pressedWash =
         if (pressed) {
             MaterialTheme.colorScheme.onSurface.copy(alpha = 0.075f)
@@ -67,8 +65,7 @@ fun ClickConversationListRow(
                 Modifier
                     .fillMaxWidth()
                     .heightIn(min = ClickConversationListRowMinHeight)
-                    .background(pressedWash, shape)
-                    .platformPressScale(interactionSource)
+                    .background(pressedWash)
                     .combinedClickable(
                         interactionSource = interactionSource,
                         indication = if (LocalPlatformStyle.current.useRipple) ripple(bounded = true) else null,
