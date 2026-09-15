@@ -622,6 +622,7 @@ internal fun EventBeaconDetail(
         val eventChatActionable =
             eventChatEligible &&
                 eventChatState != EventChatOpenState.Resolving &&
+                eventChatState != EventChatOpenState.RequiresRsvp &&
                 eventChatState != EventChatOpenState.Expired &&
                 eventChatState != EventChatOpenState.NotFound
         val eventChatPrimary = eventChatState == EventChatOpenState.Idle

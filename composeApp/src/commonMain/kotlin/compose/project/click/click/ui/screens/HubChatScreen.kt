@@ -90,15 +90,19 @@ import compose.project.click.click.ui.chat.ChatMediaPickerHandles // pragma: all
 import compose.project.click.click.ui.chat.ChatMessageTimeline // pragma: allowlist secret
 import compose.project.click.click.ui.chat.applyTimestampPeekDragStep // pragma: allowlist secret
 import compose.project.click.click.ui.chat.buildChatTimelineEntriesNewestFirst // pragma: allowlist secret
+import compose.project.click.click.ui.chat.chatComposerKeyboardMotion // pragma: allowlist secret
 import compose.project.click.click.ui.chat.chatDismissKeyboardAfterScrollConnection // pragma: allowlist secret
 import compose.project.click.click.ui.chat.chatTimelineFollowUsesAnimation // pragma: allowlist secret
+import compose.project.click.click.ui.chat.chatTimelineKeyboardViewport // pragma: allowlist secret
 import compose.project.click.click.ui.chat.chatTimelineShouldFollowInbound // pragma: allowlist secret
+import compose.project.click.click.ui.chat.chatTimelineShouldFollowKeyboard // pragma: allowlist secret
 import compose.project.click.click.ui.chat.chatTimestampPeekOnSwipeLeft // pragma: allowlist secret
 import compose.project.click.click.ui.chat.indexOfMessageId // pragma: allowlist secret
 import compose.project.click.click.ui.chat.isTimestampPeekRevealed // pragma: allowlist secret
 import compose.project.click.click.ui.chat.launchTimestampPeekReplyStyleSettle // pragma: allowlist secret
 import compose.project.click.click.ui.chat.rememberChatMediaPickers // pragma: allowlist secret
 import compose.project.click.click.ui.chat.rememberChatNativeKeyboardInsets // pragma: allowlist secret
+import compose.project.click.click.ui.chat.rememberChatTimelineKeyboardFollow // pragma: allowlist secret
 import compose.project.click.click.ui.chat.rememberTimestampPeekRevealPx // pragma: allowlist secret
 import compose.project.click.click.ui.chat.rememberTimestampPeekSoftKneePx // pragma: allowlist secret
 import compose.project.click.click.ui.chat.restoreTimestampPeekRawFromDisplay // pragma: allowlist secret
@@ -114,7 +118,6 @@ import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeft
 import compose.project.click.click.ui.components.LocalGlassAlertAnimatedDismiss // pragma: allowlist secret
 import compose.project.click.click.ui.components.NativeChromeAction // pragma: allowlist secret
 import compose.project.click.click.ui.components.UnifiedPopupFormDialog // pragma: allowlist secret
-import compose.project.click.click.ui.components.chatThreadKeyboardDock // pragma: allowlist secret
 import compose.project.click.click.ui.components.platformNativeHeaderClearance // pragma: allowlist secret
 import compose.project.click.click.ui.components.sheetPageBackground // pragma: allowlist secret
 import compose.project.click.click.ui.theme.LocalPlatformStyle // pragma: allowlist secret
@@ -230,6 +233,17 @@ fun HubChatScreen(
         }
 
     val initialTimelineScrollDone = remember(args.realtimeChannel) { mutableStateOf(false) }
+    val hubTimelineFollowsKeyboardState =
+        rememberChatTimelineKeyboardFollow(
+            nativeKeyboardLiftPxState = nativeKeyboardInsets.liftPxState,
+            shouldFollowOnKeyboardOpen = {
+                chatTimelineShouldFollowKeyboard(
+                    firstVisibleItemIndex = hubListState.firstVisibleItemIndex,
+                    initialTimelineScrollDone = initialTimelineScrollDone.value,
+                    userScrollInProgress = hubListState.isScrollInProgress,
+                )
+            },
+        )
     var focusedSearchMessageId by remember(args.realtimeChannel) { mutableStateOf<String?>(null) }
     val peerNewestMessageId =
         messages
@@ -532,20 +546,16 @@ fun HubChatScreen(
                                 .fillMaxWidth()
                                 .clipToBounds(),
                     ) {
-                        Column(
-                            modifier =
-                                Modifier
-                                    .fillMaxSize()
-                                    .chatThreadKeyboardDock(
-                                        nativeKeyboardLiftPxState = nativeKeyboardInsets.liftPxState,
-                                        clearNativeTabBar = true,
-                                    ),
-                        ) {
+                        Column(modifier = Modifier.fillMaxSize()) {
                             Box(
                                 modifier =
                                     Modifier
                                         .weight(1f)
-                                        .fillMaxWidth(),
+                                        .fillMaxWidth()
+                                        .chatTimelineKeyboardViewport(
+                                            nativeKeyboardLiftPxState = nativeKeyboardInsets.liftPxState,
+                                            followKeyboard = { hubTimelineFollowsKeyboardState.value },
+                                        ),
                             ) {
                                 ChatMessageTimeline(
                                     timelineEntries = timelineEntries,
@@ -600,7 +610,13 @@ fun HubChatScreen(
                             }
 
                             Column(
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .chatComposerKeyboardMotion(
+                                            nativeKeyboardLiftPxState = nativeKeyboardInsets.liftPxState,
+                                            clearNativeTabBar = true,
+                                        ),
                             ) {
                                 HubChatInputBar(
                                     viewModel = viewModel,

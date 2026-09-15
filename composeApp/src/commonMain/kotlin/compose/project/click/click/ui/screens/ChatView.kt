@@ -46,7 +46,6 @@ import compose.project.click.click.ui.chat.ChatWarmLoadingView // pragma: allowl
 import compose.project.click.click.ui.chat.ForwardDialog // pragma: allowlist secret
 import compose.project.click.click.ui.chat.GroupMembersPickerContext // pragma: allowlist secret
 import compose.project.click.click.ui.chat.chatDismissKeyboardAfterScrollConnection // pragma: allowlist secret
-import compose.project.click.click.ui.chat.chatPeerStatusSubtitle // pragma: allowlist secret
 import compose.project.click.click.ui.chat.chatTimelineFollowUsesAnimation // pragma: allowlist secret
 import compose.project.click.click.ui.chat.chatTimelineShouldFollowInbound // pragma: allowlist secret
 import compose.project.click.click.ui.chat.rememberChatMediaPickers // pragma: allowlist secret
@@ -105,8 +104,6 @@ fun ChatView(
     keyboardHeightProvider: KeyboardHeightProvider = rememberKeyboardHeightProvider(),
 ) {
     val chatMessagesState by viewModel.chatMessagesState.collectAsState()
-    val isPeerTyping by viewModel.isPeerTyping.collectAsState()
-    val isPeerOnline by viewModel.isPeerOnline.collectAsState()
     val chatListState by viewModel.chatListState.collectAsState()
     val archivedConnectionIds by viewModel.archivedConnectionIds.collectAsState()
     val coreConnectionIds by AppDataManager.coreConnectionIds.collectAsState()
@@ -118,7 +115,6 @@ fun ChatView(
     val nudgeResult by viewModel.nudgeResult.collectAsState()
     val currentUserId by viewModel.currentUserId.collectAsState()
     val currentUser by AppDataManager.currentUser.collectAsState()
-    val onlineUsers by AppDataManager.onlineUsers.collectAsState()
 
     // Icebreaker prompts state
     val icebreakerPrompts by viewModel.icebreakerPrompts.collectAsState()
@@ -261,26 +257,8 @@ fun ChatView(
                 ?.trim()
                 ?.takeIf { it.isNotEmpty() }
             ?: "Chat"
-    val bindOnline =
-        if (bindIsGroup) {
-            null
-        } else {
-            val peerId =
-                successChat
-                    ?.chatDetails
-                    ?.otherUser
-                    ?.id ?: hintedChatRow?.otherUser?.id
-            peerId?.let { it in onlineUsers || isPeerOnline }
-        }
-    val bindStatusSubtitle =
-        if (bindIsGroup) {
-            null
-        } else if (bindOnline != null || successChat != null || hintedChatRow != null) {
-            chatPeerStatusSubtitle(isTyping = isPeerTyping, isOnline = bindOnline == true)
-        } else {
-            null
-        }
-    val chatNativeHasStackedSubtitle = bindStatusSubtitle != null
+    val chatNativeHasStackedSubtitle =
+        !bindIsGroup && (successChat != null || hintedChatRow != null)
     val chatNativeClearance =
         platformNativeHeaderClearance(
             statusBarTop = topInset,
@@ -289,11 +267,10 @@ fun ChatView(
             stackSubtitle = chatNativeHasStackedSubtitle,
         )
     ChatViewNativeNavBinding(
+        viewModel = viewModel,
         nativeNavChrome = nativeNavChrome,
         chatId = chatId,
         bindTitle = bindTitle,
-        bindStatusSubtitle = bindStatusSubtitle,
-        bindOnline = bindOnline,
         bindIsGroup = bindIsGroup,
         bindAvatarUrl = bindAvatarUrl,
         successChat = successChat,
@@ -507,7 +484,6 @@ fun ChatView(
                     }
                     val chatDetails = state.chatDetails
                     val messages = state.messages
-                    val reactionsMap by viewModel.messageReactions.collectAsState()
                     // R1.1: hoist secure media load state above the LazyColumn so each item doesn't
                     // subscribe to the full map.
                     val isGroupChat = chatDetails.groupClique != null
@@ -689,6 +665,7 @@ fun ChatView(
                     ) {
                         Column(modifier = Modifier.fillMaxSize()) {
                             ChatViewSuccessHeader(
+                                viewModel = viewModel,
                                 nativeNavChrome = nativeNavChrome,
                                 chatNativeClearance = chatNativeClearance,
                                 topInset = topInset,
@@ -696,9 +673,6 @@ fun ChatView(
                                 isGroupChat = isGroupChat,
                                 groupTitle = groupTitle,
                                 memberSummaryLine = memberSummaryLine,
-                                isPeerTyping = isPeerTyping,
-                                isPeerOnline = isPeerOnline,
-                                onlineUsers = onlineUsers,
                                 coreConnectionIds = coreConnectionIds,
                                 chatHasIntentOverlap = chatHasIntentOverlap,
                                 onBackPressed = onBackPressed,
@@ -735,9 +709,7 @@ fun ChatView(
                                 icebreakerCooldownRemainingSec = icebreakerCooldownRemainingSec,
                                 icebreakerPanelHeightPxState = icebreakerPanelHeightPxState,
                                 icebreakerTimelineTopReserve = icebreakerTimelineTopReserve,
-                                reactionsMap = reactionsMap,
                                 isLoadingOlderMessages = isLoadingOlderMessages,
-                                isPeerTyping = isPeerTyping,
                                 typingPeerLabel = typingPeerLabel,
                                 editingMessageId = editingMessageId,
                                 replyingTo = replyingTo,

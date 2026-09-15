@@ -122,17 +122,21 @@ private fun IosHostNavBarLayer.captureStableOverlayChrome(): StableOverlayChrome
         backHandler = backTarget.handler,
         backHidden = backButton.hidden,
         backSymbol = paintedSymbols[backButton],
-        backAccessibility = stableChromeAccessibility(paintedSymbols[backButton], leading = true),
+        backAccessibility = paintedAccessibility[backButton] ?: stableChromeAccessibility(paintedSymbols[backButton], leading = true),
         searchHandler = searchTarget.handler,
         searchHidden = searchButton.hidden,
         searchSymbol = paintedSymbols[searchButton],
-        searchAccessibility = "Search",
+        searchAccessibility = paintedAccessibility[searchButton] ?: "Search",
         searchMenu = searchButton.menu,
         searchShowsMenu = searchButton.showsMenuAsPrimaryAction,
         actionHandlers = actionTargets.map { it.handler },
         actionHidden = actionButtons.map { it.hidden },
         actionSymbols = actionSymbols,
-        actionAccessibility = actionSymbols.map { stableChromeAccessibility(it, leading = false) },
+        actionAccessibility =
+            actionButtons.mapIndexed { index, button ->
+                paintedAccessibility[button]
+                    ?: stableChromeAccessibility(actionSymbols[index], leading = false)
+            },
         actionMenus = actionButtons.map { it.menu },
         actionShowsMenu = actionButtons.map { it.showsMenuAsPrimaryAction },
         arrangedSubviews = trailingStack.arrangedSubviews.map { it as UIView },
@@ -328,6 +332,7 @@ private fun IosHostNavBarLayer.restoreStableOverlayChrome(snapshot: StableOverla
         )
     } ?: paintedSymbols.remove(backButton)
     backButton.setAccessibilityLabel(snapshot.backAccessibility)
+    paintedAccessibility[backButton] = snapshot.backAccessibility
 
     snapshot.searchSymbol?.let { symbol ->
         morphClusteredChromeSymbol(
@@ -337,6 +342,7 @@ private fun IosHostNavBarLayer.restoreStableOverlayChrome(snapshot: StableOverla
         )
     } ?: paintedSymbols.remove(searchButton)
     searchButton.setAccessibilityLabel(snapshot.searchAccessibility)
+    paintedAccessibility[searchButton] = snapshot.searchAccessibility
 
     actionButtons.forEachIndexed { index, button ->
         val symbol = snapshot.actionSymbols[index]
@@ -350,6 +356,7 @@ private fun IosHostNavBarLayer.restoreStableOverlayChrome(snapshot: StableOverla
             paintedSymbols.remove(button)
         }
         button.setAccessibilityLabel(snapshot.actionAccessibility[index])
+        paintedAccessibility[button] = snapshot.actionAccessibility[index]
     }
 }
 
@@ -373,6 +380,7 @@ private fun IosHostNavBarLayer.morphLeadingChromeSymbol(
 ) {
     if (paintedSymbols[backButton] == symbol) {
         backButton.setAccessibilityLabel(accessibility)
+        paintedAccessibility[backButton] = accessibility
         return
     }
     val transitionView = if (usesGlassButtons) backGlyph else backButton
@@ -400,6 +408,7 @@ private fun IosHostNavBarLayer.morphClusteredChromeSymbol(
 ) {
     if (paintedSymbols[button] == symbol) {
         button.setAccessibilityLabel(accessibility)
+        paintedAccessibility[button] = accessibility
         return
     }
     UIView.transitionWithView(

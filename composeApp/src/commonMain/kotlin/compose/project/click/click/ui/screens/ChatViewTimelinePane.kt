@@ -106,9 +106,7 @@ internal fun ColumnScope.ChatViewTimelinePane(
     icebreakerCooldownRemainingSec: Int,
     icebreakerPanelHeightPxState: MutableIntState,
     icebreakerTimelineTopReserve: Dp,
-    reactionsMap: Map<String, List<compose.project.click.click.data.models.MessageReaction>>,
     isLoadingOlderMessages: Boolean,
-    isPeerTyping: Boolean,
     typingPeerLabel: String,
     editingMessageId: String?,
     replyingTo: MessageWithUser?,
@@ -395,7 +393,8 @@ internal fun ColumnScope.ChatViewTimelinePane(
                                 useHubNeutralMesh = isGroupChat,
                                 isGroupChat = isGroupChat,
                                 currentUserId = currentUserId,
-                                reactionsMap = reactionsMap,
+                                reactionsMap = emptyMap(),
+                                reactionsFlow = viewModel.messageReactions,
                                 secureMediaHost = viewModel,
                                 activeChatId = activeApiChatId ?: chatDetails.chat.id,
                                 onToggleReaction = { messageId, reaction ->
@@ -462,71 +461,7 @@ internal fun ColumnScope.ChatViewTimelinePane(
                             clearNativeTabBar = true,
                         ),
             ) {
-                // Typing indicator — label + bouncing dots (Realtime Broadcast)
-                AnimatedVisibility(
-                    visible = isPeerTyping,
-                    enter =
-                        fadeIn(ChatChromeMotion.ShortFade) +
-                            slideInVertically(
-                                animationSpec = ChatChromeMotion.ShortSlide,
-                                initialOffsetY = { it / 4 },
-                            ),
-                    exit =
-                        fadeOut(animationSpec = tween(160, easing = FastOutSlowInEasing)) +
-                            slideOutVertically(
-                                animationSpec = ChatChromeMotion.ShortSlide,
-                                targetOffsetY = { it / 4 },
-                            ),
-                ) {
-                    Row(
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(start = 16.dp, end = 80.dp, bottom = 4.dp),
-                        horizontalArrangement = Arrangement.Start,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Box(
-                            modifier =
-                                Modifier
-                                    .border(
-                                        width = 1.dp,
-                                        color = PrimaryBlue.copy(alpha = 0.15f),
-                                        shape =
-                                            RoundedCornerShape(
-                                                topStart = chatBubbleScaledDp(6f),
-                                                topEnd = chatBubbleScaledDp(21f),
-                                                bottomStart = chatBubbleScaledDp(21f),
-                                                bottomEnd = chatBubbleScaledDp(21f),
-                                            ),
-                                    ).clip(
-                                        RoundedCornerShape(
-                                            topStart = chatBubbleScaledDp(6f),
-                                            topEnd = chatBubbleScaledDp(21f),
-                                            bottomStart = chatBubbleScaledDp(21f),
-                                            bottomEnd = chatBubbleScaledDp(21f),
-                                        ),
-                                    ).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f))
-                                    .padding(
-                                        horizontal = chatBubbleScaledDp(18f),
-                                        vertical = chatBubbleScaledDp(12f),
-                                    ),
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(chatBubbleScaledDp(9f)),
-                            ) {
-                                Text(
-                                    text = typingPeerLabel,
-                                    style = chatBubbleReplySnippetStyle(),
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    fontStyle = FontStyle.Italic,
-                                )
-                                ChatTypingDots()
-                            }
-                        }
-                    }
-                }
+                ChatTypingIndicator(viewModel = viewModel, typingPeerLabel = typingPeerLabel)
 
                 // Edit mode indicator strip
                 if (editingMessageId != null) {
@@ -603,6 +538,64 @@ internal fun ColumnScope.ChatViewTimelinePane(
                             mapViewModel?.refreshDiscoveryFeed()
                         },
                     )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ChatTypingIndicator(
+    viewModel: ChatViewModel,
+    typingPeerLabel: String,
+) {
+    val isPeerTyping by viewModel.isPeerTyping.collectAsState()
+    AnimatedVisibility(
+        visible = isPeerTyping,
+        enter =
+            fadeIn(ChatChromeMotion.ShortFade) +
+                slideInVertically(
+                    animationSpec = ChatChromeMotion.ShortSlide,
+                    initialOffsetY = { it / 4 },
+                ),
+        exit =
+            fadeOut(animationSpec = tween(160, easing = FastOutSlowInEasing)) +
+                slideOutVertically(
+                    animationSpec = ChatChromeMotion.ShortSlide,
+                    targetOffsetY = { it / 4 },
+                ),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 80.dp, bottom = 4.dp),
+            horizontalArrangement = Arrangement.Start,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            val bubbleShape =
+                RoundedCornerShape(
+                    topStart = chatBubbleScaledDp(6f),
+                    topEnd = chatBubbleScaledDp(21f),
+                    bottomStart = chatBubbleScaledDp(21f),
+                    bottomEnd = chatBubbleScaledDp(21f),
+                )
+            Box(
+                modifier =
+                    Modifier
+                        .border(width = 1.dp, color = PrimaryBlue.copy(alpha = 0.15f), shape = bubbleShape)
+                        .clip(bubbleShape)
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f))
+                        .padding(horizontal = chatBubbleScaledDp(18f), vertical = chatBubbleScaledDp(12f)),
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(chatBubbleScaledDp(9f)),
+                ) {
+                    Text(
+                        text = typingPeerLabel,
+                        style = chatBubbleReplySnippetStyle(),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontStyle = FontStyle.Italic,
+                    )
+                    ChatTypingDots()
                 }
             }
         }

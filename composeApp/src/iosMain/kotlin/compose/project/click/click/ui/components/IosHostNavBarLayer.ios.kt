@@ -153,6 +153,7 @@ internal class IosHostNavBarLayer {
     private var lastVisualKey: String? = null
     private var lastButtonSignature: String? = null
     internal val paintedSymbols = mutableMapOf<UIButton, String>()
+    internal val paintedAccessibility = mutableMapOf<UIButton, String>()
     private var lastCollapseFraction = 0f
     private var lastHeightPt = -1.0
     private var lastTitle: String? = null
