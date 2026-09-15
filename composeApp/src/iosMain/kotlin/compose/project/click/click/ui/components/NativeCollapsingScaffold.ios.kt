@@ -296,24 +296,29 @@ private fun rememberIosHostNavBar(
         backHandler?.let { destinationBack ->
             {
                 if (overlay && !leadingClose && !reduceMotion) {
-                    IosNavChrome.beginProgrammaticPop(owner)
-                    morphScope.launch {
-                        tapMorph.stop()
-                        tapMorph.snapTo(0f)
-                        tapMorph.animateTo(
-                            targetValue = 1f,
-                            animationSpec =
-                                tween(
-                                    durationMillis = NATIVE_ROUTE_HEADER_TRANSITION_MS,
-                                    easing = FastOutSlowInEasing,
-                                ),
-                        ) {
-                            IosNavChrome.setProgrammaticPopProgress(owner, value)
+                    if (IosNavChrome.beginProgrammaticPop(owner)) {
+                        morphScope.launch {
+                            tapMorph.stop()
+                            tapMorph.snapTo(0f)
+                            tapMorph.animateTo(
+                                targetValue = 1f,
+                                animationSpec =
+                                    tween(
+                                        durationMillis = NATIVE_ROUTE_HEADER_TRANSITION_MS,
+                                        easing = FastOutSlowInEasing,
+                                    ),
+                            ) {
+                                IosNavChrome.setProgrammaticPopProgress(owner, value)
+                            }
+                            // Keep source ownership intact until the native transition reaches its
+                            // final frame. Navigation then disposes the source and reconciles the
+                            // destination exactly once, avoiding the post-pop diagonal title jump.
+                            destinationBack()
                         }
-                        IosNavChrome.endProgrammaticPop(owner)
                     }
+                } else {
+                    destinationBack()
                 }
-                destinationBack()
             }
         }
 
@@ -551,6 +556,7 @@ internal object IosNavChrome {
     private var mediaChrome: OverlayMediaChrome? = null
     private var lastSemanticSignature: String? = null
     private var lastRenderedOwner: Any? = null
+    private var transitionPreparedOwner: Any? = null
 
     private val interactiveOffsetsPt = mutableMapOf<Any, Double>()
     private var interactiveSourceOwner: Any? = null
@@ -582,6 +588,10 @@ internal object IosNavChrome {
         if (programmaticSourceOwner === owner) {
             programmaticSourceOwner = null
             programmaticProgress = 0f
+        }
+        if (transitionPreparedOwner === owner) {
+            transitionPreparedOwner = null
+            shared.resetPersistentChromeMorphVisuals(animated = false)
         }
         reconcile()
     }
@@ -625,11 +635,13 @@ internal object IosNavChrome {
         shared.bringChromeToFront()
     }
 
-    fun beginProgrammaticPop(owner: Any) {
-        if (states[owner]?.visible != true) return
+    fun beginProgrammaticPop(owner: Any): Boolean {
+        if (states[owner]?.visible != true || programmaticSourceOwner != null) return false
         programmaticSourceOwner = owner
         programmaticProgress = 0f
+        transitionPreparedOwner = null
         renderTransition(owner, 0f)
+        return true
     }
 
     fun setProgrammaticPopProgress(
@@ -645,6 +657,7 @@ internal object IosNavChrome {
         if (programmaticSourceOwner !== owner) return
         programmaticSourceOwner = null
         programmaticProgress = 0f
+        transitionPreparedOwner = null
         shared.resetPersistentChromeMorphVisuals(animated = false)
         reconcile()
     }
@@ -662,6 +675,7 @@ internal object IosNavChrome {
         val maxOffset = interactiveOffsetsPt.values.maxOrNull() ?: 0.0
         if (maxOffset <= 0.5) {
             interactiveSourceOwner = null
+            transitionPreparedOwner = null
             shared.resetPersistentChromeMorphVisuals(animated = true)
             reconcile()
             return
@@ -669,11 +683,13 @@ internal object IosNavChrome {
 
         if (interactiveSourceOwner == null) {
             interactiveSourceOwner = activeState()?.owner
+            transitionPreparedOwner = null
         }
         val sourceOwner = interactiveSourceOwner ?: return
         val source =
             states[sourceOwner] ?: run {
                 interactiveSourceOwner = activeState()?.owner
+                transitionPreparedOwner = null
                 return
             }
         val width =
@@ -698,11 +714,13 @@ internal object IosNavChrome {
         progress: Float,
     ) {
         val source = states[sourceOwner] ?: activeState() ?: return
-        val destination = activeState(excludingOwner = sourceOwner)
-        val p = progress.coerceIn(0f, 1f)
-        val state = if (destination != null && p >= 0.5f) destination else source
-        render(state, animateSemanticChange = false)
-        shared.applyPersistentChromeMorphProgress(p)
+        if (transitionPreparedOwner !== sourceOwner) {
+            // Freeze source semantics for the duration of the gesture. Only transforms/dual-title
+            // geometry change per frame; destination chrome is reconciled once the source leaves.
+            render(source, animateSemanticChange = false)
+            transitionPreparedOwner = sourceOwner
+        }
+        shared.applyPersistentChromeMorphProgress(progress.coerceIn(0f, 1f))
     }
 
     private fun reconcile() {
@@ -725,6 +743,7 @@ internal object IosNavChrome {
                 return
             }
         }
+        transitionPreparedOwner = null
         val active = activeState()
         if (active == null) {
             shared.setWantVisible(false)
@@ -769,11 +788,7 @@ internal object IosNavChrome {
         val isRoot = state.level == NativeChromeLevel.ROOT
         if (isRoot) {
             shared.applyPersistentRootTitleGeometry(isRoot = true)
-            val rootMenuHandler =
-                state.onOpenSearch
-                    ?: state.trailingActions.firstOrNull()?.onClick
-                    ?: {}
-            shared.applyPersistentRootMenu(rootMenuHandler)
+            shared.applyPersistentRootMenu(null)
         }
 
         if (overlayLike) {
