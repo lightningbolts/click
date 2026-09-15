@@ -12,12 +12,12 @@ import kotlinx.cinterop.useContents
 import platform.CoreGraphics.CGAffineTransform
 import platform.CoreGraphics.CGRectMake
 import platform.QuartzCore.CATransaction
-import platform.UIKit.NSLayoutConstraintAxisVertical
 import platform.UIKit.NSTextAlignmentCenter
 import platform.UIKit.NSTextAlignmentLeft
 import platform.UIKit.UIColor
 import platform.UIKit.UIFont
 import platform.UIKit.UILabel
+import platform.UIKit.UILayoutConstraintAxisVertical
 import platform.UIKit.UIView
 
 private data class NativeTitleSnapshot(
@@ -230,14 +230,14 @@ private fun configureTransitionContainer(
 
     title.text = snapshot.title
     title.font = UIFont.boldSystemFontOfSize(snapshot.titleFontSize)
-    title.textColor = snapshot.titleColor
+    title.textColor = snapshot.titleColor ?: UIColor.labelColor
     title.textAlignment = if (snapshot.centered) NSTextAlignmentCenter else NSTextAlignmentLeft
     title.numberOfLines = 1
     title.userInteractionEnabled = false
 
     subtitle.text = snapshot.subtitle
     subtitle.font = UIFont.systemFontOfSize(snapshot.subtitleFontSize)
-    subtitle.textColor = snapshot.subtitleColor
+    subtitle.textColor = snapshot.subtitleColor ?: UIColor.secondaryLabelColor
     subtitle.textAlignment = title.textAlignment
     subtitle.numberOfLines = 1
     subtitle.hidden = snapshot.subtitle.isEmpty()
@@ -320,7 +320,7 @@ internal fun IosHostNavBarLayer.applyPersistentRootTitleGeometry(isRoot: Boolean
             titleTrailingToCluster?.active = true
         }
         subtitleLabel.hidden = true
-        titleColumn.axis = NSLayoutConstraintAxisVertical
+        titleColumn.axis = UILayoutConstraintAxisVertical
         titleColumn.spacing = 0.0
     } else {
         titleLeadingToBack?.active = false
