@@ -95,10 +95,11 @@ internal fun ProfileMediaPreviewOverlay(
 
     // Profile media is launched from a native profile sheet on iOS. Keep the preview in the same
     // full-screen portal used by event chat so it covers the sheet instead of being clipped to the
-    // sheet's rounded presentation container. The model is intentionally retained through the
-    // overlay's exit animation, so the portal stays mounted until that exit has actually finished.
+    // sheet's rounded presentation container. GlassFullscreenMediaOverlay calls the parent dismiss
+    // callback only after its own exit animation is idle, so the portal can detach as soon as the
+    // parent's visible flag falls without leaving a transparent full-screen hit-testing layer.
     PlatformOverlayAbovePresentedSheets(
-        liftAbovePresentedSheets = isIOS,
+        liftAbovePresentedSheets = isIOS && mediaPreviewVisible,
     ) {
         GlassFullscreenMediaOverlay(
             visible = mediaPreviewVisible,
