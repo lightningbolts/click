@@ -55,13 +55,26 @@ private class NativeTitleTransitionViews {
     var active = false
 }
 
+private data class NativeLeadingSemanticSnapshot(
+    val handler: (() -> Unit)?,
+    val symbol: String,
+    val accessibility: String,
+)
+
 private val transitionViewsByLayer = mutableMapOf<IosHostNavBarLayer, NativeTitleTransitionViews>()
 private val lastRootSnapshotByLayer = mutableMapOf<IosHostNavBarLayer, NativeTitleSnapshot>()
+private val leadingSemanticSnapshotByLayer = mutableMapOf<IosHostNavBarLayer, NativeLeadingSemanticSnapshot>()
+private val leadingDestinationAppliedByLayer = mutableMapOf<IosHostNavBarLayer, Boolean>()
 
 /**
  * Controls remain persistent, but route text does not semantically morph. UIKit navigation keeps
  * outgoing and incoming route titles as separate visual objects during an interactive pop. The
  * source title follows the foreground page while the cached destination title parallaxes in.
+ *
+ * The leading button is the same physical UIButton for both routes. Its symbol therefore changes
+ * while the control is at the compressed midpoint of the morph, not after the control has already
+ * expanded into the destination. Reversing/cancelling the gesture restores the source semantic at
+ * the same midpoint, keeping icon and material motion one continuous interaction.
  */
 @OptIn(ExperimentalForeignApi::class)
 internal fun IosHostNavBarLayer.applyPersistentChromeMorphProgress(progress: Float) {
@@ -80,10 +93,12 @@ internal fun IosHostNavBarLayer.applyPersistentChromeMorphProgress(progress: Flo
     CATransaction.commit()
 
     applyRouteTitleTransition(p)
+    applyLeadingRouteSemanticTransition(p)
 }
 
 @OptIn(ExperimentalForeignApi::class)
 internal fun IosHostNavBarLayer.resetPersistentChromeMorphVisuals(animated: Boolean) {
+    restoreLeadingRouteSemanticIfNeeded()
     clearRouteTitleTransition()
     val identity = identityTransform()
     val apply = {
@@ -129,6 +144,67 @@ internal fun IosHostNavBarLayer.animatePersistentSemanticSettle(enabled: Boolean
         backButton.alpha = 1.0
         trailingCluster.alpha = 1.0
     }
+}
+
+@OptIn(ExperimentalForeignApi::class)
+private fun IosHostNavBarLayer.applyLeadingRouteSemanticTransition(progress: Float) {
+    // The existing route-title transition is only created when the cached root route is actually
+    // the pop destination, so use that as the semantic handoff contract as well. This avoids
+    // guessing that every pushed-to-pushed transition should become the root overflow menu.
+    val routeTransition = transitionViewsByLayer[this]
+    if (routeTransition?.active != true || routeTransition.destinationSnapshot == null) return
+
+    val source =
+        leadingSemanticSnapshotByLayer.getOrPut(this) {
+            NativeLeadingSemanticSnapshot(
+                handler = backTarget.handler,
+                symbol = paintedSymbols[backButton] ?: "chevron.backward",
+                accessibility = paintedAccessibility[backButton] ?: "Back",
+            )
+        }
+    val destinationApplied = leadingDestinationAppliedByLayer[this] == true
+    val shouldShowDestination = progress >= 0.5f
+    if (shouldShowDestination == destinationApplied) return
+
+    CATransaction.begin()
+    CATransaction.setDisableActions(true)
+    if (shouldShowDestination) {
+        applyPersistentRootMenu(onClick = null)
+    } else {
+        backButton.menu = null
+        backButton.showsMenuAsPrimaryAction = false
+        backTarget.handler = source.handler
+        backButton.hidden = false
+        paintChromeButton(
+            button = backButton,
+            symbol = source.symbol,
+            accessibility = source.accessibility,
+            clustered = false,
+        )
+    }
+    CATransaction.commit()
+    leadingDestinationAppliedByLayer[this] = shouldShowDestination
+}
+
+@OptIn(ExperimentalForeignApi::class)
+private fun IosHostNavBarLayer.restoreLeadingRouteSemanticIfNeeded() {
+    val source = leadingSemanticSnapshotByLayer.remove(this) ?: return
+    val destinationApplied = leadingDestinationAppliedByLayer.remove(this) == true
+    if (!destinationApplied) return
+
+    CATransaction.begin()
+    CATransaction.setDisableActions(true)
+    backButton.menu = null
+    backButton.showsMenuAsPrimaryAction = false
+    backTarget.handler = source.handler
+    backButton.hidden = false
+    paintChromeButton(
+        button = backButton,
+        symbol = source.symbol,
+        accessibility = source.accessibility,
+        clustered = false,
+    )
+    CATransaction.commit()
 }
 
 @OptIn(ExperimentalForeignApi::class)
