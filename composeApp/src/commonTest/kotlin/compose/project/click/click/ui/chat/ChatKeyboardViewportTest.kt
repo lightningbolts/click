@@ -40,8 +40,8 @@ class ChatKeyboardViewportTest {
     }
 
     @Test
-    fun timelineDoesNotFollowBeforeInitialAnchorIsEstablished() {
-        assertFalse(
+    fun emptyNewestTimelineFollowsKeyboardBeforeFirstMessageIsInserted() {
+        assertTrue(
             chatTimelineShouldFollowKeyboard(
                 firstVisibleItemIndex = 0,
                 initialTimelineScrollDone = false,
