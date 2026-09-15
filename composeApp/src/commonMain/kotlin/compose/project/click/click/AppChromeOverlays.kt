@@ -22,6 +22,8 @@ import compose.project.click.click.navigation.NavigationItem // pragma: allowlis
 import compose.project.click.click.navigation.bottomNavItems // pragma: allowlist secret
 import compose.project.click.click.ui.components.AppScreenChromeState // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlobalTetherOverlay // pragma: allowlist secret
+import compose.project.click.click.ui.components.NativeChromeMenuItem // pragma: allowlist secret
+import compose.project.click.click.ui.components.NativeRootMenuRegistry // pragma: allowlist secret
 import compose.project.click.click.ui.components.PlatformBottomBar // pragma: allowlist secret
 import compose.project.click.click.ui.components.UnifiedToastHost // pragma: allowlist secret
 import compose.project.click.click.ui.components.UnifiedToastState // pragma: allowlist secret
@@ -113,7 +115,68 @@ internal fun BoxScope.AppBottomChrome(
     var pendingChatId by pendingChatIdState
     var pendingTargetMessageId by pendingTargetMessageIdState
     var pendingBeaconId by pendingBeaconIdState
-    // Overlay (not Scaffold bottomBar) so tab content scrolls under a translucent bar.
+
+    // The leading ellipsis is an actual overflow menu, not an alias for Search. Search owns its
+    // dedicated trailing magnifier. Keep these commands shell-level so every root uses the same
+    // semantics and the persistent UIKit button never needs route-specific hacks.
+    SideEffect {
+        NativeRootMenuRegistry.replace(
+            buildList {
+                if (currentRoute != NavigationItem.Home.route) {
+                    add(
+                        NativeChromeMenuItem(
+                            title = "Home",
+                            sfSymbol = "house",
+                            onClick = {
+                                focusManager.clearFocus()
+                                navigateTo(NavigationItem.Home.route)
+                            },
+                        ),
+                    )
+                }
+                if (currentRoute != NavigationItem.AddClick.route) {
+                    add(
+                        NativeChromeMenuItem(
+                            title = "Add Click",
+                            sfSymbol = "plus.circle",
+                            onClick = {
+                                focusManager.clearFocus()
+                                navigateTo(NavigationItem.AddClick.route)
+                            },
+                        ),
+                    )
+                }
+                if (currentRoute != NavigationItem.Map.route) {
+                    add(
+                        NativeChromeMenuItem(
+                            title = "Map",
+                            sfSymbol = "location",
+                            onClick = {
+                                focusManager.clearFocus()
+                                navigateTo(NavigationItem.Map.route)
+                            },
+                        ),
+                    )
+                }
+                if (currentRoute != NavigationItem.Settings.route) {
+                    add(
+                        NativeChromeMenuItem(
+                            title = "Settings",
+                            sfSymbol = "gearshape",
+                            onClick = {
+                                focusManager.clearFocus()
+                                navigateTo(NavigationItem.Settings.route)
+                            },
+                        ),
+                    )
+                }
+            },
+        )
+    }
+    DisposableEffect(Unit) {
+        onDispose { NativeRootMenuRegistry.clear() }
+    }
+
     Box(
         modifier =
             Modifier
