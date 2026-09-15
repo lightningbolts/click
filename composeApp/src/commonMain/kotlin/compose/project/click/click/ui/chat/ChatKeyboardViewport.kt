@@ -28,26 +28,19 @@ import kotlinx.coroutines.flow.collect
  * Keyboard motion for chat is deliberately split into two consumers:
  *
  * 1. The composer/accessory dock always follows the keyboard top.
- * 2. The message timeline follows only when the keyboard session begins at the newest message.
+ * 2. The message timeline follows when the keyboard session begins at the newest edge.
  *
- * This prevents the old "rigid slab" behavior where the header, history viewport, timeline, and
- * composer all appeared to be pushed upward together. A user reading history keeps the same
- * visible message while the keyboard changes; a user at latest keeps the newest message visually
- * attached to the composer.
- *
- * Neither path uses `imePadding`: iOS consumes the native keyboard animation sampled by
- * [rememberChatNativeKeyboardInsets], while Android reads animated IME placement in the modifier
- * placement phase. That keeps keyboard frames out of the message composition path.
+ * The newest edge is index 0 for the reverse-layout timeline. It is valid even before the first
+ * message has been inserted, which matters for a brand-new/empty hub: opening the keyboard first
+ * must still reserve the keyboard viewport so the first outbound message cannot appear underneath
+ * the keyboard.
  */
-
 internal fun chatTimelineShouldFollowKeyboard(
     firstVisibleItemIndex: Int,
     initialTimelineScrollDone: Boolean,
     userScrollInProgress: Boolean,
 ): Boolean =
-    initialTimelineScrollDone &&
-        firstVisibleItemIndex == 0 &&
-        !userScrollInProgress
+    firstVisibleItemIndex == 0 && !userScrollInProgress
 
 internal fun effectiveChatKeyboardLiftPx(
     imeBottomPx: Int,
@@ -57,8 +50,7 @@ internal fun effectiveChatKeyboardLiftPx(
 /**
  * Pure state machine for one keyboard-visible session. The follow decision is captured exactly
  * once on the hidden -> visible edge, held while keyboard height changes, and cleared only after
- * the visible -> hidden edge. Keeping this outside Compose makes the no-jump contract directly
- * unit-testable.
+ * the visible -> hidden edge.
  */
 internal class ChatKeyboardSessionLatch {
     private var wasVisible = false
@@ -78,14 +70,6 @@ internal class ChatKeyboardSessionLatch {
     }
 }
 
-/**
- * Latches the timeline anchoring policy for one keyboard-visible session.
- *
- * The decision is made once, when keyboard lift changes from zero to non-zero. This is important:
- * if the timeline stopped following merely because the user started dragging, it would jump down
- * by the full keyboard height under their finger. Likewise, a history reader who opens the
- * keyboard must not suddenly be pulled to the latest message halfway through the animation.
- */
 @Composable
 fun rememberChatTimelineKeyboardFollow(
     nativeKeyboardLiftPxState: MutableFloatState? = null,
@@ -121,14 +105,6 @@ fun rememberChatTimelineKeyboardFollow(
     return followState
 }
 
-/**
- * Moves only the message viewport for keyboard sessions that began at latest. When the user was
- * reading history at focus time, the viewport stays in place and the keyboard simply occludes its
- * lower region as the composer moves above the IME.
- *
- * [followKeyboard] is evaluated from the graphics/placement phase so keyboard frames do not force
- * the chat subtree to recompose.
- */
 fun Modifier.chatTimelineKeyboardViewport(
     nativeKeyboardLiftPxState: MutableFloatState? = null,
     followKeyboard: () -> Boolean,
@@ -157,15 +133,6 @@ fun Modifier.chatTimelineKeyboardViewport(
         }
     }
 
-/**
- * Pins the composer, typing/reply/edit accessories, and staged-media chrome to the keyboard top.
- * The message viewport is intentionally not part of this modifier; use
- * [chatTimelineKeyboardViewport] for its independent anchoring policy.
- *
- * Do not clip this translated dock at its own layout bounds. Its resting layout intentionally
- * reserves bottom chrome space while its rendered position may travel hundreds of pixels upward;
- * the chat screen's outer viewport is the correct clipping boundary.
- */
 fun Modifier.chatComposerKeyboardMotion(
     extraBottom: Dp = 0.dp,
     nativeKeyboardLiftPxState: MutableFloatState? = null,
