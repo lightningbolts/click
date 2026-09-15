@@ -313,12 +313,13 @@ private fun configureTransitionContainer(
 
 @OptIn(ExperimentalForeignApi::class)
 private fun IosHostNavBarLayer.clearRouteTitleTransition() {
-    val views = transitionViewsByLayer[this] ?: run {
-        titleColumn.alpha = 1.0
-        avatarButton.transform = identityTransform()
-        avatarButton.alpha = 1.0
-        return
-    }
+    val views =
+        transitionViewsByLayer[this] ?: run {
+            titleColumn.alpha = 1.0
+            avatarButton.transform = identityTransform()
+            avatarButton.alpha = 1.0
+            return
+        }
     views.sourceSnapshot?.let { source ->
         glassPlate.alpha = source.glassAlpha
         glassPlate.hidden = source.glassAlpha < 0.02
