@@ -61,10 +61,18 @@ private data class NativeLeadingSemanticSnapshot(
     val accessibility: String,
 )
 
+private data class NativeLeadingVisualSnapshot(
+    val symbol: String,
+    val accessibility: String,
+)
+
 private val transitionViewsByLayer = mutableMapOf<IosHostNavBarLayer, NativeTitleTransitionViews>()
 private val lastRootSnapshotByLayer = mutableMapOf<IosHostNavBarLayer, NativeTitleSnapshot>()
 private val leadingSemanticSnapshotByLayer = mutableMapOf<IosHostNavBarLayer, NativeLeadingSemanticSnapshot>()
 private val leadingDestinationAppliedByLayer = mutableMapOf<IosHostNavBarLayer, Boolean>()
+private val lastSettledLeadingVisualByLayer = mutableMapOf<IosHostNavBarLayer, NativeLeadingVisualSnapshot>()
+private val suppressNextSemanticSettleByLayer = mutableSetOf<IosHostNavBarLayer>()
+private val semanticAnimationGenerationByLayer = mutableMapOf<IosHostNavBarLayer, Int>()
 
 /**
  * Controls remain persistent, but route text does not semantically morph. UIKit navigation keeps
@@ -98,7 +106,17 @@ internal fun IosHostNavBarLayer.applyPersistentChromeMorphProgress(progress: Flo
 
 @OptIn(ExperimentalForeignApi::class)
 internal fun IosHostNavBarLayer.resetPersistentChromeMorphVisuals(animated: Boolean) {
-    restoreLeadingRouteSemanticIfNeeded()
+    val destinationWasApplied = leadingDestinationAppliedByLayer[this] == true
+    if (destinationWasApplied) {
+        // A completed pop has already crossed the semantic midpoint. Do not repaint the source
+        // chevron/xmark during source disposal and then immediately paint the destination again.
+        // That one-frame rebound was the remaining post-pop flicker on physical devices.
+        leadingSemanticSnapshotByLayer.remove(this)
+        leadingDestinationAppliedByLayer.remove(this)
+        suppressNextSemanticSettleByLayer += this
+    } else {
+        restoreLeadingRouteSemanticIfNeeded()
+    }
     clearRouteTitleTransition()
     val identity = identityTransform()
     val apply = {
@@ -125,25 +143,109 @@ internal fun IosHostNavBarLayer.animatePersistentSemanticSettle(enabled: Boolean
     repairPersistentLeadingControlIfNeeded()
     titleLabel.layer.removeAllAnimations()
     subtitleLabel.layer.removeAllAnimations()
+
+    val destinationVisual =
+        NativeLeadingVisualSnapshot(
+            symbol = paintedSymbols[backButton] ?: "none",
+            accessibility = paintedAccessibility[backButton] ?: "",
+        )
+    val sourceVisual = lastSettledLeadingVisualByLayer[this]
+    lastSettledLeadingVisualByLayer[this] = destinationVisual
+
+    if (suppressNextSemanticSettleByLayer.remove(this)) {
+        // The committed interactive/programmatic pop already completed its compress -> semantic
+        // midpoint -> expand sequence. Rendering the destination must not start a second pulse.
+        clearRouteTitleTransition()
+        backButton.userInteractionEnabled = true
+        return
+    }
     if (!enabled) return
 
     clearRouteTitleTransition()
+    val generation = (semanticAnimationGenerationByLayer[this] ?: 0) + 1
+    semanticAnimationGenerationByLayer[this] = generation
+    backButton.layer.removeAllAnimations()
+    trailingCluster.layer.removeAllAnimations()
+
+    if (sourceVisual == null || sourceVisual == destinationVisual || backButton.hidden) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        val compressed = scaleTransform(0.9)
+        backButton.transform = compressed
+        trailingCluster.transform = compressed
+        backButton.alpha = 0.94
+        trailingCluster.alpha = 0.94
+        titleColumn.alpha = 1.0
+        CATransaction.commit()
+        UIView.animateWithDuration(0.16) {
+            val identity = identityTransform()
+            backButton.transform = identity
+            trailingCluster.transform = identity
+            backButton.alpha = 1.0
+            trailingCluster.alpha = 1.0
+        }
+        return
+    }
+
+    // For immediate semantic transitions such as media xmark -> chat chevron, render the previous
+    // symbol while the same physical glass control compresses, swap at the compressed midpoint,
+    // then expand. The destination handler/menu is already authoritative; only the visual is held
+    // until the midpoint, so route ownership cannot oscillate.
     CATransaction.begin()
     CATransaction.setDisableActions(true)
-    val compressed = scaleTransform(0.9)
-    backButton.transform = compressed
-    trailingCluster.transform = compressed
-    backButton.alpha = 0.94
-    trailingCluster.alpha = 0.94
-    titleColumn.alpha = 1.0
+    paintChromeButton(
+        button = backButton,
+        symbol = sourceVisual.symbol,
+        accessibility = sourceVisual.accessibility,
+        clustered = false,
+    )
+    backButton.transform = identityTransform()
+    trailingCluster.transform = identityTransform()
+    backButton.alpha = 1.0
+    trailingCluster.alpha = 1.0
+    backButton.userInteractionEnabled = false
     CATransaction.commit()
-    UIView.animateWithDuration(0.16) {
-        val identity = identityTransform()
-        backButton.transform = identity
-        trailingCluster.transform = identity
-        backButton.alpha = 1.0
-        trailingCluster.alpha = 1.0
-    }
+
+    UIView.animateWithDuration(
+        duration = 0.08,
+        animations = {
+            val compressed = scaleTransform(0.88)
+            backButton.transform = compressed
+            trailingCluster.transform = compressed
+            backButton.alpha = 0.94
+            trailingCluster.alpha = 0.94
+        },
+        completion = { _ ->
+            if (semanticAnimationGenerationByLayer[this] != generation) {
+                backButton.userInteractionEnabled = true
+                return@animateWithDuration
+            }
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            paintChromeButton(
+                button = backButton,
+                symbol = destinationVisual.symbol,
+                accessibility = destinationVisual.accessibility,
+                clustered = false,
+            )
+            CATransaction.commit()
+            UIView.animateWithDuration(
+                duration = 0.1,
+                animations = {
+                    val identity = identityTransform()
+                    backButton.transform = identity
+                    trailingCluster.transform = identity
+                    backButton.alpha = 1.0
+                    trailingCluster.alpha = 1.0
+                },
+                completion = { _ ->
+                    if (semanticAnimationGenerationByLayer[this] == generation) {
+                        backButton.userInteractionEnabled = true
+                    }
+                },
+            )
+        },
+    )
 }
 
 @OptIn(ExperimentalForeignApi::class)
