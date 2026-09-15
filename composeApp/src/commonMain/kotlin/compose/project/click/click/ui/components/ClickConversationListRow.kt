@@ -29,6 +29,9 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.ui.theme.LocalPlatformStyle // pragma: allowlist secret
 
+val ClickConversationListRowMinHeight = 72.dp
+val ClickConversationAvatarSize = 48.dp
+
 /**
  * Conversation-specific list row.
  *
@@ -63,7 +66,7 @@ fun ClickConversationListRow(
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .heightIn(min = 72.dp)
+                    .heightIn(min = ClickConversationListRowMinHeight)
                     .background(pressedWash, shape)
                     .platformPressScale(interactionSource)
                     .combinedClickable(
@@ -72,13 +75,17 @@ fun ClickConversationListRow(
                         onClick = onClick,
                         onLongClick = onLongPress,
                     )
-                    .defaultMinSize(minHeight = 72.dp)
+                    .defaultMinSize(minHeight = ClickConversationListRowMinHeight)
                     .padding(vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (leading != null) {
                 Box(
-                    modifier = Modifier.defaultMinSize(minWidth = 48.dp, minHeight = 48.dp),
+                    modifier =
+                        Modifier.defaultMinSize(
+                            minWidth = ClickConversationAvatarSize,
+                            minHeight = ClickConversationAvatarSize,
+                        ),
                     contentAlignment = Alignment.Center,
                 ) {
                     leading()
