@@ -262,6 +262,8 @@ fun HubChatScreen(
         }
     }
 
+    // Standalone proximity hubs use the three-person lobby threshold. Event hubs are already
+    // authorized by host/RSVP/check-in membership and must be testable/usable below three people.
     val inLobby = !isEventHub && occupantCount < 3
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val hubHasSubtitle = true
@@ -276,7 +278,9 @@ fun HubChatScreen(
     val channelReady = realtimeState is HubRealtimeState.Ready
     val channelError = (realtimeState as? HubRealtimeState.Error)?.message
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+    ) {
         ChatAmbientMeshBackground(
             connection = null,
             isHubNeutral = true,
@@ -329,7 +333,10 @@ fun HubChatScreen(
                                 testTag = ChatGlassHeaderPlateTestTag,
                             )
                             Row(
-                                modifier = Modifier.fillMaxSize().padding(horizontal = ChatChromeHorizontalPadding),
+                                modifier =
+                                    Modifier
+                                        .fillMaxSize()
+                                        .padding(horizontal = ChatChromeHorizontalPadding),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
@@ -383,7 +390,10 @@ fun HubChatScreen(
                     if (inLobby) {
                         Text(
                             text = "You're the first one here. We'll ping you when others join.",
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 6.dp),
                             style = MaterialTheme.typography.bodyMedium,
                             textAlign = TextAlign.Center,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -455,17 +465,24 @@ fun HubChatScreen(
                         onDispose {
                             timestampPeekSettleJob.value?.cancel()
                             timestampPeekSettleJob.value = null
-                            if (integrate) onRegisterSwipeBackRightToLeftPeek(null)
+                            if (integrate) {
+                                onRegisterSwipeBackRightToLeftPeek(null)
+                            }
                         }
                     }
 
-                    val timelineEntries = remember(messages) { buildChatTimelineEntriesNewestFirst(messages) }
+                    val timelineEntries =
+                        remember(messages) {
+                            buildChatTimelineEntriesNewestFirst(messages)
+                        }
                     LaunchedEffect(args.realtimeChannel, targetMessageId, timelineEntries) {
                         val id = targetMessageId?.trim()?.takeIf { it.isNotEmpty() } ?: return@LaunchedEffect
                         val index = timelineEntries.indexOfMessageId(id)
                         if (index < 0) {
                             val found = viewModel.ensureTargetMessageLoaded(id)
-                            if (!found) initialTimelineScrollDone.value = true
+                            if (!found) {
+                                initialTimelineScrollDone.value = true
+                            }
                             return@LaunchedEffect
                         }
                         initialTimelineScrollDone.value = true
@@ -476,12 +493,18 @@ fun HubChatScreen(
                         )
                         focusedSearchMessageId = id
                         delay(CHAT_SEARCH_FOCUS_HOLD_MS)
-                        if (focusedSearchMessageId == id) focusedSearchMessageId = null
+                        if (focusedSearchMessageId == id) {
+                            focusedSearchMessageId = null
+                        }
                     }
                     val reverseListNewestEdgePad = 6.dp
 
                     Box(
-                        modifier = Modifier.weight(1f).fillMaxWidth().clipToBounds(),
+                        modifier =
+                            Modifier
+                                .weight(1f)
+                                .fillMaxWidth()
+                                .clipToBounds(),
                     ) {
                         Column(modifier = Modifier.fillMaxSize()) {
                             Box(
@@ -527,20 +550,22 @@ fun HubChatScreen(
                                     enableMessageContextMenu = false,
                                     highlightedMessageId = focusedSearchMessageId,
                                     modifier =
-                                        Modifier.fillMaxSize().then(
-                                            if (!integrateTimestampPeekWithSwipeBackContainer) {
-                                                Modifier.chatTimestampPeekOnSwipeLeft(
-                                                    maxRevealPx = peekRevealPx,
-                                                    softKneePx = timestampPeekSoftKneePx,
-                                                    rawLeftPx = rawTimestampPeekTravelPx,
-                                                    displayVisualPx = displayTimestampPeekVisualPx,
-                                                    scope = hubPeekScope,
-                                                    settleJobHolder = timestampPeekSettleJob,
-                                                )
-                                            } else {
-                                                Modifier
-                                            },
-                                        ),
+                                        Modifier
+                                            .fillMaxSize()
+                                            .then(
+                                                if (!integrateTimestampPeekWithSwipeBackContainer) {
+                                                    Modifier.chatTimestampPeekOnSwipeLeft(
+                                                        maxRevealPx = peekRevealPx,
+                                                        softKneePx = timestampPeekSoftKneePx,
+                                                        rawLeftPx = rawTimestampPeekTravelPx,
+                                                        displayVisualPx = displayTimestampPeekVisualPx,
+                                                        scope = hubPeekScope,
+                                                        settleJobHolder = timestampPeekSettleJob,
+                                                    )
+                                                } else {
+                                                    Modifier
+                                                },
+                                            ),
                                 )
                             }
 
@@ -574,7 +599,10 @@ fun HubChatScreen(
                     showClickDropsCamera = false
                 },
                 onDismiss = { showClickDropsCamera = false },
-                modifier = Modifier.fillMaxSize().zIndex(10_500f),
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .zIndex(10_500f),
             )
         }
 
@@ -817,14 +845,20 @@ private fun HubChatInputBar(
                     ) {},
         )
         Column(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = composerRowHPad, vertical = composerRowVPad),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = composerRowHPad, vertical = composerRowVPad),
         ) {
             sendError?.let { err ->
                 Text(
                     text = "$err · Review and tap send to retry",
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 4.dp),
                 )
             }
             ChatComposerStrip(
@@ -903,7 +937,10 @@ private fun HubRealtimeErrorView(
         if (composeHeader) {
             Box(modifier = Modifier.padding(start = 20.dp, top = topInset, end = 20.dp)) {
                 Row(
-                    modifier = Modifier.fillMaxWidth().height(56.dp),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .height(56.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     ChatHeaderIconButton(
