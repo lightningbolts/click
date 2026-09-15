@@ -5,6 +5,9 @@
 
 package compose.project.click.click.ui.components // pragma: allowlist secret
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,6 +33,7 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -39,10 +43,12 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.uikit.LocalUIViewController
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import compose.project.click.click.platform.rememberReduceMotionEnabled // pragma: allowlist secret
 import compose.project.click.click.platform.rememberReduceTransparencyEnabled // pragma: allowlist secret
 import compose.project.click.click.ui.theme.LocalIsDarkMode // pragma: allowlist secret
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.useContents
+import kotlinx.coroutines.launch
 import platform.Foundation.NSProcessInfo
 import platform.UIKit.UIImage
 
@@ -267,6 +273,7 @@ private fun rememberIosHostNavBar(
     val viewController = LocalUIViewController.current
     val isDarkMode = LocalIsDarkMode.current
     val reduceTransparency = rememberReduceTransparencyEnabled()
+    val reduceMotion = rememberReduceMotionEnabled()
     val usesNativeLiquidGlass =
         remember {
             NSProcessInfo.processInfo.operatingSystemVersion.useContents { majorVersion >= 26 }
@@ -278,6 +285,15 @@ private fun rememberIosHostNavBar(
     val identityHandler by rememberUpdatedState(identity)
     val hasSubtitle = !subtitle.isNullOrBlank() || presenceOnline != null
     val layer = if (overlay) IosNavChrome.overlay else IosNavChrome.tab
+    val routeMotionScope = rememberCoroutineScope()
+    val routeSlideOffsetPt = remember(owner) { Animatable(0f) }
+    var routeEntryGeneration by remember(owner) { mutableStateOf(0) }
+    var routeWasVisible by remember(owner) { mutableStateOf(false) }
+    var routeExitInFlight by remember(owner) { mutableStateOf(false) }
+    val routeMotionEnabled = overlay && !leadingClose
+    val routeWidthPt by rememberUpdatedState(
+        viewController.view.bounds.useContents { size.width.toFloat().coerceAtLeast(1f) },
+    )
     // Snapshot read so chat rebinds when Click Drops clears exclusive ownership.
     val exclusiveOwner = if (overlay) IosNavChrome.overlayExclusiveOwner else null
     val mediaChrome = if (overlay && !leadingClose) IosNavChrome.overlayMediaChrome else null
@@ -293,6 +309,10 @@ private fun rememberIosHostNavBar(
             IosNavChrome.overlayExclusiveOwner = owner
         }
         onDispose {
+            // Route motion and interactive swipe use independent slide owners. Always clear this
+            // binder's route-motion contribution before releasing ownership so a completed push or
+            // pop cannot leak a horizontal transform into the next overlay.
+            layer.setSlideOffset(owner, 0.0)
             val wasExclusive = IosNavChrome.overlayExclusiveOwner === owner
             val othersRemain = overlay && IosNavChrome.otherOverlayBindersRemain(except = owner)
             if (wasExclusive) {
@@ -313,11 +333,67 @@ private fun rememberIosHostNavBar(
         }
     }
 
+    LaunchedEffect(owner, routeMotionEnabled) {
+        if (!routeMotionEnabled) return@LaunchedEffect
+        snapshotFlow { routeSlideOffsetPt.value }.collect { offsetPt ->
+            layer.setSlideOffset(owner, offsetPt.toDouble())
+        }
+    }
+
+    LaunchedEffect(owner, routeEntryGeneration, routeMotionEnabled, reduceMotion) {
+        if (!routeMotionEnabled || routeEntryGeneration <= 0) return@LaunchedEffect
+        routeExitInFlight = false
+        if (reduceMotion) {
+            routeSlideOffsetPt.snapTo(0f)
+            return@LaunchedEffect
+        }
+        routeSlideOffsetPt.snapTo(routeWidthPt)
+        routeSlideOffsetPt.animateTo(
+            targetValue = 0f,
+            animationSpec =
+                tween(
+                    durationMillis = NATIVE_ROUTE_HEADER_TRANSITION_MS,
+                    easing = FastOutSlowInEasing,
+                ),
+        )
+    }
+
+    val coordinatedBackHandler: (() -> Unit)? =
+        when {
+            mediaClose != null -> mediaClose
+            backHandler == null -> null
+            !routeMotionEnabled || reduceMotion -> backHandler
+            else -> {
+                {
+                    if (!routeExitInFlight) {
+                        routeExitInFlight = true
+                        routeMotionScope.launch {
+                            routeSlideOffsetPt.stop()
+                            routeSlideOffsetPt.animateTo(
+                                targetValue = routeWidthPt,
+                                animationSpec =
+                                    tween(
+                                        durationMillis = NATIVE_ROUTE_HEADER_TRANSITION_MS,
+                                        easing = FastOutSlowInEasing,
+                                    ),
+                            )
+                            routeExitInFlight = false
+                        }
+                    }
+                    // Start the Compose route transition in the same event turn as native chrome.
+                    // The overlay remains mounted for its 300 ms exit, so the same UIKit objects
+                    // travel with the body rather than disappearing and rematerializing later.
+                    backHandler?.invoke()
+                }
+            }
+        }
+
     SideEffect {
         if (overlay && OverlayExclusiveBindPolicy.shouldSkipOverlayBind(exclusiveOwner, owner)) {
             return@SideEffect
         }
         if (!visible) {
+            routeWasVisible = false
             // Inactive underlays (Map swipe-back composing Home) must not unhide stale
             // tab chrome. Only hide if this composition currently owns the layer.
             if (layer.owns(owner)) {
@@ -341,11 +417,21 @@ private fun rememberIosHostNavBar(
             collapseFraction = collapseFraction,
             hasSubtitle = hasSubtitle,
             onOpenSearch = searchHandler,
-            onNavigateBack = mediaClose ?: backHandler,
+            onNavigateBack = coordinatedBackHandler,
             trailingActions = mediaTrailing ?: trailingHandlers,
             collapseSearchIntoBar = collapseSearchIntoBar,
             leadingClose = leadingClose || mediaChrome != null,
         )
+        if (routeMotionEnabled && !routeWasVisible) {
+            // Prime the native transform in the same commit that makes the overlay visible. This
+            // removes the one-frame flash where the header used to appear at x=0 before the
+            // Compose screen began its horizontal push.
+            if (!reduceMotion) {
+                layer.setSlideOffset(owner, routeWidthPt.toDouble())
+            }
+            routeEntryGeneration += 1
+        }
+        routeWasVisible = true
     }
 }
 
@@ -531,3 +617,5 @@ internal object IosNavChrome {
         overlay.bringChromeToFront()
     }
 }
+
+private const val NATIVE_ROUTE_HEADER_TRANSITION_MS = 300
