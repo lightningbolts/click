@@ -106,7 +106,8 @@ internal fun AppHubChatHost(
     // hit-testing layer even when the sheet view itself is hidden. On iOS, event hub chat is instead
     // portaled above the live presentation container so the exact sheet stack stays mounted below.
     PlatformOverlayAbovePresentedSheets(
-        liftAbovePresentedSheets = keepEventHubPortalMounted,
+        liftAbovePresentedSheets =
+            keepEventHubPortalMounted || (isIOS && hubChatArgs?.isEventHub == true),
     ) {
         val hubSlideSpec = tween<IntOffset>(300, easing = FastOutSlowInEasing)
         val hubFadeSpec = tween<Float>(220, easing = LinearOutSlowInEasing)
