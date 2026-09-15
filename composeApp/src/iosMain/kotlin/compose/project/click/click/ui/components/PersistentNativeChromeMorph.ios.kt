@@ -10,6 +10,7 @@ import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.cValue
 import platform.CoreGraphics.CGAffineTransform
 import platform.QuartzCore.CATransaction
+import platform.UIKit.NSLayoutConstraintAxisVertical
 import platform.UIKit.UIView
 
 /**
@@ -23,8 +24,6 @@ import platform.UIKit.UIView
 internal fun IosHostNavBarLayer.applyPersistentChromeMorphProgress(progress: Float) {
     val p = progress.coerceIn(0f, 1f)
     val distanceFromMid = kotlin.math.abs(p - 0.5f) / 0.5f
-    // Compress into the semantic hand-off, then expand the same physical controls back out.
-    // Keep alpha high enough that the glass control never appears to blink out/remount.
     val scale = 0.82 + (0.18 * distanceFromMid)
     val alpha = 0.90 + (0.10 * distanceFromMid)
     val transform = scaleTransform(scale)
@@ -35,7 +34,9 @@ internal fun IosHostNavBarLayer.applyPersistentChromeMorphProgress(progress: Flo
     trailingCluster.transform = transform
     backButton.alpha = alpha
     trailingCluster.alpha = alpha
-    titleColumn.alpha = 0.88 + (0.12 * distanceFromMid)
+    // Titles stay readable while controls morph. Route-title handoff must never make the header
+    // disappear in the middle of an interactive gesture.
+    titleColumn.alpha = 1.0
     CATransaction.commit()
 }
 
@@ -66,6 +67,7 @@ internal fun IosHostNavBarLayer.resetPersistentChromeMorphVisuals(animated: Bool
  */
 @OptIn(ExperimentalForeignApi::class)
 internal fun IosHostNavBarLayer.animatePersistentSemanticSettle(enabled: Boolean) {
+    repairPersistentLeadingControlIfNeeded()
     if (!enabled) {
         resetPersistentChromeMorphVisuals(animated = false)
         return
@@ -88,9 +90,31 @@ internal fun IosHostNavBarLayer.animatePersistentSemanticSettle(enabled: Boolean
 }
 
 /**
+ * Root menu state can leave a UIMenu and ellipsis painted on the persistent leading control.
+ * A pushed screen owns the same UIButton, so explicitly clear root-menu semantics as soon as a
+ * back handler is bound. This prevents the observed hub header from showing an ellipsis that opens
+ * Search where a Back chevron belongs.
+ */
+@OptIn(ExperimentalForeignApi::class)
+private fun IosHostNavBarLayer.repairPersistentLeadingControlIfNeeded() {
+    if (backTarget.handler == null) return
+    if (backButton.showsMenuAsPrimaryAction || backButton.menu != null) {
+        backButton.menu = null
+        backButton.showsMenuAsPrimaryAction = false
+    }
+    if (paintedAccessibility[backButton] == "Menu" || paintedSymbols[backButton] == "ellipsis") {
+        paintChromeButton(
+            button = backButton,
+            symbol = "chevron.backward",
+            accessibility = "Back",
+            clustered = false,
+        )
+    }
+}
+
+/**
  * Kotlin/Native UIKit exposes UIView.transform as CValue<CGAffineTransform>. Construct the value
- * explicitly instead of relying on CoreGraphics convenience-return bridging, which differs across
- * Kotlin/Native SDK bindings and caused the iOS PR gate to fail at compile time.
+ * explicitly instead of relying on CoreGraphics convenience-return bridging.
  */
 @OptIn(ExperimentalForeignApi::class)
 private fun scaleTransform(scale: Double): CValue<CGAffineTransform> =
@@ -107,26 +131,46 @@ private fun scaleTransform(scale: Double): CValue<CGAffineTransform> =
 private fun identityTransform(): CValue<CGAffineTransform> = scaleTransform(1.0)
 
 /**
- * Root titles are laid out independently from asymmetric leading/trailing controls. The title
- * column always spans symmetric screen insets; compact text can therefore be truly centered even
- * when a menu exists on the left and search/actions exist on the right.
+ * Expanded root titles live below the action plane and may use the page width. Compact titles do
+ * not: they occupy a protected center lane between the persistent leading and trailing controls.
+ * This is the important UIKit invariant the previous symmetric full-width constraints violated.
  */
 @OptIn(ExperimentalForeignApi::class)
 internal fun IosHostNavBarLayer.applyPersistentRootTitleGeometry(isRoot: Boolean) {
     if (!isRoot) return
-    titleLeadingToBack?.active = false
+    val compact = titleLabel.font.pointSize <= NativeHeaderMetrics.CompactTitlePointSize + 1.5
+
     titleLeadingToAvatar?.active = false
     avatarLeadingToBack?.active = false
-    titleLeadingToBar?.active = true
-    titleTrailingToCluster?.active = false
-    titleTrailingToBar?.active = true
+    if (compact) {
+        titleLeadingToBar?.active = false
+        titleLeadingToBack?.active = true
+        if (trailingCluster.hidden) {
+            titleTrailingToCluster?.active = false
+            titleTrailingToBar?.active = true
+        } else {
+            titleTrailingToBar?.active = false
+            titleTrailingToCluster?.active = true
+        }
+        // Root subtitles belong to the expanded hierarchy. Keeping greeting + subtitle inline in a
+        // 52pt compact bar is what produced the overlapping Home header captured on device.
+        subtitleLabel.hidden = true
+        titleColumn.axis = UILayoutConstraintAxisVertical
+        titleColumn.spacing = 0.0
+    } else {
+        titleLeadingToBack?.active = false
+        titleLeadingToBar?.active = true
+        titleTrailingToCluster?.active = false
+        titleTrailingToBar?.active = true
+    }
     bar.superview?.layoutIfNeeded()
     chromeRow.superview?.layoutIfNeeded()
 }
 
 /**
  * Root-screen menu anchor. This reuses the exact same leading UIButton later used as Back and
- * Close on pushed/media states.
+ * Close on pushed/media states. The caller still supplies the menu action; Search must remain a
+ * separate trailing control rather than being duplicated as the root menu's only command.
  */
 @OptIn(ExperimentalForeignApi::class)
 internal fun IosHostNavBarLayer.applyPersistentRootMenu(onClick: (() -> Unit)?) {
@@ -136,23 +180,10 @@ internal fun IosHostNavBarLayer.applyPersistentRootMenu(onClick: (() -> Unit)?) 
         backButton.showsMenuAsPrimaryAction = false
         return
     }
-    val menuAction =
-        NativeChromeAction(
-            sfSymbol = "ellipsis",
-            contentDescription = "Menu",
-            onClick = {},
-            menuItems =
-                listOf(
-                    NativeChromeMenuItem(
-                        title = "Search",
-                        sfSymbol = "magnifyingglass",
-                        onClick = onClick,
-                    ),
-                ),
-        )
     backButton.hidden = false
-    backTarget.handler = {}
-    bindNativeMenu(backButton, menuAction, actionIndex = -2)
+    backButton.menu = null
+    backButton.showsMenuAsPrimaryAction = false
+    backTarget.handler = onClick
     paintChromeButton(
         button = backButton,
         symbol = "ellipsis",
