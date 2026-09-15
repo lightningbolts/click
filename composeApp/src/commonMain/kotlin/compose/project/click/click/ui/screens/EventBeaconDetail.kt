@@ -302,8 +302,6 @@ internal fun EventBeaconDetail(
         displayBeacon.creatorDisplayName?.trim()?.takeIf { it.isNotEmpty() }
             ?: hostUser?.name?.trim()?.takeIf { it.isNotEmpty() }
     val hostAvatarUrl = hostUser?.image?.trim()?.takeIf { it.isNotEmpty() }
-    // The initial bookmark/proximity seed can omit creator_id. Re-evaluate ownership after
-    // detail hydration so creators never lose the event-chat affordance on iOS cold opens.
     val isEventCreator =
         isCreator ||
             (!currentUser?.id.isNullOrBlank() && displayBeacon.createdByUserId == currentUser?.id)
@@ -344,8 +342,6 @@ internal fun EventBeaconDetail(
         viewModel.loadBeaconAttendeeDirectory(displayBeacon.id, forceRefresh = false)
     }
 
-    // RSVP/host eligibility invalidates any in-flight resolver result. A cancellation must not be
-    // able to race a stale Ready response into navigation, even if a hub id was previously cached.
     LaunchedEffect(displayBeacon.id, eventChatEligible) {
         eventChatRequestGeneration += 1
         val readyHub = (eventChatState as? EventChatOpenState.Ready)?.hubId
@@ -451,7 +447,7 @@ internal fun EventBeaconDetail(
             ) {
                 val reverse =
                     withContext(Dispatchers.Default) {
-                        compose.project.click.click.utils.GeocodingService.reverseGeocode( // pragma: allowlist secret
+                        compose.project.click.click.utils.GeocodingService.reverseGeocode(
                             displayBeacon.latitude,
                             displayBeacon.longitude,
                         )
@@ -518,7 +514,7 @@ internal fun EventBeaconDetail(
             attendees =
                 directoryAttendees.ifEmpty {
                     attendees.map {
-                        compose.project.click.click.events.DirectoryAttendee( // pragma: allowlist secret
+                        compose.project.click.click.events.DirectoryAttendee(
                             userId = it.userId,
                             name = it.name,
                             avatarUrl = it.avatarUrl,
@@ -561,7 +557,7 @@ internal fun EventBeaconDetail(
                     attendees =
                         directoryAttendees.ifEmpty {
                             attendees.map {
-                                compose.project.click.click.events.DirectoryAttendee( // pragma: allowlist secret
+                                compose.project.click.click.events.DirectoryAttendee(
                                     userId = it.userId,
                                     name = it.name,
                                     avatarUrl = it.avatarUrl,
@@ -584,7 +580,7 @@ internal fun EventBeaconDetail(
                 directoryAttendees.firstOrNull { it.userId == profileId }
                     ?: attendees
                         .map {
-                            compose.project.click.click.events.DirectoryAttendee( // pragma: allowlist secret
+                            compose.project.click.click.events.DirectoryAttendee(
                                 userId = it.userId,
                                 name = it.name,
                                 avatarUrl = it.avatarUrl,
@@ -593,7 +589,7 @@ internal fun EventBeaconDetail(
             if (attendee != null) {
                 val viewerId = currentUser?.id
                 val canMessage =
-                    compose.project.click.click.events.allowsDirectoryConnectActions( // pragma: allowlist secret
+                    compose.project.click.click.events.allowsDirectoryConnectActions(
                         attendee.relationship,
                     )
                 EventDirectoryUserProfileSheet(
@@ -604,7 +600,7 @@ internal fun EventBeaconDetail(
                         if (canMessage) {
                             {
                                 val conn =
-                                    compose.project.click.click.data.AppDataManager.connections.value // pragma: allowlist secret
+                                    compose.project.click.click.data.AppDataManager.connections.value
                                         .firstOrNull { c ->
                                             attendee.userId in c.user_ids &&
                                                 (viewerId.isNullOrBlank() || viewerId in c.user_ids)
@@ -672,7 +668,9 @@ internal fun EventBeaconDetail(
                                 title = resolved.title,
                                 creatorId = resolved.creatorId,
                             )
-                            viewModel.clearSelection()
+                            // Hub chat is an app-level overlay. Keep the selected beacon and both
+                            // underlying Map/Nearby/Event sheets mounted so Back returns exactly to
+                            // the context from which the event chat was opened.
                         }
                         else -> eventChatState = resolved
                     }
@@ -816,9 +814,6 @@ internal fun EventBeaconDetail(
                                 rsvpError = viewModel.engagementSnackbar.value
                                     ?: "Could not update RSVP. Please try again."
                             } else {
-                                // RSVP is the membership source of truth. Refresh it, then let the
-                                // explicit event-chat resolver determine canonical hub + access when
-                                // the user opens chat; do not hydrate presentation data for hub ids.
                                 viewModel.loadBeaconRsvp(displayBeacon.id, forceRefresh = true)
                                 viewModel.loadBeaconAttendeeDirectory(displayBeacon.id, forceRefresh = true)
                             }
