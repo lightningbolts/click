@@ -42,15 +42,12 @@ import compose.project.click.click.platform.rememberKeyboardHeightProvider // pr
 import compose.project.click.click.ui.chat.ChatAmbientMeshBackground // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatChannelLoadingView // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatHeaderIconButton // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatThreadAutoFollowEffects // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatWarmLoadingView // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ForwardDialog // pragma: allowlist secret
 import compose.project.click.click.ui.chat.GroupMembersPickerContext // pragma: allowlist secret
-import compose.project.click.click.ui.chat.chatDismissKeyboardAfterScrollConnection // pragma: allowlist secret
-import compose.project.click.click.ui.chat.chatTimelineFollowUsesAnimation // pragma: allowlist secret
-import compose.project.click.click.ui.chat.chatTimelineShouldFollowInbound // pragma: allowlist secret
 import compose.project.click.click.ui.chat.rememberChatMediaPickers // pragma: allowlist secret
-import compose.project.click.click.ui.chat.rememberChatNativeKeyboardInsets // pragma: allowlist secret
-import compose.project.click.click.ui.chat.scrollChatTimelineToLatest // pragma: allowlist secret
+import compose.project.click.click.ui.chat.rememberChatThreadRuntime // pragma: allowlist secret
 import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeftPeek // pragma: allowlist secret
 import compose.project.click.click.ui.components.platformNativeHeaderClearance // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberEdgeToEdgeBottomPadding // pragma: allowlist secret
@@ -123,58 +120,21 @@ fun ChatView(
     val hasMoreOlderMessages by viewModel.hasMoreOlderMessages.collectAsState()
     val isLoadingOlderMessages by viewModel.isLoadingOlderMessages.collectAsState()
 
-    // Fresh scroll state per chat so opening a thread doesn't keep the previous scroll offset
-    val listState = remember(chatId) { LazyListState() }
     val coroutineScope = rememberCoroutineScope()
     val density = LocalDensity.current
     val platformStyle = LocalPlatformStyle.current
-    val nativeKeyboardInsets =
-        rememberChatNativeKeyboardInsets(
+    val threadRuntime =
+        rememberChatThreadRuntime(
+            threadKey = chatId,
             keyboardHeightProvider = keyboardHeightProvider,
-            subtractTabBarOverlay = true,
+            parentInteractiveBackSwipePx = parentInteractiveBackSwipePx,
         )
+    val listState = threadRuntime.listState
+    val nativeKeyboardInsets = threadRuntime.nativeKeyboardInsets
+    val suppressKeyboardDismissWhileProgrammaticTimelineScroll =
+        threadRuntime.suppressKeyboardDismissWhileProgrammaticTimelineScroll
+    val dismissKeyboardOnUserMessageScroll = threadRuntime.dismissKeyboardOnUserMessageScroll
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val focusManager = LocalFocusManager.current
-    val focusManagerState = rememberUpdatedState(focusManager)
-    val keyboardController = LocalSoftwareKeyboardController.current
-    val keyboardControllerState = rememberUpdatedState(keyboardController)
-
-    /** Skips IME dismiss while [listState.scrollToItem] snaps the newest-first timeline (not user-driven). */
-    val suppressKeyboardDismissWhileProgrammaticTimelineScroll = remember { mutableStateOf(false) }
-
-    /**
-     * Dismisses the IME after the user finishes a scroll gesture — never mid-drag / mid-fling.
-     * Clearing focus while coasting resizes keyboard insets and kills LazyColumn fling physics.
-     */
-    val keyboardDismissScrollThresholdPx = remember(density) { with(density) { 16.dp.toPx() } }
-    val dismissKeyboardOnUserMessageScroll =
-        remember(keyboardDismissScrollThresholdPx) {
-            chatDismissKeyboardAfterScrollConnection(
-                thresholdPx = keyboardDismissScrollThresholdPx,
-                isSuppressed = { suppressKeyboardDismissWhileProgrammaticTimelineScroll.value },
-                onDismiss = { focusManagerState.value.clearFocus() },
-            )
-        }
-
-    var imeClearedForInteractiveBackSwipe = false
-    LaunchedEffect(parentInteractiveBackSwipePx) {
-        val ref = parentInteractiveBackSwipePx ?: return@LaunchedEffect
-        // Defer IME teardown until the swipe is well underway (~28% width). Hiding the
-        // keyboard at 8px resized the LazyColumn mid-gesture and tanked interactive-back fps.
-        // Use a plain flag (not mutableState) — writing Compose state here recomposed the
-        // entire ChatView (all image bubbles) every threshold cross and made backswipe laggy.
-        snapshotFlow { ref.floatValue }.collect { offset ->
-            val commitPx = with(density) { 120.dp.toPx() }
-            when {
-                offset > commitPx && !imeClearedForInteractiveBackSwipe -> {
-                    imeClearedForInteractiveBackSwipe = true
-                    keyboardControllerState.value?.hide()
-                    focusManagerState.value.clearFocus()
-                }
-                offset <= 0f -> imeClearedForInteractiveBackSwipe = false
-            }
-        }
-    }
 
     // Connection action sheet (archive, delete, report, block)
     val showConnectionSheetState = remember { mutableStateOf(false) }
@@ -312,10 +272,8 @@ fun ChatView(
             ?.takeIf { !it.isSent }
             ?.message
             ?.id
-    val initialTimelineScrollDoneState = remember(chatId) { mutableStateOf(false) }
-    var initialTimelineScrollDone by initialTimelineScrollDoneState
-    val focusedSearchMessageIdState = remember(chatId) { mutableStateOf<String?>(null) }
-    var focusedSearchMessageId by focusedSearchMessageIdState
+    val initialTimelineScrollDoneState = threadRuntime.initialTimelineScrollDoneState
+    val focusedSearchMessageIdState = threadRuntime.focusedSearchMessageIdState
 
     LaunchedEffect(listState) {
         snapshotFlow {
@@ -334,36 +292,14 @@ fun ChatView(
         }
     }
 
-    LaunchedEffect(chatId, successMessages.isNotEmpty(), targetMessageId) {
-        if (successMessages.isEmpty() || initialTimelineScrollDone) return@LaunchedEffect
-        if (!targetMessageId.isNullOrBlank()) {
-            val found = viewModel.ensureTargetMessageLoaded(targetMessageId)
-            if (!found) {
-                initialTimelineScrollDone = true
-                scrollChatTimelineToLatest(
-                    listState = listState,
-                    suppressKeyboardDismiss = suppressKeyboardDismissWhileProgrammaticTimelineScroll,
-                )
-            }
-            return@LaunchedEffect
-        }
-        initialTimelineScrollDone = true
-        scrollChatTimelineToLatest(
-            listState = listState,
-            suppressKeyboardDismiss = suppressKeyboardDismissWhileProgrammaticTimelineScroll,
-        )
-    }
-
-    LaunchedEffect(peerNewestMessageId) {
-        if (peerNewestMessageId == null) return@LaunchedEffect
-        if (chatTimelineShouldFollowInbound(listState.firstVisibleItemIndex, initialTimelineScrollDone)) {
-            scrollChatTimelineToLatest(
-                listState = listState,
-                suppressKeyboardDismiss = suppressKeyboardDismissWhileProgrammaticTimelineScroll,
-                animated = chatTimelineFollowUsesAnimation(initialTimelineScrollDone),
-            )
-        }
-    }
+    ChatThreadAutoFollowEffects(
+        threadKey = chatId,
+        hasMessages = successMessages.isNotEmpty(),
+        targetMessageId = targetMessageId,
+        peerNewestMessageId = peerNewestMessageId,
+        runtime = threadRuntime,
+        ensureTargetMessageLoaded = viewModel::ensureTargetMessageLoaded,
+    )
 
     Box(
         modifier =
