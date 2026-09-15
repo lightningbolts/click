@@ -31,6 +31,14 @@ private data class NativeTitleSnapshot(
     val y: Double,
     val width: Double,
     val height: Double,
+    val titleX: Double,
+    val titleY: Double,
+    val titleWidth: Double,
+    val titleHeight: Double,
+    val subtitleX: Double,
+    val subtitleY: Double,
+    val subtitleWidth: Double,
+    val subtitleHeight: Double,
     val centered: Boolean,
 )
 
@@ -58,8 +66,8 @@ private val lastRootSnapshotByLayer = mutableMapOf<IosHostNavBarLayer, NativeTit
 internal fun IosHostNavBarLayer.applyPersistentChromeMorphProgress(progress: Float) {
     val p = progress.coerceIn(0f, 1f)
     val distanceFromMid = kotlin.math.abs(p - 0.5f) / 0.5f
-    val scale = 0.82 + (0.18 * distanceFromMid)
-    val alpha = 0.90 + (0.10 * distanceFromMid)
+    val scale = 0.88 + (0.12 * distanceFromMid)
+    val alpha = 0.94 + (0.06 * distanceFromMid)
     val transform = scaleTransform(scale)
 
     CATransaction.begin()
@@ -80,8 +88,10 @@ internal fun IosHostNavBarLayer.resetPersistentChromeMorphVisuals(animated: Bool
     val apply = {
         backButton.transform = identity
         trailingCluster.transform = identity
+        avatarButton.transform = identity
         backButton.alpha = 1.0
         trailingCluster.alpha = 1.0
+        avatarButton.alpha = 1.0
         titleColumn.alpha = 1.0
     }
     if (animated) {
@@ -97,24 +107,21 @@ internal fun IosHostNavBarLayer.resetPersistentChromeMorphVisuals(animated: Bool
 @OptIn(ExperimentalForeignApi::class)
 internal fun IosHostNavBarLayer.animatePersistentSemanticSettle(enabled: Boolean) {
     repairPersistentLeadingControlIfNeeded()
-    if (!enabled) {
-        // `renderTransition()` renders source/destination semantics every gesture frame and then
-        // immediately calls applyPersistentChromeMorphProgress(). Resetting here used to destroy
-        // and recreate the dual-title overlay on every frame (and killed it completely after the
-        // 50% semantic handoff). Gesture completion/cancel owns the explicit reset instead.
-        return
-    }
+    titleLabel.layer.removeAllAnimations()
+    subtitleLabel.layer.removeAllAnimations()
+    if (!enabled) return
+
     clearRouteTitleTransition()
     CATransaction.begin()
     CATransaction.setDisableActions(true)
-    val compressed = scaleTransform(0.88)
+    val compressed = scaleTransform(0.9)
     backButton.transform = compressed
     trailingCluster.transform = compressed
-    backButton.alpha = 0.92
-    trailingCluster.alpha = 0.92
+    backButton.alpha = 0.94
+    trailingCluster.alpha = 0.94
     titleColumn.alpha = 1.0
     CATransaction.commit()
-    UIView.animateWithDuration(0.18) {
+    UIView.animateWithDuration(0.16) {
         val identity = identityTransform()
         backButton.transform = identity
         trailingCluster.transform = identity
@@ -125,15 +132,36 @@ internal fun IosHostNavBarLayer.animatePersistentSemanticSettle(enabled: Boolean
 
 @OptIn(ExperimentalForeignApi::class)
 private fun IosHostNavBarLayer.captureCurrentTitleSnapshot(): NativeTitleSnapshot {
+    chromeRow.superview?.layoutIfNeeded()
     var x = 0.0
     var y = 0.0
     var width = 0.0
     var height = 0.0
+    var titleX = 0.0
+    var titleY = 0.0
+    var titleWidth = 0.0
+    var titleHeight = 0.0
+    var subtitleX = 0.0
+    var subtitleY = 0.0
+    var subtitleWidth = 0.0
+    var subtitleHeight = 0.0
     titleColumn.frame.useContents {
         x = origin.x
         y = origin.y
         width = size.width
         height = size.height
+    }
+    titleLabel.frame.useContents {
+        titleX = origin.x
+        titleY = origin.y
+        titleWidth = size.width
+        titleHeight = size.height
+    }
+    subtitleLabel.frame.useContents {
+        subtitleX = origin.x
+        subtitleY = origin.y
+        subtitleWidth = size.width
+        subtitleHeight = size.height
     }
     return NativeTitleSnapshot(
         title = titleLabel.text.orEmpty(),
@@ -148,13 +176,20 @@ private fun IosHostNavBarLayer.captureCurrentTitleSnapshot(): NativeTitleSnapsho
         y = y,
         width = width,
         height = height.coerceAtLeast(NativeHeaderMetrics.CompactBarHeightPt),
+        titleX = titleX,
+        titleY = titleY,
+        titleWidth = titleWidth.coerceAtLeast(width),
+        titleHeight = titleHeight.coerceAtLeast(1.0),
+        subtitleX = subtitleX,
+        subtitleY = subtitleY,
+        subtitleWidth = subtitleWidth.coerceAtLeast(width),
+        subtitleHeight = subtitleHeight.coerceAtLeast(1.0),
         centered = titleLabel.textAlignment == NSTextAlignmentCenter,
     )
 }
 
 @OptIn(ExperimentalForeignApi::class)
 private fun IosHostNavBarLayer.rememberRootTitleSnapshot() {
-    chromeRow.superview?.layoutIfNeeded()
     lastRootSnapshotByLayer[this] = captureCurrentTitleSnapshot()
 }
 
@@ -184,8 +219,11 @@ private fun IosHostNavBarLayer.applyRouteTitleTransition(progress: Float) {
             views.destinationSubtitle,
             destinationSnapshot,
         )
-        chromeRow.addSubview(views.destination)
-        chromeRow.addSubview(views.source)
+        chromeRow.insertSubview(views.destination, belowSubview = backButton)
+        chromeRow.insertSubview(views.source, belowSubview = backButton)
+        chromeRow.bringSubviewToFront(backButton)
+        chromeRow.bringSubviewToFront(avatarButton)
+        chromeRow.bringSubviewToFront(trailingCluster)
         views.active = true
     }
 
@@ -213,8 +251,10 @@ private fun IosHostNavBarLayer.applyRouteTitleTransition(progress: Float) {
             destination.height,
         ),
     )
-    views.source.alpha = (1.0 - 0.18 * p).coerceIn(0.0, 1.0)
-    views.destination.alpha = (0.78 + 0.22 * p).coerceIn(0.0, 1.0)
+    views.source.alpha = (1.0 - 0.14 * p).coerceIn(0.0, 1.0)
+    views.destination.alpha = (0.82 + 0.18 * p).coerceIn(0.0, 1.0)
+    avatarButton.transform = translationTransform(hostWidth * p)
+    avatarButton.alpha = (1.0 - 0.2 * p).coerceIn(0.0, 1.0)
     CATransaction.commit()
 }
 
@@ -236,6 +276,14 @@ private fun configureTransitionContainer(
     title.textAlignment = if (snapshot.centered) NSTextAlignmentCenter else NSTextAlignmentLeft
     title.numberOfLines = 1
     title.userInteractionEnabled = false
+    title.setFrame(
+        CGRectMake(
+            snapshot.titleX,
+            snapshot.titleY,
+            snapshot.titleWidth,
+            snapshot.titleHeight,
+        ),
+    )
 
     subtitle.text = snapshot.subtitle
     subtitle.font = UIFont.systemFontOfSize(snapshot.subtitleFontSize)
@@ -244,13 +292,15 @@ private fun configureTransitionContainer(
     subtitle.numberOfLines = 1
     subtitle.hidden = snapshot.subtitle.isEmpty()
     subtitle.userInteractionEnabled = false
+    subtitle.setFrame(
+        CGRectMake(
+            snapshot.subtitleX,
+            snapshot.subtitleY,
+            snapshot.subtitleWidth,
+            snapshot.subtitleHeight,
+        ),
+    )
 
-    val titleHeight = if (snapshot.titleFontSize > 22.0) 42.0 else 22.0
-    val subtitleHeight = if (snapshot.subtitle.isEmpty()) 0.0 else 17.0
-    val totalHeight = titleHeight + subtitleHeight
-    val top = ((snapshot.height - totalHeight) / 2.0).coerceAtLeast(0.0)
-    title.setFrame(CGRectMake(0.0, top, snapshot.width, titleHeight))
-    subtitle.setFrame(CGRectMake(0.0, top + titleHeight, snapshot.width, subtitleHeight))
     container.addSubview(title)
     if (!subtitle.hidden) container.addSubview(subtitle)
 }
@@ -259,6 +309,8 @@ private fun configureTransitionContainer(
 private fun IosHostNavBarLayer.clearRouteTitleTransition() {
     val views = transitionViewsByLayer[this] ?: run {
         titleColumn.alpha = 1.0
+        avatarButton.transform = identityTransform()
+        avatarButton.alpha = 1.0
         return
     }
     views.source.removeFromSuperview()
@@ -267,6 +319,8 @@ private fun IosHostNavBarLayer.clearRouteTitleTransition() {
     views.destinationSnapshot = null
     views.active = false
     titleColumn.alpha = 1.0
+    avatarButton.transform = identityTransform()
+    avatarButton.alpha = 1.0
 }
 
 @OptIn(ExperimentalForeignApi::class)
@@ -294,6 +348,17 @@ private fun scaleTransform(scale: Double): CValue<CGAffineTransform> =
         c = 0.0
         d = scale
         tx = 0.0
+        ty = 0.0
+    }
+
+@OptIn(ExperimentalForeignApi::class)
+private fun translationTransform(x: Double): CValue<CGAffineTransform> =
+    cValue {
+        a = 1.0
+        b = 0.0
+        c = 0.0
+        d = 1.0
+        tx = x
         ty = 0.0
     }
 
