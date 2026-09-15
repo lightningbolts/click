@@ -8,18 +8,55 @@ package compose.project.click.click.ui.components // pragma: allowlist secret
 import kotlinx.cinterop.CValue
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.cValue
+import kotlinx.cinterop.useContents
 import platform.CoreGraphics.CGAffineTransform
+import platform.CoreGraphics.CGRectMake
 import platform.QuartzCore.CATransaction
 import platform.UIKit.NSLayoutConstraintAxisVertical
 import platform.UIKit.NSTextAlignmentCenter
+import platform.UIKit.NSTextAlignmentLeft
+import platform.UIKit.UIColor
+import platform.UIKit.UIFont
+import platform.UIKit.UILabel
 import platform.UIKit.UIView
+
+private data class NativeTitleSnapshot(
+    val title: String,
+    val subtitle: String,
+    val titleFontSize: Double,
+    val subtitleFontSize: Double,
+    val titleColor: UIColor?,
+    val subtitleColor: UIColor?,
+    val x: Double,
+    val y: Double,
+    val width: Double,
+    val height: Double,
+    val centered: Boolean,
+)
+
+private class NativeTitleTransitionViews {
+    val source = UIView()
+    val destination = UIView()
+    val sourceTitle = UILabel()
+    val sourceSubtitle = UILabel()
+    val destinationTitle = UILabel()
+    val destinationSubtitle = UILabel()
+    var sourceSnapshot: NativeTitleSnapshot? = null
+    var destinationSnapshot: NativeTitleSnapshot? = null
+    var active = false
+}
+
+private val transitionViewsByLayer = mutableMapOf<IosHostNavBarLayer, NativeTitleTransitionViews>()
+private val lastRootSnapshotByLayer = mutableMapOf<IosHostNavBarLayer, NativeTitleSnapshot>()
 
 /**
  * Visual transition policy for the single persistent iOS navigation chrome host.
  *
- * Route changes never replace the physical UIKit controls. Their semantic role changes in-place
- * (menu -> back -> close and the reverse), which is the interaction model required for stable
- * WhatsApp-style Liquid Glass navigation.
+ * Controls remain persistent, but route text does not semantically morph. UIKit navigation keeps
+ * outgoing and incoming route titles as separate visual objects during an interactive pop. We do
+ * the same here: the source title follows the foreground page while the cached destination title
+ * parallaxes in underneath. This avoids the previous midpoint title replacement where Clicks and
+ * chat/hub text fought over one UILabel.
  */
 @OptIn(ExperimentalForeignApi::class)
 internal fun IosHostNavBarLayer.applyPersistentChromeMorphProgress(progress: Float) {
@@ -35,14 +72,14 @@ internal fun IosHostNavBarLayer.applyPersistentChromeMorphProgress(progress: Flo
     trailingCluster.transform = transform
     backButton.alpha = alpha
     trailingCluster.alpha = alpha
-    // Never fade the title column out during a back gesture. The previous alpha dip amplified the
-    // source/destination text handoff and made the header look like it disappeared mid-gesture.
-    titleColumn.alpha = 1.0
     CATransaction.commit()
+
+    applyRouteTitleTransition(p)
 }
 
 @OptIn(ExperimentalForeignApi::class)
 internal fun IosHostNavBarLayer.resetPersistentChromeMorphVisuals(animated: Boolean) {
+    clearRouteTitleTransition()
     val identity = identityTransform()
     val apply = {
         backButton.transform = identity
@@ -62,9 +99,7 @@ internal fun IosHostNavBarLayer.resetPersistentChromeMorphVisuals(animated: Bool
 }
 
 /**
- * Semantic swaps that are not directly gesture-driven still settle on the same physical controls.
- * There is deliberately no cross-dissolve or replacement view: the persistent control compresses
- * and returns to rest.
+ * Semantic swaps that are not gesture-driven still settle on the same physical controls.
  */
 @OptIn(ExperimentalForeignApi::class)
 internal fun IosHostNavBarLayer.animatePersistentSemanticSettle(enabled: Boolean) {
@@ -73,6 +108,7 @@ internal fun IosHostNavBarLayer.animatePersistentSemanticSettle(enabled: Boolean
         resetPersistentChromeMorphVisuals(animated = false)
         return
     }
+    clearRouteTitleTransition()
     CATransaction.begin()
     CATransaction.setDisableActions(true)
     val compressed = scaleTransform(0.88)
@@ -80,6 +116,7 @@ internal fun IosHostNavBarLayer.animatePersistentSemanticSettle(enabled: Boolean
     trailingCluster.transform = compressed
     backButton.alpha = 0.92
     trailingCluster.alpha = 0.92
+    titleColumn.alpha = 1.0
     CATransaction.commit()
     UIView.animateWithDuration(0.18) {
         val identity = identityTransform()
@@ -90,11 +127,155 @@ internal fun IosHostNavBarLayer.animatePersistentSemanticSettle(enabled: Boolean
     }
 }
 
+@OptIn(ExperimentalForeignApi::class)
+private fun IosHostNavBarLayer.captureCurrentTitleSnapshot(): NativeTitleSnapshot {
+    var x = 0.0
+    var y = 0.0
+    var width = 0.0
+    var height = 0.0
+    titleColumn.frame.useContents {
+        x = origin.x
+        y = origin.y
+        width = size.width
+        height = size.height
+    }
+    return NativeTitleSnapshot(
+        title = titleLabel.text.orEmpty(),
+        subtitle = if (subtitleLabel.hidden) "" else subtitleLabel.text.orEmpty(),
+        titleFontSize = titleLabel.font.pointSize,
+        subtitleFontSize = subtitleLabel.font.pointSize,
+        titleColor = titleLabel.textColor,
+        subtitleColor = subtitleLabel.textColor,
+        x = x,
+        y = y,
+        width = width,
+        height = height.coerceAtLeast(NativeHeaderMetrics.CompactBarHeightPt),
+        centered = titleLabel.textAlignment == NSTextAlignmentCenter,
+    )
+}
+
+@OptIn(ExperimentalForeignApi::class)
+private fun IosHostNavBarLayer.rememberRootTitleSnapshot() {
+    chromeRow.superview?.layoutIfNeeded()
+    lastRootSnapshotByLayer[this] = captureCurrentTitleSnapshot()
+}
+
+@OptIn(ExperimentalForeignApi::class)
+private fun IosHostNavBarLayer.applyRouteTitleTransition(progress: Float) {
+    val destinationSnapshot = lastRootSnapshotByLayer[this]
+    if (progress <= 0.001f || destinationSnapshot == null) {
+        clearRouteTitleTransition()
+        return
+    }
+
+    val views = transitionViewsByLayer.getOrPut(this) { NativeTitleTransitionViews() }
+    if (!views.active) {
+        val sourceSnapshot = captureCurrentTitleSnapshot()
+        if (sourceSnapshot.title == destinationSnapshot.title &&
+            sourceSnapshot.subtitle == destinationSnapshot.subtitle
+        ) {
+            titleColumn.alpha = 1.0
+            return
+        }
+        views.sourceSnapshot = sourceSnapshot
+        views.destinationSnapshot = destinationSnapshot
+        configureTransitionContainer(views.source, views.sourceTitle, views.sourceSubtitle, sourceSnapshot)
+        configureTransitionContainer(
+            views.destination,
+            views.destinationTitle,
+            views.destinationSubtitle,
+            destinationSnapshot,
+        )
+        chromeRow.addSubview(views.destination)
+        chromeRow.addSubview(views.source)
+        views.active = true
+    }
+
+    val source = views.sourceSnapshot ?: return
+    val destination = views.destinationSnapshot ?: return
+    val hostWidth = chromeRow.bounds.useContents { size.width }.coerceAtLeast(1.0)
+    val p = progress.coerceIn(0f, 1f).toDouble()
+
+    CATransaction.begin()
+    CATransaction.setDisableActions(true)
+    titleColumn.alpha = 0.0
+    // Foreground page tracks the finger. The revealed destination uses the same restrained
+    // underlay parallax as iOS navigation rather than moving at full foreground speed.
+    views.source.setFrame(
+        CGRectMake(
+            source.x + hostWidth * p,
+            source.y,
+            source.width,
+            source.height,
+        ),
+    )
+    views.destination.setFrame(
+        CGRectMake(
+            destination.x - hostWidth * 0.22 * (1.0 - p),
+            destination.y,
+            destination.width,
+            destination.height,
+        ),
+    )
+    views.source.alpha = (1.0 - 0.18 * p).coerceIn(0.0, 1.0)
+    views.destination.alpha = (0.78 + 0.22 * p).coerceIn(0.0, 1.0)
+    CATransaction.commit()
+}
+
+@OptIn(ExperimentalForeignApi::class)
+private fun configureTransitionContainer(
+    container: UIView,
+    title: UILabel,
+    subtitle: UILabel,
+    snapshot: NativeTitleSnapshot,
+) {
+    container.backgroundColor = UIColor.clearColor
+    container.userInteractionEnabled = false
+    container.setFrame(CGRectMake(snapshot.x, snapshot.y, snapshot.width, snapshot.height))
+    container.subviews.forEach { it.removeFromSuperview() }
+
+    title.text = snapshot.title
+    title.font = UIFont.boldSystemFontOfSize(snapshot.titleFontSize)
+    title.textColor = snapshot.titleColor
+    title.textAlignment = if (snapshot.centered) NSTextAlignmentCenter else NSTextAlignmentLeft
+    title.numberOfLines = 1
+    title.userInteractionEnabled = false
+
+    subtitle.text = snapshot.subtitle
+    subtitle.font = UIFont.systemFontOfSize(snapshot.subtitleFontSize)
+    subtitle.textColor = snapshot.subtitleColor
+    subtitle.textAlignment = title.textAlignment
+    subtitle.numberOfLines = 1
+    subtitle.hidden = snapshot.subtitle.isEmpty()
+    subtitle.userInteractionEnabled = false
+
+    val titleHeight = if (snapshot.titleFontSize > 22.0) 42.0 else 22.0
+    val subtitleHeight = if (snapshot.subtitle.isEmpty()) 0.0 else 17.0
+    val totalHeight = titleHeight + subtitleHeight
+    val top = ((snapshot.height - totalHeight) / 2.0).coerceAtLeast(0.0)
+    title.setFrame(CGRectMake(0.0, top, snapshot.width, titleHeight))
+    subtitle.setFrame(CGRectMake(0.0, top + titleHeight, snapshot.width, subtitleHeight))
+    container.addSubview(title)
+    if (!subtitle.hidden) container.addSubview(subtitle)
+}
+
+@OptIn(ExperimentalForeignApi::class)
+private fun IosHostNavBarLayer.clearRouteTitleTransition() {
+    val views = transitionViewsByLayer[this] ?: run {
+        titleColumn.alpha = 1.0
+        return
+    }
+    views.source.removeFromSuperview()
+    views.destination.removeFromSuperview()
+    views.sourceSnapshot = null
+    views.destinationSnapshot = null
+    views.active = false
+    titleColumn.alpha = 1.0
+}
+
 /**
- * The root overflow and pushed Back control are the same UIButton. A root UIMenu can otherwise
- * survive into a hub/chat bind, leaving an ellipsis that still opens the root menu. `bindRow`
- * always assigns a back handler for pushed screens while root menu presentation needs no target
- * handler, so that distinction is stable and does not depend on mount order.
+ * The root overflow and pushed Back control are the same UIButton. Clear root-menu semantics as
+ * soon as a pushed route binds a Back handler.
  */
 @OptIn(ExperimentalForeignApi::class)
 private fun IosHostNavBarLayer.repairPersistentLeadingControlIfNeeded() {
@@ -113,7 +294,6 @@ private fun IosHostNavBarLayer.repairPersistentLeadingControlIfNeeded() {
     }
 }
 
-/** Kotlin/Native UIKit exposes UIView.transform as CValue<CGAffineTransform>. */
 @OptIn(ExperimentalForeignApi::class)
 private fun scaleTransform(scale: Double): CValue<CGAffineTransform> =
     cValue {
@@ -129,10 +309,8 @@ private fun scaleTransform(scale: Double): CValue<CGAffineTransform> =
 private fun identityTransform(): CValue<CGAffineTransform> = scaleTransform(1.0)
 
 /**
- * Expanded root titles live below the action plane and may use the page width. Once the native
- * title enters compact centered mode, it occupies a protected lane between the leading overflow
- * control and the trailing search/action cluster. This prevents either glass control from covering
- * title text at any intermediate collapse fraction.
+ * Expanded root titles live below the action plane. Compact titles occupy a protected lane between
+ * the leading overflow control and trailing search/actions so glass controls can never cover text.
  */
 @OptIn(ExperimentalForeignApi::class)
 internal fun IosHostNavBarLayer.applyPersistentRootTitleGeometry(isRoot: Boolean) {
@@ -151,9 +329,8 @@ internal fun IosHostNavBarLayer.applyPersistentRootTitleGeometry(isRoot: Boolean
             titleTrailingToBar?.active = false
             titleTrailingToCluster?.active = true
         }
-        // Expanded descriptive copy does not belong in a 52pt compact navigation row.
         subtitleLabel.hidden = true
-        titleColumn.axis = UILayoutConstraintAxisVertical
+        titleColumn.axis = NSLayoutConstraintAxisVertical
         titleColumn.spacing = 0.0
     } else {
         titleLeadingToBack?.active = false
@@ -163,12 +340,12 @@ internal fun IosHostNavBarLayer.applyPersistentRootTitleGeometry(isRoot: Boolean
     }
     bar.superview?.layoutIfNeeded()
     chromeRow.superview?.layoutIfNeeded()
+    rememberRootTitleSnapshot()
 }
 
 /**
- * Root-screen overflow menu. Search is deliberately not duplicated here: it remains the dedicated
- * magnifier on the trailing side. Commands come from the app shell so they are real navigation
- * actions, not placeholder menu entries.
+ * Root overflow menu. Search is deliberately not duplicated here; it remains the dedicated
+ * magnifier. Commands come from the app shell and are real navigation actions.
  */
 @OptIn(ExperimentalForeignApi::class)
 internal fun IosHostNavBarLayer.applyPersistentRootMenu(onClick: (() -> Unit)?) {
@@ -196,8 +373,6 @@ internal fun IosHostNavBarLayer.applyPersistentRootMenu(onClick: (() -> Unit)?) 
             menuItems = items,
         )
     backButton.hidden = false
-    // UIMenu is the primary action; keeping the target empty lets pushed routes reliably detect
-    // that they must retarget this physical button to Back.
     backTarget.handler = null
     bindNativeMenu(backButton, menuAction, actionIndex = -2)
     paintChromeButton(
