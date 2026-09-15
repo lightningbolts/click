@@ -493,7 +493,9 @@ internal data class OverlayMediaChrome(
     val trailing: List<NativeChromeAction>,
 )
 
-internal enum class NativeChromeLevel(val priority: Int) {
+internal enum class NativeChromeLevel(
+    val priority: Int,
+) {
     ROOT(0),
     OVERLAY(1),
     EXCLUSIVE(2),
@@ -669,12 +671,14 @@ internal object IosNavChrome {
             interactiveSourceOwner = activeState()?.owner
         }
         val sourceOwner = interactiveSourceOwner ?: return
-        val source = states[sourceOwner] ?: run {
-            interactiveSourceOwner = activeState()?.owner
-            return
-        }
+        val source =
+            states[sourceOwner] ?: run {
+                interactiveSourceOwner = activeState()?.owner
+                return
+            }
         val width =
-            source.host.view.bounds.useContents { size.width }
+            source.host.view.bounds
+                .useContents { size.width }
                 .coerceAtLeast(1.0)
         val progress = (maxOffset / width).toFloat().coerceIn(0f, 1f)
         renderTransition(sourceOwner, progress)
@@ -712,7 +716,10 @@ internal object IosNavChrome {
         if (interactiveOwner != null && interactiveOffsetsPt.isNotEmpty()) {
             val source = states[interactiveOwner]
             if (source != null) {
-                val width = source.host.view.bounds.useContents { size.width }.coerceAtLeast(1.0)
+                val width =
+                    source.host.view.bounds
+                        .useContents { size.width }
+                        .coerceAtLeast(1.0)
                 val offset = interactiveOffsetsPt.values.maxOrNull() ?: 0.0
                 renderTransition(interactiveOwner, (offset / width).toFloat())
                 return
