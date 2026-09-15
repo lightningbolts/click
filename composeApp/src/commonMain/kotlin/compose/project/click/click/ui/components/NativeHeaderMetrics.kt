@@ -11,17 +11,22 @@ import androidx.compose.ui.unit.dp
  * Shared iOS-native header geometry. Compose 1.dp == 1pt on iOS, so these values drive both
  * the host `UINavigationBar` height and the Compose clearance under it.
  *
- * Expanded chrome is standard large-title type (34pt, up to 2 lines) on the **same row** as
- * bar buttons. The first line of that title shares a horizontal plane with compact subpage
- * chrome (back button + 17pt title). Extra lines and subtitles grow downward. The title
- * column wraps before the action cluster; it does not use UIKit `prefersLargeTitles`.
+ * Root screens follow the iOS/WhatsApp hierarchy: the 40pt action controls occupy a dedicated
+ * compact action row first, and the expanded 34pt title sits below that row. As the root collapses,
+ * the title moves into the compact action plane and shrinks to 17pt. Subpages are already supplied
+ * with collapseFraction=1f and therefore stay in compact back/title/action chrome.
+ *
+ * Keeping the expanded title to one line also makes the vertical interpolation solvable for every
+ * collapse fraction. The previous two-line title could become taller than the interpolating bar at
+ * intermediate fractions, producing Auto Layout conflicts and, on device, a title that sometimes
+ * disappeared completely while scrolling.
  */
 object NativeHeaderMetrics {
     const val CompactBarHeightPt = 52.0
     const val LargeTitlePointSize = 34.0
     const val CompactTitlePointSize = 17.0
     const val LargeTitleLineHeightPt = 41.0
-    const val LargeTitleMaxLines = 2
+    const val LargeTitleMaxLines = 1
     const val CompactTitleMaxLines = 1
     const val TitleGutterPt = 8.0
     const val LeadingInsetPt = 20.0
@@ -45,13 +50,14 @@ object NativeHeaderMetrics {
     const val OverlayHideKeepClipFraction = 0.92
     const val OverlayCompletedSwipeFraction = 0.85
 
-    /** Vertical center of compact chrome (40pt buttons in the 52pt bar). Expanded titles pin here too. */
+    /** Vertical center of compact chrome (40pt buttons in the 52pt action row). */
     const val CompactChromeCenterYPt = CompactBarHeightPt / 2.0
 
     val CompactBarHeight: Dp = CompactBarHeightPt.toFloat().dp
 
+    /** Expanded root = compact action row + title band below it. */
     val ExpandedBarHeightPt: Double =
-        ExpandedVerticalPaddingPt + LargeTitleLineHeightPt * LargeTitleMaxLines +
+        CompactBarHeightPt + ExpandedVerticalPaddingPt + LargeTitleLineHeightPt * LargeTitleMaxLines +
             ExpandedVerticalPaddingPt
 
     val ExpandedBarHeight: Dp = ExpandedBarHeightPt.toFloat().dp
@@ -156,14 +162,15 @@ object NativeHeaderMetrics {
     ): Double = (barWidthPt - leadingInsetPt - trailingInsetPt).coerceAtLeast(MinTitleWidthPt)
 
     /**
-     * Top inset for the title column so the first line shares [CompactChromeCenterYPt] with
-     * compact subpage chrome (back button, avatar, action capsule).
+     * Root expanded title begins below the compact action row. During collapse it moves onto the
+     * compact chrome plane. With one title line, this interpolation stays within bar bounds for
+     * every fraction and avoids the former no-valid-layout interval.
      */
     fun titleColumnTopInsetPt(collapseFraction: Float): Double {
         val t = collapseFraction.coerceIn(0f, 1f).toDouble()
-        val lineHeight =
-            LargeTitleLineHeightPt + (CompactTitlePointSize - LargeTitleLineHeightPt) * t
-        return CompactChromeCenterYPt - lineHeight / 2.0
+        val expandedTop = CompactBarHeightPt + ExpandedVerticalPaddingPt
+        val compactTop = CompactChromeCenterYPt - CompactTitlePointSize / 2.0
+        return expandedTop + (compactTop - expandedTop) * t
     }
 
     /**
