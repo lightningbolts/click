@@ -263,7 +263,7 @@ class NativeHeaderMetricsTest {
     @Test
     fun collapsedGlass_isOpaqueOnlyWhenFullyCollapsed() {
         assertEquals(0f, NativeHeaderMetrics.collapsedGlassAlpha(0f))
-        assertEquals(0.92f, NativeHeaderMetrics.collapsedGlassAlpha(1f), 0.01f)
-        assertEquals(0.368f, NativeHeaderMetrics.collapsedGlassAlpha(0.4f), 0.01f)
+        assertEquals(0.64f, NativeHeaderMetrics.collapsedGlassAlpha(1f), 0.01f)
+        assertEquals(0.256f, NativeHeaderMetrics.collapsedGlassAlpha(0.4f), 0.01f)
     }
 }
