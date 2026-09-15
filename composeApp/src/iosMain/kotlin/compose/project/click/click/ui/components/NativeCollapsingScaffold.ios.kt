@@ -31,11 +31,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableFloatState
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -51,6 +49,7 @@ import kotlinx.cinterop.useContents
 import kotlinx.coroutines.launch
 import platform.Foundation.NSProcessInfo
 import platform.UIKit.UIImage
+import platform.UIKit.UIViewController
 
 @OptIn(ExperimentalForeignApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -283,155 +282,72 @@ private fun rememberIosHostNavBar(
     val backHandler by rememberUpdatedState(onNavigateBack)
     val trailingHandlers by rememberUpdatedState(nativeTrailingActions)
     val identityHandler by rememberUpdatedState(identity)
+    val morphScope = rememberCoroutineScope()
+    val tapMorph = remember(owner) { Animatable(0f) }
     val hasSubtitle = !subtitle.isNullOrBlank() || presenceOnline != null
-    val layer = if (overlay) IosNavChrome.overlay else IosNavChrome.tab
-    val routeMotionScope = rememberCoroutineScope()
-    val routeSlideOffsetPt = remember(owner) { Animatable(0f) }
-    var routeEntryGeneration by remember(owner) { mutableStateOf(0) }
-    var routeWasVisible by remember(owner) { mutableStateOf(false) }
-    var routeExitInFlight by remember(owner) { mutableStateOf(false) }
-    val routeMotionEnabled = overlay && !leadingClose
-    val routeWidthPt by rememberUpdatedState(
-        viewController.view.bounds.useContents { size.width.toFloat().coerceAtLeast(1f) },
-    )
-    // Snapshot read so chat rebinds when Click Drops clears exclusive ownership.
-    val exclusiveOwner = if (overlay) IosNavChrome.overlayExclusiveOwner else null
-    val mediaChrome = if (overlay && !leadingClose) IosNavChrome.overlayMediaChrome else null
-    val mediaClose = mediaChrome?.onClose
-    val mediaTrailing = mediaChrome?.trailing
-
-    DisposableEffect(viewController, overlay, leadingClose) {
-        layer.attach(viewController)
-        if (overlay) {
-            IosNavChrome.registerOverlayBinder(owner)
+    val level =
+        when {
+            leadingClose -> NativeChromeLevel.EXCLUSIVE
+            overlay -> NativeChromeLevel.OVERLAY
+            else -> NativeChromeLevel.ROOT
         }
-        if (overlay && leadingClose) {
-            IosNavChrome.overlayExclusiveOwner = owner
-        }
-        onDispose {
-            // Route motion and interactive swipe use independent slide owners. Always clear this
-            // binder's route-motion contribution before releasing ownership so a completed push or
-            // pop cannot leak a horizontal transform into the next overlay.
-            layer.setSlideOffset(owner, 0.0)
-            val wasExclusive = IosNavChrome.overlayExclusiveOwner === owner
-            val othersRemain = overlay && IosNavChrome.otherOverlayBindersRemain(except = owner)
-            if (wasExclusive) {
-                IosNavChrome.overlayExclusiveOwner = null
-            }
-            if (overlay) {
-                IosNavChrome.unregisterOverlayBinder(owner)
-            }
-            val hideExclusive =
-                overlay &&
-                    leadingClose &&
-                    OverlayExclusiveBindPolicy.shouldHideOverlayOnExclusiveRelease(othersRemain)
-            if (overlay && leadingClose && !hideExclusive) {
-                layer.yieldExclusive(owner)
-            } else {
-                layer.release(owner, immediate = overlay)
-            }
-        }
-    }
-
-    LaunchedEffect(owner, routeMotionEnabled) {
-        if (!routeMotionEnabled) return@LaunchedEffect
-        snapshotFlow { routeSlideOffsetPt.value }.collect { offsetPt ->
-            layer.setSlideOffset(owner, offsetPt.toDouble())
-        }
-    }
-
-    LaunchedEffect(owner, routeEntryGeneration, routeMotionEnabled, reduceMotion) {
-        if (!routeMotionEnabled || routeEntryGeneration <= 0) return@LaunchedEffect
-        routeExitInFlight = false
-        if (reduceMotion) {
-            routeSlideOffsetPt.snapTo(0f)
-            return@LaunchedEffect
-        }
-        routeSlideOffsetPt.snapTo(routeWidthPt)
-        routeSlideOffsetPt.animateTo(
-            targetValue = 0f,
-            animationSpec =
-                tween(
-                    durationMillis = NATIVE_ROUTE_HEADER_TRANSITION_MS,
-                    easing = FastOutSlowInEasing,
-                ),
-        )
-    }
 
     val coordinatedBackHandler: (() -> Unit)? =
-        when {
-            mediaClose != null -> mediaClose
-            backHandler == null -> null
-            !routeMotionEnabled || reduceMotion -> backHandler
-            else -> {
-                {
-                    if (!routeExitInFlight) {
-                        routeExitInFlight = true
-                        routeMotionScope.launch {
-                            routeSlideOffsetPt.stop()
-                            routeSlideOffsetPt.animateTo(
-                                targetValue = routeWidthPt,
-                                animationSpec =
-                                    tween(
-                                        durationMillis = NATIVE_ROUTE_HEADER_TRANSITION_MS,
-                                        easing = FastOutSlowInEasing,
-                                    ),
-                            )
-                            routeExitInFlight = false
+        backHandler?.let { destinationBack ->
+            {
+                if (overlay && !leadingClose && !reduceMotion) {
+                    IosNavChrome.beginProgrammaticPop(owner)
+                    morphScope.launch {
+                        tapMorph.stop()
+                        tapMorph.snapTo(0f)
+                        tapMorph.animateTo(
+                            targetValue = 1f,
+                            animationSpec =
+                                tween(
+                                    durationMillis = NATIVE_ROUTE_HEADER_TRANSITION_MS,
+                                    easing = FastOutSlowInEasing,
+                                ),
+                        ) {
+                            IosNavChrome.setProgrammaticPopProgress(owner, value)
                         }
+                        IosNavChrome.endProgrammaticPop(owner)
                     }
-                    // Start the Compose route transition in the same event turn as native chrome.
-                    // The overlay remains mounted for its 300 ms exit, so the same UIKit objects
-                    // travel with the body rather than disappearing and rematerializing later.
-                    backHandler?.invoke()
                 }
+                destinationBack()
             }
         }
 
+    DisposableEffect(owner, viewController) {
+        IosNavChrome.register(owner, level)
+        onDispose {
+            IosNavChrome.unregister(owner)
+        }
+    }
+
     SideEffect {
-        if (overlay && OverlayExclusiveBindPolicy.shouldSkipOverlayBind(exclusiveOwner, owner)) {
-            return@SideEffect
-        }
-        if (!visible) {
-            routeWasVisible = false
-            // Inactive underlays (Map swipe-back composing Home) must not unhide stale
-            // tab chrome. Only hide if this composition currently owns the layer.
-            if (layer.owns(owner)) {
-                layer.setWantVisible(false)
-            }
-            return@SideEffect
-        }
-        layer.applyAppearance(
-            isDarkMode = isDarkMode,
-            reduceTransparency = reduceTransparency,
-            usesNativeLiquidGlass = usesNativeLiquidGlass,
+        IosNavChrome.publish(
+            PublishedNativeChromeState(
+                owner = owner,
+                host = viewController,
+                level = level,
+                title = title,
+                subtitle = subtitle,
+                presenceOnline = presenceOnline,
+                identity = identityHandler,
+                visible = visible,
+                collapseFraction = collapseFraction,
+                hasSubtitle = hasSubtitle,
+                onOpenSearch = searchHandler,
+                onNavigateBack = coordinatedBackHandler,
+                trailingActions = trailingHandlers,
+                collapseSearchIntoBar = collapseSearchIntoBar,
+                leadingClose = leadingClose,
+                isDarkMode = isDarkMode,
+                reduceTransparency = reduceTransparency,
+                reduceMotion = reduceMotion,
+                usesNativeLiquidGlass = usesNativeLiquidGlass,
+            ),
         )
-        layer.update(
-            owner = owner,
-            host = viewController,
-            title = title,
-            subtitle = subtitle,
-            presenceOnline = presenceOnline,
-            identity = identityHandler,
-            visible = true,
-            collapseFraction = collapseFraction,
-            hasSubtitle = hasSubtitle,
-            onOpenSearch = searchHandler,
-            onNavigateBack = coordinatedBackHandler,
-            trailingActions = mediaTrailing ?: trailingHandlers,
-            collapseSearchIntoBar = collapseSearchIntoBar,
-            leadingClose = leadingClose || mediaChrome != null,
-        )
-        if (routeMotionEnabled && !routeWasVisible) {
-            // Prime the native transform in the same commit that makes the overlay visible. This
-            // removes the one-frame flash where the header used to appear at x=0 before the
-            // Compose screen began its horizontal push.
-            if (!reduceMotion) {
-                layer.setSlideOffset(owner, routeWidthPt.toDouble())
-            }
-            routeEntryGeneration += 1
-        }
-        routeWasVisible = true
     }
 }
 
@@ -443,13 +359,13 @@ actual fun HidePlatformNativeNavigationBar() {
     }
 }
 
+/**
+ * The global persistent host no longer needs to hide one native bar before mounting another.
+ * Keeping this API as a no-op preserves camera/sheet call sites while preventing Liquid Glass
+ * rematerialization during exclusive overlay transitions.
+ */
 @Composable
-actual fun CoverPlatformOverlayNavigationBar() {
-    DisposableEffect(Unit) {
-        IosNavChrome.overlay.acquireCover()
-        onDispose { IosNavChrome.overlay.releaseCover() }
-    }
-}
+actual fun CoverPlatformOverlayNavigationBar() = Unit
 
 @OptIn(ExperimentalForeignApi::class)
 @Composable
@@ -457,11 +373,11 @@ actual fun PlatformNativeNavigationBarSwipeReveal(revealPx: MutableFloatState) {
     val owner = remember { Any() }
     val density = LocalDensity.current.density
     DisposableEffect(owner) {
-        onDispose { IosNavChrome.overlay.setSlideOffset(owner, 0.0) }
+        onDispose { IosNavChrome.setInteractivePopOffset(owner, 0.0) }
     }
     LaunchedEffect(owner, density) {
         snapshotFlow { revealPx.floatValue }.collect { px ->
-            IosNavChrome.overlay.setSlideOffset(owner, (px / density).toDouble())
+            IosNavChrome.setInteractivePopOffset(owner, (px / density).toDouble())
         }
     }
 }
@@ -503,7 +419,6 @@ actual fun ApplyOverlayMediaChrome(
 ) {
     val close by rememberUpdatedState(onClose)
     val trailingLatest by rememberUpdatedState(trailing)
-    val hasUnderlyingBinder = remember { IosNavChrome.hasOverlayBinder() }
     val trailingShape =
         trailing.map { action ->
             Triple(
@@ -516,9 +431,7 @@ actual fun ApplyOverlayMediaChrome(
         remember(trailingShape) {
             trailing.mapIndexed { actionIndex, action ->
                 action.copy(
-                    onClick = {
-                        trailingLatest.getOrNull(actionIndex)?.onClick?.invoke()
-                    },
+                    onClick = { trailingLatest.getOrNull(actionIndex)?.onClick?.invoke() },
                     menuItems =
                         action.menuItems.mapIndexed { itemIndex, item ->
                             item.copy(
@@ -538,22 +451,26 @@ actual fun ApplyOverlayMediaChrome(
     val stableMediaChrome =
         remember(stableTrailing) {
             OverlayMediaChrome(
-                onClose = { close() },
+                onClose = {
+                    IosNavChrome.setMediaChrome(null)
+                    close()
+                },
                 trailing = stableTrailing,
             )
         }
+    val hasUnderlyingBinder = IosNavChrome.hasOverlayBinder()
+
     DisposableEffect(active, hasUnderlyingBinder, stableMediaChrome) {
         if (active && hasUnderlyingBinder) {
-            IosNavChrome.overlayMediaChrome = stableMediaChrome
+            IosNavChrome.setMediaChrome(stableMediaChrome)
         } else if (!active) {
-            IosNavChrome.overlayMediaChrome = null
+            IosNavChrome.setMediaChrome(null)
         }
         onDispose {
-            if (IosNavChrome.overlayMediaChrome != null) {
-                IosNavChrome.overlayMediaChrome = null
-            }
+            IosNavChrome.clearMediaChromeIf(stableMediaChrome)
         }
     }
+
     if (active && !hasUnderlyingBinder) {
         rememberIosHostNavBar(
             title = "",
@@ -563,8 +480,8 @@ actual fun ApplyOverlayMediaChrome(
             visible = LocalNativeChromeActive.current,
             overlay = true,
             onOpenSearch = null,
-            onNavigateBack = { close() },
-            nativeTrailingActions = trailingLatest,
+            onNavigateBack = { stableMediaChrome.onClose() },
+            nativeTrailingActions = stableTrailing,
             collapseSearchIntoBar = false,
             leadingClose = true,
         )
@@ -576,45 +493,310 @@ internal data class OverlayMediaChrome(
     val trailing: List<NativeChromeAction>,
 )
 
+internal enum class NativeChromeLevel(val priority: Int) {
+    ROOT(0),
+    OVERLAY(1),
+    EXCLUSIVE(2),
+}
+
+@OptIn(ExperimentalForeignApi::class)
+internal data class PublishedNativeChromeState(
+    val owner: Any,
+    val host: UIViewController,
+    val level: NativeChromeLevel,
+    val title: String,
+    val subtitle: String?,
+    val presenceOnline: Boolean?,
+    val identity: NativeChromeIdentity?,
+    val visible: Boolean,
+    val collapseFraction: Float,
+    val hasSubtitle: Boolean,
+    val onOpenSearch: (() -> Unit)?,
+    val onNavigateBack: (() -> Unit)?,
+    val trailingActions: List<NativeChromeAction>,
+    val collapseSearchIntoBar: Boolean,
+    val leadingClose: Boolean,
+    val isDarkMode: Boolean,
+    val reduceTransparency: Boolean,
+    val reduceMotion: Boolean,
+    val usesNativeLiquidGlass: Boolean,
+    val mountOrder: Long = 0L,
+)
+
+/**
+ * Single-owner iOS chrome coordinator.
+ *
+ * Root, pushed, hub, media, and camera states all publish into this coordinator. There is exactly
+ * one attached [IosHostNavBarLayer], so the leading/trailing UIViews stay physically mounted at
+ * identical coordinates while their semantic role changes. No route owns a second navigation bar.
+ */
+@OptIn(ExperimentalForeignApi::class)
 internal object IosNavChrome {
+    val shared = IosHostNavBarLayer()
+
+    // Kept only because legacy layer helpers refer to these identities internally. New app chrome
+    // never attaches either instance; [shared] is the only live host.
     val tab = IosHostNavBarLayer()
     val overlay = IosHostNavBarLayer()
     val avatarPhotos = mutableMapOf<String, UIImage>()
 
-    /**
-     * Camera / sheet that rebinds overlay chrome while [overlay] coverCount > 0.
-     * Snapshot state so the underlying conversation bind recomposes and restores titles
-     * when exclusive ownership clears.
-     */
-    var overlayExclusiveOwner by mutableStateOf<Any?>(null)
-    var overlayMediaChrome by mutableStateOf<OverlayMediaChrome?>(null)
-    private val overlayBindOwners = mutableSetOf<Any>()
+    var overlayExclusiveOwner: Any? = null
 
-    fun hasOverlayBinder(): Boolean = overlayBindOwners.isNotEmpty()
+    private val states = linkedMapOf<Any, PublishedNativeChromeState>()
+    private val mountOrders = mutableMapOf<Any, Long>()
+    private var nextMountOrder = 1L
+    private var coverCount = 0
+    private var mediaChrome: OverlayMediaChrome? = null
+    private var lastSemanticSignature: String? = null
+    private var lastRenderedOwner: Any? = null
 
-    fun registerOverlayBinder(owner: Any) {
-        overlayBindOwners.add(owner)
+    private val interactiveOffsetsPt = mutableMapOf<Any, Double>()
+    private var interactiveSourceOwner: Any? = null
+    private var programmaticSourceOwner: Any? = null
+    private var programmaticProgress = 0f
+
+    fun register(
+        owner: Any,
+        level: NativeChromeLevel,
+    ) {
+        if (owner !in mountOrders) {
+            mountOrders[owner] = nextMountOrder++
+        }
+        if (level == NativeChromeLevel.EXCLUSIVE) {
+            overlayExclusiveOwner = owner
+        }
     }
 
-    fun unregisterOverlayBinder(owner: Any) {
-        overlayBindOwners.remove(owner)
+    fun unregister(owner: Any) {
+        states.remove(owner)
+        mountOrders.remove(owner)
+        if (overlayExclusiveOwner === owner) {
+            overlayExclusiveOwner = null
+        }
+        if (interactiveSourceOwner === owner) {
+            interactiveSourceOwner = null
+            interactiveOffsetsPt.clear()
+        }
+        if (programmaticSourceOwner === owner) {
+            programmaticSourceOwner = null
+            programmaticProgress = 0f
+        }
+        reconcile()
     }
 
-    fun otherOverlayBindersRemain(except: Any): Boolean = overlayBindOwners.any { it !== except }
+    fun publish(state: PublishedNativeChromeState) {
+        val order = mountOrders[state.owner] ?: nextMountOrder++.also { mountOrders[state.owner] = it }
+        states[state.owner] = state.copy(mountOrder = order)
+        reconcile()
+    }
+
+    fun hasOverlayBinder(): Boolean =
+        states.values.any {
+            it.visible && (it.level == NativeChromeLevel.OVERLAY || it.level == NativeChromeLevel.EXCLUSIVE)
+        }
+
+    fun setMediaChrome(value: OverlayMediaChrome?) {
+        if (mediaChrome === value) return
+        mediaChrome = value
+        reconcile()
+    }
+
+    fun clearMediaChromeIf(value: OverlayMediaChrome) {
+        if (mediaChrome === value) {
+            mediaChrome = null
+            reconcile()
+        }
+    }
 
     fun acquireCover() {
-        tab.acquireCover()
-        overlay.acquireCover()
+        coverCount += 1
+        shared.acquireCover()
     }
 
     fun releaseCover() {
-        tab.releaseCover()
-        overlay.releaseCover()
+        coverCount = (coverCount - 1).coerceAtLeast(0)
+        shared.releaseCover()
+        reconcile()
     }
 
     fun restack() {
-        tab.bringChromeToFront()
-        overlay.bringChromeToFront()
+        shared.bringChromeToFront()
+    }
+
+    fun beginProgrammaticPop(owner: Any) {
+        if (states[owner]?.visible != true) return
+        programmaticSourceOwner = owner
+        programmaticProgress = 0f
+        renderTransition(owner, 0f)
+    }
+
+    fun setProgrammaticPopProgress(
+        owner: Any,
+        progress: Float,
+    ) {
+        if (programmaticSourceOwner !== owner) return
+        programmaticProgress = progress.coerceIn(0f, 1f)
+        renderTransition(owner, programmaticProgress)
+    }
+
+    fun endProgrammaticPop(owner: Any) {
+        if (programmaticSourceOwner !== owner) return
+        programmaticSourceOwner = null
+        programmaticProgress = 0f
+        shared.resetPersistentChromeMorphVisuals(animated = false)
+        reconcile()
+    }
+
+    fun setInteractivePopOffset(
+        gestureOwner: Any,
+        offsetPt: Double,
+    ) {
+        if (offsetPt <= 0.5) {
+            interactiveOffsetsPt.remove(gestureOwner)
+        } else {
+            interactiveOffsetsPt[gestureOwner] = offsetPt
+        }
+
+        val maxOffset = interactiveOffsetsPt.values.maxOrNull() ?: 0.0
+        if (maxOffset <= 0.5) {
+            interactiveSourceOwner = null
+            shared.resetPersistentChromeMorphVisuals(animated = true)
+            reconcile()
+            return
+        }
+
+        if (interactiveSourceOwner == null) {
+            interactiveSourceOwner = activeState()?.owner
+        }
+        val sourceOwner = interactiveSourceOwner ?: return
+        val source = states[sourceOwner] ?: run {
+            interactiveSourceOwner = activeState()?.owner
+            return
+        }
+        val width =
+            source.host.view.bounds.useContents { size.width }
+                .coerceAtLeast(1.0)
+        val progress = (maxOffset / width).toFloat().coerceIn(0f, 1f)
+        renderTransition(sourceOwner, progress)
+    }
+
+    private fun activeState(excludingOwner: Any? = null): PublishedNativeChromeState? =
+        states.values
+            .asSequence()
+            .filter { it.visible && it.owner !== excludingOwner }
+            .maxWithOrNull(
+                compareBy<PublishedNativeChromeState> { it.level.priority }
+                    .thenBy { it.mountOrder },
+            )
+
+    private fun renderTransition(
+        sourceOwner: Any,
+        progress: Float,
+    ) {
+        val source = states[sourceOwner] ?: activeState() ?: return
+        val destination = activeState(excludingOwner = sourceOwner)
+        val p = progress.coerceIn(0f, 1f)
+        val state = if (destination != null && p >= 0.5f) destination else source
+        render(state, animateSemanticChange = false)
+        shared.applyPersistentChromeMorphProgress(p)
+    }
+
+    private fun reconcile() {
+        if (coverCount > 0) return
+        val programmaticOwner = programmaticSourceOwner
+        if (programmaticOwner != null && states[programmaticOwner]?.visible == true) {
+            renderTransition(programmaticOwner, programmaticProgress)
+            return
+        }
+        val interactiveOwner = interactiveSourceOwner
+        if (interactiveOwner != null && interactiveOffsetsPt.isNotEmpty()) {
+            val source = states[interactiveOwner]
+            if (source != null) {
+                val width = source.host.view.bounds.useContents { size.width }.coerceAtLeast(1.0)
+                val offset = interactiveOffsetsPt.values.maxOrNull() ?: 0.0
+                renderTransition(interactiveOwner, (offset / width).toFloat())
+                return
+            }
+        }
+        val active = activeState()
+        if (active == null) {
+            shared.setWantVisible(false)
+            return
+        }
+        render(active, animateSemanticChange = true)
+    }
+
+    private fun render(
+        state: PublishedNativeChromeState,
+        animateSemanticChange: Boolean,
+    ) {
+        val overlayLike = state.level != NativeChromeLevel.ROOT
+        val effectiveMedia = mediaChrome.takeIf { overlayLike && !state.leadingClose }
+        val effectiveBack = effectiveMedia?.onClose ?: state.onNavigateBack
+        val effectiveTrailing = effectiveMedia?.trailing ?: state.trailingActions
+        val effectiveClose = state.leadingClose || effectiveMedia != null
+
+        shared.attach(state.host)
+        shared.applyAppearance(
+            isDarkMode = state.isDarkMode,
+            reduceTransparency = state.reduceTransparency,
+            usesNativeLiquidGlass = state.usesNativeLiquidGlass,
+        )
+        shared.update(
+            owner = state.owner,
+            host = state.host,
+            title = state.title,
+            subtitle = state.subtitle,
+            presenceOnline = state.presenceOnline,
+            identity = state.identity,
+            visible = state.visible,
+            collapseFraction = state.collapseFraction,
+            hasSubtitle = state.hasSubtitle,
+            onOpenSearch = state.onOpenSearch,
+            onNavigateBack = effectiveBack,
+            trailingActions = effectiveTrailing,
+            collapseSearchIntoBar = state.collapseSearchIntoBar,
+            leadingClose = effectiveClose,
+        )
+
+        val isRoot = state.level == NativeChromeLevel.ROOT
+        if (isRoot) {
+            shared.applyPersistentRootTitleGeometry(isRoot = true)
+            val rootMenuHandler =
+                state.onOpenSearch
+                    ?: state.trailingActions.firstOrNull()?.onClick
+                    ?: {}
+            shared.applyPersistentRootMenu(rootMenuHandler)
+        }
+
+        if (overlayLike) {
+            IosHostMapFloatingChrome.clipLeadingUnderlay(0.0)
+        } else {
+            IosHostMapFloatingChrome.clipLeadingUnderlay(null)
+        }
+
+        val leadingSymbol =
+            when {
+                effectiveClose -> "xmark"
+                isRoot -> "ellipsis"
+                effectiveBack != null -> "chevron.backward"
+                else -> "none"
+            }
+        val semanticSignature =
+            buildString {
+                append(leadingSymbol)
+                effectiveTrailing.forEach {
+                    append('|')
+                    append(it.sfSymbol)
+                }
+            }
+        val semanticChanged = lastSemanticSignature != null && lastSemanticSignature != semanticSignature
+        lastSemanticSignature = semanticSignature
+        lastRenderedOwner = state.owner
+        shared.animatePersistentSemanticSettle(
+            enabled = animateSemanticChange && semanticChanged && !state.reduceMotion,
+        )
+        shared.bringChromeToFront()
     }
 }
 
