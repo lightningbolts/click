@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
@@ -24,6 +25,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -31,14 +33,15 @@ import compose.project.click.click.ui.theme.LocalPlatformStyle // pragma: allowl
 
 val ClickConversationListRowMinHeight = 72.dp
 val ClickConversationAvatarSize = 48.dp
+private val ClickConversationPressedShape = RoundedCornerShape(18.dp)
 
 /**
  * Conversation-specific list row.
  *
  * Chat inbox rows intentionally have more vertical breathing room than generic settings/search
- * rows and always expose an immediate pressed wash on iOS. The press state is a flat full-row wash
- * rather than a card scale animation: conversation lists should feel like native inbox rows, not
- * individually floating controls.
+ * rows and always expose an immediate pressed wash on iOS. The press state remains a full-row wash,
+ * but the interaction surface is clipped to the shared rounded touch geometry so no rectangular
+ * flash appears at the row edges during press/hold.
  */
 @Composable
 fun ClickConversationListRow(
@@ -66,6 +69,7 @@ fun ClickConversationListRow(
                 Modifier
                     .fillMaxWidth()
                     .heightIn(min = ClickConversationListRowMinHeight)
+                    .clip(ClickConversationPressedShape)
                     .background(pressedWash)
                     .combinedClickable(
                         interactionSource = interactionSource,
