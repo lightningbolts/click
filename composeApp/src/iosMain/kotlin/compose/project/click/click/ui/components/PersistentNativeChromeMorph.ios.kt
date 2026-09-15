@@ -105,9 +105,7 @@ internal fun IosHostNavBarLayer.applyPersistentRootTitleGeometry(isRoot: Boolean
  * Back and Close on pushed/media states. There is no remount and therefore no position jump.
  */
 @OptIn(ExperimentalForeignApi::class)
-internal fun IosHostNavBarLayer.applyPersistentRootMenu(
-    onClick: (() -> Unit)?,
-) {
+internal fun IosHostNavBarLayer.applyPersistentRootMenu(onClick: (() -> Unit)?) {
     if (onClick == null) return
     backButton.hidden = false
     backTarget.handler = onClick
