@@ -223,7 +223,7 @@ private fun configureTransitionContainer(
     container.backgroundColor = UIColor.clearColor
     container.userInteractionEnabled = false
     container.setFrame(CGRectMake(snapshot.x, snapshot.y, snapshot.width, snapshot.height))
-    container.subviews.forEach { it.removeFromSuperview() }
+    container.subviews.map { it as UIView }.forEach { it.removeFromSuperview() }
 
     title.text = snapshot.title
     title.font = UIFont.boldSystemFontOfSize(snapshot.titleFontSize)
@@ -335,10 +335,9 @@ internal fun IosHostNavBarLayer.applyPersistentRootTitleGeometry(isRoot: Boolean
  * magnifier. Commands come from the app shell and are real navigation actions.
  */
 @OptIn(ExperimentalForeignApi::class)
-internal fun IosHostNavBarLayer.applyPersistentRootMenu(onClick: (() -> Unit)?) {
-    // The shell publishes menu commands after the screen tree has composed. Keep a small change
-    // hook so those commands repaint this already-mounted UIKit control immediately rather than
-    // waiting for an unrelated scroll/navigation recomposition.
+internal fun IosHostNavBarLayer.applyPersistentRootMenu(
+    @Suppress("UNUSED_PARAMETER") onClick: (() -> Unit)?,
+) {
     NativeRootMenuRegistry.onChanged = {
         if (backTarget.handler == null) {
             applyPersistentRootMenu(onClick)
