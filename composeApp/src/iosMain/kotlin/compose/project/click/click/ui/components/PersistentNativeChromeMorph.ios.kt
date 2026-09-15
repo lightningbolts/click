@@ -25,8 +25,8 @@ private data class NativeTitleSnapshot(
     val subtitle: String,
     val titleFontSize: Double,
     val subtitleFontSize: Double,
-    val titleColor: UIColor?,
-    val subtitleColor: UIColor?,
+    val titleColor: UIColor,
+    val subtitleColor: UIColor,
     val x: Double,
     val y: Double,
     val width: Double,
@@ -140,8 +140,10 @@ private fun IosHostNavBarLayer.captureCurrentTitleSnapshot(): NativeTitleSnapsho
         subtitle = if (subtitleLabel.hidden) "" else subtitleLabel.text.orEmpty(),
         titleFontSize = titleLabel.font.pointSize,
         subtitleFontSize = subtitleLabel.font.pointSize,
-        titleColor = titleLabel.textColor,
-        subtitleColor = subtitleLabel.textColor,
+        titleColor = titleLabel.textColor ?: if (lastIsDark) UIColor.whiteColor else UIColor.blackColor,
+        subtitleColor =
+            subtitleLabel.textColor
+                ?: UIColor.colorWithWhite(if (lastIsDark) 0.72 else 0.38, alpha = 1.0),
         x = x,
         y = y,
         width = width,
@@ -230,14 +232,14 @@ private fun configureTransitionContainer(
 
     title.text = snapshot.title
     title.font = UIFont.boldSystemFontOfSize(snapshot.titleFontSize)
-    title.textColor = snapshot.titleColor ?: UIColor.labelColor
+    title.textColor = snapshot.titleColor
     title.textAlignment = if (snapshot.centered) NSTextAlignmentCenter else NSTextAlignmentLeft
     title.numberOfLines = 1
     title.userInteractionEnabled = false
 
     subtitle.text = snapshot.subtitle
     subtitle.font = UIFont.systemFontOfSize(snapshot.subtitleFontSize)
-    subtitle.textColor = snapshot.subtitleColor ?: UIColor.secondaryLabelColor
+    subtitle.textColor = snapshot.subtitleColor
     subtitle.textAlignment = title.textAlignment
     subtitle.numberOfLines = 1
     subtitle.hidden = snapshot.subtitle.isEmpty()
