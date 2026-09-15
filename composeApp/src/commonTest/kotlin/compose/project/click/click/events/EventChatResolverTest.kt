@@ -66,9 +66,10 @@ class EventChatResolverTest {
 
     @Test
     fun genericFailureIsBoundedRetry() {
-        val retry = assertIs<EventChatOpenState.RetryableError>(
-            classifyEventChatResolveFailure(IllegalStateException("network")),
-        )
+        val retry =
+            assertIs<EventChatOpenState.RetryableError>(
+                classifyEventChatResolveFailure(IllegalStateException("network")),
+            )
 
         assertEquals("Couldn't open event chat. Try again.", retry.message)
     }
