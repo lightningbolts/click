@@ -31,7 +31,6 @@ import androidx.compose.material3.ripple
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
@@ -85,19 +84,6 @@ internal fun ChatViewSuccessHeader(
     var showRenameGroupDialog by showRenameGroupDialogState
     var renameGroupDraft by renameGroupDraftState
     if (nativeNavChrome) {
-        val isPeerTyping by viewModel.isPeerTyping.collectAsState()
-        val isPeerOnline by viewModel.isPeerOnline.collectAsState()
-        val onlineUsers by AppDataManager.onlineUsers.collectAsState()
-        val peerId = successChat?.chatDetails?.otherUser?.id ?: hintedChatRow?.otherUser?.id
-        val bindOnline = if (bindIsGroup) null else peerId?.let { it in onlineUsers || isPeerOnline }
-        val bindStatusSubtitle =
-            if (bindIsGroup) {
-                null
-            } else if (bindOnline != null || successChat != null || hintedChatRow != null) {
-                chatPeerStatusSubtitle(isTyping = isPeerTyping, isOnline = bindOnline == true)
-            } else {
-                null
-            }
         Spacer(
             modifier =
                 Modifier
@@ -296,7 +282,6 @@ internal fun ChatViewSuccessHeader(
                     )
                 }
 
-                // Overflow / connection options
                 ChatHeaderIconButton(
                     icon = Icons.Filled.MoreVert,
                     contentDescription = "More options",
@@ -329,6 +314,20 @@ internal fun ChatViewNativeNavBinding(
     var showRenameGroupDialog by showRenameGroupDialogState
     var renameGroupDraft by renameGroupDraftState
     if (nativeNavChrome) {
+        val isPeerTyping by viewModel.isPeerTyping.collectAsState()
+        val isPeerOnline by viewModel.isPeerOnline.collectAsState()
+        val onlineUsers by AppDataManager.onlineUsers.collectAsState()
+        val peerId = successChat?.chatDetails?.otherUser?.id ?: hintedChatRow?.otherUser?.id
+        val bindOnline = if (bindIsGroup) null else peerId?.let { it in onlineUsers || isPeerOnline }
+        val bindStatusSubtitle =
+            if (bindIsGroup) {
+                null
+            } else if (bindOnline != null || successChat != null || hintedChatRow != null) {
+                chatPeerStatusSubtitle(isTyping = isPeerTyping, isOnline = bindOnline == true)
+            } else {
+                null
+            }
+
         BindPlatformNativeNavigationBar(
             title = bindTitle,
             subtitle = bindStatusSubtitle,
