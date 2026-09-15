@@ -116,7 +116,10 @@ internal actual class ComposerLiftAnimator actual constructor() {
             }
     }
 
-    actual fun snapTo(liftPxState: MutableFloatState, targetPx: Float) {
+    actual fun snapTo(
+        liftPxState: MutableFloatState,
+        targetPx: Float,
+    ) {
         sampleJob?.cancel()
         sampleJob = null
         ensureAttached()

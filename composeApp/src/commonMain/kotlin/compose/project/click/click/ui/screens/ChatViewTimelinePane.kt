@@ -196,8 +196,7 @@ internal fun ColumnScope.ChatViewTimelinePane(
                                 .chatTimelineKeyboardViewport(
                                     nativeKeyboardLiftPxState = nativeKeyboardInsets.liftPxState,
                                     followKeyboard = { timelineFollowsKeyboardState.value },
-                                )
-                                .zIndex(1f),
+                                ).zIndex(1f),
                     ) {
                         if (state.isLoadingMessages && messages.isEmpty()) {
                             Box(
