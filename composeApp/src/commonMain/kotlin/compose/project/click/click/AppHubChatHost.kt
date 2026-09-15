@@ -39,6 +39,7 @@ import compose.project.click.click.ui.chat.ChatAmbientMeshBackground // pragma: 
 import compose.project.click.click.ui.components.InteractiveSwipeBackContainer // pragma: allowlist secret
 import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeftPeek // pragma: allowlist secret
 import compose.project.click.click.ui.components.PlatformNativeNavigationBarSwipeReveal // pragma: allowlist secret
+import compose.project.click.click.ui.components.PlatformNativeSheetOcclusion // pragma: allowlist secret
 import compose.project.click.click.ui.screens.* // pragma: allowlist secret
 import compose.project.click.click.ui.theme.* // pragma: allowlist secret
 import compose.project.click.click.utils.LocationResult // pragma: allowlist secret
@@ -48,6 +49,7 @@ import compose.project.click.click.viewmodel.AuthViewModel // pragma: allowlist 
 import io.ktor.client.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.serialization.kotlinx.json.*
+import kotlinx.coroutines.delay
 
 @Composable
 internal fun AppHubChatHost(
@@ -69,6 +71,26 @@ internal fun AppHubChatHost(
     }
     val hubSwipeDragPx = remember { mutableFloatStateOf(0f) }
     PlatformNativeNavigationBarSwipeReveal(hubSwipeDragPx)
+
+    // Map/Nearby/Event use native UISheetPresentationController layers, which sit above Compose.
+    // Event hub chat is a full-screen app destination, so temporarily occlude (do not dismiss) the
+    // native sheet container. This preserves the exact Nearby + Event state and restores it after
+    // Back without requiring the user to swipe two sheets away or reconstructing either sheet.
+    var occludeEventSourceSheets by remember { mutableStateOf(false) }
+    LaunchedEffect(hubChatArgs, hubChatTransitionMode) {
+        if (hubChatArgs?.isEventHub == true) {
+            occludeEventSourceSheets = true
+        } else if (occludeEventSourceSheets) {
+            val settleMs =
+                if (hubChatTransitionMode == NavigationTransitionMode.GestureBack) 80L else 320L
+            delay(settleMs)
+            if (hubChatArgs == null) {
+                occludeEventSourceSheets = false
+            }
+        }
+    }
+    PlatformNativeSheetOcclusion(active = isIOS && occludeEventSourceSheets)
+
     LaunchedEffect(hubChatArgs) {
         if (hubChatArgs != null) {
             lastHubChatArgs = hubChatArgs
@@ -117,9 +139,6 @@ internal fun AppHubChatHost(
                 }
             DisposableEffect(hubOverlayViewModelOwner) {
                 onDispose {
-                    // Hub chat is an overlay session, not an app-scoped destination.
-                    // Clearing its store invokes HubChatViewModel.onCleared(), which
-                    // tears down realtime presence and zeroes overlay-owned state.
                     hubOverlayViewModelOwner.viewModelStore.clear()
                 }
             }
