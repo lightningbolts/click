@@ -76,8 +76,7 @@ fun ClickConversationListRow(
                         indication = if (LocalPlatformStyle.current.useRipple) ripple(bounded = true) else null,
                         onClick = onClick,
                         onLongClick = onLongPress,
-                    )
-                    .defaultMinSize(minHeight = ClickConversationListRowMinHeight)
+                    ).defaultMinSize(minHeight = ClickConversationListRowMinHeight)
                     .padding(vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
