@@ -102,14 +102,34 @@ internal fun IosHostNavBarLayer.applyPersistentRootTitleGeometry(isRoot: Boolean
 
 /**
  * Root-screen menu anchor. This deliberately reuses the exact same leading UIButton later used as
- * Back and Close on pushed/media states. There is no remount and therefore no position jump.
+ * Back and Close on pushed/media states. When the root exposes search, the ellipsis is a real
+ * native UIMenu anchor rather than a disguised direct-search button.
  */
 @OptIn(ExperimentalForeignApi::class)
 internal fun IosHostNavBarLayer.applyPersistentRootMenu(onClick: (() -> Unit)?) {
-    if (onClick == null) return
+    if (onClick == null) {
+        backButton.hidden = true
+        backButton.menu = null
+        backButton.showsMenuAsPrimaryAction = false
+        return
+    }
+    val menuAction =
+        NativeChromeAction(
+            sfSymbol = "ellipsis",
+            contentDescription = "Menu",
+            onClick = {},
+            menuItems =
+                listOf(
+                    NativeChromeMenuItem(
+                        title = "Search",
+                        sfSymbol = "magnifyingglass",
+                        onClick = onClick,
+                    ),
+                ),
+        )
     backButton.hidden = false
-    backTarget.handler = onClick
-    bindNativeMenu(backButton, null, actionIndex = -2)
+    backTarget.handler = {}
+    bindNativeMenu(backButton, menuAction, actionIndex = -2)
     paintChromeButton(
         button = backButton,
         symbol = "ellipsis",
