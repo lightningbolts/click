@@ -39,17 +39,12 @@ import compose.project.click.click.ui.chat.ChatAmbientMeshBackground // pragma: 
 import compose.project.click.click.ui.components.InteractiveSwipeBackContainer // pragma: allowlist secret
 import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeftPeek // pragma: allowlist secret
 import compose.project.click.click.ui.components.PlatformNativeNavigationBarSwipeReveal // pragma: allowlist secret
-import compose.project.click.click.ui.components.PlatformNativeSheetOcclusion // pragma: allowlist secret
+import compose.project.click.click.ui.components.PlatformOverlayAbovePresentedSheets // pragma: allowlist secret
 import compose.project.click.click.ui.screens.* // pragma: allowlist secret
 import compose.project.click.click.ui.theme.* // pragma: allowlist secret
 import compose.project.click.click.utils.LocationResult // pragma: allowlist secret
-import compose.project.click.click.utils.resolveHubGatekeeperLocation // pragma: allowlist secret
 import compose.project.click.click.viewmodel.AuthState // pragma: allowlist secret
 import compose.project.click.click.viewmodel.AuthViewModel // pragma: allowlist secret
-import io.ktor.client.*
-import io.ktor.client.plugins.contentnegotiation.*
-import io.ktor.serialization.kotlinx.json.*
-import kotlinx.coroutines.delay
 
 @Composable
 internal fun AppHubChatHost(
@@ -72,25 +67,6 @@ internal fun AppHubChatHost(
     val hubSwipeDragPx = remember { mutableFloatStateOf(0f) }
     PlatformNativeNavigationBarSwipeReveal(hubSwipeDragPx)
 
-    // Map/Nearby/Event use native UISheetPresentationController layers, which sit above Compose.
-    // Event hub chat is a full-screen app destination, so temporarily occlude (do not dismiss) the
-    // native sheet container. This preserves the exact Nearby + Event state and restores it after
-    // Back without requiring the user to swipe two sheets away or reconstructing either sheet.
-    var occludeEventSourceSheets by remember { mutableStateOf(false) }
-    LaunchedEffect(hubChatArgs, hubChatTransitionMode) {
-        if (hubChatArgs?.isEventHub == true) {
-            occludeEventSourceSheets = true
-        } else if (occludeEventSourceSheets) {
-            val settleMs =
-                if (hubChatTransitionMode == NavigationTransitionMode.GestureBack) 80L else 320L
-            delay(settleMs)
-            if (hubChatArgs == null) {
-                occludeEventSourceSheets = false
-            }
-        }
-    }
-    PlatformNativeSheetOcclusion(active = isIOS && occludeEventSourceSheets)
-
     LaunchedEffect(hubChatArgs) {
         if (hubChatArgs != null) {
             lastHubChatArgs = hubChatArgs
@@ -100,87 +76,94 @@ internal fun AppHubChatHost(
         }
     }
 
-    // ── Hub Chat Overlay (mirrors ConnectionsScreen iOS chat overlay) ──
-    val hubSlideSpec = tween<IntOffset>(300, easing = FastOutSlowInEasing)
-    val hubFadeSpec = tween<Float>(220, easing = LinearOutSlowInEasing)
-    androidx.compose.animation.AnimatedVisibility(
-        visible = hubChatArgs != null,
-        modifier = Modifier.fillMaxSize(),
-        enter =
-            if (reduceMotion) {
-                fadeIn(animationSpec = tween(120))
-            } else {
-                slideInHorizontally(animationSpec = hubSlideSpec, initialOffsetX = { it }) +
-                    fadeIn(animationSpec = hubFadeSpec)
-            },
-        exit =
-            if (hubChatTransitionMode == NavigationTransitionMode.GestureBack) {
-                ExitTransition.None
-            } else if (reduceMotion) {
-                fadeOut(animationSpec = tween(90))
-            } else {
-                slideOutHorizontally(animationSpec = hubSlideSpec, targetOffsetX = { it }) +
-                    fadeOut(animationSpec = hubFadeSpec)
-            },
-        label = "hub_chat_overlay",
+    // Event detail/Nearby are native UISheetPresentationController layers. A root-Compose overlay
+    // cannot safely hide those containers: UIKit keeps the modal presenter dimmed and can retain a
+    // hit-testing layer even when the sheet view itself is hidden. On iOS, event hub chat is instead
+    // portaled above the live presentation container so the exact sheet stack stays mounted below.
+    PlatformOverlayAbovePresentedSheets(
+        liftAbovePresentedSheets = isIOS && hubChatArgs?.isEventHub == true,
     ) {
-        val activeHubArgs = lastHubChatArgs
-        val hubUserId =
-            when (val state = authViewModel.authState) {
-                is AuthState.Success -> state.userId
-                else -> ""
-            }
-        if (activeHubArgs != null && hubUserId.isNotEmpty()) {
-            val hubOverlayViewModelOwner =
-                remember(activeHubArgs.realtimeChannel, hubUserId) {
-                    object : ViewModelStoreOwner {
-                        override val viewModelStore = ViewModelStore()
+        val hubSlideSpec = tween<IntOffset>(300, easing = FastOutSlowInEasing)
+        val hubFadeSpec = tween<Float>(220, easing = LinearOutSlowInEasing)
+        AnimatedVisibility(
+            visible = hubChatArgs != null,
+            modifier = Modifier.fillMaxSize(),
+            enter =
+                if (reduceMotion) {
+                    fadeIn(animationSpec = tween(120))
+                } else {
+                    slideInHorizontally(animationSpec = hubSlideSpec, initialOffsetX = { it }) +
+                        fadeIn(animationSpec = hubFadeSpec)
+                },
+            exit =
+                if (hubChatTransitionMode == NavigationTransitionMode.GestureBack) {
+                    ExitTransition.None
+                } else if (reduceMotion) {
+                    fadeOut(animationSpec = tween(90))
+                } else {
+                    slideOutHorizontally(animationSpec = hubSlideSpec, targetOffsetX = { it }) +
+                        fadeOut(animationSpec = hubFadeSpec)
+                },
+            label = "hub_chat_overlay",
+        ) {
+            val activeHubArgs = lastHubChatArgs
+            val hubUserId =
+                when (val state = authViewModel.authState) {
+                    is AuthState.Success -> state.userId
+                    else -> ""
+                }
+            if (activeHubArgs != null && hubUserId.isNotEmpty()) {
+                val hubOverlayViewModelOwner =
+                    remember(activeHubArgs.realtimeChannel, hubUserId) {
+                        object : ViewModelStoreOwner {
+                            override val viewModelStore = ViewModelStore()
+                        }
+                    }
+                DisposableEffect(hubOverlayViewModelOwner) {
+                    onDispose {
+                        hubOverlayViewModelOwner.viewModelStore.clear()
                     }
                 }
-            DisposableEffect(hubOverlayViewModelOwner) {
-                onDispose {
-                    hubOverlayViewModelOwner.viewModelStore.clear()
-                }
+                val hubKeyboardController = LocalSoftwareKeyboardController.current
+                val hubFocusManager = LocalFocusManager.current
+                InteractiveSwipeBackContainer(
+                    enabled = true,
+                    opaquePreviousBackground = false,
+                    externalDragOffsetPx = hubSwipeDragPx,
+                    onBehindLayersVisibleChanged = {},
+                    onBack = {
+                        hubFocusManager.clearFocus()
+                        if (!isIOS) {
+                            hubKeyboardController?.hide()
+                        }
+                        closeHubChat(NavigationTransitionMode.GestureBack)
+                    },
+                    rightToLeftPeek = hubChatRightToLeftPeek,
+                    previousContent = {},
+                    currentContent = {
+                        CompositionLocalProvider(LocalViewModelStoreOwner provides hubOverlayViewModelOwner) {
+                            HubChatScreen(
+                                args = activeHubArgs,
+                                currentUserId = hubUserId,
+                                targetMessageId = pendingHubTargetMessageId,
+                                onNavigateBack = {
+                                    closeHubChat(NavigationTransitionMode.Tap)
+                                },
+                                resolveHubGatekeeperLocation = { resolveHubGatekeeperLocationForChat() },
+                                integrateTimestampPeekWithSwipeBackContainer = true,
+                                onRegisterSwipeBackRightToLeftPeek = {
+                                    hubChatRightToLeftPeek = it
+                                },
+                                parentInteractiveBackSwipePx = hubSwipeDragPx,
+                            )
+                        }
+                    },
+                )
             }
-            val hubKeyboardController = LocalSoftwareKeyboardController.current
-            val hubFocusManager = LocalFocusManager.current
-            InteractiveSwipeBackContainer(
-                enabled = true,
-                opaquePreviousBackground = false,
-                externalDragOffsetPx = hubSwipeDragPx,
-                onBehindLayersVisibleChanged = {},
-                onBack = {
-                    hubFocusManager.clearFocus()
-                    if (!isIOS) {
-                        hubKeyboardController?.hide()
-                    }
-                    closeHubChat(NavigationTransitionMode.GestureBack)
-                },
-                rightToLeftPeek = hubChatRightToLeftPeek,
-                previousContent = {},
-                currentContent = {
-                    CompositionLocalProvider(LocalViewModelStoreOwner provides hubOverlayViewModelOwner) {
-                        HubChatScreen(
-                            args = activeHubArgs,
-                            currentUserId = hubUserId,
-                            targetMessageId = pendingHubTargetMessageId,
-                            onNavigateBack = {
-                                closeHubChat(NavigationTransitionMode.Tap)
-                            },
-                            resolveHubGatekeeperLocation = { resolveHubGatekeeperLocationForChat() },
-                            integrateTimestampPeekWithSwipeBackContainer = true,
-                            onRegisterSwipeBackRightToLeftPeek = {
-                                hubChatRightToLeftPeek = it
-                            },
-                            parentInteractiveBackSwipePx = hubSwipeDragPx,
-                        )
-                    }
-                },
-            )
         }
     }
 
-    androidx.compose.animation.AnimatedVisibility(
+    AnimatedVisibility(
         visible = hubVerifyInProgress,
         enter = if (reduceMotion) MotionTokens.reduceMotionEnter() else MotionTokens.contentFadeIn(),
         exit = if (reduceMotion) MotionTokens.reduceMotionExit() else MotionTokens.contentFadeOut(),
