@@ -45,6 +45,7 @@ import compose.project.click.click.ui.theme.* // pragma: allowlist secret
 import compose.project.click.click.utils.LocationResult // pragma: allowlist secret
 import compose.project.click.click.viewmodel.AuthState // pragma: allowlist secret
 import compose.project.click.click.viewmodel.AuthViewModel // pragma: allowlist secret
+import kotlinx.coroutines.delay
 
 @Composable
 internal fun AppHubChatHost(
@@ -64,6 +65,7 @@ internal fun AppHubChatHost(
     var hubChatRightToLeftPeek by remember {
         mutableStateOf<InteractiveSwipeBackRightToLeftPeek?>(null)
     }
+    var keepEventHubPortalMounted by remember { mutableStateOf(false) }
     val hubSwipeDragPx = remember { mutableFloatStateOf(0f) }
     PlatformNativeNavigationBarSwipeReveal(hubSwipeDragPx)
 
@@ -76,12 +78,35 @@ internal fun AppHubChatHost(
         }
     }
 
+    LaunchedEffect(isIOS, hubChatArgs, hubChatTransitionMode, reduceMotion) {
+        val activeArgs = hubChatArgs
+        when {
+            !isIOS -> keepEventHubPortalMounted = false
+            activeArgs?.isEventHub == true -> keepEventHubPortalMounted = true
+            activeArgs != null -> keepEventHubPortalMounted = false
+            !keepEventHubPortalMounted -> Unit
+            hubChatTransitionMode == NavigationTransitionMode.GestureBack -> {
+                // GestureBack already moved the foreground route completely off-screen.
+                keepEventHubPortalMounted = false
+            }
+            else -> {
+                // A tap-back exit animates inside this portal. Do not detach the native overlay
+                // container until that exit has finished or the outgoing hub will jump underneath
+                // the still-present Event/Nearby sheets for its final frames.
+                delay(if (reduceMotion) 110L else 320L)
+                if (hubChatArgsState.value == null) {
+                    keepEventHubPortalMounted = false
+                }
+            }
+        }
+    }
+
     // Event detail/Nearby are native UISheetPresentationController layers. A root-Compose overlay
     // cannot safely hide those containers: UIKit keeps the modal presenter dimmed and can retain a
     // hit-testing layer even when the sheet view itself is hidden. On iOS, event hub chat is instead
     // portaled above the live presentation container so the exact sheet stack stays mounted below.
     PlatformOverlayAbovePresentedSheets(
-        liftAbovePresentedSheets = isIOS && hubChatArgs?.isEventHub == true,
+        liftAbovePresentedSheets = keepEventHubPortalMounted,
     ) {
         val hubSlideSpec = tween<IntOffset>(300, easing = FastOutSlowInEasing)
         val hubFadeSpec = tween<Float>(220, easing = LinearOutSlowInEasing)
