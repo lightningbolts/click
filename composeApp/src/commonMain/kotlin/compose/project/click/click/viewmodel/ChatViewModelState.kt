@@ -157,9 +157,17 @@ internal const val CONNECTIONS_PAGE_SIZE = 50
 internal const val CONNECTIONS_LIST_DEBOUNCE_MS = 450L
 internal const val APP_DATA_STARTUP_WAIT_MS = 20_000L
 internal const val CHAT_THREAD_CACHE_FRESH_MS = 120_000L
-internal const val CHAT_OPEN_PREFETCH_CONCURRENCY = 4
+
+// Opening a chat competes with inbox prefetch, E2EE hydration, image decode, and the route
+// transition. Four concurrent background thread builds made the first physical-device entry
+// highly timing-dependent. Two preserves warm-cache coverage without saturating the cold-open path.
+internal const val CHAT_OPEN_PREFETCH_CONCURRENCY = 2
 internal const val INITIAL_CHAT_MESSAGE_FETCH_LIMIT = 80
 internal const val OLDER_MESSAGES_PAGE_SIZE = 40
 internal const val TARGET_MESSAGE_MAX_PAGES = 16
-internal const val SECURE_CHAT_IMAGE_NETWORK_CONCURRENCY = 4
-internal const val SECURE_CHAT_DISK_HYDRATE_VISIBLE_BATCH = 12
+
+// Media hydration is deliberately bounded below the device's likely core count. Image decode and
+// vault reads can still consume CPU/memory after the network await; limiting both the network fanout
+// and visible disk batch prevents a fast scroll from releasing a burst of expensive work at once.
+internal const val SECURE_CHAT_IMAGE_NETWORK_CONCURRENCY = 2
+internal const val SECURE_CHAT_DISK_HYDRATE_VISIBLE_BATCH = 6

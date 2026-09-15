@@ -24,7 +24,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Logout
@@ -51,7 +50,6 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -59,7 +57,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
@@ -88,21 +85,22 @@ import compose.project.click.click.ui.chat.ChatInterMessageHubBaseCompact // pra
 import compose.project.click.click.ui.chat.ChatLiquidGlassPlate // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatMediaPickerHandles // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatMessageTimeline // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatThreadAutoFollowEffects // pragma: allowlist secret
 import compose.project.click.click.ui.chat.applyTimestampPeekDragStep // pragma: allowlist secret
 import compose.project.click.click.ui.chat.buildChatTimelineEntriesNewestFirst // pragma: allowlist secret
-import compose.project.click.click.ui.chat.chatDismissKeyboardAfterScrollConnection // pragma: allowlist secret
-import compose.project.click.click.ui.chat.chatTimelineFollowUsesAnimation // pragma: allowlist secret
-import compose.project.click.click.ui.chat.chatTimelineShouldFollowInbound // pragma: allowlist secret
+import compose.project.click.click.ui.chat.chatComposerKeyboardMotion // pragma: allowlist secret
+import compose.project.click.click.ui.chat.chatTimelineKeyboardViewport // pragma: allowlist secret
+import compose.project.click.click.ui.chat.chatTimelineShouldFollowKeyboard // pragma: allowlist secret
 import compose.project.click.click.ui.chat.chatTimestampPeekOnSwipeLeft // pragma: allowlist secret
 import compose.project.click.click.ui.chat.indexOfMessageId // pragma: allowlist secret
 import compose.project.click.click.ui.chat.isTimestampPeekRevealed // pragma: allowlist secret
 import compose.project.click.click.ui.chat.launchTimestampPeekReplyStyleSettle // pragma: allowlist secret
 import compose.project.click.click.ui.chat.rememberChatMediaPickers // pragma: allowlist secret
-import compose.project.click.click.ui.chat.rememberChatNativeKeyboardInsets // pragma: allowlist secret
+import compose.project.click.click.ui.chat.rememberChatThreadRuntime // pragma: allowlist secret
+import compose.project.click.click.ui.chat.rememberChatTimelineKeyboardFollow // pragma: allowlist secret
 import compose.project.click.click.ui.chat.rememberTimestampPeekRevealPx // pragma: allowlist secret
 import compose.project.click.click.ui.chat.rememberTimestampPeekSoftKneePx // pragma: allowlist secret
 import compose.project.click.click.ui.chat.restoreTimestampPeekRawFromDisplay // pragma: allowlist secret
-import compose.project.click.click.ui.chat.scrollChatTimelineToLatest // pragma: allowlist secret
 import compose.project.click.click.ui.chat.scrollChatTimelineToMessage // pragma: allowlist secret
 import compose.project.click.click.ui.components.BentoGlassOptionRow // pragma: allowlist secret
 import compose.project.click.click.ui.components.BindPlatformNativeNavigationBar // pragma: allowlist secret
@@ -114,7 +112,6 @@ import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeft
 import compose.project.click.click.ui.components.LocalGlassAlertAnimatedDismiss // pragma: allowlist secret
 import compose.project.click.click.ui.components.NativeChromeAction // pragma: allowlist secret
 import compose.project.click.click.ui.components.UnifiedPopupFormDialog // pragma: allowlist secret
-import compose.project.click.click.ui.components.chatThreadKeyboardDock // pragma: allowlist secret
 import compose.project.click.click.ui.components.platformNativeHeaderClearance // pragma: allowlist secret
 import compose.project.click.click.ui.components.sheetPageBackground // pragma: allowlist secret
 import compose.project.click.click.ui.theme.LocalPlatformStyle // pragma: allowlist secret
@@ -209,28 +206,31 @@ fun HubChatScreen(
 
     val hubIdForSecureMedia = remember(args.hubId) { args.hubId }
     val hubPeekScope = rememberCoroutineScope()
-    val hubListState = remember(args.realtimeChannel) { LazyListState() }
-    val density = LocalDensity.current
-    val nativeKeyboardInsets =
-        rememberChatNativeKeyboardInsets(
+    val threadRuntime =
+        rememberChatThreadRuntime(
+            threadKey = args.realtimeChannel,
             keyboardHeightProvider = keyboardHeightProvider,
-            subtractTabBarOverlay = true,
+            parentInteractiveBackSwipePx = parentInteractiveBackSwipePx,
         )
-    val focusManager = LocalFocusManager.current
-    val focusManagerState = rememberUpdatedState(focusManager)
-    val suppressKeyboardDismissWhileProgrammaticTimelineScroll = remember { mutableStateOf(false) }
-    val keyboardDismissScrollThresholdPx = remember(density) { with(density) { 16.dp.toPx() } }
-    val dismissKeyboardOnUserMessageScroll =
-        remember(keyboardDismissScrollThresholdPx) {
-            chatDismissKeyboardAfterScrollConnection(
-                thresholdPx = keyboardDismissScrollThresholdPx,
-                isSuppressed = { suppressKeyboardDismissWhileProgrammaticTimelineScroll.value },
-                onDismiss = { focusManagerState.value.clearFocus() },
-            )
-        }
-
-    val initialTimelineScrollDone = remember(args.realtimeChannel) { mutableStateOf(false) }
-    var focusedSearchMessageId by remember(args.realtimeChannel) { mutableStateOf<String?>(null) }
+    val hubListState = threadRuntime.listState
+    val nativeKeyboardInsets = threadRuntime.nativeKeyboardInsets
+    val suppressKeyboardDismissWhileProgrammaticTimelineScroll =
+        threadRuntime.suppressKeyboardDismissWhileProgrammaticTimelineScroll
+    val dismissKeyboardOnUserMessageScroll = threadRuntime.dismissKeyboardOnUserMessageScroll
+    val initialTimelineScrollDone = threadRuntime.initialTimelineScrollDoneState
+    val focusedSearchMessageIdState = threadRuntime.focusedSearchMessageIdState
+    var focusedSearchMessageId by focusedSearchMessageIdState
+    val hubTimelineFollowsKeyboardState =
+        rememberChatTimelineKeyboardFollow(
+            nativeKeyboardLiftPxState = nativeKeyboardInsets.liftPxState,
+            shouldFollowOnKeyboardOpen = {
+                chatTimelineShouldFollowKeyboard(
+                    firstVisibleItemIndex = hubListState.firstVisibleItemIndex,
+                    initialTimelineScrollDone = initialTimelineScrollDone.value,
+                    userScrollInProgress = hubListState.isScrollInProgress,
+                )
+            },
+        )
     val peerNewestMessageId =
         messages
             .lastOrNull()
@@ -238,40 +238,14 @@ fun HubChatScreen(
             ?.message
             ?.id
 
-    LaunchedEffect(args.realtimeChannel, messages.isNotEmpty(), targetMessageId) {
-        if (messages.isEmpty() || initialTimelineScrollDone.value) return@LaunchedEffect
-        if (!targetMessageId.isNullOrBlank()) {
-            val found = viewModel.ensureTargetMessageLoaded(targetMessageId)
-            if (!found) {
-                initialTimelineScrollDone.value = true
-                scrollChatTimelineToLatest(
-                    listState = hubListState,
-                    suppressKeyboardDismiss = suppressKeyboardDismissWhileProgrammaticTimelineScroll,
-                )
-            }
-            return@LaunchedEffect
-        }
-        initialTimelineScrollDone.value = true
-        scrollChatTimelineToLatest(
-            listState = hubListState,
-            suppressKeyboardDismiss = suppressKeyboardDismissWhileProgrammaticTimelineScroll,
-        )
-    }
-
-    LaunchedEffect(peerNewestMessageId) {
-        if (peerNewestMessageId == null) return@LaunchedEffect
-        if (chatTimelineShouldFollowInbound(
-                firstVisibleItemIndex = hubListState.firstVisibleItemIndex,
-                initialTimelineScrollDone = initialTimelineScrollDone.value,
-            )
-        ) {
-            scrollChatTimelineToLatest(
-                listState = hubListState,
-                suppressKeyboardDismiss = suppressKeyboardDismissWhileProgrammaticTimelineScroll,
-                animated = chatTimelineFollowUsesAnimation(initialTimelineScrollDone.value),
-            )
-        }
-    }
+    ChatThreadAutoFollowEffects(
+        threadKey = args.realtimeChannel,
+        hasMessages = messages.isNotEmpty(),
+        targetMessageId = targetMessageId,
+        peerNewestMessageId = peerNewestMessageId,
+        runtime = threadRuntime,
+        ensureTargetMessageLoaded = viewModel::ensureTargetMessageLoaded,
+    )
 
     LaunchedEffect(viewModel) {
         viewModel.navigationEvents.collect { event ->
@@ -288,8 +262,9 @@ fun HubChatScreen(
         }
     }
 
-    // Keep the send affordance aligned with the server's three-person lobby threshold.
-    val inLobby = occupantCount < 3
+    // Standalone proximity hubs use the three-person lobby threshold. Event hubs are already
+    // authorized by host/RSVP/check-in membership and must be testable/usable below three people.
+    val inLobby = !isEventHub && occupantCount < 3
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val hubHasSubtitle = true
     val hubNativeClearance =
@@ -425,7 +400,6 @@ fun HubChatScreen(
                         )
                     }
 
-                    // ── Timestamp peek ──────────────────────────────────────────
                     val rawTimestampPeekTravelPx = remember { mutableFloatStateOf(0f) }
                     val displayTimestampPeekVisualPx = remember { mutableFloatStateOf(0f) }
                     val timestampPeekSettleJob = remember { mutableStateOf<Job?>(null) }
@@ -532,20 +506,16 @@ fun HubChatScreen(
                                 .fillMaxWidth()
                                 .clipToBounds(),
                     ) {
-                        Column(
-                            modifier =
-                                Modifier
-                                    .fillMaxSize()
-                                    .chatThreadKeyboardDock(
-                                        nativeKeyboardLiftPxState = nativeKeyboardInsets.liftPxState,
-                                        clearNativeTabBar = true,
-                                    ),
-                        ) {
+                        Column(modifier = Modifier.fillMaxSize()) {
                             Box(
                                 modifier =
                                     Modifier
                                         .weight(1f)
-                                        .fillMaxWidth(),
+                                        .fillMaxWidth()
+                                        .chatTimelineKeyboardViewport(
+                                            nativeKeyboardLiftPxState = nativeKeyboardInsets.liftPxState,
+                                            followKeyboard = { hubTimelineFollowsKeyboardState.value },
+                                        ),
                             ) {
                                 ChatMessageTimeline(
                                     timelineEntries = timelineEntries,
@@ -600,7 +570,13 @@ fun HubChatScreen(
                             }
 
                             Column(
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .chatComposerKeyboardMotion(
+                                            nativeKeyboardLiftPxState = nativeKeyboardInsets.liftPxState,
+                                            clearNativeTabBar = true,
+                                        ),
                             ) {
                                 HubChatInputBar(
                                     viewModel = viewModel,
@@ -834,11 +810,6 @@ fun HubChatScreen(
     }
 }
 
-/**
- * Hub composer strip modeled exactly on [ConnectionChatMessageComposer]:
- * `+` attachment button (left) → BasicTextField (center) → gradient send button (right).
- * Same sizes, shapes, and spring press animations.
- */
 @Composable
 private fun HubChatInputBar(
     viewModel: HubChatViewModel,

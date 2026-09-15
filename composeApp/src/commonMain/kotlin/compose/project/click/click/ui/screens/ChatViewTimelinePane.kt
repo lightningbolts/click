@@ -55,17 +55,20 @@ import compose.project.click.click.ui.chat.applyTimestampPeekDragStep // pragma:
 import compose.project.click.click.ui.chat.buildChatTimelineEntriesNewestFirst // pragma: allowlist secret
 import compose.project.click.click.ui.chat.chatBubbleReplySnippetStyle // pragma: allowlist secret
 import compose.project.click.click.ui.chat.chatBubbleScaledDp // pragma: allowlist secret
+import compose.project.click.click.ui.chat.chatComposerKeyboardMotion // pragma: allowlist secret
+import compose.project.click.click.ui.chat.chatTimelineKeyboardViewport // pragma: allowlist secret
+import compose.project.click.click.ui.chat.chatTimelineShouldFollowKeyboard // pragma: allowlist secret
 import compose.project.click.click.ui.chat.chatTimestampPeekOnSwipeLeft // pragma: allowlist secret
 import compose.project.click.click.ui.chat.indexOfMessageId // pragma: allowlist secret
 import compose.project.click.click.ui.chat.isTimestampPeekRevealed // pragma: allowlist secret
 import compose.project.click.click.ui.chat.launchTimestampPeekReplyStyleSettle // pragma: allowlist secret
+import compose.project.click.click.ui.chat.rememberChatTimelineKeyboardFollow // pragma: allowlist secret
 import compose.project.click.click.ui.chat.rememberTimestampPeekRevealPx // pragma: allowlist secret
 import compose.project.click.click.ui.chat.rememberTimestampPeekSoftKneePx // pragma: allowlist secret
 import compose.project.click.click.ui.chat.restoreTimestampPeekRawFromDisplay // pragma: allowlist secret
 import compose.project.click.click.ui.chat.scrollChatTimelineToMessage // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeftPeek // pragma: allowlist secret
-import compose.project.click.click.ui.components.chatThreadKeyboardDock // pragma: allowlist secret
 import compose.project.click.click.ui.theme.* // pragma: allowlist secret
 import compose.project.click.click.viewmodel.ChatMessagesState // pragma: allowlist secret
 import compose.project.click.click.viewmodel.ChatViewModel // pragma: allowlist secret
@@ -103,9 +106,7 @@ internal fun ColumnScope.ChatViewTimelinePane(
     icebreakerCooldownRemainingSec: Int,
     icebreakerPanelHeightPxState: MutableIntState,
     icebreakerTimelineTopReserve: Dp,
-    reactionsMap: Map<String, List<compose.project.click.click.data.models.MessageReaction>>,
     isLoadingOlderMessages: Boolean,
-    isPeerTyping: Boolean,
     typingPeerLabel: String,
     editingMessageId: String?,
     replyingTo: MessageWithUser?,
@@ -135,6 +136,17 @@ internal fun ColumnScope.ChatViewTimelinePane(
     var openBeaconDetailFallback by openBeaconDetailFallbackState
     var openBeaconDetailMetadata by openBeaconDetailMetadataState
     var openBeaconDetailContent by openBeaconDetailContentState
+    val timelineFollowsKeyboardState =
+        rememberChatTimelineKeyboardFollow(
+            nativeKeyboardLiftPxState = nativeKeyboardInsets.liftPxState,
+            shouldFollowOnKeyboardOpen = {
+                chatTimelineShouldFollowKeyboard(
+                    firstVisibleItemIndex = listState.firstVisibleItemIndex,
+                    initialTimelineScrollDone = initialTimelineScrollDoneState.value,
+                    userScrollInProgress = listState.isScrollInProgress,
+                )
+            },
+        )
     Box(
         modifier =
             Modifier
@@ -143,13 +155,7 @@ internal fun ColumnScope.ChatViewTimelinePane(
                 .clipToBounds(),
     ) {
         Column(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .chatThreadKeyboardDock(
-                        nativeKeyboardLiftPxState = nativeKeyboardInsets.liftPxState,
-                        clearNativeTabBar = true,
-                    ),
+            modifier = Modifier.fillMaxSize(),
         ) {
             Box(
                 modifier =
@@ -177,14 +183,18 @@ internal fun ColumnScope.ChatViewTimelinePane(
                         }
                     }
 
-                    // Messages
+                    // Messages. The keyboard only moves this viewport for sessions that began at
+                    // latest; history remains visually stationary while the composer follows IME.
                     Box(
                         modifier =
                             Modifier
                                 .fillMaxSize()
                                 .padding(top = icebreakerTimelineTopReserve)
                                 .clipToBounds()
-                                .zIndex(1f),
+                                .chatTimelineKeyboardViewport(
+                                    nativeKeyboardLiftPxState = nativeKeyboardInsets.liftPxState,
+                                    followKeyboard = { timelineFollowsKeyboardState.value },
+                                ).zIndex(1f),
                     ) {
                         if (state.isLoadingMessages && messages.isEmpty()) {
                             Box(
@@ -383,7 +393,8 @@ internal fun ColumnScope.ChatViewTimelinePane(
                                 useHubNeutralMesh = isGroupChat,
                                 isGroupChat = isGroupChat,
                                 currentUserId = currentUserId,
-                                reactionsMap = reactionsMap,
+                                reactionsMap = emptyMap(),
+                                reactionsFlow = viewModel.messageReactions,
                                 secureMediaHost = viewModel,
                                 activeChatId = activeApiChatId ?: chatDetails.chat.id,
                                 onToggleReaction = { messageId, reaction ->
@@ -440,74 +451,17 @@ internal fun ColumnScope.ChatViewTimelinePane(
                 }
             }
 
+            // Composer/accessory chrome tracks the keyboard independently from the timeline.
             Column(
-                modifier = Modifier.fillMaxWidth(),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .chatComposerKeyboardMotion(
+                            nativeKeyboardLiftPxState = nativeKeyboardInsets.liftPxState,
+                            clearNativeTabBar = true,
+                        ),
             ) {
-                // Typing indicator — label + bouncing dots (Realtime Broadcast)
-                AnimatedVisibility(
-                    visible = isPeerTyping,
-                    enter =
-                        fadeIn(ChatChromeMotion.ShortFade) +
-                            slideInVertically(
-                                animationSpec = ChatChromeMotion.ShortSlide,
-                                initialOffsetY = { it / 4 },
-                            ),
-                    exit =
-                        fadeOut(animationSpec = tween(160, easing = FastOutSlowInEasing)) +
-                            slideOutVertically(
-                                animationSpec = ChatChromeMotion.ShortSlide,
-                                targetOffsetY = { it / 4 },
-                            ),
-                ) {
-                    Row(
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(start = 16.dp, end = 80.dp, bottom = 4.dp),
-                        horizontalArrangement = Arrangement.Start,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Box(
-                            modifier =
-                                Modifier
-                                    .border(
-                                        width = 1.dp,
-                                        color = PrimaryBlue.copy(alpha = 0.15f),
-                                        shape =
-                                            RoundedCornerShape(
-                                                topStart = chatBubbleScaledDp(6f),
-                                                topEnd = chatBubbleScaledDp(21f),
-                                                bottomStart = chatBubbleScaledDp(21f),
-                                                bottomEnd = chatBubbleScaledDp(21f),
-                                            ),
-                                    ).clip(
-                                        RoundedCornerShape(
-                                            topStart = chatBubbleScaledDp(6f),
-                                            topEnd = chatBubbleScaledDp(21f),
-                                            bottomStart = chatBubbleScaledDp(21f),
-                                            bottomEnd = chatBubbleScaledDp(21f),
-                                        ),
-                                    ).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f))
-                                    .padding(
-                                        horizontal = chatBubbleScaledDp(18f),
-                                        vertical = chatBubbleScaledDp(12f),
-                                    ),
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(chatBubbleScaledDp(9f)),
-                            ) {
-                                Text(
-                                    text = typingPeerLabel,
-                                    style = chatBubbleReplySnippetStyle(),
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    fontStyle = FontStyle.Italic,
-                                )
-                                ChatTypingDots()
-                            }
-                        }
-                    }
-                }
+                ChatTypingIndicator(viewModel = viewModel, typingPeerLabel = typingPeerLabel)
 
                 // Edit mode indicator strip
                 if (editingMessageId != null) {
@@ -584,6 +538,64 @@ internal fun ColumnScope.ChatViewTimelinePane(
                             mapViewModel?.refreshDiscoveryFeed()
                         },
                     )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ChatTypingIndicator(
+    viewModel: ChatViewModel,
+    typingPeerLabel: String,
+) {
+    val isPeerTyping by viewModel.isPeerTyping.collectAsState()
+    AnimatedVisibility(
+        visible = isPeerTyping,
+        enter =
+            fadeIn(ChatChromeMotion.ShortFade) +
+                slideInVertically(
+                    animationSpec = ChatChromeMotion.ShortSlide,
+                    initialOffsetY = { it / 4 },
+                ),
+        exit =
+            fadeOut(animationSpec = tween(160, easing = FastOutSlowInEasing)) +
+                slideOutVertically(
+                    animationSpec = ChatChromeMotion.ShortSlide,
+                    targetOffsetY = { it / 4 },
+                ),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 80.dp, bottom = 4.dp),
+            horizontalArrangement = Arrangement.Start,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            val bubbleShape =
+                RoundedCornerShape(
+                    topStart = chatBubbleScaledDp(6f),
+                    topEnd = chatBubbleScaledDp(21f),
+                    bottomStart = chatBubbleScaledDp(21f),
+                    bottomEnd = chatBubbleScaledDp(21f),
+                )
+            Box(
+                modifier =
+                    Modifier
+                        .border(width = 1.dp, color = PrimaryBlue.copy(alpha = 0.15f), shape = bubbleShape)
+                        .clip(bubbleShape)
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f))
+                        .padding(horizontal = chatBubbleScaledDp(18f), vertical = chatBubbleScaledDp(12f)),
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(chatBubbleScaledDp(9f)),
+                ) {
+                    Text(
+                        text = typingPeerLabel,
+                        style = chatBubbleReplySnippetStyle(),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontStyle = FontStyle.Italic,
+                    )
+                    ChatTypingDots()
                 }
             }
         }

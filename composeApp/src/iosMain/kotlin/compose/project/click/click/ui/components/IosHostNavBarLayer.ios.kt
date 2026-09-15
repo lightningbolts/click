@@ -44,7 +44,6 @@ import platform.UIKit.UIStackView
 import platform.UIKit.UIStackViewAlignmentCenter
 import platform.UIKit.UIStackViewAlignmentLeading
 import platform.UIKit.UIView
-import platform.UIKit.UIViewAnimationOptionTransitionCrossDissolve
 import platform.UIKit.UIViewContentMode
 import platform.UIKit.UIViewController
 import platform.UIKit.UIVisualEffectView
@@ -153,6 +152,7 @@ internal class IosHostNavBarLayer {
     private var lastVisualKey: String? = null
     private var lastButtonSignature: String? = null
     internal val paintedSymbols = mutableMapOf<UIButton, String>()
+    internal val paintedAccessibility = mutableMapOf<UIButton, String>()
     private var lastCollapseFraction = 0f
     private var lastHeightPt = -1.0
     private var lastTitle: String? = null
@@ -215,7 +215,6 @@ internal class IosHostNavBarLayer {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         if (changed && this === IosNavChrome.overlay && visible) {
-            // Next open must not inherit a completed-swipe translation.
             resetSlideTransformLocked()
         }
         applyVisibility()
@@ -245,7 +244,6 @@ internal class IosHostNavBarLayer {
             }
             IosNavChrome.tab.setSuppressed(visible)
             if (!visible) {
-                // Overlay is already hidden; identity is safe and unsticks the next present.
                 resetSlideTransformLocked()
                 if (NativeHeaderMetrics.shouldReapplyTabBarHeightOnOverlayHide()) {
                     IosNavChrome.tab.reapplyLastBarHeight()
@@ -253,8 +251,6 @@ internal class IosHostNavBarLayer {
             }
         }
         CATransaction.commit()
-        // Restack only when showing the overlay. Re-inserting the tab glass plate on
-        // dismiss rematerializes Liquid Glass and flashes the destination header.
         if (changed && visible) {
             IosNavChrome.restack()
         }
@@ -344,11 +340,6 @@ internal class IosHostNavBarLayer {
         return UIScreen.mainScreen.bounds.useContents { size.width }
     }
 
-    /**
-     * Clip the tab header to [leadingWidthPt] points while an overlay covers it.
-     * `null` removes the clip (overlay gone). `0.0` hides every pixel so chat glass
-     * cannot show the list title, without toggling `hidden` (that flashed twice).
-     */
     fun clipLeadingUnderlay(leadingWidthPt: Double?) {
         applyLeadingRevealMask(leadingWidthPt)
     }
@@ -371,10 +362,6 @@ internal class IosHostNavBarLayer {
         }
     }
 
-    /**
-     * Exclusive overlay (Click Drops) is leaving while a conversation bind is still composed.
-     * Restore the prior owner token and keep the overlay visible so tab-root chrome cannot leak.
-     */
     fun yieldExclusive(owner: Any) {
         val restored =
             OverlayExclusiveBindPolicy.restoredOwnerToken(
@@ -384,9 +371,6 @@ internal class IosHostNavBarLayer {
             )
         overlayUnderlyingOwner = null
         ownerToken = restored
-        // Keep [lastButtonSignature] / painted symbols so the next chat bind can swap
-        // xmark → chevron on the same glass control. Clearing [lastVisualKey] forced a
-        // full chrome rebuild and blinked the material.
     }
 
     fun attach(host: UIViewController) {
@@ -442,12 +426,7 @@ internal class IosHostNavBarLayer {
         if (appearanceKey == lastAppearanceKey) return
         lastAppearanceKey = appearanceKey
         bar.setTranslucent(true)
-        val titleColor =
-            if (isDarkMode) {
-                UIColor.whiteColor
-            } else {
-                UIColor.blackColor
-            }
+        val titleColor = if (isDarkMode) UIColor.whiteColor else UIColor.blackColor
         titleLabel.textColor = titleColor
         subtitleLabel.textColor = titleColor.colorWithAlphaComponent(0.62)
         bar.tintColor = titleColor
@@ -458,14 +437,10 @@ internal class IosHostNavBarLayer {
             lastButtonSignature = null
             paintedSymbols.clear()
             backGlassConfigured = false
-            chromeButtons().forEach { button ->
-                button.configuration = null
-            }
+            chromeButtons().forEach { button -> button.configuration = null }
         }
         usesGlassButtons = nextGlass
-        chromeButtons().forEach { button ->
-            button.tintColor = titleColor
-        }
+        chromeButtons().forEach { button -> button.tintColor = titleColor }
         applyClusterChrome()
         val clear = UIColor.clearColor
         val appearance =
@@ -534,16 +509,12 @@ internal class IosHostNavBarLayer {
     ) {
         if (this === IosNavChrome.overlay) {
             val exclusive = IosNavChrome.overlayExclusiveOwner
-            if (OverlayExclusiveBindPolicy.shouldSkipOverlayBind(exclusive, owner)) {
-                return
-            }
+            if (OverlayExclusiveBindPolicy.shouldSkipOverlayBind(exclusive, owner)) return
             if (OverlayExclusiveBindPolicy.shouldStashUnderlyingOwner(exclusive, owner, ownerToken)) {
                 overlayUnderlyingOwner = ownerToken
             }
         }
-        if (attachedHost !== host) {
-            attach(host)
-        }
+        if (attachedHost !== host) attach(host)
         ownerToken = owner
         val fraction = collapseFraction.coerceIn(0f, 1f)
         val stackIdentity = identity != null
@@ -643,25 +614,9 @@ internal class IosHostNavBarLayer {
         titleColumnCenterYConstraint?.active = stackTwoLine
         chromeRow.clipsToBounds = false
         titleLabel.font = UIFont.boldSystemFontOfSize(NativeHeaderMetrics.titlePointSize(fraction))
-        val identityUserId = identity?.userId
-        val snapTitle =
-            identityUserId != lastBoundIdentityUserId ||
-                lastTitle == null ||
-                !wantVisible ||
-                bar.hidden
-        lastBoundIdentityUserId = identityUserId
-        if (!snapTitle && title != lastTitle && lastTitle != null) {
-            UIView.transitionWithView(
-                titleLabel,
-                duration = 0.18,
-                options = UIViewAnimationOptionTransitionCrossDissolve,
-                animations = { titleLabel.text = title },
-                completion = null,
-            )
-        } else {
-            titleLabel.layer.removeAllAnimations()
-            titleLabel.text = title
-        }
+        lastBoundIdentityUserId = identity?.userId
+        titleLabel.layer.removeAllAnimations()
+        titleLabel.text = title
         lastTitle = title
         val compactTabRoot =
             NativeHeaderMetrics.isCompactTabRootChrome(
@@ -669,10 +624,8 @@ internal class IosHostNavBarLayer {
                 hasBack = hasBack,
                 hasIdentity = stackIdentity,
             )
-        titleColumn.axis =
-            if (compactTabRoot) UILayoutConstraintAxisHorizontal else UILayoutConstraintAxisVertical
-        titleColumn.alignment =
-            if (compactTabRoot) UIStackViewAlignmentCenter else UIStackViewAlignmentLeading
+        titleColumn.axis = if (compactTabRoot) UILayoutConstraintAxisHorizontal else UILayoutConstraintAxisVertical
+        titleColumn.alignment = if (compactTabRoot) UIStackViewAlignmentCenter else UIStackViewAlignmentLeading
         titleColumn.spacing =
             when {
                 stackTwoLine -> NativeHeaderMetrics.StackedIdentitySpacingPt
@@ -681,11 +634,7 @@ internal class IosHostNavBarLayer {
             }
         subtitleLabel.font =
             UIFont.systemFontOfSize(
-                if (stackTwoLine) {
-                    NativeHeaderMetrics.StackedIdentitySubtitlePointSize
-                } else {
-                    13.0
-                },
+                if (stackTwoLine) NativeHeaderMetrics.StackedIdentitySubtitlePointSize else 13.0,
             )
         titleLabel.numberOfLines =
             if (stackTwoLine || NativeHeaderMetrics.isCompactTitle(fraction)) {
@@ -701,6 +650,7 @@ internal class IosHostNavBarLayer {
             }
         titleLabel.setContentCompressionResistancePriority(749f, forAxis = UILayoutConstraintAxisHorizontal)
         subtitleLabel.setContentCompressionResistancePriority(751f, forAxis = UILayoutConstraintAxisHorizontal)
+        subtitleLabel.layer.removeAllAnimations()
         subtitleLabel.text = subtitleText
         subtitleLabel.hidden = subtitleText.isEmpty()
         subtitleLabel.textColor =
@@ -719,20 +669,17 @@ internal class IosHostNavBarLayer {
 
     private fun setBarHeight(targetPt: Double) {
         val current = heightConstraint?.constant ?: targetPt
-        val jump = abs(targetPt - current)
-        if (jump < 0.5 && lastHeightPt >= 0.0) {
-            return
-        }
+        if (abs(targetPt - current) < 0.5 && lastHeightPt >= 0.0) return
+
+        // Height follows scroll/route state directly. Wrapping this state-driven geometry in a
+        // second UIView animation caused the destination large title to move diagonally after an
+        // interactive pop had already completed and added extra work during rapid reversals.
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
         heightConstraint?.constant = targetPt
-        val animateJump = lastHeightPt >= 0.0 && jump > 20.0 && wantVisible && !bar.hidden
-        if (animateJump) {
-            UIView.animateWithDuration(0.22) {
-                bar.superview?.layoutIfNeeded()
-                chromeRow.superview?.layoutIfNeeded()
-            }
-        } else {
-            bar.superview?.layoutIfNeeded()
-        }
+        bar.superview?.layoutIfNeeded()
+        chromeRow.superview?.layoutIfNeeded()
+        CATransaction.commit()
         lastHeightPt = targetPt
         updateGlassFadeMask()
     }
@@ -748,8 +695,7 @@ internal class IosHostNavBarLayer {
                 growCompactSubtitle = lastGrowCompactSubtitle,
             ),
         )
-        titleColumnTopConstraint?.constant =
-            NativeHeaderMetrics.titleColumnTopInsetPt(lastCollapseFraction)
+        titleColumnTopConstraint?.constant = NativeHeaderMetrics.titleColumnTopInsetPt(lastCollapseFraction)
         titleColumnTopConstraint?.active = !lastStackTwoLine
         titleColumnCenterYConstraint?.active = lastStackTwoLine
         bar.superview?.layoutIfNeeded()
@@ -770,11 +716,7 @@ internal class IosHostNavBarLayer {
                 !collapseSearchIntoBar -> true
                 else -> {
                     searchPinnedVisible =
-                        if (searchPinnedVisible) {
-                            collapseFraction > 0.28f
-                        } else {
-                            collapseFraction > 0.45f
-                        }
+                        if (searchPinnedVisible) collapseFraction > 0.28f else collapseFraction > 0.45f
                     searchPinnedVisible
                 }
             }
@@ -814,16 +756,10 @@ internal class IosHostNavBarLayer {
             val previousSignature = lastButtonSignature
             lastButtonSignature = signature
             val showBack = onNavigateBack != null
-            if (backButton.hidden != !showBack) {
-                backButton.hidden = !showBack
-            }
+            if (backButton.hidden != !showBack) backButton.hidden = !showBack
             val previousLeading = previousSignature?.take(2)
-            val trailingChanged =
-                previousSignature == null ||
-                    previousSignature.drop(2) != signature.drop(2)
-            if (trailingChanged) {
-                syncTrailingButtons(trailingActions, showSearch)
-            }
+            val trailingChanged = previousSignature == null || previousSignature.drop(2) != signature.drop(2)
+            if (trailingChanged) syncTrailingButtons(trailingActions, showSearch)
             val previousLeadingClose = previousLeading?.getOrNull(1)?.let { it == 'X' }
             val needsLeadingPaint =
                 showBack &&

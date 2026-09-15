@@ -31,7 +31,6 @@ import androidx.compose.material3.ripple
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
@@ -39,6 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.models.ChatWithDetails // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatChromeHorizontalPadding // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatGlassHeaderPlateTestTag // pragma: allowlist secret
@@ -55,10 +55,12 @@ import compose.project.click.click.ui.components.NativeChromeAction // pragma: a
 import compose.project.click.click.ui.components.NativeChromeIdentity // pragma: allowlist secret
 import compose.project.click.click.ui.components.groupAvatarClusterWidth // pragma: allowlist secret
 import compose.project.click.click.viewmodel.ChatMessagesState // pragma: allowlist secret
+import compose.project.click.click.viewmodel.ChatViewModel // pragma: allowlist secret
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun ChatViewSuccessHeader(
+    viewModel: ChatViewModel,
     nativeNavChrome: Boolean,
     chatNativeClearance: Dp,
     topInset: Dp,
@@ -66,9 +68,6 @@ internal fun ChatViewSuccessHeader(
     isGroupChat: Boolean,
     groupTitle: String,
     memberSummaryLine: String?,
-    isPeerTyping: Boolean,
-    isPeerOnline: Boolean,
-    onlineUsers: Set<String>,
     coreConnectionIds: Set<String>,
     chatHasIntentOverlap: Boolean,
     onBackPressed: () -> Unit,
@@ -78,6 +77,9 @@ internal fun ChatViewSuccessHeader(
     showRenameGroupDialogState: MutableState<Boolean>,
     renameGroupDraftState: MutableState<String>,
 ) {
+    val isPeerTyping by viewModel.isPeerTyping.collectAsState()
+    val isPeerOnline by viewModel.isPeerOnline.collectAsState()
+    val onlineUsers by AppDataManager.onlineUsers.collectAsState()
     var showConnectionSheet by showConnectionSheetState
     var showRenameGroupDialog by showRenameGroupDialogState
     var renameGroupDraft by renameGroupDraftState
@@ -280,7 +282,6 @@ internal fun ChatViewSuccessHeader(
                     )
                 }
 
-                // Overflow / connection options
                 ChatHeaderIconButton(
                     icon = Icons.Filled.MoreVert,
                     contentDescription = "More options",
@@ -294,11 +295,10 @@ internal fun ChatViewSuccessHeader(
 
 @Composable
 internal fun ChatViewNativeNavBinding(
+    viewModel: ChatViewModel,
     nativeNavChrome: Boolean,
     chatId: String,
     bindTitle: String,
-    bindStatusSubtitle: String?,
-    bindOnline: Boolean?,
     bindIsGroup: Boolean,
     bindAvatarUrl: String?,
     successChat: ChatMessagesState.Success?,
@@ -314,6 +314,20 @@ internal fun ChatViewNativeNavBinding(
     var showRenameGroupDialog by showRenameGroupDialogState
     var renameGroupDraft by renameGroupDraftState
     if (nativeNavChrome) {
+        val isPeerTyping by viewModel.isPeerTyping.collectAsState()
+        val isPeerOnline by viewModel.isPeerOnline.collectAsState()
+        val onlineUsers by AppDataManager.onlineUsers.collectAsState()
+        val peerId = successChat?.chatDetails?.otherUser?.id ?: hintedChatRow?.otherUser?.id
+        val bindOnline = if (bindIsGroup) null else peerId?.let { it in onlineUsers || isPeerOnline }
+        val bindStatusSubtitle =
+            if (bindIsGroup) {
+                null
+            } else if (bindOnline != null || successChat != null || hintedChatRow != null) {
+                chatPeerStatusSubtitle(isTyping = isPeerTyping, isOnline = bindOnline == true)
+            } else {
+                null
+            }
+
         BindPlatformNativeNavigationBar(
             title = bindTitle,
             subtitle = bindStatusSubtitle,

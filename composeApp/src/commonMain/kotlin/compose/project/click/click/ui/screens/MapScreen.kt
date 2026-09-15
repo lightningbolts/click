@@ -64,7 +64,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel as composeViewModel
  *    "Liquid Glass" styling. Replaces the old [PageHeader] + top-right stats chip.
  *  * GhostMode FAB is gone — the toggle now lives in Settings (per directive Q5). Ghost mode
  *    state itself still flows from the view model so tinting/snackbars remain correct.
- *  * Nearby is a canonical platform bottom sheet over the persistent map, not a second route.
+ *  * Nearby is the persistent root sheet. Beacon/event/hub/profile details are composed from
+ *    inside that root so native sheets push above it instead of replacing it.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -206,8 +207,18 @@ fun MapScreen(
         onDispose { onEventsSheetExpandedChanged(false) }
     }
 
-    PlatformBackHandler(enabled = eventsSheetExpanded) {
-        onEventsSheetExpandedChanged(false)
+    val hasSheetDetailSelection =
+        selection is MapSelection.ConnectionSelected ||
+            selection is MapSelection.BeaconSelected ||
+            selection is MapSelection.HubSelected ||
+            selection is MapSelection.OverlappingPinsSelected
+
+    PlatformBackHandler(enabled = eventsSheetExpanded || hasSheetDetailSelection) {
+        if (hasSheetDetailSelection) {
+            viewModel.clearSelection()
+        } else {
+            onEventsSheetExpandedChanged(false)
+        }
     }
 
     val toastState = rememberUnifiedToastState()
@@ -274,6 +285,205 @@ fun MapScreen(
             } else {
                 null
             }
+    }
+
+    val mapSelectionDetailContent: @Composable () -> Unit = {
+        if (showOverlappingPinsSheet && selection is MapSelection.OverlappingPinsSelected) {
+            val stack = selection as MapSelection.OverlappingPinsSelected
+            val sheetBg = MaterialTheme.colorScheme.surface
+            val onSheet = MaterialTheme.colorScheme.onSurface
+            MapBeaconSheetRoot(
+                visible = true,
+                onDismissRequest = { viewModel.clearSelection() },
+                containerColor = sheetBg,
+                contentColor = onSheet,
+                scrimColor = MaterialTheme.colorScheme.scrim.copy(alpha = 0.55f),
+                contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
+                appColorScheme = MaterialTheme.colorScheme,
+                appTypography = MaterialTheme.typography,
+                modifier = Modifier,
+            ) {
+                ClickSheetDialogChrome(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .fillMaxHeight(),
+                    sheetColor = sheetBg,
+                    onSurface = onSheet,
+                    alignSemanticColorsToSheet = true,
+                ) {
+                    OverlappingMapPinsChooser(
+                        pins = stack.pins,
+                        onChoose = { viewModel.onOverlappingPinChosen(it) },
+                        onDismiss = { viewModel.clearSelection() },
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .sheetBodyScroll()
+                                .padding(horizontal = 24.dp, vertical = 12.dp),
+                    )
+                }
+            }
+        }
+
+        if (showCommunityHubSheet && selection is MapSelection.HubSelected) {
+            val hubSel = selection as MapSelection.HubSelected
+            val hubSheetBg = MaterialTheme.colorScheme.surface
+            val onHubSheet = MaterialTheme.colorScheme.onSurface
+            MapBeaconSheetRoot(
+                visible = true,
+                onDismissRequest = { viewModel.clearSelection() },
+                containerColor = hubSheetBg,
+                contentColor = onHubSheet,
+                scrimColor = MaterialTheme.colorScheme.scrim.copy(alpha = 0.55f),
+                contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
+                appColorScheme = MaterialTheme.colorScheme,
+                appTypography = MaterialTheme.typography,
+                modifier = Modifier,
+            ) {
+                ClickSheetDialogChrome(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .fillMaxHeight(),
+                    sheetColor = hubSheetBg,
+                    onSurface = onHubSheet,
+                    alignSemanticColorsToSheet = true,
+                ) {
+                    CommunityHubBottomSheet(
+                        hub = hubSel.hub,
+                        distanceMeters = hubSel.distanceMeters,
+                        canJoinGeofence = hubSel.canJoinGeofence,
+                        onJoin = {
+                            onJoinCommunityHub(hubSel.hub.hubId)
+                            viewModel.clearSelection()
+                        },
+                        onDismiss = { viewModel.clearSelection() },
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .sheetBodyScroll()
+                                .padding(horizontal = 24.dp, vertical = 12.dp),
+                    )
+                }
+            }
+        }
+
+        if (showBeaconDetailSheet && selection is MapSelection.BeaconSelected) {
+            val beaconSel = selection as MapSelection.BeaconSelected
+            val detailSurface = MaterialTheme.colorScheme.surface
+            val onDetailSurface = MaterialTheme.colorScheme.onSurface
+            var shareBeaconToChat by remember(beaconSel.beacon.id) {
+                mutableStateOf<MapBeacon?>(null)
+            }
+            val inboxChats by compose.project.click.click.data.AppDataManager.inboxFeedChats // pragma: allowlist secret
+                .collectAsState()
+            MapBeaconSheetRoot(
+                visible = true,
+                onDismissRequest = {
+                    shareBeaconToChat = null
+                    viewModel.clearSelection()
+                },
+                containerColor = detailSurface,
+                contentColor = onDetailSurface,
+                scrimColor = MaterialTheme.colorScheme.scrim.copy(alpha = 0.55f),
+                contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
+                appColorScheme = MaterialTheme.colorScheme,
+                appTypography = MaterialTheme.typography,
+                modifier = Modifier,
+            ) {
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    ClickSheetDialogChrome(
+                        modifier = Modifier.fillMaxWidth(),
+                        sheetColor = detailSurface,
+                        onSurface = onDetailSurface,
+                        alignSemanticColorsToSheet = true,
+                    ) {
+                        BeaconDetailSheetContent(
+                            beacon = beaconSel.beacon,
+                            distanceMeters = beaconSel.distanceMeters,
+                            currentUserId = currentUser?.id,
+                            viewModel = viewModel,
+                            onShareBeaconToChat = { beacon ->
+                                shareBeaconToChat = beacon
+                            },
+                            onNavigateToChat = onNavigateToChat,
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .sheetBodyScroll()
+                                    .padding(horizontal = 24.dp, vertical = 12.dp),
+                        )
+                    }
+                    UnifiedToastHost(
+                        state = toastState,
+                        opaque = true,
+                        modifier =
+                            Modifier
+                                .align(Alignment.BottomCenter)
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp)
+                                .padding(bottom = 24.dp)
+                                .zIndex(100f),
+                    )
+                    shareBeaconToChat?.let { beaconToShare ->
+                        BeaconShareToChatDialog(
+                            beacon = beaconToShare,
+                            chats = inboxChats,
+                            onDismissRequest = { shareBeaconToChat = null },
+                            onShare = { selectedChatIds, openChatConnectionId ->
+                                onShareBeaconToChats?.invoke(
+                                    beaconToShare,
+                                    selectedChatIds,
+                                    openChatConnectionId,
+                                )
+                                shareBeaconToChat = null
+                            },
+                        )
+                    }
+                }
+            }
+        }
+
+        if (showBottomSheet && selection is MapSelection.ConnectionSelected) {
+            val connectionSelection = selection as MapSelection.ConnectionSelected
+            val viewerUserId = currentUser?.id
+            val peerUserId =
+                connectionSelection.otherUser?.id?.takeIf { it.isNotBlank() }
+                    ?: connectionSelection.point.connection.user_ids.firstOrNull { id ->
+                        id.isNotBlank() && id != viewerUserId
+                    }
+            val statusBadge =
+                when (connectionSelection.point.timeState) {
+                    TimeState.LIVE -> ProfileSheetBadge("Live now", PrimaryBlue)
+                    TimeState.RECENT -> ProfileSheetBadge("Recent", LightBlue)
+                    TimeState.ARCHIVE -> ProfileSheetBadge("Memory", Color.Gray)
+                }
+            TabbedUserProfileSheet(
+                userId = peerUserId,
+                viewerUserId = viewerUserId,
+                connectionId = connectionSelection.point.connection.id,
+                statusBadge = statusBadge,
+                onDismiss = {
+                    selectedProfileId = null
+                    viewModel.clearSelection()
+                },
+                onMessage = {
+                    selectedProfileId = null
+                    viewModel.clearSelection()
+                    onNavigateToChat?.invoke(connectionSelection.point.connection.id)
+                },
+                onNudge = {
+                    viewModel.sendNudge(
+                        connectionId = connectionSelection.point.connection.id,
+                        otherUserName = connectionSelection.otherUser?.name ?: "Someone",
+                    )
+                    selectedProfileId = null
+                    viewModel.clearSelection()
+                },
+                onOpenDisposableRoll = onOpenDisposableRoll,
+            )
+        }
     }
 
     Scaffold(
@@ -403,6 +613,17 @@ fun MapScreen(
                                         .zIndex(20f),
                             )
 
+                            if (!eventsSheetExpanded && hasSheetDetailSelection) {
+                                Box(
+                                    modifier =
+                                        Modifier
+                                            .fillMaxSize()
+                                            .zIndex(30f),
+                                ) {
+                                    mapSelectionDetailContent()
+                                }
+                            }
+
                             if (eventsSheetExpanded) {
                                 EventsDiscoveryFullScreen(
                                     feedItems = feedItems,
@@ -412,7 +633,13 @@ fun MapScreen(
                                     layerFilters = layerFilters,
                                     onToggleLayerFilter = { viewModel.toggleLayerFilter(it) },
                                     viewModel = viewModel,
-                                    onBack = { onEventsSheetExpandedChanged(false) },
+                                    onBack = {
+                                        if (hasSheetDetailSelection) {
+                                            viewModel.clearSelection()
+                                        } else {
+                                            onEventsSheetExpandedChanged(false)
+                                        }
+                                    },
                                     onBeaconClick = { beacon, distanceM ->
                                         TelemetryBatcher.recordActionTaken()
                                         viewModel.onBeaconPinTapped(
@@ -420,6 +647,17 @@ fun MapScreen(
                                             seedDistanceMeters = distanceM,
                                         )
                                     },
+                                    onHubClick = { item ->
+                                        TelemetryBatcher.recordActionTaken()
+                                        viewModel.onCommunityHubTapped(
+                                            item.hub,
+                                            seedDistanceMeters =
+                                                item.sortDistanceM.takeIf {
+                                                    it.isFinite() && it < Double.MAX_VALUE
+                                                },
+                                        )
+                                    },
+                                    detailContent = mapSelectionDetailContent,
                                     interactiveBackSwipeOffsetPx = null,
                                 )
                             }
@@ -525,208 +763,6 @@ fun MapScreen(
                 },
             )
         }
-    }
-
-    if (showOverlappingPinsSheet && selection is MapSelection.OverlappingPinsSelected) {
-        val stack = selection as MapSelection.OverlappingPinsSelected
-        val sheetBg = MaterialTheme.colorScheme.surface
-        val onSheet = MaterialTheme.colorScheme.onSurface
-        MapBeaconSheetRoot(
-            visible = true,
-            onDismissRequest = { viewModel.clearSelection() },
-            containerColor = sheetBg,
-            contentColor = onSheet,
-            scrimColor = MaterialTheme.colorScheme.scrim.copy(alpha = 0.55f),
-            contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
-            appColorScheme = MaterialTheme.colorScheme,
-            appTypography = MaterialTheme.typography,
-            modifier = Modifier,
-        ) {
-            ClickSheetDialogChrome(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .fillMaxHeight(),
-                sheetColor = sheetBg,
-                onSurface = onSheet,
-                alignSemanticColorsToSheet = true,
-            ) {
-                OverlappingMapPinsChooser(
-                    pins = stack.pins,
-                    onChoose = { viewModel.onOverlappingPinChosen(it) },
-                    onDismiss = { viewModel.clearSelection() },
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .sheetBodyScroll()
-                            .padding(horizontal = 24.dp, vertical = 12.dp),
-                )
-            }
-        }
-    }
-
-    if (showCommunityHubSheet && selection is MapSelection.HubSelected) {
-        val hubSel = selection as MapSelection.HubSelected
-        val hubSheetBg = MaterialTheme.colorScheme.surface
-        val onHubSheet = MaterialTheme.colorScheme.onSurface
-        MapBeaconSheetRoot(
-            visible = true,
-            onDismissRequest = { viewModel.clearSelection() },
-            containerColor = hubSheetBg,
-            contentColor = onHubSheet,
-            scrimColor = MaterialTheme.colorScheme.scrim.copy(alpha = 0.55f),
-            contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
-            appColorScheme = MaterialTheme.colorScheme,
-            appTypography = MaterialTheme.typography,
-            modifier = Modifier,
-        ) {
-            ClickSheetDialogChrome(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .fillMaxHeight(),
-                sheetColor = hubSheetBg,
-                onSurface = onHubSheet,
-                alignSemanticColorsToSheet = true,
-            ) {
-                CommunityHubBottomSheet(
-                    hub = hubSel.hub,
-                    distanceMeters = hubSel.distanceMeters,
-                    canJoinGeofence = hubSel.canJoinGeofence,
-                    onJoin = {
-                        onJoinCommunityHub(hubSel.hub.hubId)
-                        viewModel.clearSelection()
-                    },
-                    onDismiss = { viewModel.clearSelection() },
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .sheetBodyScroll()
-                            .padding(horizontal = 24.dp, vertical = 12.dp),
-                )
-            }
-        }
-    }
-
-    if (showBeaconDetailSheet && selection is MapSelection.BeaconSelected) {
-        val beaconSel = selection as MapSelection.BeaconSelected
-        val detailSurface = MaterialTheme.colorScheme.surface
-        val onDetailSurface = MaterialTheme.colorScheme.onSurface
-        var shareBeaconToChat by remember(beaconSel.beacon.id) {
-            mutableStateOf<MapBeacon?>(null)
-        }
-        val inboxChats by compose.project.click.click.data.AppDataManager.inboxFeedChats // pragma: allowlist secret
-            .collectAsState()
-        MapBeaconSheetRoot(
-            visible = true,
-            onDismissRequest = {
-                shareBeaconToChat = null
-                viewModel.clearSelection()
-            },
-            containerColor = detailSurface,
-            contentColor = onDetailSurface,
-            scrimColor = MaterialTheme.colorScheme.scrim.copy(alpha = 0.55f),
-            contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
-            appColorScheme = MaterialTheme.colorScheme,
-            appTypography = MaterialTheme.typography,
-            modifier = Modifier,
-        ) {
-            Box(modifier = Modifier.fillMaxWidth()) {
-                ClickSheetDialogChrome(
-                    modifier = Modifier.fillMaxWidth(),
-                    sheetColor = detailSurface,
-                    onSurface = onDetailSurface,
-                    alignSemanticColorsToSheet = true,
-                ) {
-                    BeaconDetailSheetContent(
-                        beacon = beaconSel.beacon,
-                        distanceMeters = beaconSel.distanceMeters,
-                        currentUserId = currentUser?.id,
-                        viewModel = viewModel,
-                        onShareBeaconToChat = { beacon ->
-                            shareBeaconToChat = beacon
-                        },
-                        onNavigateToChat = onNavigateToChat,
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .sheetBodyScroll()
-                                .padding(horizontal = 24.dp, vertical = 12.dp),
-                    )
-                }
-                UnifiedToastHost(
-                    state = toastState,
-                    opaque = true,
-                    modifier =
-                        Modifier
-                            .align(Alignment.BottomCenter)
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp)
-                            .padding(bottom = 24.dp)
-                            .zIndex(100f),
-                )
-                shareBeaconToChat?.let { beaconToShare ->
-                    BeaconShareToChatDialog(
-                        beacon = beaconToShare,
-                        chats = inboxChats,
-                        onDismissRequest = { shareBeaconToChat = null },
-                        onShare = { selectedChatIds, openChatConnectionId ->
-                            onShareBeaconToChats?.invoke(
-                                beaconToShare,
-                                selectedChatIds,
-                                openChatConnectionId,
-                            )
-                            shareBeaconToChat = null
-                        },
-                    )
-                }
-            }
-        }
-    }
-
-    if (showBottomSheet && selection is MapSelection.ConnectionSelected) {
-        val connectionSelection = selection as MapSelection.ConnectionSelected
-        val viewerUserId =
-            compose.project.click.click.data.AppDataManager // pragma: allowlist secret
-                .currentUser
-                .collectAsState()
-                .value
-                ?.id
-        val peerUserId =
-            connectionSelection.otherUser?.id?.takeIf { it.isNotBlank() }
-                ?: connectionSelection.point.connection.user_ids.firstOrNull { id ->
-                    id.isNotBlank() && id != viewerUserId
-                }
-        val statusBadge =
-            when (connectionSelection.point.timeState) {
-                TimeState.LIVE -> ProfileSheetBadge("Live now", PrimaryBlue)
-                TimeState.RECENT -> ProfileSheetBadge("Recent", LightBlue)
-                TimeState.ARCHIVE -> ProfileSheetBadge("Memory", Color.Gray)
-            }
-        TabbedUserProfileSheet(
-            userId = peerUserId,
-            viewerUserId = viewerUserId,
-            connectionId = connectionSelection.point.connection.id,
-            statusBadge = statusBadge,
-            onDismiss = {
-                selectedProfileId = null
-                viewModel.clearSelection()
-            },
-            onMessage = {
-                selectedProfileId = null
-                viewModel.clearSelection()
-                onNavigateToChat?.invoke(connectionSelection.point.connection.id)
-            },
-            onNudge = {
-                viewModel.sendNudge(
-                    connectionId = connectionSelection.point.connection.id,
-                    otherUserName = connectionSelection.otherUser?.name ?: "Someone",
-                )
-                selectedProfileId = null
-                viewModel.clearSelection()
-            },
-            onOpenDisposableRoll = onOpenDisposableRoll,
-        )
     }
 
     val mapLocationService = remember { LocationService() }

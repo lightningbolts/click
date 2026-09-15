@@ -48,11 +48,60 @@ jobs:
           java-version: "17"
           cache: gradle
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      # ubuntu-latest already ships the Android command-line SDK. setup-android@v3
+      # re-downloads legacy tools metadata before Gradle starts, which made every Android
+      # workflow depend on a transient Google repository2.xml request. Reuse the runner SDK
+      # and only download an actually-missing platform/build-tools package.
+      - name: Use preinstalled Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk_root="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+          if [ -z "$sdk_root" ] || [ ! -d "$sdk_root" ]; then
+            echo "GitHub runner Android SDK not found (ANDROID_SDK_ROOT/ANDROID_HOME)."
+            exit 1
+          fi
+          sdkmanager_bin=""
+          for candidate in \
+            "$sdk_root/cmdline-tools/latest/bin/sdkmanager" \
+            "$sdk_root/cmdline-tools"/*/bin/sdkmanager \
+            "$sdk_root/tools/bin/sdkmanager"; do
+            if [ -x "$candidate" ]; then
+              sdkmanager_bin="$candidate"
+              break
+            fi
+          done
+          if [ -z "$sdkmanager_bin" ]; then
+            echo "sdkmanager not found in preinstalled SDK: $sdk_root"
+            find "$sdk_root" -maxdepth 4 -name sdkmanager -print || true
+            exit 1
+          fi
+          echo "ANDROID_SDK_ROOT=$sdk_root" >> "$GITHUB_ENV"
+          echo "ANDROID_HOME=$sdk_root" >> "$GITHUB_ENV"
+          echo "$(dirname "$sdkmanager_bin")" >> "$GITHUB_PATH"
+          "$sdkmanager_bin" --version
 
-      - name: Install Android SDK packages
-        run: sdkmanager "platforms;android-36" "build-tools;35.0.0"
+      - name: Ensure Android SDK packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          packages=()
+          [ -d "$ANDROID_SDK_ROOT/platforms/android-36" ] || packages+=("platforms;android-36")
+          [ -d "$ANDROID_SDK_ROOT/build-tools/35.0.0" ] || packages+=("build-tools;35.0.0")
+          if [ "${#packages[@]}" -eq 0 ]; then
+            echo "Required Android SDK packages are already present on the runner."
+            exit 0
+          fi
+          for attempt in 1 2 3; do
+            if sdkmanager "${packages[@]}"; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              echo "sdkmanager failed after 3 attempts: ${packages[*]}"
+              exit 1
+            fi
+            sleep $((attempt * 10))
+          done
 
       - name: Create local.properties
         env:

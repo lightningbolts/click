@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
@@ -249,28 +250,16 @@ private fun DiscoverySortFilterMenuChip(
     }
 }
 
-/**
- * Active / Groups / Archived filter — exterior radius matches chat list bubbles ([GlassSheetTokens.BentoExteriorCorner]).
- */
+/** Distance / Recent use the same independent-pill treatment as the Clicks inbox filters. */
 @Composable
 fun DiscoverySortSegmentBar(
     selectedTabIndex: Int,
     onTabSelected: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val exterior = GlassSheetTokens.BentoExteriorCorner
-    val trackPadding = 6.dp
-    val segmentCorner = exterior - trackPadding
-
     Row(
-        modifier =
-            modifier
-                .fillMaxWidth()
-                .border(clickBorderWidth(), clickBorderColor(), RoundedCornerShape(exterior))
-                .clip(RoundedCornerShape(exterior))
-                .background(MaterialTheme.colorScheme.surface)
-                .padding(trackPadding),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         listOf("Distance", "Recent").forEachIndexed { index, label ->
             val selected = selectedTabIndex == index
@@ -278,12 +267,14 @@ fun DiscoverySortSegmentBar(
                 modifier =
                     Modifier
                         .weight(1f)
-                        .clip(RoundedCornerShape(segmentCorner))
+                        .clip(CircleShape)
                         .then(
                             if (selected) {
                                 Modifier.background(MaterialTheme.colorScheme.primaryContainer)
                             } else {
                                 Modifier
+                                    .background(MaterialTheme.colorScheme.surface)
+                                    .border(clickBorderWidth(), clickBorderColor(), CircleShape)
                             },
                         ).clickable { onTabSelected(index) }
                         .padding(horizontal = 12.dp, vertical = 10.dp),
@@ -305,6 +296,7 @@ fun DiscoverySortSegmentBar(
     }
 }
 
+/** Active / Groups / Archived are independent pills, not a segmented rectangle. */
 @Composable
 fun ConnectionsSegmentBar(
     selectedTabIndex: Int,
@@ -314,19 +306,9 @@ fun ConnectionsSegmentBar(
     archivedCount: Int,
     modifier: Modifier = Modifier,
 ) {
-    val exterior = GlassSheetTokens.BentoExteriorCorner
-    val trackPadding = 6.dp
-    val segmentCorner = exterior - trackPadding
-
     Row(
-        modifier =
-            modifier
-                .fillMaxWidth()
-                .border(clickBorderWidth(), clickBorderColor(), RoundedCornerShape(exterior))
-                .clip(RoundedCornerShape(exterior))
-                .background(MaterialTheme.colorScheme.surface)
-                .padding(trackPadding),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         listOf(
             Triple(0, "Active", activeCount),
@@ -338,12 +320,14 @@ fun ConnectionsSegmentBar(
                 modifier =
                     Modifier
                         .weight(1f)
-                        .clip(RoundedCornerShape(segmentCorner))
+                        .clip(CircleShape)
                         .then(
                             if (selected) {
                                 Modifier.background(MaterialTheme.colorScheme.primaryContainer)
                             } else {
                                 Modifier
+                                    .background(MaterialTheme.colorScheme.surface)
+                                    .border(clickBorderWidth(), clickBorderColor(), CircleShape)
                             },
                         ).clickable { onTabSelected(index) }
                         .padding(horizontal = 8.dp, vertical = 10.dp),

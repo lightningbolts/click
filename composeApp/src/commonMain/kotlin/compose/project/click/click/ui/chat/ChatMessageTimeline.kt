@@ -18,6 +18,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableFloatState
 import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -35,6 +38,9 @@ import compose.project.click.click.data.models.MessageReaction
 import compose.project.click.click.data.models.MessageWithUser
 import compose.project.click.click.viewmodel.SecureChatMediaHost
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlin.math.abs
 
 internal fun chatTimelineShouldFollowInbound(
@@ -119,6 +125,29 @@ internal fun chatDismissKeyboardAfterScrollConnection(
     }
 
 /**
+ * Observe only the reaction slice needed by one visible message row.
+ *
+ * Previously [ChatMessageTimeline] collected the entire messageId -> reactions map. Every reaction
+ * delivery therefore invalidated the LazyColumn owner and all visible row lambdas, even when only
+ * one bubble changed. Visible rows now subscribe to their own map entry and use
+ * [distinctUntilChanged], so a reaction on message A does not recompose message B..N.
+ */
+@Composable
+private fun messageReactionsForRow(
+    messageId: String,
+    fallback: Map<String, List<MessageReaction>>,
+    live: StateFlow<Map<String, List<MessageReaction>>>?,
+): List<MessageReaction> {
+    if (live == null) return fallback[messageId].orEmpty()
+    val rowFlow =
+        remember(live, messageId) {
+            live.map { reactions -> reactions[messageId].orEmpty() }.distinctUntilChanged()
+        }
+    val reactions by rowFlow.collectAsState(initial = live.value[messageId].orEmpty())
+    return reactions
+}
+
+/**
  * Isolated message list for chat screens. Kept separate from [compose.project.click.click.ui.screens.ChatView]
  * so IME-driven layout passes on the thread dock do not recompose this subtree.
  */
@@ -136,6 +165,7 @@ internal fun ChatMessageTimeline(
     isGroupChat: Boolean,
     currentUserId: String?,
     reactionsMap: Map<String, List<MessageReaction>>,
+    reactionsFlow: StateFlow<Map<String, List<MessageReaction>>>? = null,
     secureMediaHost: SecureChatMediaHost,
     activeChatId: String?,
     onToggleReaction: (messageId: String, reaction: String) -> Unit,
@@ -219,7 +249,12 @@ internal fun ChatMessageTimeline(
                     }
                     is ChatTimelineEntry.MessageEntry -> {
                         val messageWithUser = entry.messageWithUser
-                        val msgReactions = reactionsMap[messageWithUser.message.id] ?: emptyList()
+                        val msgReactions =
+                            messageReactionsForRow(
+                                messageId = messageWithUser.message.id,
+                                fallback = reactionsMap,
+                                live = reactionsFlow,
+                            )
                         val mt = messageWithUser.message.messageType.lowercase()
                         // Beacons are regular actionable messages (timestamp peek, reply swipe,
                         // long-press menu). Only call logs skip the gutter/gesture chrome.

@@ -7,21 +7,13 @@ package compose.project.click.click.ui.components // pragma: allowlist secret
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
-/**
- * Shared iOS-native header geometry. Compose 1.dp == 1pt on iOS, so these values drive both
- * the host `UINavigationBar` height and the Compose clearance under it.
- *
- * Expanded chrome is standard large-title type (34pt, up to 2 lines) on the **same row** as
- * bar buttons. The first line of that title shares a horizontal plane with compact subpage
- * chrome (back button + 17pt title). Extra lines and subtitles grow downward. The title
- * column wraps before the action cluster; it does not use UIKit `prefersLargeTitles`.
- */
+/** Shared iOS-native header geometry. Compose 1.dp == 1pt on iOS. */
 object NativeHeaderMetrics {
     const val CompactBarHeightPt = 52.0
     const val LargeTitlePointSize = 34.0
     const val CompactTitlePointSize = 17.0
     const val LargeTitleLineHeightPt = 41.0
-    const val LargeTitleMaxLines = 2
+    const val LargeTitleMaxLines = 1
     const val CompactTitleMaxLines = 1
     const val TitleGutterPt = 8.0
     const val LeadingInsetPt = 20.0
@@ -37,21 +29,25 @@ object NativeHeaderMetrics {
     const val ClusterIconSpacingPt = 0.0
     const val ClusterContentInsetPt = 0.0
     const val CompactRowBottomPaddingPt = 8.0
-    const val GlassFadeExtensionPt = 8.0
-    const val CollapsedGlassAlphaMax = 0.92f
+
+    // Let the material feather into page content rather than ending like a card/slab.
+    const val GlassFadeExtensionPt = 16.0
+
+    // Native glass already contributes contrast. A lighter host alpha keeps page color/content
+    // visible underneath, closer to iOS system navigation and WhatsApp's integrated treatment.
+    const val CollapsedGlassAlphaMax = 0.64f
     const val StackedIdentitySpacingPt = 3.0
     const val StackedIdentitySubtitlePointSize = 12.0
     const val OverlayUncoverEpsilonPt = 0.5
     const val OverlayHideKeepClipFraction = 0.92
     const val OverlayCompletedSwipeFraction = 0.85
 
-    /** Vertical center of compact chrome (40pt buttons in the 52pt bar). Expanded titles pin here too. */
     const val CompactChromeCenterYPt = CompactBarHeightPt / 2.0
 
     val CompactBarHeight: Dp = CompactBarHeightPt.toFloat().dp
 
     val ExpandedBarHeightPt: Double =
-        ExpandedVerticalPaddingPt + LargeTitleLineHeightPt * LargeTitleMaxLines +
+        CompactBarHeightPt + ExpandedVerticalPaddingPt + LargeTitleLineHeightPt * LargeTitleMaxLines +
             ExpandedVerticalPaddingPt
 
     val ExpandedBarHeight: Dp = ExpandedBarHeightPt.toFloat().dp
@@ -62,11 +58,7 @@ object NativeHeaderMetrics {
     }
 
     fun titleMaxLines(collapseFraction: Float): Int =
-        if (collapseFraction < CompactTitleCollapseThreshold) {
-            LargeTitleMaxLines
-        } else {
-            CompactTitleMaxLines
-        }
+        if (collapseFraction < CompactTitleCollapseThreshold) LargeTitleMaxLines else CompactTitleMaxLines
 
     fun isCompactTitle(collapseFraction: Float): Boolean = collapseFraction >= CompactTitleCollapseThreshold
 
@@ -80,8 +72,6 @@ object NativeHeaderMetrics {
         val expanded =
             ExpandedBarHeightPt +
                 if (hasSubtitle) SubtitleLineHeightPt * SubtitleMaxLines else 0.0
-        // Identity stacks stay 52pt (centered on the avatar). Subpages with a
-        // back button grow so the subtitle is not clipped under the glass.
         val compact =
             CompactBarHeightPt +
                 if (growCompactSubtitle && hasSubtitle) SubtitleLineHeightPt else 0.0
@@ -155,40 +145,23 @@ object NativeHeaderMetrics {
         trailingInsetPt: Double,
     ): Double = (barWidthPt - leadingInsetPt - trailingInsetPt).coerceAtLeast(MinTitleWidthPt)
 
-    /**
-     * Top inset for the title column so the first line shares [CompactChromeCenterYPt] with
-     * compact subpage chrome (back button, avatar, action capsule).
-     */
     fun titleColumnTopInsetPt(collapseFraction: Float): Double {
         val t = collapseFraction.coerceIn(0f, 1f).toDouble()
-        val lineHeight =
-            LargeTitleLineHeightPt + (CompactTitlePointSize - LargeTitleLineHeightPt) * t
-        return CompactChromeCenterYPt - lineHeight / 2.0
+        val expandedTop = CompactBarHeightPt + ExpandedVerticalPaddingPt
+        val compactTop = CompactChromeCenterYPt - CompactTitlePointSize / 2.0
+        return expandedTop + (compactTop - expandedTop) * t
     }
 
-    /**
-     * Leading strip of the underlay (tab) header that should paint during interactive-back.
-     * Zero while the overlay is at rest so translucent chat glass cannot show the list title.
-     */
     fun overlayUncoverLeadingWidthPt(offsetPt: Double): Double = if (offsetPt <= OverlayUncoverEpsilonPt) 0.0 else offsetPt
 
-    /** Username + status column height for a compact chat identity stack. */
     fun stackedIdentityColumnHeightPt(): Double = CompactTitlePointSize + StackedIdentitySpacingPt + StackedIdentitySubtitlePointSize
 
-    /**
-     * Collapsed tab-root chrome inlines title + subtitle. Subpages (back) and chat identity
-     * always stack those lines so the subtitle is not truncated beside the title.
-     */
     fun isCompactTabRootChrome(
         collapseFraction: Float,
         hasBack: Boolean,
         hasIdentity: Boolean,
     ): Boolean = !hasBack && !hasIdentity && isCompactTitle(collapseFraction)
 
-    /**
-     * Compact two-line identity (avatar + name/status) or subpage title + subtitle, centered
-     * on the 40pt chrome plane.
-     */
     fun shouldStackCompactSubtitle(
         hasBack: Boolean,
         hasIdentity: Boolean,
@@ -196,10 +169,6 @@ object NativeHeaderMetrics {
         collapseFraction: Float,
     ): Boolean = hasSubtitle && isCompactTitle(collapseFraction) && (hasIdentity || hasBack)
 
-    /**
-     * Scan QR / Tap to Connect compact chrome must grow so the instruction line sits
-     * *in* the native bar, not under the glass plate. Chat identity does not grow.
-     */
     fun shouldGrowCompactBarForStackedSubtitle(
         hasBack: Boolean,
         hasIdentity: Boolean,
@@ -210,38 +179,14 @@ object NativeHeaderMetrics {
             hasBack &&
             !hasIdentity
 
-    /**
-     * Only the live tab-root header may be clipped into the overlay peek. A stale header from
-     * a previous tab (e.g. Add Click still sitting in the shared layer while Map is showing)
-     * must not be unhidden.
-     */
     fun shouldClipTabChromeUnderOverlay(tabWantVisible: Boolean): Boolean = tabWantVisible
 
-    /**
-     * Swipe underlays and inactive AnimatedContent copies must not bind the shared tab
-     * `UINavigationBar`. Map in particular has no tab header — showing the previous tab's
-     * title over the map at gesture start is a bug.
-     */
     fun shouldBindSharedTabChrome(chromeActive: Boolean): Boolean = chromeActive
 
-    /**
-     * Overlay covers (chat, settings subpages, Add Click QR/NFC/Tap, Nearby) must keep the
-     * destination host chrome bound and clip it to the uncovered leading strip. Flipping
-     * [LocalNativeChromeActive] off remounts liquid glass when the overlay dismisses.
-     */
     fun shouldKeepDestinationChromeBoundUnderOverlay(): Boolean = true
 
-    /**
-     * Map layer / zoom / drop controls are host-view siblings. Toggling `hidden` rematerializes
-     * liquid glass after Nearby dismiss. Clip to the uncovered strip instead.
-     */
     fun shouldHideMapFloatingChromeForNearbyCover(nearbyCovering: Boolean): Boolean = false
 
-    /**
-     * After a completed swipe the destination header is already fully revealed (mask ≈ screen
-     * width). Clearing `CALayer.mask` rematerializes liquid glass / labels. Keep that mask.
-     * Tap-dismiss at rest (clip 0) still unclips so the hub/tab title can appear.
-     */
     fun shouldClearLeadingClipOnOverlayHide(
         uncoverLeadingPt: Double,
         hostWidthPt: Double,
@@ -251,11 +196,6 @@ object NativeHeaderMetrics {
         return uncoverLeadingPt < hostWidthPt * OverlayHideKeepClipFraction
     }
 
-    /**
-     * `reset()` / overlay-key disposal drives slide offset to 0 while the overlay chrome is
-     * still composed (AnimatedVisibility exit, Settings hub `LaunchedEffect`). Applying
-     * identity after a completed swipe snaps My QR / Availability back on-screen for a frame.
-     */
     fun shouldApplyOverlaySlideTransform(
         overlayWantVisible: Boolean,
         newOffsetPt: Double,
@@ -272,29 +212,16 @@ object NativeHeaderMetrics {
         return true
     }
 
-    /**
-     * Unsuppressing tab chrome after overlay dismiss must not re-run full `applyVisibility()`
-     * (that re-sets `glassPlate.hidden` and rematerializes Liquid Glass). Toggle hit-testing only.
-     */
     fun shouldRematerializeChromeOnUnsuppress(): Boolean = false
 
-    /**
-     * After an overlay cover (Click Drops) hides, re-apply the tab bar's last expanded height so
-     * the subtitle is not clipped to a sliver while the large title stays 34pt.
-     */
     fun shouldReapplyTabBarHeightOnOverlayHide(): Boolean = OverlayExclusiveBindPolicy.shouldReapplyTabBarHeightOnOverlayHide()
 
-    /**
-     * Visible width of a host-view control that is not left-aligned, given a leading uncover
-     * strip in host coordinates. The nav bar sits at x=0 so this equals [uncoverLeadingPt].
-     */
     fun hostLeadingClipWidthPt(
         uncoverLeadingPt: Double,
         viewMinXPt: Double,
     ): Double = (uncoverLeadingPt - viewMinXPt).coerceAtLeast(0.0)
 }
 
-/** Status bar + interpolating native bar + collapsing subtitle overlay. */
 fun platformNativeHeaderClearance(
     statusBarTop: Dp,
     collapseFraction: Float = 1f,

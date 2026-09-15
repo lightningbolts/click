@@ -139,7 +139,17 @@ class OverlayExclusiveBindPolicyTest {
     @Test
     fun overlayHideReappliesExpandedTabHeight() {
         assertTrue(OverlayExclusiveBindPolicy.shouldReapplyTabBarHeightOnOverlayHide())
-        assertEquals(134.0, NativeHeaderMetrics.barHeightPt(0f, hasSubtitle = true), 0.01)
+        // The expanded root header now has a dedicated compact action row above the large title.
+        // Keep this assertion derived from the geometry contract instead of pinning the retired
+        // same-row 134pt value, otherwise a valid header hierarchy change looks like a regression.
+        val expandedWithSubtitle =
+            NativeHeaderMetrics.ExpandedBarHeightPt +
+                NativeHeaderMetrics.SubtitleLineHeightPt * NativeHeaderMetrics.SubtitleMaxLines
+        assertEquals(
+            expandedWithSubtitle,
+            NativeHeaderMetrics.barHeightPt(0f, hasSubtitle = true),
+            0.01,
+        )
         assertEquals(52.0, NativeHeaderMetrics.barHeightPt(1f, hasSubtitle = true), 0.01)
         assertEquals(34.0, NativeHeaderMetrics.titlePointSize(0f), 0.01)
     }

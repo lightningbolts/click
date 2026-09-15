@@ -35,7 +35,7 @@ import androidx.compose.ui.unit.sp
 import compose.project.click.click.data.models.ChatWithDetails // pragma: allowlist secret
 import compose.project.click.click.data.models.previewLabel // pragma: allowlist secret
 import compose.project.click.click.ui.components.AvatarWithOnlineIndicator
-import compose.project.click.click.ui.components.ClickListRow // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickConversationListRow // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickUnreadDot // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionListUserAvatarFace // pragma: allowlist secret
 import compose.project.click.click.ui.components.CoreConnectionAvatarFrame // pragma: allowlist secret
@@ -101,12 +101,12 @@ fun ConnectionItem(
             }
         }
 
-    ClickListRow(
+    ClickConversationListRow(
         onClick = onClick,
         onLongPress = onLongPress,
         leading = {
             if (isGroup) {
-                val groupListAvatarSize = 40.dp
+                val groupListAvatarSize = 44.dp
                 val groupAvatarUrl =
                     chatDetails.groupClique
                         ?.avatarUrl
@@ -125,10 +125,10 @@ fun ConnectionItem(
                     modifier =
                         Modifier
                             .width(groupClusterWidth)
-                            .height(44.dp)
+                            .height(48.dp)
                             .clickable(
                                 interactionSource = remember { MutableInteractionSource() },
-                                indication = ripple(bounded = false, radius = 24.dp),
+                                indication = ripple(bounded = false, radius = 26.dp),
                                 onClick = {
                                     groupMembersPickerContextFrom(chatDetails)?.let(onGroupMembersPicker)
                                 },
@@ -139,7 +139,7 @@ fun ConnectionItem(
                         Box(
                             modifier =
                                 Modifier
-                                    .size(40.dp)
+                                    .size(44.dp)
                                     .clip(CircleShape)
                                     .background(MaterialTheme.colorScheme.surfaceVariant),
                             contentAlignment = Alignment.Center,
@@ -148,7 +148,7 @@ fun ConnectionItem(
                                 Icons.Filled.Groups,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(22.dp),
+                                modifier = Modifier.size(23.dp),
                             )
                         }
                     } else {
@@ -165,7 +165,7 @@ fun ConnectionItem(
                 ) {
                     CoreConnectionAvatarFrame(
                         isCore = isCore,
-                        avatarSize = 44.dp,
+                        avatarSize = 48.dp,
                         onClick = onAvatarClick,
                     ) {
                         ConnectionListUserAvatarFace(
@@ -220,7 +220,7 @@ fun ConnectionItem(
                 )
             }
         }
-        Spacer(modifier = Modifier.height(2.dp))
+        Spacer(modifier = Modifier.height(3.dp))
         if (showLoadingSubtitle) {
             LoadingSubtitlePlaceholder()
         } else {

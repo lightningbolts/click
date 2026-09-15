@@ -425,6 +425,7 @@ internal fun IosHostNavBarLayer.paintChromeButton(
 ) {
     if (paintedSymbols[button] == symbol) {
         button.setAccessibilityLabel(accessibility)
+        paintedAccessibility[button] = accessibility
         return
     }
     val symbolConfig =
@@ -452,6 +453,7 @@ internal fun IosHostNavBarLayer.paintChromeButton(
         backGlyph.hidden = false
         button.tintColor = tint
         button.setAccessibilityLabel(accessibility)
+        paintedAccessibility[button] = accessibility
         CATransaction.commit()
         paintedSymbols[button] = symbol
         return
@@ -476,6 +478,7 @@ internal fun IosHostNavBarLayer.paintChromeButton(
     button.configuration = config
     button.tintColor = tint
     button.setAccessibilityLabel(accessibility)
+    paintedAccessibility[button] = accessibility
     CATransaction.commit()
     paintedSymbols[button] = symbol
 }
