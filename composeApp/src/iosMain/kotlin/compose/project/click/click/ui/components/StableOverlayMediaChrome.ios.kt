@@ -84,22 +84,32 @@ internal actual fun ApplyStableOverlayMediaChrome(
         )
         layer.logStableChromeIdentity("media-installed")
         onDispose {
-            layer.restoreStableOverlayChrome(snapshot)
+            // The route may have rebound handlers/actions while media was open. Restore the most
+            // recently observed route snapshot instead of the one captured on lightbox entry.
+            layer.restoreStableOverlayChrome(snapshotHolder[0] ?: snapshot)
             snapshotHolder[0] = null
             layer.logStableChromeIdentity("conversation-restored")
         }
     }
 
-    // Handler closures and chat presence can change while the lightbox is open. Refresh the media
-    // meaning after composition without replacing the UIView instances, material views, owner
-    // token, or title container. If the underlying chat rebinds its route actions in the same
-    // composition, this step deterministically reapplies media semantics before the frame renders.
+    // Handler closures and chat presence can change while the lightbox is open. The underlying
+    // route binder runs before this overlay in composition order. If it repaints the leading route
+    // symbol, capture that newly authoritative route plane before putting media semantics back on
+    // the same UIViews. If nothing underneath changed, the leading button is still xmark and the
+    // last route snapshot remains authoritative.
     SideEffect {
-        snapshotHolder[0]?.let { snapshot ->
+        snapshotHolder[0]?.let { previousSnapshot ->
+            val routeSnapshot =
+                if (layer.paintedSymbols[layer.backButton] != "xmark") {
+                    layer.captureStableOverlayChrome()
+                } else {
+                    previousSnapshot
+                }
+            snapshotHolder[0] = routeSnapshot
             layer.refreshStableMediaChrome(
                 onClose = { close() },
                 trailing = latestTrailing,
-                snapshot = snapshot,
+                snapshot = routeSnapshot,
             )
         }
     }
