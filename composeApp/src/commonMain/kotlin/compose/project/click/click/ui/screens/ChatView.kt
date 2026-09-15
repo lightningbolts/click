@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.offset // pragma: allowlist secret
 import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
@@ -23,8 +22,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -113,7 +110,6 @@ fun ChatView(
     val currentUserId by viewModel.currentUserId.collectAsState()
     val currentUser by AppDataManager.currentUser.collectAsState()
 
-    // Icebreaker prompts state
     val icebreakerPrompts by viewModel.icebreakerPrompts.collectAsState()
     val showIcebreakerPanel by viewModel.showIcebreakerPanel.collectAsState()
     val icebreakerCooldownRemainingSec by viewModel.icebreakerCooldownRemainingSec.collectAsState()
@@ -136,14 +132,12 @@ fun ChatView(
     val dismissKeyboardOnUserMessageScroll = threadRuntime.dismissKeyboardOnUserMessageScroll
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
-    // Connection action sheet (archive, delete, report, block)
     val showConnectionSheetState = remember { mutableStateOf(false) }
     var showConnectionSheet by showConnectionSheetState
     val showRenameGroupDialogState = remember { mutableStateOf(false) }
     var showRenameGroupDialog by showRenameGroupDialogState
     val renameGroupDraftState = remember { mutableStateOf("") }
     var renameGroupDraft by renameGroupDraftState
-    // Message context sheet (reactions, edit, delete, copy)
     val contextMenuMessageState = remember { mutableStateOf<MessageWithUser?>(null) }
     var contextMenuMessage by contextMenuMessageState
     val forwardMessageIdState = remember { mutableStateOf<String?>(null) }
@@ -262,9 +256,6 @@ fun ChatView(
         }
     }
 
-    // Newest-first + reverseLayout pins latest messages next to the composer.
-    // Snap only on open and when a peer message arrives while already near the bottom —
-    // never on every size change (load-older / prefetch merge), which caused lag + teleports.
     val successMessages = (chatMessagesState as? ChatMessagesState.Success)?.messages.orEmpty()
     val peerNewestMessageId =
         successMessages
@@ -322,12 +313,7 @@ fun ChatView(
                         (chatListState as? ChatListState.Success)
                             ?.chats
                             ?.firstOrNull { it.connection.id == chatId || it.chat.id == chatId }
-                    if (hintedRow != null &&
-                        (
-                            hintedRow.lastMessage != null ||
-                                hintedRow.chat.messages.isNotEmpty()
-                        )
-                    ) {
+                    if (hintedRow != null && (hintedRow.lastMessage != null || hintedRow.chat.messages.isNotEmpty())) {
                         ChatWarmLoadingView(
                             topInset = topInset,
                             onBackPressed = onBackPressed,
@@ -348,10 +334,7 @@ fun ChatView(
                     } else {
                         Box(modifier = Modifier.padding(start = 20.dp, top = topInset, end = 20.dp)) {
                             Row(
-                                modifier =
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .height(56.dp),
+                                modifier = Modifier.fillMaxWidth().height(56.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 ChatHeaderIconButton(
@@ -370,10 +353,7 @@ fun ChatView(
                             }
                         }
                     }
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center,
-                    ) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
                                 "Error loading chat",
@@ -392,11 +372,7 @@ fun ChatView(
                 is ChatMessagesState.Success -> {
                     val stateMatchesThread =
                         state.chatDetails.connection.id == chatId ||
-                            (
-                                !state.chatDetails.chat.id
-                                    .isNullOrBlank() &&
-                                    state.chatDetails.chat.id == chatId
-                            )
+                            (!state.chatDetails.chat.id.isNullOrBlank() && state.chatDetails.chat.id == chatId)
                     if (!stateMatchesThread) {
                         val hintedRow =
                             (chatListState as? ChatListState.Success)
@@ -420,16 +396,11 @@ fun ChatView(
                     }
                     val chatDetails = state.chatDetails
                     val messages = state.messages
-                    // R1.1: hoist secure media load state above the LazyColumn so each item doesn't
-                    // subscribe to the full map.
                     val isGroupChat = chatDetails.groupClique != null
                     val overlapRepo = remember { SupabaseRepository() }
                     val chatPeerId = chatDetails.otherUser.id
                     val tetherChannelId =
-                        remember(
-                            chatDetails.connection.id,
-                            collaborationSessions,
-                        ) {
+                        remember(chatDetails.connection.id, collaborationSessions) {
                             collaborationSessions[chatDetails.connection.id]?.encounterId?.takeIf { it.isNotBlank() }
                                 ?: chatDetails.connection.recentEncounterId()?.takeIf { it.isNotBlank() }
                                 ?: chatDetails.connection.id
@@ -461,11 +432,10 @@ fun ChatView(
                         EncounterTetherManager.subscribe(tetherChannelId, self, resolver)
                     }
                     LaunchedEffect(tetherPayload, chatPeerId, currentUserId, isGroupChat) {
-                        val ping =
-                            tetherPayload ?: run {
-                                tetherToastMessage = null
-                                return@LaunchedEffect
-                            }
+                        val ping = tetherPayload ?: run {
+                            tetherToastMessage = null
+                            return@LaunchedEffect
+                        }
                         if (ping.senderId == currentUserId) return@LaunchedEffect
                         if (!isGroupChat && ping.senderId != chatPeerId) return@LaunchedEffect
                         val receiver = LocationService().getCurrentLocation()
@@ -485,11 +455,7 @@ fun ChatView(
                     var chatHasIntentOverlap by remember(chatDetails.otherUser.id, currentUserId, isGroupChat) {
                         val v = currentUserId
                         val cached =
-                            if (!isGroupChat && !v.isNullOrBlank()) {
-                                AvailabilityOverlapCache.get(v, chatPeerId)
-                            } else {
-                                null
-                            }
+                            if (!isGroupChat && !v.isNullOrBlank()) AvailabilityOverlapCache.get(v, chatPeerId) else null
                         mutableStateOf(cached == true)
                     }
                     LaunchedEffect(chatDetails.otherUser.id, currentUserId, isGroupChat) {
@@ -497,11 +463,10 @@ fun ChatView(
                             chatHasIntentOverlap = false
                             return@LaunchedEffect
                         }
-                        val v =
-                            currentUserId ?: run {
-                                chatHasIntentOverlap = false
-                                return@LaunchedEffect
-                            }
+                        val v = currentUserId ?: run {
+                            chatHasIntentOverlap = false
+                            return@LaunchedEffect
+                        }
                         val peer = chatDetails.otherUser.id
                         AvailabilityOverlapCache.get(v, peer)?.let { cached ->
                             chatHasIntentOverlap = cached
@@ -522,11 +487,7 @@ fun ChatView(
                     }
                     val typingPeerLabel =
                         remember(chatDetails.otherUser.name, isGroupChat) {
-                            if (isGroupChat) {
-                                "Someone is typing"
-                            } else {
-                                "${chatDetails.otherUser.name ?: "Someone"} is typing"
-                            }
+                            if (isGroupChat) "Someone is typing" else "${chatDetails.otherUser.name ?: "Someone"} is typing"
                         }
                     val groupTitle =
                         chatDetails.groupClique
@@ -548,12 +509,7 @@ fun ChatView(
                                         val u = byId[id]
                                         val part =
                                             u?.firstName?.trim()?.takeIf { it.isNotEmpty() }
-                                                ?: u
-                                                    ?.name
-                                                    ?.trim()
-                                                    ?.split(Regex("\\s+"))
-                                                    ?.firstOrNull()
-                                                    ?.takeIf { it.isNotEmpty() }
+                                                ?: u?.name?.trim()?.split(Regex("\\s+"))?.firstOrNull()?.takeIf { it.isNotEmpty() }
                                                 ?: "Member"
                                         add(part)
                                     }
@@ -567,19 +523,9 @@ fun ChatView(
                             onFilePicked = { picked ->
                                 viewModel.sendChatFile(picked.bytes, picked.mimeType, picked.fileName)
                             },
-                            onMediaAccessBlocked = { msg ->
-                                toastState.show(coroutineScope, msg)
-                            },
+                            onMediaAccessBlocked = { msg -> toastState.show(coroutineScope, msg) },
                         )
 
-                    /**
-                     * Full-screen ambient mesh behind header + thread. Top padding uses
-                     * [WindowInsets.statusBars] only so opening the IME does not push the header past the
-                     * top via [WindowInsets.safeDrawing] / display cutout coupling.
-                     *
-                     * iOS keeps the timeline scrollable by padding its bottom edge while the composer
-                     * follows the native keyboard on a graphics layer.
-                     */
                     val reverseListNewestEdgePad = 6.dp
                     val showIcebreaker = showIcebreakerPanel && icebreakerPrompts.isNotEmpty() && messages.size < 5
                     val icebreakerPanelHeightPxState = remember { mutableIntStateOf(0) }
@@ -591,14 +537,9 @@ fun ChatView(
                         } else {
                             0.dp
                         }
-                    val messageContentModifier =
-                        Modifier
-                            .weight(1f)
-                            .fillMaxWidth()
+                    val messageContentModifier = Modifier.weight(1f).fillMaxWidth()
 
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                    ) {
+                    Box(modifier = Modifier.fillMaxSize()) {
                         Column(modifier = Modifier.fillMaxSize()) {
                             ChatViewSuccessHeader(
                                 viewModel = viewModel,
@@ -673,9 +614,7 @@ fun ChatView(
                                     hiddenConnectionIds = hiddenConnectionIds,
                                     onSelect = { targetChatId ->
                                         val msgId = forwardMessageId
-                                        if (msgId != null) {
-                                            viewModel.forwardMessage(msgId, targetChatId)
-                                        }
+                                        if (msgId != null) viewModel.forwardMessage(msgId, targetChatId)
                                         forwardMessageId = null
                                     },
                                     onDismiss = { forwardMessageId = null },
@@ -712,5 +651,5 @@ fun ChatView(
             showRenameGroupDialogState = showRenameGroupDialogState,
             renameGroupDraftState = renameGroupDraftState,
         )
-    } // End outer Box
+    }
 }
