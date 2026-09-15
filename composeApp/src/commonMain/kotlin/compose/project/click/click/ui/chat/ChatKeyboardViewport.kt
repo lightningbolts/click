@@ -39,8 +39,7 @@ internal fun chatTimelineShouldFollowKeyboard(
     firstVisibleItemIndex: Int,
     initialTimelineScrollDone: Boolean,
     userScrollInProgress: Boolean,
-): Boolean =
-    firstVisibleItemIndex == 0 && !userScrollInProgress
+): Boolean = firstVisibleItemIndex == 0 && !userScrollInProgress
 
 internal fun effectiveChatKeyboardLiftPx(
     imeBottomPx: Int,
