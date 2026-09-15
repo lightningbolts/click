@@ -98,7 +98,10 @@ internal fun IosHostNavBarLayer.resetPersistentChromeMorphVisuals(animated: Bool
 internal fun IosHostNavBarLayer.animatePersistentSemanticSettle(enabled: Boolean) {
     repairPersistentLeadingControlIfNeeded()
     if (!enabled) {
-        resetPersistentChromeMorphVisuals(animated = false)
+        // `renderTransition()` renders source/destination semantics every gesture frame and then
+        // immediately calls applyPersistentChromeMorphProgress(). Resetting here used to destroy
+        // and recreate the dual-title overlay on every frame (and killed it completely after the
+        // 50% semantic handoff). Gesture completion/cancel owns the explicit reset instead.
         return
     }
     clearRouteTitleTransition()
