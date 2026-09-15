@@ -55,6 +55,30 @@ internal fun effectiveChatKeyboardLiftPx(
 ): Int = (imeBottomPx - navigationBottomPx).coerceAtLeast(0)
 
 /**
+ * Pure state machine for one keyboard-visible session. The follow decision is captured exactly
+ * once on the hidden -> visible edge, held while keyboard height changes, and cleared only after
+ * the visible -> hidden edge. Keeping this outside Compose makes the no-jump contract directly
+ * unit-testable.
+ */
+internal class ChatKeyboardSessionLatch {
+    private var wasVisible = false
+    private var followsKeyboard = false
+
+    fun update(
+        liftPx: Float,
+        shouldFollowOnOpen: Boolean,
+    ): Boolean {
+        val visible = liftPx > KEYBOARD_VISIBLE_EPSILON_PX
+        when {
+            visible && !wasVisible -> followsKeyboard = shouldFollowOnOpen
+            !visible && wasVisible -> followsKeyboard = false
+        }
+        wasVisible = visible
+        return followsKeyboard
+    }
+}
+
+/**
  * Latches the timeline anchoring policy for one keyboard-visible session.
  *
  * The decision is made once, when keyboard lift changes from zero to non-zero. This is important:
@@ -73,9 +97,9 @@ fun rememberChatTimelineKeyboardFollow(
     val navInsets = WindowInsets.navigationBars
     val shouldFollowState = rememberUpdatedState(shouldFollowOnKeyboardOpen)
     val followState = remember { mutableStateOf(false) }
+    val sessionLatch = remember { ChatKeyboardSessionLatch() }
 
     LaunchedEffect(style.isIOS, nativeKeyboardLiftPxState, density) {
-        var wasVisible = false
         snapshotFlow {
             if (style.isIOS) {
                 nativeKeyboardLiftPxState?.floatValue?.coerceAtLeast(0f) ?: 0f
@@ -86,14 +110,11 @@ fun rememberChatTimelineKeyboardFollow(
                 ).toFloat()
             }
         }.collect { liftPx ->
-            val visible = liftPx > KEYBOARD_VISIBLE_EPSILON_PX
-            if (visible && !wasVisible) {
-                followState.value = shouldFollowState.value()
-            } else if (!visible && wasVisible) {
-                // At this point the lift is already zero, so clearing the latch cannot move pixels.
-                followState.value = false
-            }
-            wasVisible = visible
+            followState.value =
+                sessionLatch.update(
+                    liftPx = liftPx,
+                    shouldFollowOnOpen = shouldFollowState.value(),
+                )
         }
     }
 
