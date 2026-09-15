@@ -10,6 +10,8 @@ import platform.UIKit.UIView
 import platform.UIKit.UIViewController
 import platform.UIKit.presentationController
 import platform.UIKit.sheetPresentationController
+import platform.darwin.dispatch_async
+import platform.darwin.dispatch_get_main_queue
 
 @OptIn(ExperimentalForeignApi::class)
 @Composable
@@ -21,18 +23,33 @@ actual fun PlatformNativeSheetOcclusion(active: Boolean) {
         }
 
         val root = host.presentationRoot()
-        // Hiding the first presented sheet container hides its entire nested sheet chain (Nearby +
-        // Event detail) while keeping the UIKit controllers presented and stateful underneath.
-        val sheetContainer = root.firstPresentedSheetContainer()
-        if (sheetContainer != null) {
-            sheetContainer.hidden = true
-            sheetContainer.userInteractionEnabled = false
+        val hiddenContainers = mutableListOf<UIView>()
+        var disposed = false
+
+        fun hidePresentedSheetChain() {
+            if (disposed) return
+            root.presentedSheetContainers().forEach { container ->
+                if (hiddenContainers.none { it === container }) {
+                    hiddenContainers += container
+                }
+                container.hidden = true
+                container.userInteractionEnabled = false
+            }
+        }
+
+        // The event hub state is published from Compose while UIKit may still be finishing the
+        // nested Event-detail sheet transaction. Hide what exists now and repeat on the next main
+        // run-loop turn so both Nearby and its child detail container are occluded together.
+        hidePresentedSheetChain()
+        dispatch_async(dispatch_get_main_queue()) {
+            hidePresentedSheetChain()
         }
 
         onDispose {
-            if (sheetContainer != null) {
-                sheetContainer.hidden = false
-                sheetContainer.userInteractionEnabled = true
+            disposed = true
+            hiddenContainers.forEach { container ->
+                container.hidden = false
+                container.userInteractionEnabled = true
             }
         }
     }
@@ -48,13 +65,14 @@ private fun UIViewController.presentationRoot(): UIViewController {
 }
 
 @OptIn(ExperimentalForeignApi::class)
-private fun UIViewController.firstPresentedSheetContainer(): UIView? {
+private fun UIViewController.presentedSheetContainers(): List<UIView> {
+    val containers = mutableListOf<UIView>()
     var presented = presentedViewController
     while (presented != null) {
         if (presented.sheetPresentationController != null) {
-            return presented.presentationController?.containerView
+            presented.presentationController?.containerView?.let(containers::add)
         }
         presented = presented.presentedViewController
     }
-    return null
+    return containers
 }
