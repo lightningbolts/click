@@ -263,6 +263,8 @@ internal fun EventsReopenChip(
 /**
  * Nearby discovery presented through Click's canonical platform sheet. The historical name is kept
  * so MapScreen does not need a second navigation path, but this is no longer a full-screen route.
+ * Detail sheets are composed from inside this sheet's UIKit/Compose host, so the platform sheet
+ * manager stacks them above Nearby instead of dismissing and replacing Nearby.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -277,6 +279,8 @@ internal fun EventsDiscoveryFullScreen(
     viewModel: MapViewModel,
     onBack: () -> Unit,
     onBeaconClick: (MapBeacon, distanceMeters: Double?) -> Unit,
+    onHubClick: (DiscoveryFeedItem.Hub) -> Unit = {},
+    detailContent: @Composable () -> Unit = {},
     interactiveBackSwipeOffsetPx: androidx.compose.runtime.MutableFloatState? = null,
 ) {
     var sortMode by remember { mutableIntStateOf(0) }
@@ -525,7 +529,14 @@ internal fun EventsDiscoveryFullScreen(
                                                 )
                                             }
                                             is DiscoveryFeedItem.Hub -> {
-                                                DiscoveryHubCard(item = item)
+                                                DiscoveryHubCard(
+                                                    item = item,
+                                                    onOpen = {
+                                                        keyboardController?.hide()
+                                                        focusManager.clearFocus(force = true)
+                                                        onHubClick(item)
+                                                    },
+                                                )
                                             }
                                             is DiscoveryFeedItem.Connection -> Unit
                                         }
@@ -547,6 +558,11 @@ internal fun EventsDiscoveryFullScreen(
                 }
             }
         }
+
+        // Important: detail sheets live compositionally inside Nearby's native sheet host. On iOS
+        // MapIosNativeSheetManager can therefore identify Nearby as their presentation parent and
+        // stack them without dismissing the root. The root's query/sort/list state remains mounted.
+        detailContent()
     }
 }
 
@@ -613,7 +629,10 @@ private fun FilterChipPill(
 }
 
 @Composable
-private fun DiscoveryHubCard(item: DiscoveryFeedItem.Hub) {
+private fun DiscoveryHubCard(
+    item: DiscoveryFeedItem.Hub,
+    onOpen: () -> Unit,
+) {
     val hub = item.hub
     val shape = RoundedCornerShape(16.dp)
     val distanceText =
@@ -629,6 +648,7 @@ private fun DiscoveryHubCard(item: DiscoveryFeedItem.Hub) {
                 .clip(shape)
                 .background(clickCardSurface())
                 .border(clickBorderWidth(), clickBorderColor(), shape)
+                .clickable(onClick = onOpen)
                 .padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
