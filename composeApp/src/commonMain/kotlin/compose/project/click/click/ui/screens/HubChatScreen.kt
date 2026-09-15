@@ -302,8 +302,9 @@ fun HubChatScreen(
         }
     }
 
-    // Keep the send affordance aligned with the server's three-person lobby threshold.
-    val inLobby = occupantCount < 3
+    // Standalone proximity hubs use the three-person lobby threshold. Event hubs are already
+    // authorized by host/RSVP/check-in membership and must be testable/usable below three people.
+    val inLobby = !isEventHub && occupantCount < 3
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val hubHasSubtitle = true
     val hubNativeClearance =
@@ -439,7 +440,6 @@ fun HubChatScreen(
                         )
                     }
 
-                    // ── Timestamp peek ──────────────────────────────────────────
                     val rawTimestampPeekTravelPx = remember { mutableFloatStateOf(0f) }
                     val displayTimestampPeekVisualPx = remember { mutableFloatStateOf(0f) }
                     val timestampPeekSettleJob = remember { mutableStateOf<Job?>(null) }
@@ -850,11 +850,6 @@ fun HubChatScreen(
     }
 }
 
-/**
- * Hub composer strip modeled exactly on [ConnectionChatMessageComposer]:
- * `+` attachment button (left) → BasicTextField (center) → gradient send button (right).
- * Same sizes, shapes, and spring press animations.
- */
 @Composable
 private fun HubChatInputBar(
     viewModel: HubChatViewModel,
