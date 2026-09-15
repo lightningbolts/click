@@ -8,6 +8,7 @@ import androidx.compose.ui.uikit.LocalUIViewController
 import kotlinx.cinterop.ExperimentalForeignApi
 import platform.UIKit.UIView
 import platform.UIKit.UIViewController
+import platform.UIKit.presentationController
 import platform.UIKit.sheetPresentationController
 
 @OptIn(ExperimentalForeignApi::class)
