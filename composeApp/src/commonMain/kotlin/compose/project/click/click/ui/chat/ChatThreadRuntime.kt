@@ -92,7 +92,7 @@ internal fun rememberChatThreadRuntime(
             nativeKeyboardInsets = nativeKeyboardInsets,
             dismissKeyboardOnUserMessageScroll = dismissKeyboardOnUserMessageScroll,
             suppressKeyboardDismissWhileProgrammaticTimelineScroll =
-                suppressKeyboardDismissWhileProgrammaticTimelineScroll,
+            suppressKeyboardDismissWhileProgrammaticTimelineScroll,
             initialTimelineScrollDoneState = initialTimelineScrollDoneState,
             focusedSearchMessageIdState = focusedSearchMessageIdState,
         )
