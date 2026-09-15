@@ -277,7 +277,7 @@ fun MapScreen(
     val showCommunityHubSheet = selection is MapSelection.HubSelected
     val showOverlappingPinsSheet = selection is MapSelection.OverlappingPinsSelected
 
-    LaunchedEffect(selection, eventsSheetExpanded) {
+    LaunchedEffect(selection) {
         val sel = selection
         selectedProfileId =
             if (sel is MapSelection.ConnectionSelected) {
@@ -285,11 +285,6 @@ fun MapScreen(
             } else {
                 null
             }
-        // Direct map taps also acquire the Nearby root first. Dismissing the detail therefore
-        // reveals a stable default Nearby surface instead of dropping the user back to bare map.
-        if (hasSheetDetailSelection && !eventsSheetExpanded) {
-            onEventsSheetExpandedChanged(true)
-        }
     }
 
     val mapSelectionDetailContent: @Composable () -> Unit = {
@@ -617,6 +612,17 @@ fun MapScreen(
                                         .fillMaxSize()
                                         .zIndex(20f),
                             )
+
+                            if (!eventsSheetExpanded && hasSheetDetailSelection) {
+                                Box(
+                                    modifier =
+                                        Modifier
+                                            .fillMaxSize()
+                                            .zIndex(30f),
+                                ) {
+                                    mapSelectionDetailContent()
+                                }
+                            }
 
                             if (eventsSheetExpanded) {
                                 EventsDiscoveryFullScreen(
