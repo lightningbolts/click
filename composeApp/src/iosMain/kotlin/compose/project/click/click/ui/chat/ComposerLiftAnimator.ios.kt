@@ -35,20 +35,22 @@ import kotlin.time.TimeSource
 @OptIn(ExperimentalForeignApi::class)
 internal actual class ComposerLiftAnimator actual constructor() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    private val proxy = UIView(frame = CGRectMake(0.0, 0.0, 1.0, 1.0)).apply {
-        setUserInteractionEnabled(false)
-        alpha = 0.0
-        setHidden(true)
-    }
+    private val proxy =
+        UIView(frame = CGRectMake(0.0, 0.0, 1.0, 1.0)).apply {
+            setUserInteractionEnabled(false)
+            alpha = 0.0
+            setHidden(true)
+        }
     private var sampleJob: Job? = null
     private var disposed = false
     private var attached = false
 
     private fun ensureAttached() {
         if (attached || disposed) return
-        val root = UIApplication.sharedApplication.keyWindow
-            ?: UIApplication.sharedApplication.windows.firstOrNull() as? platform.UIKit.UIWindow
-            ?: return
+        val root =
+            UIApplication.sharedApplication.keyWindow
+                ?: UIApplication.sharedApplication.windows.firstOrNull() as? platform.UIKit.UIWindow
+                ?: return
         root.addSubview(proxy)
         attached = true
     }
@@ -96,20 +98,22 @@ internal actual class ComposerLiftAnimator actual constructor() {
             liftPxState.floatValue = (ty * scale).toFloat()
         } ?: run { liftPxState.floatValue = fromPx }
 
-        sampleJob = scope.launch {
-            val start = TimeSource.Monotonic.markNow()
-            val limitMs = durationMs + 32L
-            while (start.elapsedNow().inWholeMilliseconds < limitMs) {
-                val presentedPoints = proxy.layer.presentationLayer()?.affineTransform()?.useContents {
-                    ty
+        sampleJob =
+            scope.launch {
+                val start = TimeSource.Monotonic.markNow()
+                val limitMs = durationMs + 32L
+                while (start.elapsedNow().inWholeMilliseconds < limitMs) {
+                    val presentedPoints =
+                        proxy.layer.presentationLayer()?.affineTransform()?.useContents {
+                            ty
+                        }
+                    if (presentedPoints != null) {
+                        liftPxState.floatValue = (presentedPoints * scale).toFloat()
+                    }
+                    delay(PRESENTATION_SAMPLE_INTERVAL_MS)
                 }
-                if (presentedPoints != null) {
-                    liftPxState.floatValue = (presentedPoints * scale).toFloat()
-                }
-                delay(PRESENTATION_SAMPLE_INTERVAL_MS)
+                liftPxState.floatValue = targetPx
             }
-            liftPxState.floatValue = targetPx
-        }
     }
 
     actual fun snapTo(liftPxState: MutableFloatState, targetPx: Float) {
@@ -141,13 +145,14 @@ internal actual class ComposerLiftAnimator actual constructor() {
 }
 
 private fun uiKitKeyboardAnimationOptions(curve: Int): ULong {
-    val curveOption = when (curve) {
-        0 -> UIViewAnimationOptionCurveEaseInOut
-        1 -> UIViewAnimationOptionCurveEaseIn
-        2 -> UIViewAnimationOptionCurveEaseOut
-        3 -> UIViewAnimationOptionCurveLinear
-        else -> (curve.toULong() shl 16)
-    }
+    val curveOption =
+        when (curve) {
+            0 -> UIViewAnimationOptionCurveEaseInOut
+            1 -> UIViewAnimationOptionCurveEaseIn
+            2 -> UIViewAnimationOptionCurveEaseOut
+            3 -> UIViewAnimationOptionCurveLinear
+            else -> (curve.toULong() shl 16)
+        }
     return curveOption or UIViewAnimationOptionBeginFromCurrentState
 }
 
