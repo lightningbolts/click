@@ -6,7 +6,7 @@ package compose.project.click.click.ui.components // pragma: allowlist secret
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -21,8 +21,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -30,18 +33,21 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.ui.theme.LocalPlatformStyle // pragma: allowlist secret
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 val ClickConversationListRowMinHeight = 72.dp
 val ClickConversationAvatarSize = 48.dp
 private val ClickConversationPressedShape = RoundedCornerShape(18.dp)
+private const val QuickTapFeedbackHoldMs = 90L
 
 /**
  * Conversation-specific list row.
  *
  * Chat inbox rows intentionally have more vertical breathing room than generic settings/search
- * rows and always expose an immediate pressed wash on iOS. The press state remains a full-row wash,
- * but the interaction surface is clipped to the shared rounded touch geometry so no rectangular
- * flash appears at the row edges during press/hold.
+ * rows. iOS does not use a ripple, so a short-lived pressed wash is latched through very fast taps
+ * instead of depending on a press/release pair surviving long enough to be drawn in one frame.
  */
 @Composable
 fun ClickConversationListRow(
@@ -55,9 +61,32 @@ fun ClickConversationListRow(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
-    val pressed by interactionSource.collectIsPressedAsState()
+    var pressedVisible by remember { mutableStateOf(false) }
+
+    LaunchedEffect(interactionSource) {
+        var clearJob: Job? = null
+        interactionSource.interactions.collect { interaction ->
+            when (interaction) {
+                is PressInteraction.Press -> {
+                    clearJob?.cancel()
+                    pressedVisible = true
+                }
+                is PressInteraction.Release,
+                is PressInteraction.Cancel,
+                -> {
+                    clearJob?.cancel()
+                    clearJob =
+                        launch {
+                            delay(QuickTapFeedbackHoldMs)
+                            pressedVisible = false
+                        }
+                }
+            }
+        }
+    }
+
     val pressedWash =
-        if (pressed) {
+        if (pressedVisible) {
             MaterialTheme.colorScheme.onSurface.copy(alpha = 0.075f)
         } else {
             Color.Transparent
