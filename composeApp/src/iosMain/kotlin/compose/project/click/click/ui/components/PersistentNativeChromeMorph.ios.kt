@@ -50,13 +50,9 @@ private val transitionViewsByLayer = mutableMapOf<IosHostNavBarLayer, NativeTitl
 private val lastRootSnapshotByLayer = mutableMapOf<IosHostNavBarLayer, NativeTitleSnapshot>()
 
 /**
- * Visual transition policy for the single persistent iOS navigation chrome host.
- *
  * Controls remain persistent, but route text does not semantically morph. UIKit navigation keeps
- * outgoing and incoming route titles as separate visual objects during an interactive pop. We do
- * the same here: the source title follows the foreground page while the cached destination title
- * parallaxes in underneath. This avoids the previous midpoint title replacement where Clicks and
- * chat/hub text fought over one UILabel.
+ * outgoing and incoming route titles as separate visual objects during an interactive pop. The
+ * source title follows the foreground page while the cached destination title parallaxes in.
  */
 @OptIn(ExperimentalForeignApi::class)
 internal fun IosHostNavBarLayer.applyPersistentChromeMorphProgress(progress: Float) {
@@ -98,9 +94,6 @@ internal fun IosHostNavBarLayer.resetPersistentChromeMorphVisuals(animated: Bool
     }
 }
 
-/**
- * Semantic swaps that are not gesture-driven still settle on the same physical controls.
- */
 @OptIn(ExperimentalForeignApi::class)
 internal fun IosHostNavBarLayer.animatePersistentSemanticSettle(enabled: Boolean) {
     repairPersistentLeadingControlIfNeeded()
@@ -199,8 +192,6 @@ private fun IosHostNavBarLayer.applyRouteTitleTransition(progress: Float) {
     CATransaction.begin()
     CATransaction.setDisableActions(true)
     titleColumn.alpha = 0.0
-    // Foreground page tracks the finger. The revealed destination uses the same restrained
-    // underlay parallax as iOS navigation rather than moving at full foreground speed.
     views.source.setFrame(
         CGRectMake(
             source.x + hostWidth * p,
@@ -273,10 +264,6 @@ private fun IosHostNavBarLayer.clearRouteTitleTransition() {
     titleColumn.alpha = 1.0
 }
 
-/**
- * The root overflow and pushed Back control are the same UIButton. Clear root-menu semantics as
- * soon as a pushed route binds a Back handler.
- */
 @OptIn(ExperimentalForeignApi::class)
 private fun IosHostNavBarLayer.repairPersistentLeadingControlIfNeeded() {
     if (backTarget.handler == null) return
@@ -349,6 +336,15 @@ internal fun IosHostNavBarLayer.applyPersistentRootTitleGeometry(isRoot: Boolean
  */
 @OptIn(ExperimentalForeignApi::class)
 internal fun IosHostNavBarLayer.applyPersistentRootMenu(onClick: (() -> Unit)?) {
+    // The shell publishes menu commands after the screen tree has composed. Keep a small change
+    // hook so those commands repaint this already-mounted UIKit control immediately rather than
+    // waiting for an unrelated scroll/navigation recomposition.
+    NativeRootMenuRegistry.onChanged = {
+        if (backTarget.handler == null) {
+            applyPersistentRootMenu(onClick)
+        }
+    }
+
     val items = NativeRootMenuRegistry.snapshot()
     menuClicksByKey.keys
         .filter { it.startsWith("-2:") }
