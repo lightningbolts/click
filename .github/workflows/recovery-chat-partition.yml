@@ -1,0 +1,380 @@
+name: Recovery Chat Partition
+
+on:
+  push:
+    branches: [feat/main-recovery-20260914]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: recovery-chat-partition
+  cancel-in-progress: true
+
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, '[chat-partition-autofix]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout recovery branch
+        uses: actions/checkout@v4
+        with:
+          ref: feat/main-recovery-20260914
+          fetch-depth: 0
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Apply focused recovery patch
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              if old not in text:
+                  raise SystemExit(f"missing replacement target in {path}: {old[:100]!r}")
+              p.write_text(text.replace(old, new, 1))
+
+          def replace_between(path, start, end, replacement):
+              p = Path(path)
+              text = p.read_text()
+              i = text.find(start)
+              if i < 0:
+                  raise SystemExit(f"missing start marker in {path}: {start!r}")
+              j = text.find(end, i)
+              if j < 0:
+                  raise SystemExit(f"missing end marker in {path}: {end!r}")
+              p.write_text(text[:i] + replacement + text[j:])
+
+          # 1) Event-chat 403 is terminal until RSVP state actually changes.
+          event = "composeApp/src/commonMain/kotlin/compose/project/click/click/ui/screens/EventBeaconDetail.kt"
+          replace_once(
+              event,
+              """            eventChatEligible &&\n                eventChatState != EventChatOpenState.Resolving &&\n                eventChatState != EventChatOpenState.Expired &&""",
+              """            eventChatEligible &&\n                eventChatState != EventChatOpenState.Resolving &&\n                eventChatState != EventChatOpenState.RequiresRsvp &&\n                eventChatState != EventChatOpenState.Expired &&""",
+          )
+
+          # 2) Keep the real route accessibility labels in app-owned UIKit state. Kotlin/Native
+          # cannot reliably read the Objective-C accessibility getter here, so capture labels at
+          # the point where Click paints them instead of reconstructing from SF Symbols.
+          layer = "composeApp/src/iosMain/kotlin/compose/project/click/click/ui/components/IosHostNavBarLayer.ios.kt"
+          replace_once(
+              layer,
+              "    internal val paintedSymbols = mutableMapOf<UIButton, String>()\n",
+              "    internal val paintedSymbols = mutableMapOf<UIButton, String>()\n    internal val paintedAccessibility = mutableMapOf<UIButton, String>()\n",
+          )
+
+          views = "composeApp/src/iosMain/kotlin/compose/project/click/click/ui/components/IosHostNavBarLayerViews.ios.kt"
+          replace_once(
+              views,
+              """    if (paintedSymbols[button] == symbol) {\n        button.setAccessibilityLabel(accessibility)\n        return\n    }""",
+              """    if (paintedSymbols[button] == symbol) {\n        button.setAccessibilityLabel(accessibility)\n        paintedAccessibility[button] = accessibility\n        return\n    }""",
+          )
+          replace_once(
+              views,
+              """        button.setAccessibilityLabel(accessibility)\n        CATransaction.commit()\n        paintedSymbols[button] = symbol\n        return""",
+              """        button.setAccessibilityLabel(accessibility)\n        paintedAccessibility[button] = accessibility\n        CATransaction.commit()\n        paintedSymbols[button] = symbol\n        return""",
+          )
+          replace_once(
+              views,
+              """    button.setAccessibilityLabel(accessibility)\n    CATransaction.commit()\n    paintedSymbols[button] = symbol\n}""",
+              """    button.setAccessibilityLabel(accessibility)\n    paintedAccessibility[button] = accessibility\n    CATransaction.commit()\n    paintedSymbols[button] = symbol\n}""",
+          )
+
+          stable = "composeApp/src/iosMain/kotlin/compose/project/click/click/ui/components/StableOverlayMediaChrome.ios.kt"
+          replace_once(
+              stable,
+              "backAccessibility = stableChromeAccessibility(paintedSymbols[backButton], leading = true),",
+              "backAccessibility = paintedAccessibility[backButton] ?: stableChromeAccessibility(paintedSymbols[backButton], leading = true),",
+          )
+          replace_once(
+              stable,
+              "searchAccessibility = \"Search\",",
+              "searchAccessibility = paintedAccessibility[searchButton] ?: \"Search\",",
+          )
+          replace_once(
+              stable,
+              "actionAccessibility = actionSymbols.map { stableChromeAccessibility(it, leading = false) },",
+              """actionAccessibility =\n            actionButtons.mapIndexed { index, button ->\n                paintedAccessibility[button]\n                    ?: stableChromeAccessibility(actionSymbols[index], leading = false)\n            },""",
+          )
+          replace_once(
+              stable,
+              """    backButton.setAccessibilityLabel(snapshot.backAccessibility)\n\n    snapshot.searchSymbol?.let""",
+              """    backButton.setAccessibilityLabel(snapshot.backAccessibility)\n    paintedAccessibility[backButton] = snapshot.backAccessibility\n\n    snapshot.searchSymbol?.let""",
+          )
+          replace_once(
+              stable,
+              """    searchButton.setAccessibilityLabel(snapshot.searchAccessibility)\n\n    actionButtons.forEachIndexed""",
+              """    searchButton.setAccessibilityLabel(snapshot.searchAccessibility)\n    paintedAccessibility[searchButton] = snapshot.searchAccessibility\n\n    actionButtons.forEachIndexed""",
+          )
+          replace_once(
+              stable,
+              """        button.setAccessibilityLabel(snapshot.actionAccessibility[index])\n    }\n}""",
+              """        button.setAccessibilityLabel(snapshot.actionAccessibility[index])\n        paintedAccessibility[button] = snapshot.actionAccessibility[index]\n    }\n}""",
+          )
+          replace_once(
+              stable,
+              """    if (paintedSymbols[backButton] == symbol) {\n        backButton.setAccessibilityLabel(accessibility)\n        return\n    }""",
+              """    if (paintedSymbols[backButton] == symbol) {\n        backButton.setAccessibilityLabel(accessibility)\n        paintedAccessibility[backButton] = accessibility\n        return\n    }""",
+          )
+          replace_once(
+              stable,
+              """    if (paintedSymbols[button] == symbol) {\n        button.setAccessibilityLabel(accessibility)\n        return\n    }""",
+              """    if (paintedSymbols[button] == symbol) {\n        button.setAccessibilityLabel(accessibility)\n        paintedAccessibility[button] = accessibility\n        return\n    }""",
+          )
+
+          # 3) Hub/event chats adopt the same split IME architecture as user/group chats.
+          hub = "composeApp/src/commonMain/kotlin/compose/project/click/click/ui/screens/HubChatScreen.kt"
+          replace_once(
+              hub,
+              "import compose.project.click.click.ui.chat.chatDismissKeyboardAfterScrollConnection // pragma: allowlist secret\n",
+              """import compose.project.click.click.ui.chat.chatComposerKeyboardMotion // pragma: allowlist secret\nimport compose.project.click.click.ui.chat.chatDismissKeyboardAfterScrollConnection // pragma: allowlist secret\n""",
+          )
+          replace_once(
+              hub,
+              "import compose.project.click.click.ui.chat.chatTimelineShouldFollowInbound // pragma: allowlist secret\n",
+              """import compose.project.click.click.ui.chat.chatTimelineKeyboardViewport // pragma: allowlist secret\nimport compose.project.click.click.ui.chat.chatTimelineShouldFollowInbound // pragma: allowlist secret\nimport compose.project.click.click.ui.chat.chatTimelineShouldFollowKeyboard // pragma: allowlist secret\n""",
+          )
+          replace_once(
+              hub,
+              "import compose.project.click.click.ui.chat.rememberChatNativeKeyboardInsets // pragma: allowlist secret\n",
+              """import compose.project.click.click.ui.chat.rememberChatNativeKeyboardInsets // pragma: allowlist secret\nimport compose.project.click.click.ui.chat.rememberChatTimelineKeyboardFollow // pragma: allowlist secret\n""",
+          )
+          replace_once(
+              hub,
+              "import compose.project.click.click.ui.components.chatThreadKeyboardDock // pragma: allowlist secret\n",
+              "",
+          )
+          replace_once(
+              hub,
+              """    val initialTimelineScrollDone = remember(args.realtimeChannel) { mutableStateOf(false) }\n    var focusedSearchMessageId by remember(args.realtimeChannel) { mutableStateOf<String?>(null) }""",
+              """    val initialTimelineScrollDone = remember(args.realtimeChannel) { mutableStateOf(false) }\n    val hubTimelineFollowsKeyboardState =\n        rememberChatTimelineKeyboardFollow(\n            nativeKeyboardLiftPxState = nativeKeyboardInsets.liftPxState,\n            shouldFollowOnKeyboardOpen = {\n                chatTimelineShouldFollowKeyboard(\n                    firstVisibleItemIndex = hubListState.firstVisibleItemIndex,\n                    initialTimelineScrollDone = initialTimelineScrollDone.value,\n                    userScrollInProgress = hubListState.isScrollInProgress,\n                )\n            },\n        )\n    var focusedSearchMessageId by remember(args.realtimeChannel) { mutableStateOf<String?>(null) }""",
+          )
+          replace_once(
+              hub,
+              """                        Column(\n                            modifier =\n                                Modifier\n                                    .fillMaxSize()\n                                    .chatThreadKeyboardDock(\n                                        nativeKeyboardLiftPxState = nativeKeyboardInsets.liftPxState,\n                                        clearNativeTabBar = true,\n                                    ),\n                        ) {\n                            Box(\n                                modifier =\n                                    Modifier\n                                        .weight(1f)\n                                        .fillMaxWidth(),\n                            ) {""",
+              """                        Column(modifier = Modifier.fillMaxSize()) {\n                            Box(\n                                modifier =\n                                    Modifier\n                                        .weight(1f)\n                                        .fillMaxWidth()\n                                        .chatTimelineKeyboardViewport(\n                                            nativeKeyboardLiftPxState = nativeKeyboardInsets.liftPxState,\n                                            followKeyboard = { hubTimelineFollowsKeyboardState.value },\n                                        ),\n                            ) {""",
+          )
+          replace_once(
+              hub,
+              """                            Column(\n                                modifier = Modifier.fillMaxWidth(),\n                            ) {\n                                HubChatInputBar(""",
+              """                            Column(\n                                modifier =\n                                    Modifier\n                                        .fillMaxWidth()\n                                        .chatComposerKeyboardMotion(\n                                            nativeKeyboardLiftPxState = nativeKeyboardInsets.liftPxState,\n                                            clearNativeTabBar = true,\n                                        ),\n                            ) {\n                                HubChatInputBar(""",
+          )
+
+          # 4) Keep high-frequency typing/presence/reaction signals out of the ChatView root.
+          chat = "composeApp/src/commonMain/kotlin/compose/project/click/click/ui/screens/ChatView.kt"
+          replace_once(chat, "    val isPeerTyping by viewModel.isPeerTyping.collectAsState()\n", "")
+          replace_once(chat, "    val isPeerOnline by viewModel.isPeerOnline.collectAsState()\n", "")
+          replace_once(chat, "    val onlineUsers by AppDataManager.onlineUsers.collectAsState()\n", "")
+          replace_once(
+              chat,
+              "import compose.project.click.click.ui.chat.chatPeerStatusSubtitle // pragma: allowlist secret\n",
+              "",
+          )
+          replace_between(
+              chat,
+              "    val bindOnline =\n",
+              "    val chatNativeClearance =\n",
+              """    val chatNativeHasStackedSubtitle =\n        !bindIsGroup && (successChat != null || hintedChatRow != null)\n""",
+          )
+          replace_once(
+              chat,
+              """    ChatViewNativeNavBinding(\n        nativeNavChrome = nativeNavChrome,""",
+              """    ChatViewNativeNavBinding(\n        viewModel = viewModel,\n        nativeNavChrome = nativeNavChrome,""",
+          )
+          replace_once(chat, "        bindStatusSubtitle = bindStatusSubtitle,\n", "")
+          replace_once(chat, "        bindOnline = bindOnline,\n", "")
+          replace_once(chat, "                    val reactionsMap by viewModel.messageReactions.collectAsState()\n", "")
+          replace_once(
+              chat,
+              """                            ChatViewSuccessHeader(\n                                nativeNavChrome = nativeNavChrome,""",
+              """                            ChatViewSuccessHeader(\n                                viewModel = viewModel,\n                                nativeNavChrome = nativeNavChrome,""",
+          )
+          replace_once(chat, "                                isPeerTyping = isPeerTyping,\n", "")
+          replace_once(chat, "                                isPeerOnline = isPeerOnline,\n", "")
+          replace_once(chat, "                                onlineUsers = onlineUsers,\n", "")
+          replace_once(chat, "                                reactionsMap = reactionsMap,\n", "")
+          replace_once(chat, "                                isPeerTyping = isPeerTyping,\n", "")
+
+          header = "composeApp/src/commonMain/kotlin/compose/project/click/click/ui/screens/ChatViewHeader.kt"
+          replace_once(
+              header,
+              "import compose.project.click.click.data.models.ChatWithDetails // pragma: allowlist secret\n",
+              """import compose.project.click.click.data.AppDataManager // pragma: allowlist secret\nimport compose.project.click.click.data.models.ChatWithDetails // pragma: allowlist secret\n""",
+          )
+          replace_once(
+              header,
+              "import compose.project.click.click.viewmodel.ChatMessagesState // pragma: allowlist secret\n",
+              """import compose.project.click.click.viewmodel.ChatMessagesState // pragma: allowlist secret\nimport compose.project.click.click.viewmodel.ChatViewModel // pragma: allowlist secret\n""",
+          )
+          replace_once(
+              header,
+              """internal fun ChatViewSuccessHeader(\n    nativeNavChrome: Boolean,""",
+              """internal fun ChatViewSuccessHeader(\n    viewModel: ChatViewModel,\n    nativeNavChrome: Boolean,""",
+          )
+          replace_once(header, "    isPeerTyping: Boolean,\n", "")
+          replace_once(header, "    isPeerOnline: Boolean,\n", "")
+          replace_once(header, "    onlineUsers: Set<String>,\n", "")
+          replace_once(
+              header,
+              """    var showConnectionSheet by showConnectionSheetState\n    var showRenameGroupDialog by showRenameGroupDialogState""",
+              """    val isPeerTyping by viewModel.isPeerTyping.collectAsState()\n    val isPeerOnline by viewModel.isPeerOnline.collectAsState()\n    val onlineUsers by AppDataManager.onlineUsers.collectAsState()\n    var showConnectionSheet by showConnectionSheetState\n    var showRenameGroupDialog by showRenameGroupDialogState""",
+          )
+          replace_once(
+              header,
+              """internal fun ChatViewNativeNavBinding(\n    nativeNavChrome: Boolean,""",
+              """internal fun ChatViewNativeNavBinding(\n    viewModel: ChatViewModel,\n    nativeNavChrome: Boolean,""",
+          )
+          replace_once(header, "    bindStatusSubtitle: String?,\n", "")
+          replace_once(header, "    bindOnline: Boolean?,\n", "")
+          replace_once(
+              header,
+              """    var showConnectionSheet by showConnectionSheetState\n    var showRenameGroupDialog by showRenameGroupDialogState\n    var renameGroupDraft by renameGroupDraftState\n    if (nativeNavChrome) {""",
+              """    var showConnectionSheet by showConnectionSheetState\n    var showRenameGroupDialog by showRenameGroupDialogState\n    var renameGroupDraft by renameGroupDraftState\n    if (nativeNavChrome) {\n        val isPeerTyping by viewModel.isPeerTyping.collectAsState()\n        val isPeerOnline by viewModel.isPeerOnline.collectAsState()\n        val onlineUsers by AppDataManager.onlineUsers.collectAsState()\n        val peerId =\n            successChat\n                ?.chatDetails\n                ?.otherUser\n                ?.id ?: hintedChatRow?.otherUser?.id\n        val bindOnline =\n            if (bindIsGroup) {\n                null\n            } else {\n                peerId?.let { it in onlineUsers || isPeerOnline }\n            }\n        val bindStatusSubtitle =\n            if (bindIsGroup) {\n                null\n            } else if (bindOnline != null || successChat != null || hintedChatRow != null) {\n                chatPeerStatusSubtitle(isTyping = isPeerTyping, isOnline = bindOnline == true)\n            } else {\n                null\n            }""",
+          )
+
+          pane = "composeApp/src/commonMain/kotlin/compose/project/click/click/ui/screens/ChatViewTimelinePane.kt"
+          replace_once(pane, "    reactionsMap: Map<String, List<compose.project.click.click.data.models.MessageReaction>>,\n", "")
+          replace_once(pane, "    isPeerTyping: Boolean,\n", "")
+          replace_once(
+              pane,
+              "                                reactionsMap = reactionsMap,\n",
+              """                                reactionsMap = emptyMap(),\n                                reactionsFlow = viewModel.messageReactions,\n""",
+          )
+          replace_between(
+              pane,
+              "                // Typing indicator — label + bouncing dots (Realtime Broadcast)\n",
+              "\n                // Edit mode indicator strip",
+              "                ChatTypingIndicator(viewModel = viewModel, typingPeerLabel = typingPeerLabel)\n",
+          )
+          p = Path(pane)
+          text = p.read_text()
+          text += """
+
+@Composable
+private fun ChatTypingIndicator(
+    viewModel: ChatViewModel,
+    typingPeerLabel: String,
+) {
+    val isPeerTyping by viewModel.isPeerTyping.collectAsState()
+    AnimatedVisibility(
+        visible = isPeerTyping,
+        enter =
+            fadeIn(ChatChromeMotion.ShortFade) +
+                slideInVertically(
+                    animationSpec = ChatChromeMotion.ShortSlide,
+                    initialOffsetY = { it / 4 },
+                ),
+        exit =
+            fadeOut(animationSpec = tween(160, easing = FastOutSlowInEasing)) +
+                slideOutVertically(
+                    animationSpec = ChatChromeMotion.ShortSlide,
+                    targetOffsetY = { it / 4 },
+                ),
+    ) {
+        Row(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(start = 16.dp, end = 80.dp, bottom = 4.dp),
+            horizontalArrangement = Arrangement.Start,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier =
+                    Modifier
+                        .border(
+                            width = 1.dp,
+                            color = PrimaryBlue.copy(alpha = 0.15f),
+                            shape =
+                                RoundedCornerShape(
+                                    topStart = chatBubbleScaledDp(6f),
+                                    topEnd = chatBubbleScaledDp(21f),
+                                    bottomStart = chatBubbleScaledDp(21f),
+                                    bottomEnd = chatBubbleScaledDp(21f),
+                                ),
+                        ).clip(
+                            RoundedCornerShape(
+                                topStart = chatBubbleScaledDp(6f),
+                                topEnd = chatBubbleScaledDp(21f),
+                                bottomStart = chatBubbleScaledDp(21f),
+                                bottomEnd = chatBubbleScaledDp(21f),
+                            ),
+                        ).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f))
+                        .padding(
+                            horizontal = chatBubbleScaledDp(18f),
+                            vertical = chatBubbleScaledDp(12f),
+                        ),
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(chatBubbleScaledDp(9f)),
+                ) {
+                    Text(
+                        text = typingPeerLabel,
+                        style = chatBubbleReplySnippetStyle(),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontStyle = FontStyle.Italic,
+                    )
+                    ChatTypingDots()
+                }
+            }
+        }
+    }
+}
+"""
+          p.write_text(text)
+
+          timeline = "composeApp/src/commonMain/kotlin/compose/project/click/click/ui/chat/ChatMessageTimeline.kt"
+          replace_once(
+              timeline,
+              "import androidx.compose.runtime.MutableState\n",
+              """import androidx.compose.runtime.MutableState\nimport androidx.compose.runtime.collectAsState\nimport androidx.compose.runtime.getValue\n""",
+          )
+          replace_once(
+              timeline,
+              "import kotlinx.coroutines.delay\n",
+              """import kotlinx.coroutines.delay\nimport kotlinx.coroutines.flow.StateFlow\n""",
+          )
+          replace_once(
+              timeline,
+              "    reactionsMap: Map<String, List<MessageReaction>>,\n",
+              """    reactionsMap: Map<String, List<MessageReaction>>,\n    reactionsFlow: StateFlow<Map<String, List<MessageReaction>>>? = null,\n""",
+          )
+          replace_once(
+              timeline,
+              """    val onOpenBeaconState = rememberUpdatedState(onOpenBeacon)\n\n    Box(""",
+              """    val onOpenBeaconState = rememberUpdatedState(onOpenBeacon)\n    val observedReactionsMap =\n        if (reactionsFlow != null) {\n            val liveReactions by reactionsFlow.collectAsState()\n            liveReactions\n        } else {\n            reactionsMap\n        }\n\n    Box(""",
+          )
+          replace_once(
+              timeline,
+              "val msgReactions = reactionsMap[messageWithUser.message.id] ?: emptyList()",
+              "val msgReactions = observedReactionsMap[messageWithUser.message.id] ?: emptyList()",
+          )
+
+          PY
+
+      - name: Apply repository formatting
+        run: ./gradlew spotlessApply --no-daemon --no-configuration-cache --stacktrace
+
+      - name: Commit recovery patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "No patch changes required."
+            exit 0
+          fi
+          git config user.name "click-recovery-ci[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add composeApp/src
+          git commit -m "Partition chat rendering and unify hub keyboard [chat-partition-autofix]"
+          git push origin HEAD:feat/main-recovery-20260914
