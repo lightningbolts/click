@@ -42,7 +42,7 @@ import kotlinx.coroutines.launch
 val ClickConversationListRowMinHeight = 72.dp
 val ClickConversationAvatarSize = 48.dp
 private val ClickConversationPressedShape = RoundedCornerShape(18.dp)
-private const val QuickTapFeedbackHoldMs = 90L
+private const val QUICK_TAP_FEEDBACK_HOLD_MS = 90L
 
 /**
  * Conversation-specific list row.
@@ -81,7 +81,7 @@ fun ClickConversationListRow(
                     clearJob?.cancel()
                     clearJob =
                         launch {
-                            delay(QuickTapFeedbackHoldMs)
+                            delay(QUICK_TAP_FEEDBACK_HOLD_MS)
                             pressedVisible = false
                         }
                 }
