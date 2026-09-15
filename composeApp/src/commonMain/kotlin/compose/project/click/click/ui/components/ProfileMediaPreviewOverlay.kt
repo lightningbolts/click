@@ -45,54 +45,61 @@ internal fun ProfileMediaPreviewOverlay(
     resolvedMediaBitmaps: Map<String, ImageBitmap>,
     resolvedAudioLocalPaths: Map<String, String>,
 ) {
-    val previewMedia = mediaPreviewModel
-    if (previewMedia != null) {
-        val media = previewMedia
-        val bitmapForPreview = resolvedMediaBitmaps[media.id]
-        val isIOS = LocalPlatformStyle.current.isIOS
-        val isImage = media.mediaType == ProfileSheetMediaType.Image
-        val saveImage: () -> Unit = {
-            scope.launch {
-                val url = (resolvedMediaUrls[media.id] ?: media.mediaUrl)?.trim().orEmpty()
-                val decrypted =
-                    if (url.isNotBlank() &&
-                        media.isEncrypted &&
-                        !connectionChatId.isNullOrBlank() &&
-                        !effectiveViewerUserId.isNullOrBlank()
-                    ) {
-                        connectionRepository.downloadAndDecryptChatMedia(
-                            chatId = connectionChatId!!,
-                            viewerUserId = effectiveViewerUserId!!,
-                            mediaUrl = url,
-                        )
-                    } else {
-                        null
-                    }
-                persistLightboxImageToGallery(url, decrypted, media.mimeType)
-                onDismissPreview()
-            }
+    val previewMedia = mediaPreviewModel ?: return
+    val media = previewMedia
+    val bitmapForPreview = resolvedMediaBitmaps[media.id]
+    val isIOS = LocalPlatformStyle.current.isIOS
+    val isImage = media.mediaType == ProfileSheetMediaType.Image
+    val saveImage: () -> Unit = {
+        scope.launch {
+            val url = (resolvedMediaUrls[media.id] ?: media.mediaUrl)?.trim().orEmpty()
+            val decrypted =
+                if (url.isNotBlank() &&
+                    media.isEncrypted &&
+                    !connectionChatId.isNullOrBlank() &&
+                    !effectiveViewerUserId.isNullOrBlank()
+                ) {
+                    connectionRepository.downloadAndDecryptChatMedia(
+                        chatId = connectionChatId!!,
+                        viewerUserId = effectiveViewerUserId!!,
+                        mediaUrl = url,
+                    )
+                } else {
+                    null
+                }
+            persistLightboxImageToGallery(url, decrypted, media.mimeType)
+            onDismissPreview()
         }
-        val shareImage: () -> Unit = {
-            scope.launch {
-                val url = (resolvedMediaUrls[media.id] ?: media.mediaUrl)?.trim().orEmpty()
-                val decrypted =
-                    if (url.isNotBlank() &&
-                        media.isEncrypted &&
-                        !connectionChatId.isNullOrBlank() &&
-                        !effectiveViewerUserId.isNullOrBlank()
-                    ) {
-                        connectionRepository.downloadAndDecryptChatMedia(
-                            chatId = connectionChatId!!,
-                            viewerUserId = effectiveViewerUserId!!,
-                            mediaUrl = url,
-                        )
-                    } else {
-                        null
-                    }
-                shareLightboxImage(url, decrypted, media.mimeType)
-                onDismissPreview()
-            }
+    }
+    val shareImage: () -> Unit = {
+        scope.launch {
+            val url = (resolvedMediaUrls[media.id] ?: media.mediaUrl)?.trim().orEmpty()
+            val decrypted =
+                if (url.isNotBlank() &&
+                    media.isEncrypted &&
+                    !connectionChatId.isNullOrBlank() &&
+                    !effectiveViewerUserId.isNullOrBlank()
+                ) {
+                    connectionRepository.downloadAndDecryptChatMedia(
+                        chatId = connectionChatId!!,
+                        viewerUserId = effectiveViewerUserId!!,
+                        mediaUrl = url,
+                    )
+                } else {
+                    null
+                }
+            shareLightboxImage(url, decrypted, media.mimeType)
+            onDismissPreview()
         }
+    }
+
+    // Profile media is launched from a native profile sheet on iOS. Keep the preview in the same
+    // full-screen portal used by event chat so it covers the sheet instead of being clipped to the
+    // sheet's rounded presentation container. The model is intentionally retained through the
+    // overlay's exit animation, so the portal stays mounted until that exit has actually finished.
+    PlatformOverlayAbovePresentedSheets(
+        liftAbovePresentedSheets = isIOS,
+    ) {
         GlassFullscreenMediaOverlay(
             visible = mediaPreviewVisible,
             onDismissRequest = { onDismissPreview() },
