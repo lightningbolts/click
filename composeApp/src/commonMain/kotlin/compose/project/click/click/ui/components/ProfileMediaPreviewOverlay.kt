@@ -6,41 +6,24 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.ErrorOutline
-import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.zIndex
 import coil3.compose.AsyncImage
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.models.ChatWithDetails // pragma: allowlist secret
@@ -125,21 +108,31 @@ internal fun ProfileMediaPreviewOverlay(
             shareLightboxImage(url, decrypted, media.mimeType)
         }
     }
+    val mediaActions =
+        if (isImage) {
+            mediaLightboxShareActions(onSave = saveImage, onShare = shareImage)
+        } else {
+            emptyList()
+        }
 
     PlatformOverlayAbovePresentedSheets(
         liftAbovePresentedSheets = isIOS && mediaPreviewVisible,
     ) {
+        if (isIOS) {
+            ProfileMediaPortalNativeChrome(
+                sourceChat = sourceChat,
+                onlineUsers = onlineUsers,
+                fallbackChatId = connectionChatId,
+                onClose = onDismissPreview,
+                trailingActions = mediaActions,
+            )
+        }
         GlassFullscreenMediaOverlay(
             visible = mediaPreviewVisible,
             onDismissRequest = { onDismissPreview() },
             modifier = Modifier.fillMaxSize(),
             scrimAlpha = 1f,
-            nativeTrailingActions =
-                if (!isIOS && isImage) {
-                    mediaLightboxShareActions(onSave = saveImage, onShare = shareImage)
-                } else {
-                    emptyList()
-                },
+            nativeTrailingActions = if (isIOS) emptyList() else mediaActions,
             useNativeChrome = !isIOS,
         ) {
             Box(
@@ -208,16 +201,7 @@ internal fun ProfileMediaPreviewOverlay(
                         }
                     }
                 }
-                if (isIOS) {
-                    ProfileMediaPortalTopChrome(
-                        sourceChat = sourceChat,
-                        onlineUsers = onlineUsers,
-                        onClose = onDismissPreview,
-                        onSave = saveImage,
-                        onShare = shareImage,
-                        showActions = isImage,
-                    )
-                } else {
+                if (!isIOS) {
                     MediaLightboxTopChrome(
                         onClose = { onDismissPreview() },
                         showClose = true,
@@ -237,25 +221,19 @@ internal fun ProfileMediaPreviewOverlay(
 }
 
 /**
- * Profile media is portaled above a native profile sheet, so it cannot safely attach the app-global
- * UIKit nav layer. Mirror the chat media geometry inside the portal instead: close on the same
- * leading plane, chat identity in the middle, and Save/Share in one trailing capsule.
+ * Profile media lives in a detached full-screen Compose host above the native profile sheet. Bind
+ * that host into the same persistent iOS navigation layer as chat media instead of drawing a second
+ * Compose approximation of Liquid Glass. The shared layer returns to the underlying route when the
+ * portal is disposed.
  */
 @Composable
-private fun ProfileMediaPortalTopChrome(
+private fun ProfileMediaPortalNativeChrome(
     sourceChat: ChatWithDetails?,
     onlineUsers: Set<String>,
+    fallbackChatId: String?,
     onClose: () -> Unit,
-    onSave: () -> Unit,
-    onShare: () -> Unit,
-    showActions: Boolean,
+    trailingActions: List<NativeChromeAction>,
 ) {
-    val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val safeTop = WindowInsets.safeDrawing.asPaddingValues().calculateTopPadding()
-    val resolvedTop = maxOf(statusTop, safeTop).takeIf { it > 0.dp } ?: 59.dp
-    val buttonSize = NativeHeaderMetrics.ChromeButtonSizePt.dp
-    val topGutter =
-        ((NativeHeaderMetrics.CompactBarHeightPt - NativeHeaderMetrics.ChromeButtonSizePt) / 2.0).dp
     val isGroup = sourceChat?.groupClique != null
     val title =
         if (isGroup) {
@@ -271,99 +249,32 @@ private fun ProfileMediaPortalTopChrome(
                 ?.trim()
                 ?.takeIf { it.isNotEmpty() } ?: "Connection"
         }
-    val subtitle =
-        if (isGroup) {
-            val count = sourceChat?.groupMemberUsers?.size ?: 0
-            "$count ${if (count == 1) "person" else "people"}"
-        } else {
-            val peerId = sourceChat?.otherUser?.id
-            if (peerId != null && peerId in onlineUsers) "Online" else "Offline"
+    val peerId = if (isGroup) null else sourceChat?.otherUser?.id
+    val presenceOnline = peerId?.let { it in onlineUsers }
+    val identity =
+        sourceChat?.let { chat ->
+            NativeChromeIdentity(
+                displayName = title,
+                email = if (isGroup) null else chat.otherUser.email,
+                avatarUrl = if (isGroup) chat.groupClique?.avatarUrl else chat.otherUser.image,
+                userId =
+                    if (isGroup) {
+                        chat.groupClique?.groupId ?: fallbackChatId.orEmpty()
+                    } else {
+                        chat.otherUser.id
+                    },
+                onClick = {},
+            )
         }
 
-    Row(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .zIndex(3f)
-                .padding(
-                    start = NativeHeaderMetrics.LeadingInsetPt.dp,
-                    end = NativeHeaderMetrics.TrailingInsetPt.dp,
-                    top = resolvedTop + topGutter,
-                ),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        ClickCircularGlassIconButton(
-            icon = Icons.Filled.Close,
-            contentDescription = "Close",
-            onClick = onClose,
-            size = buttonSize,
-            tint = Color.White,
-        )
-        Spacer(Modifier.width(10.dp))
-        if (sourceChat != null) {
-            if (isGroup) {
-                GroupAvatar(
-                    members = sourceChat.groupMemberUsers,
-                    avatarSize = 40.dp,
-                    avatarUrl = sourceChat.groupClique?.avatarUrl,
-                )
-            } else {
-                ConnectionListUserAvatarFace(
-                    displayName = sourceChat.otherUser.name,
-                    email = sourceChat.otherUser.email,
-                    avatarUrl = sourceChat.otherUser.image,
-                    userId = sourceChat.otherUser.id,
-                    modifier = Modifier.size(40.dp),
-                    useCompactTypography = true,
-                )
-            }
-            Spacer(Modifier.width(9.dp))
-        }
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = title,
-                color = Color.White,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                text = subtitle,
-                color = Color.White.copy(alpha = 0.62f),
-                style = MaterialTheme.typography.bodySmall,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        if (showActions) {
-            Spacer(Modifier.width(8.dp))
-            Row(
-                modifier =
-                    Modifier
-                        .height(buttonSize)
-                        .clip(RoundedCornerShape(percent = 50))
-                        .background(Color.White.copy(alpha = 0.14f))
-                        .padding(horizontal = 2.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                ClickCircularIconButton(
-                    icon = Icons.Outlined.Download,
-                    contentDescription = "Save",
-                    onClick = onSave,
-                    size = buttonSize - 4.dp,
-                    iconSize = 22.dp,
-                    tint = Color.White,
-                )
-                ClickCircularIconButton(
-                    icon = Icons.Outlined.Share,
-                    contentDescription = "Share",
-                    onClick = onShare,
-                    size = buttonSize - 4.dp,
-                    iconSize = 22.dp,
-                    tint = Color.White,
-                )
-            }
-        }
-    }
+    BindPlatformNativeNavigationBar(
+        title = title,
+        subtitle = null,
+        presenceOnline = presenceOnline,
+        identity = identity,
+        onNavigateBack = onClose,
+        nativeTrailingActions = trailingActions,
+        collapseFraction = 1f,
+        leadingClose = true,
+    )
 }
