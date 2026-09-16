@@ -21,17 +21,15 @@ import platform.UIKit.presentationController
  * iOS portal for full-screen app destinations that must appear above an existing native page-sheet
  * stack.
  *
- * The overlay is attached to the active UIWindow when possible rather than directly to a
- * UIPresentationController container. Presentation containers do not reliably propagate the
- * window's safe-area geometry to an independently hosted Compose controller; that was placing the
- * event-hub native header inside the status bar.
+ * The overlay view is mounted in the active UIWindow so it can cover a presented profile sheet, but
+ * the Compose controller remains a child of the full-screen presentation root. Controller
+ * containment is important here: without it the portal host can report a zero top safe-area, which
+ * places the shared native navigation controls inside the status bar.
  *
- * On teardown, the shared native chrome is reattached to the caller host before the portal
- * controller is released. [IosHostNavBarLayer] retains its attached controller, so leaving it on
- * the temporary portal host can keep that Compose controller (and its event-hub chrome owner)
- * alive after the overlay view disappears, leaking the malformed hub chrome into the rest of the
- * app. Reattaching breaks that retention path; normal owner disposal then reconciles the caller's
- * chrome state.
+ * On teardown the shared native chrome is reattached to the caller before the portal controller is
+ * removed. [IosHostNavBarLayer] retains its attached controller; breaking that retain first lets the
+ * portal composition dispose and unregister its native-chrome owner instead of leaking hub/media
+ * chrome into later screens after an interactive back gesture.
  */
 @Composable
 actual fun PlatformOverlayAbovePresentedSheets(
@@ -70,6 +68,8 @@ actual fun PlatformOverlayAbovePresentedSheets(
                 ?: topmost.presentationController?.containerView
 
         if (container != null) {
+            root.addChildViewController(overlayController)
+
             val overlayView = overlayController.view
             overlayView.translatesAutoresizingMaskIntoConstraints = false
             overlayView.backgroundColor = UIColor.clearColor
@@ -85,13 +85,19 @@ actual fun PlatformOverlayAbovePresentedSheets(
             )
             container.layoutIfNeeded()
             container.bringSubviewToFront(overlayView)
+            overlayController.didMoveToParentViewController(root)
         }
 
         onDispose {
-            overlayController.view.removeFromSuperview()
-            // Break the shared chrome -> temporary portal-controller retain path immediately. The
-            // portal composition can then dispose its native-chrome owner and reconcile the caller.
+            // Break shared chrome -> portal-controller retention before UIKit containment teardown.
             IosNavChrome.shared.attach(host)
+            if (overlayController.parentViewController != null) {
+                overlayController.willMoveToParentViewController(null)
+            }
+            overlayController.view.removeFromSuperview()
+            if (overlayController.parentViewController != null) {
+                overlayController.removeFromParentViewController()
+            }
         }
     }
 }
