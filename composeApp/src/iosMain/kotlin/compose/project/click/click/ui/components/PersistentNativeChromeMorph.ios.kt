@@ -83,13 +83,27 @@ private val semanticAnimationGenerationByLayer = mutableMapOf<IosHostNavBarLayer
  * while the control is at the compressed midpoint of the morph, not after the control has already
  * expanded into the destination. Reversing/cancelling the gesture restores the source semantic at
  * the same midpoint, keeping icon and material motion one continuous interaction.
+ *
+ * Trailing route actions do not have a one-to-one semantic mapping (for example group pencil + menu
+ * becomes the inbox search button). Fade the source cluster into the compressed midpoint and keep it
+ * invisible until destination ownership is reconciled; the destination cluster then expands/fades in.
+ * This prevents the visible two-buttons-to-one-button hard swap at the end of Back.
  */
 @OptIn(ExperimentalForeignApi::class)
 internal fun IosHostNavBarLayer.applyPersistentChromeMorphProgress(progress: Float) {
     val p = progress.coerceIn(0f, 1f)
+    applyRouteTitleTransition(p)
+
     val distanceFromMid = kotlin.math.abs(p - 0.5f) / 0.5f
     val scale = 0.88 + (0.12 * distanceFromMid)
     val alpha = 0.94 + (0.06 * distanceFromMid)
+    val rootPopActive = transitionViewsByLayer[this]?.active == true
+    val trailingAlpha =
+        if (rootPopActive) {
+            (1f - (p / 0.5f)).coerceIn(0f, 1f).toDouble()
+        } else {
+            alpha
+        }
     val transform = scaleTransform(scale)
 
     CATransaction.begin()
@@ -97,16 +111,16 @@ internal fun IosHostNavBarLayer.applyPersistentChromeMorphProgress(progress: Flo
     backButton.transform = transform
     trailingCluster.transform = transform
     backButton.alpha = alpha
-    trailingCluster.alpha = alpha
+    trailingCluster.alpha = trailingAlpha
     CATransaction.commit()
 
-    applyRouteTitleTransition(p)
     applyLeadingRouteSemanticTransition(p)
 }
 
 @OptIn(ExperimentalForeignApi::class)
 internal fun IosHostNavBarLayer.resetPersistentChromeMorphVisuals(animated: Boolean) {
     val destinationWasApplied = leadingDestinationAppliedByLayer[this] == true
+    val preserveTrailingForDestination = destinationWasApplied && trailingCluster.alpha < 0.99
     if (destinationWasApplied) {
         // A completed pop has already crossed the semantic midpoint. Do not repaint the source
         // chevron/xmark during source disposal and then immediately paint the destination again.
@@ -124,7 +138,9 @@ internal fun IosHostNavBarLayer.resetPersistentChromeMorphVisuals(animated: Bool
         trailingCluster.transform = identity
         avatarButton.transform = identity
         backButton.alpha = 1.0
-        trailingCluster.alpha = 1.0
+        if (!preserveTrailingForDestination) {
+            trailingCluster.alpha = 1.0
+        }
         avatarButton.alpha = 1.0
         titleColumn.alpha = 1.0
     }
@@ -153,10 +169,21 @@ internal fun IosHostNavBarLayer.animatePersistentSemanticSettle(enabled: Boolean
     lastSettledLeadingVisualByLayer[this] = destinationVisual
 
     if (suppressNextSemanticSettleByLayer.remove(this)) {
-        // The committed interactive/programmatic pop already completed its compress -> semantic
-        // midpoint -> expand sequence. Rendering the destination must not start a second pulse.
+        // Leading chrome already completed its midpoint semantic handoff. The trailing source cluster,
+        // however, deliberately exited before ownership changed; reveal the newly-bound destination
+        // cluster now so edit/menu -> search never appears as a hard replacement.
         clearRouteTitleTransition()
         backButton.userInteractionEnabled = true
+        if (trailingCluster.alpha < 0.99) {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            trailingCluster.transform = scaleTransform(0.88)
+            CATransaction.commit()
+            UIView.animateWithDuration(0.14) {
+                trailingCluster.transform = identityTransform()
+                trailingCluster.alpha = 1.0
+            }
+        }
         return
     }
     if (!enabled) return
