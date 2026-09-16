@@ -69,25 +69,39 @@ fun GlassFullscreenMediaOverlay(
     val transitionState = remember { MutableTransitionState(false) }
     var userDismissPending by remember { mutableStateOf(false) }
 
-    LaunchedEffect(visible, userDismissPending) {
-        if (userDismissPending) return@LaunchedEffect
-        transitionState.targetState = visible
+    // A user-driven close must remain tombstoned until the parent has committed visible=false.
+    // Clearing the tombstone at animation-idle while visible is still true can briefly retarget the
+    // transition back to true, resurrecting the previous media frame/native xmark over the chat.
+    LaunchedEffect(visible) {
+        if (!visible) {
+            userDismissPending = false
+            transitionState.targetState = false
+        } else if (!userDismissPending) {
+            transitionState.targetState = true
+        }
     }
 
     fun requestDismiss() {
-        if (!transitionState.targetState) return
+        if (userDismissPending) return
+        if (!transitionState.currentState && !transitionState.targetState) return
         userDismissPending = true
         transitionState.targetState = false
     }
 
-    LaunchedEffect(transitionState.isIdle, transitionState.currentState, transitionState.targetState) {
+    LaunchedEffect(
+        transitionState.isIdle,
+        transitionState.currentState,
+        transitionState.targetState,
+        userDismissPending,
+    ) {
         if (
             transitionState.isIdle &&
             !transitionState.currentState &&
             !transitionState.targetState &&
             userDismissPending
         ) {
-            userDismissPending = false
+            // Keep userDismissPending=true until visible=false is observed above. This callback is
+            // the parent's request to commit that state, not permission to reopen the overlay.
             onDismissRequest()
         }
     }
