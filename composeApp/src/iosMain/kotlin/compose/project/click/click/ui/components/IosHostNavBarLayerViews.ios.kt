@@ -177,6 +177,22 @@ internal fun IosHostNavBarLayer.syncTrailingButtons(
 ) {
     CATransaction.begin()
     CATransaction.setDisableActions(true)
+
+    // A completed root-pop may already have changed one of the source action buttons into Search.
+    // Keep that exact UIButton instead of swapping in searchButton during destination reconciliation;
+    // otherwise the right Liquid Glass control visibly rematerializes after the gesture completes.
+    val currentButtons = trailingStack.arrangedSubviews.mapNotNull { it as? UIButton }
+    val committedSearchCarrier =
+        if (showSearch && trailingActions.isEmpty()) {
+            currentButtons.firstOrNull { button ->
+                button !== searchButton &&
+                    paintedSymbols[button] == "magnifyingglass" &&
+                    paintedAccessibility[button] == "Search"
+            }
+        } else {
+            null
+        }
+
     val desired = mutableListOf<UIButton>()
     trailingActions.forEachIndexed { index, action ->
         val button = actionButtons[index]
@@ -185,32 +201,46 @@ internal fun IosHostNavBarLayer.syncTrailingButtons(
         paintChromeButton(button, action.sfSymbol, action.contentDescription, clustered = true)
         desired.add(button)
     }
-    actionButtons.drop(trailingActions.size).forEach { button ->
-        button.hidden = true
-        button.menu = null
-        button.showsMenuAsPrimaryAction = false
-    }
+
     if (showSearch) {
-        searchButton.hidden = false
-        bindNativeMenu(searchButton, null, actionIndex = -1)
-        paintChromeButton(searchButton, "magnifyingglass", "Search", clustered = true)
-        desired.add(searchButton)
+        if (committedSearchCarrier != null) {
+            committedSearchCarrier.hidden = false
+            searchButton.hidden = true
+            searchButton.menu = null
+            searchButton.showsMenuAsPrimaryAction = false
+            desired.add(committedSearchCarrier)
+        } else {
+            searchButton.hidden = false
+            bindNativeMenu(searchButton, null, actionIndex = -1)
+            paintChromeButton(searchButton, "magnifyingglass", "Search", clustered = true)
+            desired.add(searchButton)
+        }
     } else {
         searchButton.hidden = true
         searchButton.menu = null
         searchButton.showsMenuAsPrimaryAction = false
     }
-    trailingStack.arrangedSubviews.map { it as UIView }.forEach { view ->
-        if (desired.none { it === view }) {
+
+    actionButtons.forEach { button ->
+        if (desired.none { it === button }) {
+            button.hidden = true
+            button.menu = null
+            button.showsMenuAsPrimaryAction = false
+        }
+    }
+
+    val currentArranged = trailingStack.arrangedSubviews.map { it as UIView }
+    val ordered =
+        currentArranged.size == desired.size &&
+            currentArranged.indices.all { index -> currentArranged[index] === desired[index] }
+    if (!ordered) {
+        currentArranged.forEach { view ->
             trailingStack.removeArrangedSubview(view)
             view.removeFromSuperview()
         }
+        desired.forEach { trailingStack.addArrangedSubview(it) }
     }
-    desired.forEach { button ->
-        if (trailingStack.arrangedSubviews.none { it === button }) {
-            trailingStack.addArrangedSubview(button)
-        }
-    }
+
     val hasTrailing = desired.isNotEmpty()
     if (trailingCluster.hidden != !hasTrailing) {
         trailingCluster.hidden = !hasTrailing

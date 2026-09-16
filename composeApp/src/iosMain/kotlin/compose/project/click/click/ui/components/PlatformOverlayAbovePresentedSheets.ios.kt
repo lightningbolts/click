@@ -6,6 +6,7 @@ package compose.project.click.click.ui.components // pragma: allowlist secret
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.uikit.LocalUIViewController
@@ -37,6 +38,11 @@ actual fun PlatformOverlayAbovePresentedSheets(
     val latestContent = rememberUpdatedState(content)
     val latestScheme = rememberUpdatedState(MaterialTheme.colorScheme)
     val latestTypography = rememberUpdatedState(MaterialTheme.typography)
+    // ComposeUIViewController creates its composition when its view is first materialized. Keep the
+    // portal body dormant until that view is actually constrained into the UIWindow; otherwise its
+    // native chrome binder reads a detached controller with a zero top safe area and lays controls
+    // under the status bar.
+    val portalMounted = remember(host) { mutableStateOf(false) }
     val overlayController =
         remember(host) {
             ComposeUIViewController {
@@ -45,7 +51,9 @@ actual fun PlatformOverlayAbovePresentedSheets(
                     typography = latestTypography.value,
                 ) {
                     PlatformStyleProvider {
-                        latestContent.value.invoke()
+                        if (portalMounted.value) {
+                            latestContent.value.invoke()
+                        }
                     }
                 }
             }
@@ -54,10 +62,6 @@ actual fun PlatformOverlayAbovePresentedSheets(
     DisposableEffect(host, overlayController) {
         val root = host.presentationRootController()
         val topmost = root.topmostPresentedController()
-        // Prefer the real UIWindow. A presentation-controller container can extend through the
-        // status-bar region and report a zero top safe area to the detached Compose host, which is
-        // what placed profile-media native chrome under the status bar. A direct window child stays
-        // above the presented sheet while inheriting the window's actual safe-area geometry.
         val container: UIView? =
             topmost.view.window
                 ?: host.view.window
@@ -78,9 +82,13 @@ actual fun PlatformOverlayAbovePresentedSheets(
                 ),
             )
             container.bringSubviewToFront(overlayView)
+            container.layoutIfNeeded()
+            overlayView.layoutIfNeeded()
+            portalMounted.value = true
         }
 
         onDispose {
+            portalMounted.value = false
             overlayController.view.removeFromSuperview()
         }
     }
