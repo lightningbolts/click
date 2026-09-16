@@ -273,5 +273,4 @@ private fun percentEncodeHttpUrlStringPreservingExistingPctEncoding(s: String): 
     }
 }
 
-private fun Char.isHexDigit(): Boolean =
-    this in '0'..'9' || this in 'A'..'F' || this in 'a'..'f'
+private fun Char.isHexDigit(): Boolean = this in '0'..'9' || this in 'A'..'F' || this in 'a'..'f'
