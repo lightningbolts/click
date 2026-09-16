@@ -39,7 +39,7 @@ import compose.project.click.click.ui.chat.ChatAmbientMeshBackground // pragma: 
 import compose.project.click.click.ui.components.InteractiveSwipeBackContainer // pragma: allowlist secret
 import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeftPeek // pragma: allowlist secret
 import compose.project.click.click.ui.components.PlatformNativeNavigationBarSwipeReveal // pragma: allowlist secret
-import compose.project.click.click.ui.components.PlatformOverlayAbovePresentedSheets // pragma: allowlist secret
+import compose.project.click.click.ui.components.PlatformPresentedSheetSuspension // pragma: allowlist secret
 import compose.project.click.click.ui.screens.* // pragma: allowlist secret
 import compose.project.click.click.ui.theme.* // pragma: allowlist secret
 import compose.project.click.click.utils.LocationResult // pragma: allowlist secret
@@ -65,15 +65,9 @@ internal fun AppHubChatHost(
     var hubChatRightToLeftPeek by remember {
         mutableStateOf<InteractiveSwipeBackRightToLeftPeek?>(null)
     }
-    var keepEventHubPortalMounted by remember { mutableStateOf(false) }
+    var keepEventHubSheetsSuspended by remember { mutableStateOf(false) }
     val hubSwipeDragPx = remember { mutableFloatStateOf(0f) }
-    val eventPortalOwnsHeader =
-        isIOS &&
-            (hubChatArgs?.isEventHub == true ||
-                (hubChatArgs == null && lastHubChatArgs?.isEventHub == true))
-    if (!eventPortalOwnsHeader) {
-        PlatformNativeNavigationBarSwipeReveal(hubSwipeDragPx)
-    }
+    PlatformNativeNavigationBarSwipeReveal(hubSwipeDragPx)
 
     LaunchedEffect(hubChatArgs) {
         if (hubChatArgs != null) {
@@ -87,111 +81,114 @@ internal fun AppHubChatHost(
     LaunchedEffect(isIOS, hubChatArgs, hubChatTransitionMode, reduceMotion) {
         val activeArgs = hubChatArgs
         when {
-            !isIOS -> keepEventHubPortalMounted = false
-            activeArgs?.isEventHub == true -> keepEventHubPortalMounted = true
-            activeArgs != null -> keepEventHubPortalMounted = false
-            !keepEventHubPortalMounted -> Unit
+            !isIOS -> keepEventHubSheetsSuspended = false
+            activeArgs?.isEventHub == true -> keepEventHubSheetsSuspended = true
+            activeArgs != null -> keepEventHubSheetsSuspended = false
+            !keepEventHubSheetsSuspended -> Unit
             hubChatTransitionMode == NavigationTransitionMode.GestureBack -> {
                 // GestureBack already moved the foreground route completely off-screen.
-                keepEventHubPortalMounted = false
+                keepEventHubSheetsSuspended = false
             }
             else -> {
-                // A tap-back exit animates inside this portal. Do not detach the native overlay
-                // container until that exit has finished or the outgoing hub will jump underneath
-                // the still-present Event/Nearby sheets for its final frames.
+                // Tap-back exits inside the root host. Keep the Event/Nearby controllers suspended
+                // until the outgoing route has finished so the restored sheet stack cannot cover its
+                // final frames or steal native chrome ownership early.
                 delay(if (reduceMotion) 110L else 320L)
                 if (hubChatArgsState.value == null) {
-                    keepEventHubPortalMounted = false
+                    keepEventHubSheetsSuspended = false
                 }
             }
         }
     }
 
-    // Event detail/Nearby are native UISheetPresentationController layers. A root-Compose overlay
-    // cannot safely hide those containers: UIKit keeps the modal presenter dimmed and can retain a
-    // hit-testing layer even when the sheet view itself is hidden. On iOS, event hub chat is instead
-    // portaled above the live presentation container so the exact sheet stack stays mounted below.
-    PlatformOverlayAbovePresentedSheets(
-        liftAbovePresentedSheets =
-            keepEventHubPortalMounted || (isIOS && hubChatArgs?.isEventHub == true),
+    // Event detail/Nearby are native UISheetPresentationController layers. Portaling Event Hub into
+    // a second ComposeUIViewController gave it a different UIKit/safe-area/chrome host from ordinary
+    // chat, which is why its header and tab bar could never have exact 1:1/group parity. Temporarily
+    // suspend those sheet controllers instead, keep their Compose selection state intact, and render
+    // Event Hub here in the root host with the same persistent IosNavChrome + UITabBar as chat.
+    val shouldSuspendEventSheets =
+        isIOS &&
+            (hubChatArgs?.isEventHub == true || keepEventHubSheetsSuspended)
+    val eventSheetStackReady = PlatformPresentedSheetSuspension(shouldSuspendEventSheets)
+
+    val hubSlideSpec = tween<IntOffset>(300, easing = FastOutSlowInEasing)
+    val hubFadeSpec = tween<Float>(220, easing = LinearOutSlowInEasing)
+    AnimatedVisibility(
+        visible =
+            hubChatArgs != null &&
+                (hubChatArgs?.isEventHub != true || eventSheetStackReady),
+        modifier = Modifier.fillMaxSize(),
+        enter =
+            if (reduceMotion) {
+                fadeIn(animationSpec = tween(120))
+            } else {
+                slideInHorizontally(animationSpec = hubSlideSpec, initialOffsetX = { it }) +
+                    fadeIn(animationSpec = hubFadeSpec)
+            },
+        exit =
+            if (hubChatTransitionMode == NavigationTransitionMode.GestureBack) {
+                ExitTransition.None
+            } else if (reduceMotion) {
+                fadeOut(animationSpec = tween(90))
+            } else {
+                slideOutHorizontally(animationSpec = hubSlideSpec, targetOffsetX = { it }) +
+                    fadeOut(animationSpec = hubFadeSpec)
+            },
+        label = "hub_chat_overlay",
     ) {
-        val hubSlideSpec = tween<IntOffset>(300, easing = FastOutSlowInEasing)
-        val hubFadeSpec = tween<Float>(220, easing = LinearOutSlowInEasing)
-        AnimatedVisibility(
-            visible = hubChatArgs != null,
-            modifier = Modifier.fillMaxSize(),
-            enter =
-                if (reduceMotion) {
-                    fadeIn(animationSpec = tween(120))
-                } else {
-                    slideInHorizontally(animationSpec = hubSlideSpec, initialOffsetX = { it }) +
-                        fadeIn(animationSpec = hubFadeSpec)
-                },
-            exit =
-                if (hubChatTransitionMode == NavigationTransitionMode.GestureBack) {
-                    ExitTransition.None
-                } else if (reduceMotion) {
-                    fadeOut(animationSpec = tween(90))
-                } else {
-                    slideOutHorizontally(animationSpec = hubSlideSpec, targetOffsetX = { it }) +
-                        fadeOut(animationSpec = hubFadeSpec)
-                },
-            label = "hub_chat_overlay",
-        ) {
-            val activeHubArgs = lastHubChatArgs
-            val hubUserId =
-                when (val state = authViewModel.authState) {
-                    is AuthState.Success -> state.userId
-                    else -> ""
-                }
-            if (activeHubArgs != null && hubUserId.isNotEmpty()) {
-                val hubOverlayViewModelOwner =
-                    remember(activeHubArgs.realtimeChannel, hubUserId) {
-                        object : ViewModelStoreOwner {
-                            override val viewModelStore = ViewModelStore()
-                        }
-                    }
-                DisposableEffect(hubOverlayViewModelOwner) {
-                    onDispose {
-                        hubOverlayViewModelOwner.viewModelStore.clear()
-                    }
-                }
-                val hubKeyboardController = LocalSoftwareKeyboardController.current
-                val hubFocusManager = LocalFocusManager.current
-                InteractiveSwipeBackContainer(
-                    enabled = true,
-                    opaquePreviousBackground = false,
-                    externalDragOffsetPx = hubSwipeDragPx,
-                    onBehindLayersVisibleChanged = {},
-                    onBack = {
-                        hubFocusManager.clearFocus()
-                        if (!isIOS) {
-                            hubKeyboardController?.hide()
-                        }
-                        closeHubChat(NavigationTransitionMode.GestureBack)
-                    },
-                    rightToLeftPeek = hubChatRightToLeftPeek,
-                    previousContent = {},
-                    currentContent = {
-                        CompositionLocalProvider(LocalViewModelStoreOwner provides hubOverlayViewModelOwner) {
-                            HubChatScreen(
-                                args = activeHubArgs,
-                                currentUserId = hubUserId,
-                                targetMessageId = pendingHubTargetMessageId,
-                                onNavigateBack = {
-                                    closeHubChat(NavigationTransitionMode.Tap)
-                                },
-                                resolveHubGatekeeperLocation = { resolveHubGatekeeperLocationForChat() },
-                                integrateTimestampPeekWithSwipeBackContainer = true,
-                                onRegisterSwipeBackRightToLeftPeek = {
-                                    hubChatRightToLeftPeek = it
-                                },
-                                parentInteractiveBackSwipePx = hubSwipeDragPx,
-                            )
-                        }
-                    },
-                )
+        val activeHubArgs = lastHubChatArgs
+        val hubUserId =
+            when (val state = authViewModel.authState) {
+                is AuthState.Success -> state.userId
+                else -> ""
             }
+        if (activeHubArgs != null && hubUserId.isNotEmpty()) {
+            val hubOverlayViewModelOwner =
+                remember(activeHubArgs.realtimeChannel, hubUserId) {
+                    object : ViewModelStoreOwner {
+                        override val viewModelStore = ViewModelStore()
+                    }
+                }
+            DisposableEffect(hubOverlayViewModelOwner) {
+                onDispose {
+                    hubOverlayViewModelOwner.viewModelStore.clear()
+                }
+            }
+            val hubKeyboardController = LocalSoftwareKeyboardController.current
+            val hubFocusManager = LocalFocusManager.current
+            InteractiveSwipeBackContainer(
+                enabled = true,
+                opaquePreviousBackground = false,
+                externalDragOffsetPx = hubSwipeDragPx,
+                onBehindLayersVisibleChanged = {},
+                onBack = {
+                    hubFocusManager.clearFocus()
+                    if (!isIOS) {
+                        hubKeyboardController?.hide()
+                    }
+                    closeHubChat(NavigationTransitionMode.GestureBack)
+                },
+                rightToLeftPeek = hubChatRightToLeftPeek,
+                previousContent = {},
+                currentContent = {
+                    CompositionLocalProvider(LocalViewModelStoreOwner provides hubOverlayViewModelOwner) {
+                        HubChatScreen(
+                            args = activeHubArgs,
+                            currentUserId = hubUserId,
+                            targetMessageId = pendingHubTargetMessageId,
+                            onNavigateBack = {
+                                closeHubChat(NavigationTransitionMode.Tap)
+                            },
+                            resolveHubGatekeeperLocation = { resolveHubGatekeeperLocationForChat() },
+                            integrateTimestampPeekWithSwipeBackContainer = true,
+                            onRegisterSwipeBackRightToLeftPeek = {
+                                hubChatRightToLeftPeek = it
+                            },
+                            parentInteractiveBackSwipePx = hubSwipeDragPx,
+                        )
+                    }
+                },
+            )
         }
     }
 
