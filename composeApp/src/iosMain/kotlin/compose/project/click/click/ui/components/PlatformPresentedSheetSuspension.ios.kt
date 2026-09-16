@@ -118,14 +118,12 @@ actual fun PlatformPresentedSheetSuspension(active: Boolean): Boolean {
     val host = LocalUIViewController.current
     val root = remember(host) { host.presentationRootController() }
     val coordinator = remember(root) { PresentedSheetSuspensionCoordinator(root) }
-    var ready by remember(coordinator) { mutableStateOf(!active) }
+    var ready by remember(coordinator, active) { mutableStateOf(!active) }
 
     LaunchedEffect(active, coordinator) {
         if (active) {
-            ready = false
             coordinator.suspend { ready = true }
         } else {
-            ready = true
             coordinator.restore()
         }
     }
