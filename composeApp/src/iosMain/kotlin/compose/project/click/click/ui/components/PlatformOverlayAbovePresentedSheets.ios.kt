@@ -15,7 +15,11 @@ import platform.UIKit.NSLayoutConstraint
 import platform.UIKit.UIColor
 import platform.UIKit.UIView
 import platform.UIKit.UIViewController
+import platform.UIKit.addChildViewController
+import platform.UIKit.didMoveToParentViewController
 import platform.UIKit.presentationController
+import platform.UIKit.removeFromParentViewController
+import platform.UIKit.willMoveToParentViewController
 
 /**
  * iOS portal for full-screen app destinations that must appear above an existing native page-sheet
