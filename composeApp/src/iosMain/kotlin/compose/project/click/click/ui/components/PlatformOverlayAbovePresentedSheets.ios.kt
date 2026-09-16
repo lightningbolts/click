@@ -60,11 +60,6 @@ actual fun PlatformOverlayAbovePresentedSheets(
                 ?: host.view.window
 
         if (container != null) {
-            // Keep the portal controller in a real UIKit containment hierarchy. Without this,
-            // Compose's detached controller reports an incorrect/zero top safe area even though its
-            // view is pinned to the presentation container, which places native Liquid Glass chrome
-            // directly under the status bar when profile media is opened from a sheet.
-            topmost.addChildViewController(overlayController)
             val overlayView = overlayController.view
             overlayView.translatesAutoresizingMaskIntoConstraints = false
             overlayView.backgroundColor = UIColor.clearColor
@@ -78,18 +73,11 @@ actual fun PlatformOverlayAbovePresentedSheets(
                     overlayView.bottomAnchor.constraintEqualToAnchor(container.bottomAnchor),
                 ),
             )
-            overlayController.didMoveToParentViewController(topmost)
             container.bringSubviewToFront(overlayView)
         }
 
         onDispose {
-            if (overlayController.parentViewController != null) {
-                overlayController.willMoveToParentViewController(null)
-            }
             overlayController.view.removeFromSuperview()
-            if (overlayController.parentViewController != null) {
-                overlayController.removeFromParentViewController()
-            }
         }
     }
 }
