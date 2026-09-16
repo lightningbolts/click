@@ -3,7 +3,10 @@
 
 package compose.project.click.click.ui.components // pragma: allowlist secret
 
-import androidx.compose.foundation.background
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
@@ -23,33 +26,36 @@ import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.ui.theme.LocalPlatformStyle // pragma: allowlist secret
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.math.sqrt
 
 val ClickConversationListRowMinHeight = 72.dp
 val ClickConversationAvatarSize = 48.dp
 private val ClickConversationPressedShape = RoundedCornerShape(18.dp)
 private const val QUICK_TAP_FEEDBACK_HOLD_MS = 90L
+private const val PRESS_REVEAL_MILLIS = 170
+private const val PRESS_FADE_MILLIS = 220
+private const val PRESS_WASH_ALPHA = 0.075f
 
 /**
  * Conversation-specific list row.
  *
- * Chat inbox rows intentionally have more vertical breathing room than generic settings/search
- * rows. iOS does not use a ripple, so a short-lived pressed wash is latched through very fast taps
- * and navigation yields one frame so that feedback is actually presented before the row leaves.
+ * Android keeps the Material bounded ripple. iOS uses a lightweight radial wash that starts at the
+ * actual finger position and expands to the row bounds, instead of flashing the whole touch surface
+ * at once. Navigation still yields one frame so very quick taps visibly acknowledge their source.
  */
 @Composable
 fun ClickConversationListRow(
@@ -65,36 +71,60 @@ fun ClickConversationListRow(
     val interactionSource = remember { MutableInteractionSource() }
     val scope = rememberCoroutineScope()
     val useRipple = LocalPlatformStyle.current.useRipple
-    var pressedVisible by remember { mutableStateOf(false) }
+    val reveal = remember { Animatable(0f) }
+    val washAlpha = remember { Animatable(0f) }
+    val pressOrigin = remember { androidx.compose.runtime.mutableStateOf(Offset.Zero) }
+    val washColor = MaterialTheme.colorScheme.onSurface
 
-    LaunchedEffect(interactionSource) {
+    LaunchedEffect(interactionSource, useRipple) {
         var clearJob: Job? = null
+        var revealJob: Job? = null
         interactionSource.interactions.collect { interaction ->
             when (interaction) {
                 is PressInteraction.Press -> {
-                    clearJob?.cancel()
-                    pressedVisible = true
+                    if (!useRipple) {
+                        clearJob?.cancel()
+                        revealJob?.cancel()
+                        pressOrigin.value = interaction.pressPosition
+                        washAlpha.snapTo(1f)
+                        reveal.snapTo(0f)
+                        revealJob =
+                            launch {
+                                reveal.animateTo(
+                                    targetValue = 1f,
+                                    animationSpec =
+                                        tween(
+                                            durationMillis = PRESS_REVEAL_MILLIS,
+                                            easing = FastOutSlowInEasing,
+                                        ),
+                                )
+                            }
+                    }
                 }
                 is PressInteraction.Release,
                 is PressInteraction.Cancel,
                 -> {
-                    clearJob?.cancel()
-                    clearJob =
-                        launch {
-                            delay(QUICK_TAP_FEEDBACK_HOLD_MS)
-                            pressedVisible = false
-                        }
+                    if (!useRipple) {
+                        clearJob?.cancel()
+                        clearJob =
+                            launch {
+                                delay(QUICK_TAP_FEEDBACK_HOLD_MS)
+                                washAlpha.animateTo(
+                                    targetValue = 0f,
+                                    animationSpec =
+                                        tween(
+                                            durationMillis = PRESS_FADE_MILLIS,
+                                            easing = LinearOutSlowInEasing,
+                                        ),
+                                )
+                                reveal.snapTo(0f)
+                            }
+                    }
                 }
             }
         }
     }
 
-    val pressedWash =
-        if (pressedVisible) {
-            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.075f)
-        } else {
-            Color.Transparent
-        }
     val dispatchClick: () -> Unit = {
         if (useRipple) {
             onClick()
@@ -113,8 +143,25 @@ fun ClickConversationListRow(
                     .fillMaxWidth()
                     .heightIn(min = ClickConversationListRowMinHeight)
                     .clip(ClickConversationPressedShape)
-                    .background(pressedWash)
-                    .combinedClickable(
+                    .drawWithContent {
+                        drawContent()
+                        if (!useRipple && washAlpha.value > 0.001f && reveal.value > 0.001f) {
+                            val raw = pressOrigin.value
+                            val center =
+                                Offset(
+                                    x = raw.x.coerceIn(0f, size.width),
+                                    y = raw.y.coerceIn(0f, size.height),
+                                )
+                            val dx = maxOf(center.x, size.width - center.x)
+                            val dy = maxOf(center.y, size.height - center.y)
+                            val maxRadius = sqrt(dx * dx + dy * dy)
+                            drawCircle(
+                                color = washColor.copy(alpha = PRESS_WASH_ALPHA * washAlpha.value),
+                                radius = maxRadius * reveal.value,
+                                center = center,
+                            )
+                        }
+                    }.combinedClickable(
                         interactionSource = interactionSource,
                         indication = if (useRipple) ripple(bounded = true) else null,
                         onClick = dispatchClick,
