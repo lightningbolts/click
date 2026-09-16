@@ -19,9 +19,9 @@ import platform.UIKit.presentationController
 
 /**
  * iOS portal for full-screen app destinations that must appear above an existing native page-sheet
- * stack. The overlay view is inserted at the front of the top presentation controller's full-screen
- * container instead of dismissing/hiding the sheets. This matters because a hidden presented sheet
- * still leaves UIKit's modal tint/hit-testing state active on its presenter.
+ * stack. The overlay view is inserted above the live presentation stack instead of dismissing/hiding
+ * the sheets. This matters because a hidden presented sheet still leaves UIKit's modal tint/hit-testing
+ * state active on its presenter.
  */
 @Composable
 actual fun PlatformOverlayAbovePresentedSheets(
@@ -54,10 +54,14 @@ actual fun PlatformOverlayAbovePresentedSheets(
     DisposableEffect(host, overlayController) {
         val root = host.presentationRootController()
         val topmost = root.topmostPresentedController()
+        // Prefer the real UIWindow. A presentation-controller container can extend through the
+        // status-bar region and report a zero top safe area to the detached Compose host, which is
+        // what placed profile-media native chrome under the status bar. A direct window child stays
+        // above the presented sheet while inheriting the window's actual safe-area geometry.
         val container: UIView? =
-            topmost.presentationController?.containerView
-                ?: topmost.view.window
+            topmost.view.window
                 ?: host.view.window
+                ?: topmost.presentationController?.containerView
 
         if (container != null) {
             val overlayView = overlayController.view
