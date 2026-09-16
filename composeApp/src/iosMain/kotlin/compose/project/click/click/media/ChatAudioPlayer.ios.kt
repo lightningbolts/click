@@ -7,6 +7,9 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import platform.AVFAudio.AVAudioSession
+import platform.AVFAudio.AVAudioSessionCategoryPlayback
+import platform.AVFAudio.setActive
 import platform.AVFoundation.AVPlayer
 import platform.AVFoundation.AVPlayerItem
 import platform.AVFoundation.AVPlayerItemDidPlayToEndTimeNotification
@@ -18,9 +21,6 @@ import platform.AVFoundation.play
 import platform.AVFoundation.removeTimeObserver
 import platform.AVFoundation.replaceCurrentItemWithPlayerItem
 import platform.AVFoundation.seekToTime
-import platform.AVFAudio.AVAudioSession
-import platform.AVFAudio.AVAudioSessionCategoryPlayback
-import platform.AVFAudio.setActive
 import platform.CoreMedia.CMTimeGetSeconds
 import platform.CoreMedia.CMTimeMakeWithSeconds
 import platform.Foundation.NSFileManager
@@ -55,9 +55,10 @@ private class IosChatAudioPlayer(
     private val avPlayer: AVPlayer
     private val isPlayingState = mutableStateOf(false)
     private val positionMsState = mutableFloatStateOf(0f)
-    private val durationMsState = mutableFloatStateOf(
-        durationHintMs.coerceAtLeast(0L).toFloat().takeIf { it > 0f } ?: 0f
-    )
+    private val durationMsState =
+        mutableFloatStateOf(
+            durationHintMs.coerceAtLeast(0L).toFloat().takeIf { it > 0f } ?: 0f,
+        )
     private var timeObserver: Any? = null
     private var playbackEndObserver: Any? = null
     private var wantsPlayback = false
@@ -153,13 +154,14 @@ private class IosChatAudioPlayer(
                 }
             dispatch_async(dispatch_get_main_queue()) {
                 audioSessionPreparing = false
-                if (disposed) return@dispatch_async
-                audioSessionReady = ready
-                if (ready) {
-                    startPlaybackIfRequested()
-                } else {
-                    wantsPlayback = false
-                    isPlayingState.value = false
+                if (!disposed) {
+                    audioSessionReady = ready
+                    if (ready) {
+                        startPlaybackIfRequested()
+                    } else {
+                        wantsPlayback = false
+                        isPlayingState.value = false
+                    }
                 }
             }
         }
@@ -174,11 +176,12 @@ private class IosChatAudioPlayer(
 
     override fun seekTo(positionMs: Long) {
         val dur = durationMsState.floatValue.toDouble()
-        val targetSec = if (dur > 0) {
-            positionMs.coerceIn(0L, dur.toLong()) / 1000.0
-        } else {
-            positionMs.coerceAtLeast(0L) / 1000.0
-        }
+        val targetSec =
+            if (dur > 0) {
+                positionMs.coerceIn(0L, dur.toLong()) / 1000.0
+            } else {
+                positionMs.coerceAtLeast(0L) / 1000.0
+            }
         val time = CMTimeMakeWithSeconds(targetSec, 1000)
         avPlayer.seekToTime(time) { _ ->
             refreshProgressFromPlayer()
@@ -200,10 +203,11 @@ private class IosChatAudioPlayer(
 private fun resolvePlaybackNsUrl(localPath: String?, remote: String): NSURL? {
     val trimmedLocal = localPath?.trim()?.takeIf { it.isNotEmpty() }
     if (!trimmedLocal.isNullOrEmpty()) {
-        val fsPath = when {
-            trimmedLocal.startsWith("file://") -> trimmedLocal.removePrefix("file://")
-            else -> trimmedLocal
-        }
+        val fsPath =
+            when {
+                trimmedLocal.startsWith("file://") -> trimmedLocal.removePrefix("file://")
+                else -> trimmedLocal
+            }
         if (NSFileManager.defaultManager.fileExistsAtPath(fsPath)) {
             return NSURL.fileURLWithPath(fsPath)
         }
@@ -237,17 +241,18 @@ private fun percentEncodeHttpUrlStringPreservingExistingPctEncoding(s: String): 
                 i += 3
                 continue
             }
-            val mustEncode = c.isISOControl() ||
-                c == ' ' ||
-                c.code > 127 ||
-                c == '|' ||
-                c == '"' ||
-                c == '<' ||
-                c == '>' ||
-                c == '{' ||
-                c == '}' ||
-                c == '\\' ||
-                c == '`'
+            val mustEncode =
+                c.isISOControl() ||
+                    c == ' ' ||
+                    c.code > 127 ||
+                    c == '|' ||
+                    c == '"' ||
+                    c == '<' ||
+                    c == '>' ||
+                    c == '{' ||
+                    c == '}' ||
+                    c == '\\' ||
+                    c == '`'
             if (!mustEncode) {
                 append(c)
                 i++
