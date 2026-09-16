@@ -20,6 +20,7 @@ import platform.UIKit.UIColor
 import platform.UIKit.UIFont
 import platform.UIKit.UILabel
 import platform.UIKit.UILayoutConstraintAxisVertical
+import platform.UIKit.UIMenu
 import platform.UIKit.UIView
 
 private data class NativeTitleSnapshot(
@@ -71,9 +72,18 @@ private data class NativeLeadingVisualSnapshot(
 private class NativeTrailingTransitionState(
     val sourceButtons: List<UIButton>,
     val destinationSearchHandler: () -> Unit,
+    val carrierButton: UIButton,
+    val carrierTarget: IosBarButtonTarget,
+    val sourceCarrierHandler: (() -> Unit)?,
+    val sourceCarrierMenu: UIMenu?,
+    val sourceCarrierShowsMenuAsPrimaryAction: Boolean,
+    val sourceCarrierSymbol: String,
+    val sourceCarrierAccessibility: String,
 ) {
+    private val extraButtonCount = (sourceButtons.size - 1).coerceAtLeast(0)
     val sourceExtraWidth =
-        (sourceButtons.size - 1).coerceAtLeast(0) * NativeHeaderMetrics.ChromeButtonSizePt
+        extraButtonCount * NativeHeaderMetrics.ChromeButtonSizePt +
+            (extraButtonCount - 1).coerceAtLeast(0) * NativeHeaderMetrics.ClusterIconSpacingPt
     val spacer =
         UIView().apply {
             translatesAutoresizingMaskIntoConstraints = false
@@ -107,8 +117,8 @@ private val semanticAnimationGenerationByLayer = mutableMapOf<IosHostNavBarLayer
  * the same midpoint, keeping icon and material motion one continuous interaction.
  *
  * Root-pop trailing actions use the same contract. The existing Liquid Glass capsule never fades or
- * gets replaced: at the compressed midpoint its contents switch to Search while a temporary spacer
- * preserves the source width, then that spacer collapses through the second half of the gesture.
+ * gets replaced: the right-most source button remains the physical carrier throughout the gesture,
+ * changes semantic at the midpoint, and the surplus leading width collapses through the second half.
  */
 @OptIn(ExperimentalForeignApi::class)
 internal fun IosHostNavBarLayer.applyPersistentChromeMorphProgress(progress: Float) {
@@ -346,9 +356,20 @@ private fun IosHostNavBarLayer.applyTrailingRootSearchTransition(progress: Float
             if (sourceButtons.isEmpty() || sourceButtons.any { it === searchButton }) {
                 return
             }
+            val carrierButton = sourceButtons.last()
+            val carrierIndex = actionButtons.indexOfFirst { it === carrierButton }
+            if (carrierIndex < 0) return
+            val carrierTarget = actionTargets[carrierIndex]
             NativeTrailingTransitionState(
                 sourceButtons = sourceButtons,
                 destinationSearchHandler = destinationSearch,
+                carrierButton = carrierButton,
+                carrierTarget = carrierTarget,
+                sourceCarrierHandler = carrierTarget.handler,
+                sourceCarrierMenu = carrierButton.menu,
+                sourceCarrierShowsMenuAsPrimaryAction = carrierButton.showsMenuAsPrimaryAction,
+                sourceCarrierSymbol = paintedSymbols[carrierButton] ?: "ellipsis",
+                sourceCarrierAccessibility = paintedAccessibility[carrierButton] ?: "Action",
             )
         }
 
@@ -376,24 +397,23 @@ private fun IosHostNavBarLayer.applyTrailingRootSearchTransition(progress: Float
 
 @OptIn(ExperimentalForeignApi::class)
 private fun IosHostNavBarLayer.showDestinationSearchTransition(state: NativeTrailingTransitionState) {
+    // Keep the right-most source UIButton as the semantic carrier. Replacing every arranged view at
+    // the midpoint makes UIKit visibly tear down/rebuild the capsule contents even though the outer
+    // material survives. Retaining the carrier matches the leading chevron -> menu morph contract.
     state.sourceButtons.forEach { button ->
         trailingStack.removeArrangedSubview(button)
         button.removeFromSuperview()
     }
-    if (searchButton.superview != null) {
-        trailingStack.removeArrangedSubview(searchButton)
-        searchButton.removeFromSuperview()
-    }
-    searchTarget.handler = state.destinationSearchHandler
-    searchButton.hidden = false
-    searchButton.menu = null
-    searchButton.showsMenuAsPrimaryAction = false
-    paintChromeButton(searchButton, "magnifyingglass", "Search", clustered = true)
+    state.carrierButton.hidden = false
+    state.carrierButton.menu = null
+    state.carrierButton.showsMenuAsPrimaryAction = false
+    state.carrierTarget.handler = state.destinationSearchHandler
+    paintChromeButton(state.carrierButton, "magnifyingglass", "Search", clustered = true)
     state.spacerWidthConstraint.constant = state.sourceExtraWidth
     if (state.sourceExtraWidth > 0.0) {
         trailingStack.addArrangedSubview(state.spacer)
     }
-    trailingStack.addArrangedSubview(searchButton)
+    trailingStack.addArrangedSubview(state.carrierButton)
     trailingCluster.hidden = false
     trailingCluster.superview?.layoutIfNeeded()
     state.destinationApplied = true
@@ -405,12 +425,19 @@ private fun IosHostNavBarLayer.restoreSourceTrailingTransition(state: NativeTrai
         trailingStack.removeArrangedSubview(state.spacer)
         state.spacer.removeFromSuperview()
     }
-    if (searchButton.superview != null) {
-        trailingStack.removeArrangedSubview(searchButton)
-        searchButton.removeFromSuperview()
+    if (state.carrierButton.superview != null) {
+        trailingStack.removeArrangedSubview(state.carrierButton)
+        state.carrierButton.removeFromSuperview()
     }
-    searchButton.hidden = true
-    searchTarget.handler = null
+    state.carrierTarget.handler = state.sourceCarrierHandler
+    state.carrierButton.menu = state.sourceCarrierMenu
+    state.carrierButton.showsMenuAsPrimaryAction = state.sourceCarrierShowsMenuAsPrimaryAction
+    paintChromeButton(
+        state.carrierButton,
+        state.sourceCarrierSymbol,
+        state.sourceCarrierAccessibility,
+        clustered = true,
+    )
     state.sourceButtons.forEach { button ->
         button.hidden = false
         trailingStack.addArrangedSubview(button)
@@ -565,6 +592,7 @@ private fun IosHostNavBarLayer.applyRouteTitleTransition(progress: Float) {
     val p = progress.coerceIn(0f, 1f).toDouble()
     val transitionGlassAlpha =
         source.glassAlpha + (destination.glassAlpha - source.glassAlpha) * p
+    val destinationParallaxFraction = if (destination.centered) 0.48 else 0.22
 
     CATransaction.begin()
     CATransaction.setDisableActions(true)
@@ -579,7 +607,7 @@ private fun IosHostNavBarLayer.applyRouteTitleTransition(progress: Float) {
     )
     views.destination.setFrame(
         CGRectMake(
-            destination.x - hostWidth * 0.22 * (1.0 - p),
+            destination.x - hostWidth * destinationParallaxFraction * (1.0 - p),
             destination.y,
             destination.width,
             destination.height,
@@ -799,6 +827,24 @@ internal fun IosHostNavBarLayer.applyPersistentRootMenu(
     items.forEachIndexed { index, item ->
         menuClicksByKey["-2:$index"] = item.onClick
     }
+
+    // During a completed pop the midpoint morph already converted this exact UIButton into Menu.
+    // Rebinding a fresh UIMenu during destination reconciliation makes UIKit visibly rerender the
+    // control even though its semantic state did not change. Keep the existing menu object for that
+    // one reconciliation; its UIActions resolve through menuClicksByKey, whose handlers were updated
+    // above, so no behavior is stale.
+    val preserveCommittedTransitionMenu =
+        suppressNextSemanticSettleByLayer.contains(this) &&
+            !backButton.hidden &&
+            backButton.showsMenuAsPrimaryAction &&
+            backButton.menu != null &&
+            paintedSymbols[backButton] == "ellipsis" &&
+            paintedAccessibility[backButton] == "Menu"
+    if (preserveCommittedTransitionMenu) {
+        backTarget.handler = null
+        return
+    }
+
     val menuAction =
         NativeChromeAction(
             sfSymbol = "ellipsis",
