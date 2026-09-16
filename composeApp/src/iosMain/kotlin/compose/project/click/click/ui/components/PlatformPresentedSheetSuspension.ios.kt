@@ -36,7 +36,7 @@ private class PresentedSheetSuspensionCoordinator(
     private var isSuspended = false
     private var generation = 0
 
-    fun suspend(onReady: () -> Unit) {
+    fun suspendPresentedStack(onReady: () -> Unit) {
         if (isSuspended) {
             if (root.presentedViewController == null) onReady()
             return
@@ -122,7 +122,7 @@ actual fun PlatformPresentedSheetSuspension(active: Boolean): Boolean {
 
     LaunchedEffect(active, coordinator) {
         if (active) {
-            coordinator.suspend { ready = true }
+            coordinator.suspendPresentedStack { ready = true }
         } else {
             coordinator.restore()
         }
