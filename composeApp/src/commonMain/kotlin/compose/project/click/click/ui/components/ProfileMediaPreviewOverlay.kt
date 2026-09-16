@@ -15,6 +15,7 @@ import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -32,6 +33,7 @@ import compose.project.click.click.ui.chat.ChatAudioBubble // pragma: allowlist 
 import compose.project.click.click.ui.chat.ChatAudioChromeKind // pragma: allowlist secret
 import compose.project.click.click.ui.chat.persistLightboxImageToGallery // pragma: allowlist secret
 import compose.project.click.click.ui.chat.shareLightboxImage // pragma: allowlist secret
+import compose.project.click.click.ui.theme.LocalIsDarkMode // pragma: allowlist secret
 import compose.project.click.click.ui.theme.LocalPlatformStyle // pragma: allowlist secret
 import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
 import kotlinx.coroutines.launch
@@ -119,13 +121,15 @@ internal fun ProfileMediaPreviewOverlay(
         liftAbovePresentedSheets = isIOS && mediaPreviewVisible,
     ) {
         if (isIOS) {
-            ProfileMediaPortalNativeChrome(
-                sourceChat = sourceChat,
-                onlineUsers = onlineUsers,
-                fallbackChatId = connectionChatId,
-                onClose = onDismissPreview,
-                trailingActions = mediaActions,
-            )
+            CompositionLocalProvider(LocalIsDarkMode provides true) {
+                ProfileMediaPortalNativeChrome(
+                    sourceChat = sourceChat,
+                    onlineUsers = onlineUsers,
+                    fallbackChatId = connectionChatId,
+                    onClose = onDismissPreview,
+                    trailingActions = mediaActions,
+                )
+            }
         }
         GlassFullscreenMediaOverlay(
             visible = mediaPreviewVisible,
