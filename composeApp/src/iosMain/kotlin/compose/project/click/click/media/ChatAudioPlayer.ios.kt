@@ -27,6 +27,9 @@ import platform.Foundation.NSFileManager
 import platform.Foundation.NSNotificationCenter
 import platform.Foundation.NSOperationQueue
 import platform.Foundation.NSURL
+import platform.darwin.DISPATCH_QUEUE_PRIORITY_DEFAULT
+import platform.darwin.dispatch_async
+import platform.darwin.dispatch_get_global_queue
 import platform.darwin.dispatch_get_main_queue
 
 @Composable
@@ -57,6 +60,10 @@ private class IosChatAudioPlayer(
     )
     private var timeObserver: Any? = null
     private var playbackEndObserver: Any? = null
+    private var wantsPlayback = false
+    private var audioSessionReady = false
+    private var audioSessionPreparing = false
+    private var disposed = false
 
     override val isPlaying: Boolean get() = isPlayingState.value
 
@@ -65,7 +72,6 @@ private class IosChatAudioPlayer(
     override val durationMs: Long get() = durationMsState.floatValue.toLong()
 
     init {
-        prepareAudioSessionForPlayback()
         avPlayer = AVPlayer()
         val nsUrl = resolvePlaybackNsUrl(localFilePath, remoteUrl)
         if (nsUrl != null) {
@@ -76,6 +82,7 @@ private class IosChatAudioPlayer(
                 `object` = item,
                 queue = NSOperationQueue.mainQueue,
             ) { _ ->
+                wantsPlayback = false
                 isPlayingState.value = false
                 avPlayer.seekToTime(CMTimeMakeWithSeconds(0.0, 1000)) { _ ->
                     refreshProgressFromPlayer()
@@ -94,6 +101,7 @@ private class IosChatAudioPlayer(
     private fun refreshProgressFromPlayer() {
         val item = avPlayer.currentItem
         if (item != null && item.error != null) {
+            wantsPlayback = false
             if (isPlayingState.value) {
                 isPlayingState.value = false
             }
@@ -108,28 +116,60 @@ private class IosChatAudioPlayer(
     }
 
     override fun togglePlayPause() {
-        if (isPlayingState.value) {
+        if (isPlayingState.value || wantsPlayback) {
+            wantsPlayback = false
             avPlayer.pause()
             isPlayingState.value = false
-        } else {
-            if (prepareAudioSessionForPlayback()) {
-                avPlayer.play()
-                isPlayingState.value = true
-            }
+            refreshProgressFromPlayer()
+            return
         }
-        refreshProgressFromPlayer()
+
+        wantsPlayback = true
+        ensureAudioSessionThenPlay()
     }
 
-    private fun prepareAudioSessionForPlayback(): Boolean {
-        return try {
-            val session = AVAudioSession.sharedInstance()
-            // Playback category only: `defaultToSpeaker` is invalid here (requires playAndRecord).
-            session.setCategory(AVAudioSessionCategoryPlayback, error = null)
-            session.setActive(true, error = null)
-            true
-        } catch (_: Throwable) {
-            false
+    /**
+     * AVAudioSession category/activation can block while iOS negotiates the active route. Do that
+     * work away from the UI thread, then touch AVPlayer/Compose state only after returning to main.
+     */
+    private fun ensureAudioSessionThenPlay() {
+        if (audioSessionReady) {
+            startPlaybackIfRequested()
+            return
         }
+        if (audioSessionPreparing || disposed) return
+        audioSessionPreparing = true
+
+        dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT.toLong(), 0u)) {
+            val ready =
+                try {
+                    val session = AVAudioSession.sharedInstance()
+                    // Playback category only: `defaultToSpeaker` is invalid here (requires playAndRecord).
+                    session.setCategory(AVAudioSessionCategoryPlayback, error = null)
+                    session.setActive(true, error = null)
+                    true
+                } catch (_: Throwable) {
+                    false
+                }
+            dispatch_async(dispatch_get_main_queue()) {
+                audioSessionPreparing = false
+                if (disposed) return@dispatch_async
+                audioSessionReady = ready
+                if (ready) {
+                    startPlaybackIfRequested()
+                } else {
+                    wantsPlayback = false
+                    isPlayingState.value = false
+                }
+            }
+        }
+    }
+
+    private fun startPlaybackIfRequested() {
+        if (disposed || !wantsPlayback) return
+        avPlayer.play()
+        isPlayingState.value = true
+        refreshProgressFromPlayer()
     }
 
     override fun seekTo(positionMs: Long) {
@@ -146,6 +186,8 @@ private class IosChatAudioPlayer(
     }
 
     override fun dispose() {
+        disposed = true
+        wantsPlayback = false
         playbackEndObserver?.let { NSNotificationCenter.defaultCenter.removeObserver(it) }
         playbackEndObserver = null
         timeObserver?.let { avPlayer.removeTimeObserver(it) }
