@@ -67,7 +67,13 @@ internal fun AppHubChatHost(
     }
     var keepEventHubPortalMounted by remember { mutableStateOf(false) }
     val hubSwipeDragPx = remember { mutableFloatStateOf(0f) }
-    PlatformNativeNavigationBarSwipeReveal(hubSwipeDragPx)
+    val eventPortalOwnsHeader =
+        isIOS &&
+            (hubChatArgs?.isEventHub == true ||
+                (hubChatArgs == null && lastHubChatArgs?.isEventHub == true))
+    if (!eventPortalOwnsHeader) {
+        PlatformNativeNavigationBarSwipeReveal(hubSwipeDragPx)
+    }
 
     LaunchedEffect(hubChatArgs) {
         if (hubChatArgs != null) {
