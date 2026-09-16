@@ -259,9 +259,17 @@ private fun ProfileMediaPortalTopChrome(
     val isGroup = sourceChat?.groupClique != null
     val title =
         if (isGroup) {
-            sourceChat?.groupClique?.name?.trim()?.takeIf { it.isNotEmpty() } ?: "Group"
+            sourceChat
+                ?.groupClique
+                ?.name
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() } ?: "Group"
         } else {
-            sourceChat?.otherUser?.name?.trim()?.takeIf { it.isNotEmpty() } ?: "Connection"
+            sourceChat
+                ?.otherUser
+                ?.name
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() } ?: "Connection"
         }
     val subtitle =
         if (isGroup) {
