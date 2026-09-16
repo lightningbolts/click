@@ -49,12 +49,9 @@ import compose.project.click.click.ui.theme.LocalPlatformStyle // pragma: allowl
  * which hid the liquid-glass close control and left a header-height sliver of the chat
  * underneath. Click Drops uses the same in-tree cover + exclusive overlay bind.
  *
- * iOS close and trailing actions retarget the existing overlay through
- * [ApplyStableOverlayMediaChrome]. When a chat/hub route already owns native chrome, the media
- * overlay changes the meaning of those exact UIKit buttons instead of rebinding the bar. The
- * route chrome is restored as soon as the exit transition starts, so close -> back and media
- * actions -> chat actions morph during the fade rather than flickering after unmount. Android
- * continues to use [MediaLightboxTopChrome].
+ * iOS chat/hub media retargets the existing native chrome through [ApplyStableOverlayMediaChrome].
+ * Portaled profile media deliberately opts out of native chrome because its detached Compose host is
+ * not the route-owned UIKit controller; it uses [MediaLightboxTopChrome] in the portal instead.
  */
 @Composable
 fun GlassFullscreenMediaOverlay(
@@ -64,14 +61,12 @@ fun GlassFullscreenMediaOverlay(
     scrimAlpha: Float = GlassSheetTokens.ScrimBaseAlpha,
     motion: UnifiedPopupMotion = UnifiedPopupMotion.Media,
     nativeTrailingActions: List<NativeChromeAction> = emptyList(),
+    useNativeChrome: Boolean = true,
     content: @Composable () -> Unit,
 ) {
     val transitionState = remember { MutableTransitionState(false) }
     var userDismissPending by remember { mutableStateOf(false) }
 
-    // A user-driven close must remain tombstoned until the parent has committed visible=false.
-    // Clearing the tombstone at animation-idle while visible is still true can briefly retarget the
-    // transition back to true, resurrecting the previous media frame/native xmark over the chat.
     LaunchedEffect(visible) {
         if (!visible) {
             userDismissPending = false
@@ -100,8 +95,6 @@ fun GlassFullscreenMediaOverlay(
             !transitionState.targetState &&
             userDismissPending
         ) {
-            // Keep userDismissPending=true until visible=false is observed above. This callback is
-            // the parent's request to commit that state, not permission to reopen the overlay.
             onDismissRequest()
         }
     }
@@ -114,12 +107,14 @@ fun GlassFullscreenMediaOverlay(
         OverlayExclusiveBindPolicy.shouldCoverNativeTabBarForMedia(
             isIOS = LocalPlatformStyle.current.isIOS,
         )
-    CompositionLocalProvider(LocalNativeChromeActive provides true) {
-        ApplyStableOverlayMediaChrome(
-            active = transitionState.targetState,
-            onClose = ::requestDismiss,
-            trailing = nativeTrailingActions,
-        )
+    if (useNativeChrome) {
+        CompositionLocalProvider(LocalNativeChromeActive provides true) {
+            ApplyStableOverlayMediaChrome(
+                active = transitionState.targetState,
+                onClose = ::requestDismiss,
+                trailing = nativeTrailingActions,
+            )
+        }
     }
     DisposableEffect(coverNativeTabBar) {
         if (coverNativeTabBar) AppScreenChromeState.acquireNativeTabBarCover()
@@ -171,8 +166,6 @@ fun GlassFullscreenMediaOverlay(
 /**
  * Close control for photo / media lightboxes. Same 40pt liquid-glass circle as compact native
  * chrome, inset from the safe drawing edge — not stacked under the chat header.
- *
- * iOS hides this Compose control; the overlay navigation bar owns the real glass xmark.
  */
 @Composable
 fun MediaLightboxTopChrome(
