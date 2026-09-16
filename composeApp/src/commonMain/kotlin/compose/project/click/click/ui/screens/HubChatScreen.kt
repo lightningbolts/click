@@ -174,11 +174,7 @@ fun HubChatScreen(
     val resolvedCreatorId by viewModel.resolvedCreatorId.collectAsState()
     val hubDetails by viewModel.hubDetails.collectAsState()
     var settingsMenuExpanded by remember { mutableStateOf(false) }
-    // Event hubs are rendered inside PlatformOverlayAbovePresentedSheets on iOS. That detached
-    // Compose host does not own the app's persistent UIKit navigation chrome, so binding the global
-    // bar there puts it in the wrong safe-area/controller hierarchy and can leak its state after Back.
-    // Keep ordinary hubs on native chrome, but let event hubs use the existing in-tree header.
-    val nativeNavChrome = LocalPlatformStyle.current.isIOS && !args.isEventHub
+    val nativeNavChrome = LocalPlatformStyle.current.isIOS
     if (nativeNavChrome) {
         BindPlatformNativeNavigationBar(
             title = hubDetails.name.ifBlank { args.hubTitle },
