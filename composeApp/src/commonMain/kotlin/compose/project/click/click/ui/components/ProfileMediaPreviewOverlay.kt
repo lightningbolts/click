@@ -102,11 +102,12 @@ internal fun ProfileMediaPreviewOverlay(
             modifier = Modifier.fillMaxSize(),
             scrimAlpha = 1f,
             nativeTrailingActions =
-                if (isImage) {
+                if (!isIOS && isImage) {
                     mediaLightboxShareActions(onSave = saveImage, onShare = shareImage)
                 } else {
                     emptyList()
                 },
+            useNativeChrome = !isIOS,
         ) {
             Box(
                 modifier =
@@ -176,9 +177,9 @@ internal fun ProfileMediaPreviewOverlay(
                 }
                 MediaLightboxTopChrome(
                     onClose = { onDismissPreview() },
-                    showClose = !isIOS,
+                    showClose = true,
                     trailing = {
-                        if (!isIOS && isImage) {
+                        if (isImage) {
                             MediaLightboxSaveShareTrailing(
                                 onSave = saveImage,
                                 onShare = shareImage,
