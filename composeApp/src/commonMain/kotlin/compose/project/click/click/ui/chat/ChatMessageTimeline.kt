@@ -172,6 +172,7 @@ internal fun ChatMessageTimeline(
     onForward: (messageId: String) -> Unit,
     onLongPress: (MessageWithUser) -> Unit,
     onSwipeReply: (MessageWithUser) -> Unit,
+    onPeerAvatarClick: (String) -> Unit = {},
     onDownloadAttachment: suspend (
         MessageWithUser,
         compose.project.click.click.chat.attachments.AttachmentCrypto.Envelope,
@@ -188,6 +189,7 @@ internal fun ChatMessageTimeline(
     val onForwardState = rememberUpdatedState(onForward)
     val onLongPressState = rememberUpdatedState(onLongPress)
     val onSwipeReplyState = rememberUpdatedState(onSwipeReply)
+    val onPeerAvatarClickState = rememberUpdatedState(onPeerAvatarClick)
     val onDownloadAttachmentState = rememberUpdatedState(onDownloadAttachment)
     val onExpandPhotoState = rememberUpdatedState(onExpandPhoto)
     val onOpenBeaconState = rememberUpdatedState(onOpenBeacon)
@@ -287,6 +289,7 @@ internal fun ChatMessageTimeline(
                                             onLongPress = { onLongPressState.value(it) },
                                             onSwipeReply = { onSwipeReplyState.value(it) },
                                             showPeerAvatarInGroup = isGroupChat,
+                                            onPeerAvatarClick = { onPeerAvatarClickState.value(it) },
                                             secureMediaHost = secureMediaHost,
                                             activeChatId = activeChatId,
                                             enableMessageContextMenu = enableMessageContextMenu,
