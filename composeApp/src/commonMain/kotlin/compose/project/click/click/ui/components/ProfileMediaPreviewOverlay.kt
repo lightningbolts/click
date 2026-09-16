@@ -93,11 +93,6 @@ internal fun ProfileMediaPreviewOverlay(
         }
     }
 
-    // Profile media is launched from a native profile sheet on iOS. Keep the preview in the same
-    // full-screen portal used by event chat so it covers the sheet instead of being clipped to the
-    // sheet's rounded presentation container. GlassFullscreenMediaOverlay calls the parent dismiss
-    // callback only after its own exit animation is idle, so the portal can detach as soon as the
-    // parent's visible flag falls without leaving a transparent full-screen hit-testing layer.
     PlatformOverlayAbovePresentedSheets(
         liftAbovePresentedSheets = isIOS && mediaPreviewVisible,
     ) {
@@ -107,11 +102,12 @@ internal fun ProfileMediaPreviewOverlay(
             modifier = Modifier.fillMaxSize(),
             scrimAlpha = 1f,
             nativeTrailingActions =
-                if (isImage) {
+                if (!isIOS && isImage) {
                     mediaLightboxShareActions(onSave = saveImage, onShare = shareImage)
                 } else {
                     emptyList()
                 },
+            useNativeChrome = !isIOS,
         ) {
             Box(
                 modifier =
@@ -181,9 +177,9 @@ internal fun ProfileMediaPreviewOverlay(
                 }
                 MediaLightboxTopChrome(
                     onClose = { onDismissPreview() },
-                    showClose = !isIOS,
+                    showClose = true,
                     trailing = {
-                        if (!isIOS && isImage) {
+                        if (isImage) {
                             MediaLightboxSaveShareTrailing(
                                 onSave = saveImage,
                                 onShare = shareImage,
