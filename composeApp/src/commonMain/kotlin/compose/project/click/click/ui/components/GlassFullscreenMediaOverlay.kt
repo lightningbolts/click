@@ -24,8 +24,8 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material.icons.outlined.Download
+import androidx.compose.material.icons.outlined.Share
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -237,10 +237,19 @@ internal fun MediaLightboxSaveShareTrailing(
     onSave: () -> Unit,
     onShare: () -> Unit,
 ) {
-    TextButton(onClick = onSave) {
-        Text("Save", color = Color.White)
-    }
-    TextButton(onClick = onShare) {
-        Text("Share", color = Color.White)
-    }
+    val buttonSize = NativeHeaderMetrics.ChromeButtonSizePt.dp
+    ClickCircularGlassIconButton(
+        icon = Icons.Outlined.Download,
+        contentDescription = "Save",
+        onClick = onSave,
+        size = buttonSize,
+        tint = Color.White,
+    )
+    ClickCircularGlassIconButton(
+        icon = Icons.Outlined.Share,
+        contentDescription = "Share",
+        onClick = onShare,
+        size = buttonSize,
+        tint = Color.White,
+    )
 }
