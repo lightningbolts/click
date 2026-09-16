@@ -6,23 +6,22 @@ package compose.project.click.click.ui.components // pragma: allowlist secret
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.uikit.LocalUIViewController
 import androidx.compose.ui.window.ComposeUIViewController
 import compose.project.click.click.ui.theme.PlatformStyleProvider // pragma: allowlist secret
-import platform.UIKit.NSLayoutConstraint
-import platform.UIKit.UIColor
-import platform.UIKit.UIView
+import platform.UIKit.UIModalPresentationFullScreen
 import platform.UIKit.UIViewController
-import platform.UIKit.presentationController
 
 /**
- * iOS portal for full-screen app destinations that must appear above an existing native page-sheet
- * stack. The overlay view is inserted above the live presentation stack instead of dismissing/hiding
- * the sheets. This matters because a hidden presented sheet still leaves UIKit's modal tint/hit-testing
- * state active on its presenter.
+ * Full-screen iOS portal for content launched from an already-presented native sheet.
+ *
+ * This must be a real UIKit presentation, not a detached view manually inserted into UIWindow.
+ * A detached ComposeUIViewController never participates in the presentation hierarchy, so its
+ * safe-area guide can remain at y=0 and native Liquid Glass chrome is laid over the status bar.
+ * Presenting the controller full-screen gives it the same UIKit safe-area/layout contract as the
+ * working chat media path while leaving the underlying profile sheet mounted for restoration.
  */
 @Composable
 actual fun PlatformOverlayAbovePresentedSheets(
@@ -38,11 +37,6 @@ actual fun PlatformOverlayAbovePresentedSheets(
     val latestContent = rememberUpdatedState(content)
     val latestScheme = rememberUpdatedState(MaterialTheme.colorScheme)
     val latestTypography = rememberUpdatedState(MaterialTheme.typography)
-    // ComposeUIViewController creates its composition when its view is first materialized. Keep the
-    // portal body dormant until that view is actually constrained into the UIWindow; otherwise its
-    // native chrome binder reads a detached controller with a zero top safe area and lays controls
-    // under the status bar.
-    val portalMounted = remember(host) { mutableStateOf(false) }
     val overlayController =
         remember(host) {
             ComposeUIViewController {
@@ -51,45 +45,32 @@ actual fun PlatformOverlayAbovePresentedSheets(
                     typography = latestTypography.value,
                 ) {
                     PlatformStyleProvider {
-                        if (portalMounted.value) {
-                            latestContent.value.invoke()
-                        }
+                        latestContent.value.invoke()
                     }
                 }
+            }.apply {
+                modalPresentationStyle = UIModalPresentationFullScreen
+                modalPresentationCapturesStatusBarAppearance = true
             }
         }
 
     DisposableEffect(host, overlayController) {
-        val root = host.presentationRootController()
-        val topmost = root.topmostPresentedController()
-        val container: UIView? =
-            topmost.view.window
-                ?: host.view.window
-                ?: topmost.presentationController?.containerView
-
-        if (container != null) {
-            val overlayView = overlayController.view
-            overlayView.translatesAutoresizingMaskIntoConstraints = false
-            overlayView.backgroundColor = UIColor.clearColor
-            overlayView.setOpaque(false)
-            container.addSubview(overlayView)
-            NSLayoutConstraint.activateConstraints(
-                listOf(
-                    overlayView.topAnchor.constraintEqualToAnchor(container.topAnchor),
-                    overlayView.leadingAnchor.constraintEqualToAnchor(container.leadingAnchor),
-                    overlayView.trailingAnchor.constraintEqualToAnchor(container.trailingAnchor),
-                    overlayView.bottomAnchor.constraintEqualToAnchor(container.bottomAnchor),
-                ),
+        val presenter = host.presentationRootController().topmostPresentedController()
+        if (overlayController.presentingViewController == null) {
+            presenter.presentViewController(
+                viewControllerToPresent = overlayController,
+                animated = false,
+                completion = null,
             )
-            container.bringSubviewToFront(overlayView)
-            container.layoutIfNeeded()
-            overlayView.layoutIfNeeded()
-            portalMounted.value = true
         }
 
         onDispose {
-            portalMounted.value = false
-            overlayController.view.removeFromSuperview()
+            if (overlayController.presentingViewController != null) {
+                overlayController.dismissViewControllerAnimated(
+                    flag = false,
+                    completion = null,
+                )
+            }
         }
     }
 }
