@@ -78,25 +78,27 @@ private class IosChatAudioPlayer(
         if (nsUrl != null) {
             val item = AVPlayerItem(uRL = nsUrl)
             avPlayer.replaceCurrentItemWithPlayerItem(item)
-            playbackEndObserver = NSNotificationCenter.defaultCenter.addObserverForName(
-                name = AVPlayerItemDidPlayToEndTimeNotification,
-                `object` = item,
-                queue = NSOperationQueue.mainQueue,
-            ) { _ ->
-                wantsPlayback = false
-                isPlayingState.value = false
-                avPlayer.seekToTime(CMTimeMakeWithSeconds(0.0, 1000)) { _ ->
-                    refreshProgressFromPlayer()
+            playbackEndObserver =
+                NSNotificationCenter.defaultCenter.addObserverForName(
+                    name = AVPlayerItemDidPlayToEndTimeNotification,
+                    `object` = item,
+                    queue = NSOperationQueue.mainQueue,
+                ) { _ ->
+                    wantsPlayback = false
+                    isPlayingState.value = false
+                    avPlayer.seekToTime(CMTimeMakeWithSeconds(0.0, 1000)) { _ ->
+                        refreshProgressFromPlayer()
+                    }
                 }
-            }
         }
         val interval = CMTimeMakeWithSeconds(0.12, 600)
-        timeObserver = avPlayer.addPeriodicTimeObserverForInterval(
-            interval = interval,
-            queue = dispatch_get_main_queue(),
-        ) { _ ->
-            refreshProgressFromPlayer()
-        }
+        timeObserver =
+            avPlayer.addPeriodicTimeObserverForInterval(
+                interval = interval,
+                queue = dispatch_get_main_queue(),
+            ) { _ ->
+                refreshProgressFromPlayer()
+            }
     }
 
     private fun refreshProgressFromPlayer() {
@@ -200,7 +202,10 @@ private class IosChatAudioPlayer(
     }
 }
 
-private fun resolvePlaybackNsUrl(localPath: String?, remote: String): NSURL? {
+private fun resolvePlaybackNsUrl(
+    localPath: String?,
+    remote: String,
+): NSURL? {
     val trimmedLocal = localPath?.trim()?.takeIf { it.isNotEmpty() }
     if (!trimmedLocal.isNullOrEmpty()) {
         val fsPath =
