@@ -11,10 +11,13 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.uikit.LocalUIViewController
 import androidx.compose.ui.window.ComposeUIViewController
 import compose.project.click.click.ui.theme.PlatformStyleProvider // pragma: allowlist secret
+import kotlinx.cinterop.useContents
 import platform.UIKit.NSLayoutConstraint
 import platform.UIKit.UIColor
+import platform.UIKit.UIEdgeInsetsMake
 import platform.UIKit.UIView
 import platform.UIKit.UIViewController
+import platform.UIKit.additionalSafeAreaInsets
 import platform.UIKit.presentationController
 
 /**
@@ -27,8 +30,11 @@ import platform.UIKit.presentationController
  * hub content opens.
  *
  * Instead, mount only its view into the active UIWindow (falling back to the presentation container)
- * and constrain it to that full-screen container. Using the active window first gives the hosted view
- * the correct window/safe-area geometry without inventing another controller hierarchy.
+ * and constrain it to that full-screen container. A detached Compose hosting controller can report a
+ * zero safe-area even after its view is inserted into the window, so copy the window's top safe-area
+ * into additionalSafeAreaInsets only when the portal still reports zero. That keeps the exact same
+ * native media/hub chrome implementation aligned below the status bar without inventing a second
+ * controller hierarchy.
  *
  * On teardown, reattach the shared native chrome to the caller before removing the portal view.
  * [IosHostNavBarLayer] retains its attached controller, so this breaks the chrome -> temporary portal
@@ -86,6 +92,16 @@ actual fun PlatformOverlayAbovePresentedSheets(
                 ),
             )
             container.layoutIfNeeded()
+
+            val portalTopInset = overlayView.safeAreaInsets.useContents { top }
+            val containerTopInset = container.safeAreaInsets.useContents { top }
+            if (portalTopInset <= 1.0 && containerTopInset > 1.0) {
+                overlayController.additionalSafeAreaInsets =
+                    UIEdgeInsetsMake(containerTopInset, 0.0, 0.0, 0.0)
+                container.layoutIfNeeded()
+                overlayView.layoutIfNeeded()
+            }
+
             container.bringSubviewToFront(overlayView)
         }
 
