@@ -15,25 +15,25 @@ import platform.UIKit.NSLayoutConstraint
 import platform.UIKit.UIColor
 import platform.UIKit.UIView
 import platform.UIKit.UIViewController
-import platform.UIKit.addChildViewController
-import platform.UIKit.didMoveToParentViewController
 import platform.UIKit.presentationController
-import platform.UIKit.removeFromParentViewController
-import platform.UIKit.willMoveToParentViewController
 
 /**
  * iOS portal for full-screen app destinations that must appear above an existing native page-sheet
  * stack.
  *
- * The overlay view is mounted in the active UIWindow so it can cover a presented profile sheet, but
- * the Compose controller remains a child of the full-screen presentation root. Controller
- * containment is important here: without it the portal host can report a zero top safe-area, which
- * places the shared native navigation controls inside the status bar.
+ * The Compose hosting controller returned by [ComposeUIViewController] is already owned by Compose's
+ * UIKit integration. Do not manually add/remove it as a UIKit child: doing so creates a second parent
+ * relationship and crashes with UIViewControllerHierarchyInconsistency when profile media or event
+ * hub content opens.
  *
- * On teardown the shared native chrome is reattached to the caller before the portal controller is
- * removed. [IosHostNavBarLayer] retains its attached controller; breaking that retain first lets the
- * portal composition dispose and unregister its native-chrome owner instead of leaking hub/media
- * chrome into later screens after an interactive back gesture.
+ * Instead, mount only its view into the active UIWindow (falling back to the presentation container)
+ * and constrain it to that full-screen container. Using the active window first gives the hosted view
+ * the correct window/safe-area geometry without inventing another controller hierarchy.
+ *
+ * On teardown, reattach the shared native chrome to the caller before removing the portal view.
+ * [IosHostNavBarLayer] retains its attached controller, so this breaks the chrome -> temporary portal
+ * host retain path before the portal leaves the hierarchy and prevents stale hub/media chrome from
+ * leaking into later screens.
  */
 @Composable
 actual fun PlatformOverlayAbovePresentedSheets(
@@ -72,8 +72,6 @@ actual fun PlatformOverlayAbovePresentedSheets(
                 ?: topmost.presentationController?.containerView
 
         if (container != null) {
-            root.addChildViewController(overlayController)
-
             val overlayView = overlayController.view
             overlayView.translatesAutoresizingMaskIntoConstraints = false
             overlayView.backgroundColor = UIColor.clearColor
@@ -89,19 +87,12 @@ actual fun PlatformOverlayAbovePresentedSheets(
             )
             container.layoutIfNeeded()
             container.bringSubviewToFront(overlayView)
-            overlayController.didMoveToParentViewController(root)
         }
 
         onDispose {
-            // Break shared chrome -> portal-controller retention before UIKit containment teardown.
+            // Break shared chrome -> temporary portal-controller retention before removing its view.
             IosNavChrome.shared.attach(host)
-            if (overlayController.parentViewController != null) {
-                overlayController.willMoveToParentViewController(null)
-            }
             overlayController.view.removeFromSuperview()
-            if (overlayController.parentViewController != null) {
-                overlayController.removeFromParentViewController()
-            }
         }
     }
 }
