@@ -24,7 +24,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.MaterialTheme
@@ -45,14 +44,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
-import coil3.compose.AsyncImage
 import compose.project.click.click.PlatformHapticsPolicy
 import compose.project.click.click.chat.attachments.AttachmentCrypto
 import compose.project.click.click.data.models.ChatMessageType
@@ -67,6 +64,7 @@ import compose.project.click.click.data.models.mediaUrlOrNull
 import compose.project.click.click.data.models.originalMimeTypeOrNull
 import compose.project.click.click.data.models.parsedMediaMetadata
 import compose.project.click.click.data.models.replyRef
+import compose.project.click.click.ui.components.ConnectionListUserAvatarFace
 import compose.project.click.click.ui.theme.PrimaryBlue
 import compose.project.click.click.viewmodel.SecureChatMediaHost
 import compose.project.click.click.viewmodel.SecureChatMediaLoadState
@@ -108,6 +106,8 @@ fun ChatMessageBubble(
     onSwipeReply: (MessageWithUser) -> Unit = {},
     /** Verified group / multi-member chat: show the sender’s face on incoming bubbles. */
     showPeerAvatarInGroup: Boolean = false,
+    /** Opens the tapped group sender's individual profile. */
+    onPeerAvatarClick: (String) -> Unit = {},
     secureMediaHost: SecureChatMediaHost? = null,
     /**
      * Optional pre-resolved state. Prefer null and [secureMediaHost] so each row observes only
@@ -401,39 +401,20 @@ fun ChatMessageBubble(
                 ) {
                     if (!isSent && showPeerAvatarInGroup) {
                         val peer = messageWithUser.user
-                        Box(
+                        ConnectionListUserAvatarFace(
+                            displayName = peer.name,
+                            email = peer.email,
+                            avatarUrl = peer.image,
+                            userId = peer.id,
                             modifier =
                                 Modifier
-                                    .padding(end = ChatBubbleTokens.peerAvatarEndPad, bottom = ChatBubbleTokens.peerAvatarBottomPad)
-                                    .size(ChatBubbleTokens.peerAvatarSize)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.surfaceVariant),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            if (!peer.image.isNullOrBlank()) {
-                                AsyncImage(
-                                    model = peer.image,
-                                    contentDescription = null,
-                                    contentScale = ContentScale.Crop,
-                                    modifier =
-                                        Modifier
-                                            .fillMaxSize()
-                                            .clip(CircleShape),
-                                )
-                            } else {
-                                Text(
-                                    text =
-                                        peer.name
-                                            ?.trim()
-                                            ?.firstOrNull()
-                                            ?.uppercaseChar()
-                                            ?.toString() ?: "?",
-                                    style = chatBubbleReplyLabelStyle(),
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
+                                    .padding(
+                                        end = ChatBubbleTokens.peerAvatarEndPad,
+                                        bottom = ChatBubbleTokens.peerAvatarBottomPad,
+                                    ).size(ChatBubbleTokens.peerAvatarSize)
+                                    .clickable { onPeerAvatarClick(peer.id) },
+                            useCompactTypography = true,
+                        )
                     }
                     Column(
                         horizontalAlignment = if (isSent) Alignment.End else Alignment.Start,
