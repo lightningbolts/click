@@ -10,16 +10,22 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 
 /**
- * Media uses the same global native-chrome host as the underlying route, but publishes its own
- * exclusive semantic state for the lifetime of the lightbox. This is deliberately route-shaped
- * rather than a second mutable "media override" layered onto an existing route state: the latter
- * allowed close/presence recompositions to briefly republish stale xmark/share semantics after the
- * chat was already visible.
+ * Keep media chrome under the same route-owned overlay coordinator used by the conversation.
  *
- * Publishing an exclusive state also matters for media opened from a profile sheet. Those previews
- * are portaled into their own full-screen Compose host above the native sheet; binding the media
- * chrome in that host keeps Close/Save/Share visible instead of retargeting controls that remain
- * underneath the sheet.
+ * The previous implementation directly snapshotted and repainted UIKit buttons from a second
+ * Compose effect while the underlying route binder was still active. That allowed presence/title
+ * recompositions and media dismissal to fight over the same leading/trailing controls, producing
+ * xmark/chevron oscillation and repeated share/menu glyph changes on physical devices.
+ *
+ * [ApplyOverlayMediaChrome] instead publishes one semantic media state into [IosNavChrome]. The
+ * already-mounted route binder remains the sole writer to the persistent UIKit controls, so chat
+ * -> media -> chat changes are serialized through one owner and retain the same glass/button
+ * instances. It also preserves the complete trailing action list, including Save/Download.
+ *
+ * A media-close tombstone is kept for the rest of the current active media composition. Without
+ * this, the close callback can clear native media semantics before Compose has committed
+ * `active = false`; a concurrent chat/presence recomposition can then republish the same media
+ * descriptor for one frame, which is the xmark/share resurrection seen after returning to chat.
  */
 @Composable
 internal actual fun ApplyStableOverlayMediaChrome(
@@ -28,30 +34,20 @@ internal actual fun ApplyStableOverlayMediaChrome(
     trailing: List<NativeChromeAction>,
 ) {
     val latestOnClose = rememberUpdatedState(onClose)
-    val dismissingState = remember { mutableStateOf(false) }
+    val dismissingState = remember(active) { mutableStateOf(false) }
     val stableClose =
-        remember {
+        remember(active) {
             {
                 if (!dismissingState.value) {
-                    // Tombstone this media composition before navigation state changes. Even if the
-                    // caller recomposes during the exit transition, this owner cannot be rebound.
                     dismissingState.value = true
                     latestOnClose.value.invoke()
                 }
             }
         }
 
-    if (!active || dismissingState.value) return
-
-    BindPlatformNativeNavigationBar(
-        title = "",
-        subtitle = null,
-        presenceOnline = null,
-        identity = null,
-        onNavigateBack = stableClose,
-        onOpenSearch = null,
-        nativeTrailingActions = trailing,
-        collapseFraction = 1f,
-        leadingClose = true,
+    ApplyOverlayMediaChrome(
+        active = active && !dismissingState.value,
+        onClose = stableClose,
+        trailing = trailing,
     )
 }
