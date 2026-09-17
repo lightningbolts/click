@@ -1,11 +1,11 @@
 @file:OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
+@file:Suppress("ktlint:standard:function-naming")
 
-package compose.project.click.click.ui.components
+package compose.project.click.click.ui.components // pragma: allowlist secret
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.uikit.LocalUIViewController
-import kotlinx.cinterop.ExperimentalForeignApi
 
 @Composable
 actual fun PlatformPresentedSheetStackScope(content: @Composable () -> Unit) {
