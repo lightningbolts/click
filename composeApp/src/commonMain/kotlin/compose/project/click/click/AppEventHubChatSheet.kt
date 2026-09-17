@@ -24,6 +24,7 @@ import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import compose.project.click.click.ui.components.ClickFormBottomSheet // pragma: allowlist secret
+import compose.project.click.click.ui.components.PlatformPresentedSheetStackScope // pragma: allowlist secret
 import compose.project.click.click.ui.screens.HubChatNavArgs // pragma: allowlist secret
 import compose.project.click.click.ui.screens.HubChatScreen // pragma: allowlist secret
 
@@ -45,80 +46,85 @@ internal fun AppEventHubChatSheet(
 ) {
     if (args == null && !loading && errorMessage == null) return
 
-    ClickFormBottomSheet(
-        onDismissRequest = onDismissRequest,
-        modifier = Modifier.fillMaxSize(),
-        expandable = true,
-        useUiKitScrollHost = false,
-        contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
-    ) {
-        when {
-            args != null -> {
-                val owner =
-                    remember(args.realtimeChannel, currentUserId) {
-                        object : ViewModelStoreOwner {
-                            override val viewModelStore = ViewModelStore()
+    // This state is owned by AppMainShell, but the presentation originates inside the native
+    // Nearby/Event sheet stack. Re-parent the sheet host to UIKit's currently presented controller
+    // so Event Hub stacks above that dialog instead of replacing/dismissing it from the root host.
+    PlatformPresentedSheetStackScope {
+        ClickFormBottomSheet(
+            onDismissRequest = onDismissRequest,
+            modifier = Modifier.fillMaxSize(),
+            expandable = true,
+            useUiKitScrollHost = false,
+            contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
+        ) {
+            when {
+                args != null -> {
+                    val owner =
+                        remember(args.realtimeChannel, currentUserId) {
+                            object : ViewModelStoreOwner {
+                                override val viewModelStore = ViewModelStore()
+                            }
+                        }
+                    DisposableEffect(owner) {
+                        onDispose { owner.viewModelStore.clear() }
+                    }
+                    CompositionLocalProvider(LocalViewModelStoreOwner provides owner) {
+                        HubChatScreen(
+                            args = args,
+                            currentUserId = currentUserId,
+                            onNavigateBack = onDismissRequest,
+                            embeddedInSheet = true,
+                        )
+                    }
+                }
+
+                loading -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            CircularProgressIndicator()
+                            Text(
+                                text = pendingTitle?.takeIf { it.isNotBlank() } ?: "Event chat",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                            Text(
+                                text = "Opening conversation…",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                         }
                     }
-                DisposableEffect(owner) {
-                    onDispose { owner.viewModelStore.clear() }
                 }
-                CompositionLocalProvider(LocalViewModelStoreOwner provides owner) {
-                    HubChatScreen(
-                        args = args,
-                        currentUserId = currentUserId,
-                        onNavigateBack = onDismissRequest,
-                        embeddedInSheet = true,
-                    )
-                }
-            }
 
-            loading -> {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                else -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center,
                     ) {
-                        CircularProgressIndicator()
-                        Text(
-                            text = pendingTitle?.takeIf { it.isNotBlank() } ?: "Event chat",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                        Text(
-                            text = "Opening conversation…",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-            }
-
-            else -> {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Column(
-                        modifier = Modifier.padding(horizontal = 32.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Text(
-                            text = "Couldn't open event chat",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            textAlign = TextAlign.Center,
-                        )
-                        Text(
-                            text = errorMessage.orEmpty(),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center,
-                        )
+                        Column(
+                            modifier = Modifier.padding(horizontal = 32.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Text(
+                                text = "Couldn't open event chat",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                textAlign = TextAlign.Center,
+                            )
+                            Text(
+                                text = errorMessage.orEmpty(),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center,
+                            )
+                        }
                     }
                 }
             }
