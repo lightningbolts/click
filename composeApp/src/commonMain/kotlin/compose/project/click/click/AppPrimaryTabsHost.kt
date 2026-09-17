@@ -417,7 +417,8 @@ internal fun AppPrimaryTabsHost(
             modifier =
                 Modifier
                     .fillMaxSize()
-                    .interactiveSwipeBackUnderlay(addClickBackHost),
+                    .interactiveSwipeBackUnderlay(addClickBackHost)
+                    .interactiveSwipeBackUnderlay(HubChatInteractiveBackBridge.state),
         ) {
             AnimatedContent(
                 // Primary tabs (Home/AddClick/Connections/Map/Settings) all go through
