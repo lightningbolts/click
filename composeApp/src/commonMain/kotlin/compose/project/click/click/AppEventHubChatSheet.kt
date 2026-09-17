@@ -40,7 +40,7 @@ import compose.project.click.click.ui.theme.LocalPlatformStyle // pragma: allowl
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-private const val EventHubModalExitMillis = 230L
+private const val EVENT_HUB_MODAL_EXIT_MILLIS = 230L
 
 /**
  * Event Hub presentation used by event/map/feed entry points.
@@ -88,7 +88,7 @@ internal fun AppEventHubChatSheet(
             dismissScope.launch {
                 // Keep the detached controller and its native Liquid Glass chrome alive through the
                 // whole exit animation. Parent state is cleared only after the portal is offscreen.
-                delay(EventHubModalExitMillis)
+                delay(EVENT_HUB_MODAL_EXIT_MILLIS)
                 latestDismissRequest()
             }
         }
