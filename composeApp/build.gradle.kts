@@ -103,7 +103,7 @@ kotlin {
             implementation("jp.co.cyberagent.android:gpuimage:2.1.0")
 
             // Ktor OkHttp engine (WebSocket-capable; required for Supabase Realtime)
-            implementation("io.ktor:ktor-client-okhttp:3.2.3")
+            implementation("io.ktor:ktor-client-okhttp:3.3.3")
 
             // Security crypto for encrypted shared preferences
             implementation("androidx.security:security-crypto:1.1.0-alpha06")
@@ -143,8 +143,9 @@ kotlin {
 
             api("com.mohamedrejeb.calf:calf-ui:0.12.0")
 
-            // Supabase 3.2.3 replaces the racy AtomicMutableList callback registry used by Realtime.
-            implementation(project.dependencies.platform("io.github.jan-tennert.supabase:bom:3.2.3"))
+            // Realtime 3.3.0 stores callbacks in keyed atomic maps. This removes the stale
+            // AtomicMutableList index/removeAt teardown race hit while resizing Event Hub sheets.
+            implementation(project.dependencies.platform("io.github.jan-tennert.supabase:bom:3.3.0"))
             implementation("io.github.jan-tennert.supabase:postgrest-kt")
             implementation("io.github.jan-tennert.supabase:auth-kt")
             implementation("io.github.jan-tennert.supabase:realtime-kt")
@@ -153,11 +154,11 @@ kotlin {
             implementation("io.coil-kt.coil3:coil-compose:3.0.4")
             implementation("io.coil-kt.coil3:coil-network-ktor3:3.0.4")
 
-            // Keep explicit Ktor artifacts aligned with the Supabase 3.2.3 dependency set.
-            implementation("io.ktor:ktor-client-core:3.2.3")
-            implementation("io.ktor:ktor-client-auth:3.2.3")
-            implementation("io.ktor:ktor-client-content-negotiation:3.2.3")
-            implementation("io.ktor:ktor-serialization-kotlinx-json:3.2.3")
+            // Keep explicit Ktor artifacts aligned with the Supabase 3.3.0 dependency set.
+            implementation("io.ktor:ktor-client-core:3.3.3")
+            implementation("io.ktor:ktor-client-auth:3.3.3")
+            implementation("io.ktor:ktor-client-content-negotiation:3.3.3")
+            implementation("io.ktor:ktor-serialization-kotlinx-json:3.3.3")
 
             // DateTime library – use the 0.6.x-compat artifact so Calf's transitive
             // kotlinx-datetime 0.7.1 upgrade doesn't remove Clock.System / Instant
@@ -175,7 +176,7 @@ kotlin {
         }
         iosMain.dependencies {
             // Ktor iOS engine
-            implementation("io.ktor:ktor-client-darwin:3.2.3")
+            implementation("io.ktor:ktor-client-darwin:3.3.3")
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
