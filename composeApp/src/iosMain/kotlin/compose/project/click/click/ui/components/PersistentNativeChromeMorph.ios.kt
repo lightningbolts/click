@@ -647,19 +647,16 @@ private fun IosHostNavBarLayer.applyRouteTitleTransition(progress: Float) {
         } else {
             destination.width
         }
+    // The destination is the underlay revealed from the leading edge. Always start it to the left
+    // of its settled position and let it parallax right as the foreground page is dismissed. This
+    // is especially visible for centered compact root titles such as "Clicks".
     val destinationX =
-        if (destination.centered) {
-            // Animate the actual title glyph box, not the broad constrained title lane. It begins
-            // immediately after the exposed root-menu lane and ends at the physical screen center.
-            val startX =
-                NativeHeaderMetrics.LeadingInsetPt +
-                    NativeHeaderMetrics.ChromeButtonSizePt +
-                    NativeHeaderMetrics.TitleGutterPt
-            val finalX = (hostWidth - destinationWidth) / 2.0
-            startX + (finalX - startX) * p
-        } else {
-            destination.x - hostWidth * 0.22 * (1.0 - p)
-        }
+        (if (destination.centered) (hostWidth - destinationWidth) / 2.0 else destination.x) +
+            NativeHeaderMetrics.rootTitleParallaxOffsetPt(
+                hostWidthPt = hostWidth,
+                progress = progress,
+                centered = destination.centered,
+            )
 
     CATransaction.begin()
     CATransaction.setDisableActions(true)

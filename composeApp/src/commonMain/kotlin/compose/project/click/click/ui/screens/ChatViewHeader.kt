@@ -44,6 +44,7 @@ import compose.project.click.click.ui.chat.ChatChromeHorizontalPadding // pragma
 import compose.project.click.click.ui.chat.ChatGlassHeaderPlateTestTag // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatHeaderIconButton // pragma: allowlist secret
 import compose.project.click.click.ui.chat.GroupMembersPickerContext // pragma: allowlist secret
+import compose.project.click.click.ui.chat.chatGroupPresenceSubtitle // pragma: allowlist secret
 import compose.project.click.click.ui.chat.chatPeerStatusSubtitle // pragma: allowlist secret
 import compose.project.click.click.ui.chat.groupMembersPickerContextFrom // pragma: allowlist secret
 import compose.project.click.click.ui.components.AvatarWithOnlineIndicator // pragma: allowlist secret
@@ -80,6 +81,15 @@ internal fun ChatViewSuccessHeader(
     val isPeerTyping by viewModel.isPeerTyping.collectAsState()
     val isPeerOnline by viewModel.isPeerOnline.collectAsState()
     val onlineUsers by AppDataManager.onlineUsers.collectAsState()
+    val groupPresenceSubtitle =
+        if (isGroupChat) {
+            chatGroupPresenceSubtitle(
+                memberLastSeenAtMs = chatDetails.groupMemberUsers.map { it.lastPolled },
+                onlineMemberCount = chatDetails.groupMemberUsers.count { it.id in onlineUsers },
+            )
+        } else {
+            null
+        }
     var showConnectionSheet by showConnectionSheetState
     var showRenameGroupDialog by showRenameGroupDialogState
     var renameGroupDraft by renameGroupDraftState
@@ -191,9 +201,9 @@ internal fun ChatViewSuccessHeader(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    if (isGroupChat && memberSummaryLine != null) {
+                    if (isGroupChat && (memberSummaryLine != null || groupPresenceSubtitle != null)) {
                         Text(
-                            text = memberSummaryLine,
+                            text = listOfNotNull(memberSummaryLine, groupPresenceSubtitle).joinToString(" · "),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
                             maxLines = 2,
@@ -206,6 +216,7 @@ internal fun ChatViewSuccessHeader(
                             chatPeerStatusSubtitle(
                                 isTyping = isPeerTyping,
                                 isOnline = subtitleOnline,
+                                lastSeenAtMs = chatDetails.otherUser.lastPolled,
                             )
                         val showOnlineDot = subtitleOnline && !isPeerTyping
                         Row(
@@ -319,11 +330,21 @@ internal fun ChatViewNativeNavBinding(
         val onlineUsers by AppDataManager.onlineUsers.collectAsState()
         val peerId = successChat?.chatDetails?.otherUser?.id ?: hintedChatRow?.otherUser?.id
         val bindOnline = if (bindIsGroup) null else peerId?.let { it in onlineUsers || isPeerOnline }
+        val boundDetails = successChat?.chatDetails ?: hintedChatRow
         val bindStatusSubtitle =
             if (bindIsGroup) {
-                null
+                boundDetails?.groupMemberUsers?.let { members ->
+                    chatGroupPresenceSubtitle(
+                        memberLastSeenAtMs = members.map { it.lastPolled },
+                        onlineMemberCount = members.count { it.id in onlineUsers },
+                    )
+                }
             } else if (bindOnline != null || successChat != null || hintedChatRow != null) {
-                chatPeerStatusSubtitle(isTyping = isPeerTyping, isOnline = bindOnline == true)
+                chatPeerStatusSubtitle(
+                    isTyping = isPeerTyping,
+                    isOnline = bindOnline == true,
+                    lastSeenAtMs = boundDetails?.otherUser?.lastPolled,
+                )
             } else {
                 null
             }
@@ -393,7 +414,7 @@ internal fun ChatViewNativeNavBinding(
                     }
                     add(
                         NativeChromeAction(
-                            sfSymbol = "ellipsis.circle",
+                            sfSymbol = "ellipsis",
                             contentDescription = "More options",
                             onClick = { showConnectionSheet = true },
                         ),

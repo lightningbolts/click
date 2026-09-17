@@ -24,6 +24,7 @@ import compose.project.click.click.ui.components.ClickCircularIconButton
 import compose.project.click.click.ui.components.platformPressScale
 import compose.project.click.click.ui.theme.LocalPlatformStyle
 import compose.project.click.click.ui.theme.MotionTokens
+import kotlinx.datetime.Clock
 
 /** Shared horizontal inset for chat header row and composer strip (outer edges align). */
 internal val ChatChromeHorizontalPadding: Dp = 16.dp
@@ -35,11 +36,41 @@ internal val ChatChromeHorizontalPadding: Dp = 16.dp
 internal fun chatPeerStatusSubtitle(
     isTyping: Boolean,
     isOnline: Boolean,
+    lastSeenAtMs: Long? = null,
+    nowMs: Long = Clock.System.now().toEpochMilliseconds(),
 ): String =
     when {
         isTyping -> "Typing…"
         isOnline -> "Online"
+        lastSeenAtMs != null -> "Last seen ${formatLastSeenElapsed(lastSeenAtMs, nowMs)}"
         else -> "Offline"
+    }
+
+internal fun formatLastSeenElapsed(
+    lastSeenAtMs: Long,
+    nowMs: Long = Clock.System.now().toEpochMilliseconds(),
+): String {
+    val elapsedMs = (nowMs - lastSeenAtMs).coerceAtLeast(0L)
+    return when {
+        elapsedMs < 60_000L -> "just now"
+        elapsedMs < 3_600_000L -> "${elapsedMs / 60_000L}m ago"
+        elapsedMs < 86_400_000L -> "${elapsedMs / 3_600_000L}h ago"
+        elapsedMs < 604_800_000L -> "${elapsedMs / 86_400_000L}d ago"
+        else -> "${elapsedMs / 604_800_000L}w ago"
+    }
+}
+
+internal fun chatGroupPresenceSubtitle(
+    memberLastSeenAtMs: List<Long?>,
+    onlineMemberCount: Int,
+    nowMs: Long = Clock.System.now().toEpochMilliseconds(),
+): String? =
+    when {
+        onlineMemberCount > 0 -> "$onlineMemberCount online"
+        else ->
+            memberLastSeenAtMs.filterNotNull().maxOrNull()?.let {
+                "Last active ${formatLastSeenElapsed(it, nowMs)}"
+            }
     }
 
 /**

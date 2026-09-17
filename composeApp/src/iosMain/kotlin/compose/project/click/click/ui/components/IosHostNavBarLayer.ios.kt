@@ -380,6 +380,7 @@ internal class IosHostNavBarLayer {
         detachFromSuperview()
         attachedHost = host
         val hostView = host.view
+        val safeArea = hostView.window?.safeAreaLayoutGuide ?: hostView.safeAreaLayoutGuide
         hostView.addSubview(glassPlate)
         hostView.addSubview(bar)
         hostView.addSubview(chromeRow)
@@ -393,7 +394,10 @@ internal class IosHostNavBarLayer {
                 }
         NSLayoutConstraint.activateConstraints(
             listOf(
-                bar.topAnchor.constraintEqualToAnchor(hostView.safeAreaLayoutGuide.topAnchor),
+                // Detached full-screen media hosts do not always inherit their controller's safe
+                // area even after their view is mounted. Anchor to the containing UIWindow when
+                // available so profile media controls stay below the status bar/Dynamic Island.
+                bar.topAnchor.constraintEqualToAnchor(safeArea.topAnchor),
                 bar.leadingAnchor.constraintEqualToAnchor(hostView.leadingAnchor),
                 bar.trailingAnchor.constraintEqualToAnchor(hostView.trailingAnchor),
                 height,
