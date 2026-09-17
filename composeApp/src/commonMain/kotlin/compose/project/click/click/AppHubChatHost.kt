@@ -23,7 +23,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
@@ -63,7 +62,8 @@ internal fun AppHubChatHost(
     var hubChatRightToLeftPeek by remember {
         mutableStateOf<InteractiveSwipeBackRightToLeftPeek?>(null)
     }
-    val hubSwipeDragPx = remember { mutableFloatStateOf(0f) }
+    val hubBackHost = HubChatInteractiveBackBridge.state
+    val hubSwipeDragPx = hubBackHost.dragOffsetPx
     PlatformNativeNavigationBarSwipeReveal(hubSwipeDragPx)
 
     LaunchedEffect(hubChatArgs) {
@@ -71,14 +71,16 @@ internal fun AppHubChatHost(
             lastHubChatArgs = hubChatArgs
         } else {
             hubChatRightToLeftPeek = null
-            hubSwipeDragPx.floatValue = 0f
+            hubBackHost.reset()
         }
     }
+    DisposableEffect(Unit) {
+        onDispose { hubBackHost.reset() }
+    }
 
-    // Full-screen hubs are now exclusively the Connections/search presentation. Event chats
-    // launched from Map/Nearby/Event detail use AppEventHubChatSheet instead, so this host can keep
-    // the exact same root navigation/chrome path for ordinary and event hubs without any UIKit
-    // sheet portal ownership.
+    // Connections/search Hubs are a true pushed route. Keep the primary tab tree mounted below and
+    // mirror this foreground drag onto it through HubChatInteractiveBackBridge, exactly like normal
+    // Connections chat. Event/Nearby Hubs use their independent modal presentation instead.
     val hubSlideSpec = tween<IntOffset>(300, easing = FastOutSlowInEasing)
     val hubFadeSpec = tween<Float>(220, easing = LinearOutSlowInEasing)
     AnimatedVisibility(
@@ -126,7 +128,9 @@ internal fun AppHubChatHost(
                 enabled = true,
                 opaquePreviousBackground = false,
                 externalDragOffsetPx = hubSwipeDragPx,
-                onBehindLayersVisibleChanged = {},
+                onBehindLayersVisibleChanged = { revealing ->
+                    hubBackHost.behindLayersVisible = revealing
+                },
                 onBack = {
                     hubFocusManager.clearFocus()
                     if (!isIOS) {
@@ -138,7 +142,7 @@ internal fun AppHubChatHost(
                 previousContent = {},
                 currentContent = {
                     CompositionLocalProvider(LocalViewModelStoreOwner provides hubOverlayViewModelOwner) {
-                        HubChatScreen(
+                        ConnectionsHubChatScreen(
                             args = activeHubArgs,
                             currentUserId = hubUserId,
                             targetMessageId = pendingHubTargetMessageId,
@@ -146,7 +150,6 @@ internal fun AppHubChatHost(
                                 closeHubChat(NavigationTransitionMode.Tap)
                             },
                             resolveHubGatekeeperLocation = { resolveHubGatekeeperLocationForChat() },
-                            integrateTimestampPeekWithSwipeBackContainer = true,
                             onRegisterSwipeBackRightToLeftPeek = {
                                 hubChatRightToLeftPeek = it
                             },
