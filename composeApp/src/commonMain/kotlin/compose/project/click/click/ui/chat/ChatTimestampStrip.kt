@@ -6,6 +6,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
@@ -202,8 +203,6 @@ internal fun ChatMessageRowWithTimestampGutter(
     val density = LocalDensity.current
     val gutterWidthDp = ChatTimestampStripDefaults.GutterDp
     val gutterWidthPx = remember(density) { with(density) { gutterWidthDp.toPx() } }
-    val bottomReservedSpacePx =
-        remember(density, bottomReservedSpace) { with(density) { bottomReservedSpace.toPx() } }
     Box(modifier = modifier.fillMaxWidth()) {
         Box(
             modifier =
@@ -224,6 +223,9 @@ internal fun ChatMessageRowWithTimestampGutter(
             modifier =
                 Modifier
                     .align(Alignment.CenterEnd)
+                    // Move the whole gutter layout, including its clip region. Translating only
+                    // the clipped graphics layer sliced the timestamp into a horizontal strip.
+                    .offset(y = -(bottomReservedSpace / 2f))
                     .width(gutterWidthDp)
                     .clipToBounds()
                     .graphicsLayer {
@@ -231,11 +233,6 @@ internal fun ChatMessageRowWithTimestampGutter(
                             (stripVisualPx.floatValue / maxRevealPx.coerceAtLeast(1f)).coerceIn(0f, 1f)
                         alpha = p
                         translationX = size.width * (1f - p)
-                        // Normal message rows reserve a fixed reaction slot below the bubble.
-                        // Centering the timestamp on the whole row therefore placed it visibly too
-                        // low during peek. Remove half of only that bottom reservation so the time
-                        // stays centered on the actual message body throughout drag and settle.
-                        translationY = -(bottomReservedSpacePx * 0.5f)
                     },
             contentAlignment = Alignment.CenterEnd,
         ) {
