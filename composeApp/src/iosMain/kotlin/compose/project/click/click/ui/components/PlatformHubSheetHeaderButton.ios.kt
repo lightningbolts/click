@@ -167,7 +167,9 @@ private class HubSheetHeaderGlassView(
                     UIBlurEffectStyle.UIBlurEffectStyleSystemThinMaterialLight
                 }
             effect = UIBlurEffect.effectWithStyle(style)
-            cornerConfiguration = null
+            // Kotlin/Native exposes cornerConfiguration as non-null. Keep the same capsule
+            // geometry in the blur fallback instead of attempting to clear it with null.
+            cornerConfiguration = UICornerConfiguration.capsuleConfiguration()
             clipsToBounds = true
             layer.cornerRadius = NativeHeaderMetrics.ChromeButtonSizePt / 2.0
         }
