@@ -2,6 +2,7 @@
 
 package compose.project.click.click // pragma: allowlist secret
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,18 +24,24 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
+import compose.project.click.click.ui.components.BindPlatformNativeNavigationBar // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickFormBottomSheet // pragma: allowlist secret
-import compose.project.click.click.ui.components.LocalUseNativeHubSheetHeaderControls // pragma: allowlist secret
-import compose.project.click.click.ui.components.PlatformPresentedSheetStackScope // pragma: allowlist secret
+import compose.project.click.click.ui.components.PlatformOverlayAbovePresentedSheets // pragma: allowlist secret
 import compose.project.click.click.ui.screens.HubChatNavArgs // pragma: allowlist secret
 import compose.project.click.click.ui.screens.HubChatScreen // pragma: allowlist secret
+import compose.project.click.click.ui.theme.LocalPlatformStyle // pragma: allowlist secret
 
 /**
- * Sheet-owned Event Hub presentation used by event/map/feed entry points.
+ * Event Hub presentation used by event/map/feed entry points.
  *
- * The conversation itself remains the same [HubChatScreen]/HubChatViewModel stack as Connections,
- * but this shell deliberately stays inside the native page-sheet hierarchy. It never asks the root
- * app UINavigationBar, UITabBar, or interactive-back host to represent a sheet-origin route.
+ * iOS deliberately uses the same real full-screen UIKit portal contract as profile media: the
+ * existing Event/Nearby sheet stack stays mounted underneath while the conversation owns a new
+ * full-screen ComposeUIViewController and the shared native Liquid Glass chrome. This avoids
+ * trying to host Liquid Glass controls inside a UISheetPresentationController/Compose interop
+ * boundary, which produced dark rectangular backings and inconsistent interaction.
+ *
+ * Android retains the existing bottom-sheet presentation. The conversation implementation and
+ * [ViewModelStore] are shared on both platforms.
  */
 @Composable
 internal fun AppEventHubChatSheet(
@@ -47,10 +54,8 @@ internal fun AppEventHubChatSheet(
 ) {
     if (args == null && !loading && errorMessage == null) return
 
-    // Own the HubChat ViewModelStore in AppMainShell's composition, not inside the detached
-    // ComposeUIViewController created by the native sheet. UIKit can re-layout/re-host sheet
-    // content while moving between medium/large detents; that must not tear down and recreate
-    // Supabase realtime collectors. The store is cleared exactly when this sheet route leaves.
+    // Keep the HubChat ViewModel owned by AppMainShell rather than by a detached presentation
+    // host. Presentation changes must not recreate Supabase realtime collectors.
     val owner =
         remember(args?.realtimeChannel, currentUserId) {
             if (args == null) {
@@ -65,81 +70,137 @@ internal fun AppEventHubChatSheet(
         onDispose { owner?.viewModelStore?.clear() }
     }
 
-    // This state is owned by AppMainShell, but the presentation originates inside the native
-    // Nearby/Event sheet stack. Re-parent the sheet host to UIKit's currently presented controller
-    // so Event Hub stacks above that dialog instead of replacing/dismissing it from the root host.
-    PlatformPresentedSheetStackScope {
-        ClickFormBottomSheet(
-            onDismissRequest = onDismissRequest,
-            modifier = Modifier.fillMaxSize(),
-            expandable = true,
-            useUiKitScrollHost = false,
-            contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
+    val isIOS = LocalPlatformStyle.current.isIOS
+    if (isIOS) {
+        PlatformOverlayAbovePresentedSheets(
+            liftAbovePresentedSheets = true,
         ) {
             when {
                 args != null && owner != null -> {
-                    CompositionLocalProvider(
-                        LocalViewModelStoreOwner provides owner,
-                        LocalUseNativeHubSheetHeaderControls provides true,
-                    ) {
+                    CompositionLocalProvider(LocalViewModelStoreOwner provides owner) {
                         HubChatScreen(
                             args = args,
                             currentUserId = currentUserId,
                             onNavigateBack = onDismissRequest,
-                            embeddedInSheet = true,
+                            embeddedInSheet = false,
+                            nativeLeadingClose = true,
                         )
                     }
                 }
 
-                loading -> {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(12.dp),
-                        ) {
-                            CircularProgressIndicator()
-                            Text(
-                                text = pendingTitle?.takeIf { it.isNotBlank() } ?: "Event chat",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold,
-                            )
-                            Text(
-                                text = "Opening conversation…",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-                }
-
                 else -> {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(horizontal = 32.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            Text(
-                                text = "Couldn't open event chat",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                textAlign = TextAlign.Center,
-                            )
-                            Text(
-                                text = errorMessage.orEmpty(),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = TextAlign.Center,
-                            )
-                        }
-                    }
+                    EventHubPortalStatus(
+                        pendingTitle = pendingTitle,
+                        loading = loading,
+                        errorMessage = errorMessage,
+                        onDismissRequest = onDismissRequest,
+                    )
                 }
+            }
+        }
+        return
+    }
+
+    ClickFormBottomSheet(
+        onDismissRequest = onDismissRequest,
+        modifier = Modifier.fillMaxSize(),
+        expandable = true,
+        useUiKitScrollHost = false,
+        contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
+    ) {
+        when {
+            args != null && owner != null -> {
+                CompositionLocalProvider(LocalViewModelStoreOwner provides owner) {
+                    HubChatScreen(
+                        args = args,
+                        currentUserId = currentUserId,
+                        onNavigateBack = onDismissRequest,
+                        embeddedInSheet = true,
+                    )
+                }
+            }
+
+            else -> {
+                EventHubStatusBody(
+                    pendingTitle = pendingTitle,
+                    loading = loading,
+                    errorMessage = errorMessage,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun EventHubPortalStatus(
+    pendingTitle: String?,
+    loading: Boolean,
+    errorMessage: String?,
+    onDismissRequest: () -> Unit,
+) {
+    BindPlatformNativeNavigationBar(
+        title = pendingTitle?.takeIf { it.isNotBlank() } ?: "Event chat",
+        subtitle = if (loading) "Opening conversation…" else null,
+        onNavigateBack = onDismissRequest,
+        collapseFraction = 1f,
+        leadingClose = true,
+    )
+    Box(
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background),
+    ) {
+        EventHubStatusBody(
+            pendingTitle = pendingTitle,
+            loading = loading,
+            errorMessage = errorMessage,
+        )
+    }
+}
+
+@Composable
+private fun EventHubStatusBody(
+    pendingTitle: String?,
+    loading: Boolean,
+    errorMessage: String?,
+) {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            if (loading) {
+                CircularProgressIndicator()
+                Text(
+                    text = pendingTitle?.takeIf { it.isNotBlank() } ?: "Event chat",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    textAlign = TextAlign.Center,
+                )
+                Text(
+                    text = "Opening conversation…",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                )
+            } else {
+                Text(
+                    text = "Couldn't open event chat",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    textAlign = TextAlign.Center,
+                )
+                Text(
+                    text = errorMessage.orEmpty(),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                )
             }
         }
     }
