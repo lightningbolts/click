@@ -50,8 +50,8 @@ import compose.project.click.click.ui.theme.LocalPlatformStyle // pragma: allowl
  * underneath. Click Drops uses the same in-tree cover + exclusive overlay bind.
  *
  * iOS chat/hub media retargets the existing native chrome through [ApplyStableOverlayMediaChrome].
- * Portaled profile media deliberately opts out of native chrome because its detached Compose host is
- * not the route-owned UIKit controller; it uses [MediaLightboxTopChrome] in the portal instead.
+ * Portaled profile media can provide [chrome] so its detached UIKit host uses the same dismissal
+ * transaction as the media content instead of tearing down native controls independently.
  */
 @Composable
 fun GlassFullscreenMediaOverlay(
@@ -62,6 +62,8 @@ fun GlassFullscreenMediaOverlay(
     motion: UnifiedPopupMotion = UnifiedPopupMotion.Media,
     nativeTrailingActions: List<NativeChromeAction> = emptyList(),
     useNativeChrome: Boolean = true,
+    onDismissTransitionStarted: (() -> Unit)? = null,
+    chrome: @Composable (onClose: () -> Unit) -> Unit = {},
     content: @Composable () -> Unit,
 ) {
     val transitionState = remember { MutableTransitionState(false) }
@@ -80,6 +82,7 @@ fun GlassFullscreenMediaOverlay(
         if (userDismissPending) return
         if (!transitionState.currentState && !transitionState.targetState) return
         userDismissPending = true
+        onDismissTransitionStarted?.invoke()
         transitionState.targetState = false
     }
 
@@ -107,6 +110,7 @@ fun GlassFullscreenMediaOverlay(
         OverlayExclusiveBindPolicy.shouldCoverNativeTabBarForMedia(
             isIOS = LocalPlatformStyle.current.isIOS,
         )
+    chrome(::requestDismiss)
     if (useNativeChrome) {
         CompositionLocalProvider(LocalNativeChromeActive provides true) {
             ApplyStableOverlayMediaChrome(
