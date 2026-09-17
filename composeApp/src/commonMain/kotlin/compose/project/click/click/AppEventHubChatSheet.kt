@@ -24,6 +24,7 @@ import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import compose.project.click.click.ui.components.ClickFormBottomSheet // pragma: allowlist secret
+import compose.project.click.click.ui.components.LocalUseNativeHubSheetHeaderControls // pragma: allowlist secret
 import compose.project.click.click.ui.components.PlatformPresentedSheetStackScope // pragma: allowlist secret
 import compose.project.click.click.ui.screens.HubChatNavArgs // pragma: allowlist secret
 import compose.project.click.click.ui.screens.HubChatScreen // pragma: allowlist secret
@@ -68,7 +69,10 @@ internal fun AppEventHubChatSheet(
                     DisposableEffect(owner) {
                         onDispose { owner.viewModelStore.clear() }
                     }
-                    CompositionLocalProvider(LocalViewModelStoreOwner provides owner) {
+                    CompositionLocalProvider(
+                        LocalViewModelStoreOwner provides owner,
+                        LocalUseNativeHubSheetHeaderControls provides true,
+                    ) {
                         HubChatScreen(
                             args = args,
                             currentUserId = currentUserId,
