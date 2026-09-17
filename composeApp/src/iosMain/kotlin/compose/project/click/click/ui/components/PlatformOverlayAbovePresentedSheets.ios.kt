@@ -5,12 +5,14 @@ package compose.project.click.click.ui.components // pragma: allowlist secret
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.uikit.LocalUIViewController
 import androidx.compose.ui.window.ComposeUIViewController
+import compose.project.click.click.ui.theme.LocalIsDarkMode // pragma: allowlist secret
 import compose.project.click.click.ui.theme.PlatformStyleProvider // pragma: allowlist secret
 import platform.UIKit.UIColor
 import platform.UIKit.UIModalPresentationOverFullScreen
@@ -42,6 +44,7 @@ actual fun PlatformOverlayAbovePresentedSheets(
     val latestContent = rememberUpdatedState(content)
     val latestScheme = rememberUpdatedState(MaterialTheme.colorScheme)
     val latestTypography = rememberUpdatedState(MaterialTheme.typography)
+    val latestDarkMode = rememberUpdatedState(LocalIsDarkMode.current)
     val overlayController =
         remember(host) {
             ComposeUIViewController {
@@ -49,8 +52,14 @@ actual fun PlatformOverlayAbovePresentedSheets(
                     colorScheme = latestScheme.value,
                     typography = latestTypography.value,
                 ) {
-                    PlatformStyleProvider {
-                        latestContent.value.invoke()
+                    // This is a separate Compose root, so CompositionLocals from the app root do
+                    // not cross the UIKit presentation boundary automatically. Preserve dark-mode
+                    // ownership explicitly or native Liquid Glass title/glyph colors fall back to
+                    // LocalIsDarkMode's light default while the app itself is dark.
+                    CompositionLocalProvider(LocalIsDarkMode provides latestDarkMode.value) {
+                        PlatformStyleProvider {
+                            latestContent.value.invoke()
+                        }
                     }
                 }
             }.apply {
