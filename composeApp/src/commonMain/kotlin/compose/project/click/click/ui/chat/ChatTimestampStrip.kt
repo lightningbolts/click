@@ -18,11 +18,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.graphicsLayer
-import compose.project.click.click.data.models.Connection // pragma: allowlist secret
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import compose.project.click.click.data.models.Connection // pragma: allowlist secret
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -188,6 +189,7 @@ internal fun ChatMessageRowWithTimestampGutter(
     timeCreated: Long,
     stripVisualPx: MutableFloatState,
     maxRevealPx: Float,
+    bottomReservedSpace: Dp,
     modifier: Modifier = Modifier,
     @Suppress("UNUSED_PARAMETER") meshConnection: Connection? = null,
     @Suppress("UNUSED_PARAMETER") useHubNeutralMesh: Boolean = false,
@@ -200,6 +202,8 @@ internal fun ChatMessageRowWithTimestampGutter(
     val density = LocalDensity.current
     val gutterWidthDp = ChatTimestampStripDefaults.GutterDp
     val gutterWidthPx = remember(density) { with(density) { gutterWidthDp.toPx() } }
+    val bottomReservedSpacePx =
+        remember(density, bottomReservedSpace) { with(density) { bottomReservedSpace.toPx() } }
     Box(modifier = modifier.fillMaxWidth()) {
         Box(
             modifier =
@@ -227,6 +231,11 @@ internal fun ChatMessageRowWithTimestampGutter(
                             (stripVisualPx.floatValue / maxRevealPx.coerceAtLeast(1f)).coerceIn(0f, 1f)
                         alpha = p
                         translationX = size.width * (1f - p)
+                        // Normal message rows reserve a fixed reaction slot below the bubble.
+                        // Centering the timestamp on the whole row therefore placed it visibly too
+                        // low during peek. Remove half of only that bottom reservation so the time
+                        // stays centered on the actual message body throughout drag and settle.
+                        translationY = -(bottomReservedSpacePx * 0.5f)
                     },
             contentAlignment = Alignment.CenterEnd,
         ) {
