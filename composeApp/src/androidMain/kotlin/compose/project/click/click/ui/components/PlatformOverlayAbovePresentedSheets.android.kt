@@ -9,6 +9,7 @@ actual fun PlatformOverlayAbovePresentedSheets(
     liftAbovePresentedSheets: Boolean,
     dismissing: Boolean,
     revealUnderlyingPresentation: Boolean,
+    presentationMotion: PlatformOverlayPresentationMotion,
     content: @Composable () -> Unit,
 ) {
     content()
