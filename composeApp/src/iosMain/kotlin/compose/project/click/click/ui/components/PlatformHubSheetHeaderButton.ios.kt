@@ -100,7 +100,7 @@ actual fun PlatformHubSheetHeaderButton(
 @OptIn(ExperimentalForeignApi::class)
 private class HubSheetHeaderGlassView(
     target: HubSheetHeaderTapTarget,
-) : UIVisualEffectView() {
+) : UIVisualEffectView(effect = null) {
     private val button =
         UIButton.buttonWithType(UIButtonTypeSystem).apply {
             translatesAutoresizingMaskIntoConstraints = false
