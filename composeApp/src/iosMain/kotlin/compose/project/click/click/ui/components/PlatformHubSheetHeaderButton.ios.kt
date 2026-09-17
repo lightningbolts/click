@@ -27,6 +27,7 @@ import platform.Foundation.NSSelectorFromString
 import platform.UIKit.NSDirectionalEdgeInsetsMake
 import platform.UIKit.UIButton
 import platform.UIKit.UIButtonConfiguration
+import platform.UIKit.UIButtonConfigurationCornerStyleCapsule
 import platform.UIKit.UIButtonTypeSystem
 import platform.UIKit.UIColor
 import platform.UIKit.UIControlEventTouchUpInside
@@ -142,12 +143,15 @@ private fun paintHubSheetHeaderButton(
             weight = UIImageSymbolWeightMedium,
         )
     val image =
-        (UIImage.systemImageNamed(symbol, withConfiguration = symbolConfig)
-            ?: UIImage.systemImageNamed(symbol))
-            ?.imageWithRenderingMode(UIImageRenderingMode.UIImageRenderingModeAlwaysTemplate)
+        (
+            UIImage.systemImageNamed(symbol, withConfiguration = symbolConfig)
+                ?: UIImage.systemImageNamed(symbol)
+        )?.imageWithRenderingMode(UIImageRenderingMode.UIImageRenderingModeAlwaysTemplate)
     val config =
         if (usesNativeLiquidGlass) {
-            UIButtonConfiguration.glassButtonConfiguration()
+            UIButtonConfiguration.glassButtonConfiguration().apply {
+                cornerStyle = UIButtonConfigurationCornerStyleCapsule
+            }
         } else {
             UIButtonConfiguration.plainButtonConfiguration()
         }
