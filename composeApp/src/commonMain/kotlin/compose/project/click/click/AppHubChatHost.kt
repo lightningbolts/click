@@ -86,8 +86,14 @@ internal fun AppHubChatHost(
             activeArgs != null -> keepEventHubSheetsSuspended = false
             !keepEventHubSheetsSuspended -> Unit
             hubChatTransitionMode == NavigationTransitionMode.GestureBack -> {
-                // GestureBack already moved the foreground route completely off-screen.
-                keepEventHubSheetsSuspended = false
+                // InteractiveSwipeBackContainer invokes onBack at the committed end position, then
+                // intentionally holds its settling state for 34 ms so the foreground can disappear
+                // without snapping back. Restoring native sheets inside that guard races UIKit's
+                // presentation layers and can leave the retained sheet stack black/dimmed.
+                delay(50L)
+                if (hubChatArgsState.value == null) {
+                    keepEventHubSheetsSuspended = false
+                }
             }
             else -> {
                 // Tap-back exits inside the root host. Keep the Event/Nearby controllers suspended
