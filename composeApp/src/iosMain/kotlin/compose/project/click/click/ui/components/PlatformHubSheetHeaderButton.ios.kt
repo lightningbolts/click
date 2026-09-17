@@ -72,7 +72,8 @@ actual fun PlatformHubSheetHeaderButton(
             }
         },
         modifier = modifier,
-        update = { button ->
+        update = { view ->
+            val button = view as? UIButton ?: return@UIKitView
             button.applyHubSheetHeaderButtonAppearance(
                 symbol = symbol,
                 contentDescription = contentDescription,
