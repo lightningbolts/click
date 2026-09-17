@@ -148,6 +148,11 @@ fun HubChatScreen(
     integrateTimestampPeekWithSwipeBackContainer: Boolean = false,
     onRegisterSwipeBackRightToLeftPeek: (InteractiveSwipeBackRightToLeftPeek?) -> Unit = {},
     parentInteractiveBackSwipePx: androidx.compose.runtime.MutableFloatState? = null,
+    /**
+     * Sheet-origin event chats keep platform identity/keyboard behavior but render their own local
+     * header instead of binding the root app UINavigationBar/UITabBar chrome.
+     */
+    embeddedInSheet: Boolean = false,
     keyboardHeightProvider: KeyboardHeightProvider = rememberKeyboardHeightProvider(),
 ) {
     val viewModel: HubChatViewModel =
@@ -175,7 +180,7 @@ fun HubChatScreen(
     val resolvedCreatorId by viewModel.resolvedCreatorId.collectAsState()
     val hubDetails by viewModel.hubDetails.collectAsState()
     var settingsMenuExpanded by remember { mutableStateOf(false) }
-    val nativeNavChrome = LocalPlatformStyle.current.isIOS
+    val nativeNavChrome = LocalPlatformStyle.current.isIOS && !embeddedInSheet
     if (nativeNavChrome) {
         BindPlatformNativeNavigationBar(
             title = hubDetails.name.ifBlank { args.hubTitle },
@@ -266,7 +271,12 @@ fun HubChatScreen(
     // Standalone proximity hubs use the three-person lobby threshold. Event hubs are already
     // authorized by host/RSVP/check-in membership and must be testable/usable below three people.
     val inLobby = !isEventHub && occupantCount < 3
-    val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val topInset =
+        if (embeddedInSheet) {
+            0.dp
+        } else {
+            WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+        }
     val hubHasSubtitle = true
     val hubNativeClearance =
         platformNativeHeaderClearance(
@@ -576,7 +586,7 @@ fun HubChatScreen(
                                         .fillMaxWidth()
                                         .chatComposerKeyboardMotion(
                                             nativeKeyboardLiftPxState = nativeKeyboardInsets.liftPxState,
-                                            clearNativeTabBar = true,
+                                            clearNativeTabBar = !embeddedInSheet,
                                         ),
                             ) {
                                 HubChatInputBar(
