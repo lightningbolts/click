@@ -6,7 +6,6 @@
 package compose.project.click.click.ui.screens // pragma: allowlist secret
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -24,9 +23,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.pointer.PointerEventPass
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -40,7 +36,6 @@ import compose.project.click.click.ui.components.JoinCommunityHubSheet // pragma
 import compose.project.click.click.ui.components.SuccessBeat // pragma: allowlist secret
 import compose.project.click.click.ui.theme.* // pragma: allowlist secret
 import compose.project.click.click.utils.LocationService // pragma: allowlist secret
-import kotlin.math.abs
 
 @Composable
 fun AddClickScreen(
@@ -60,38 +55,12 @@ fun AddClickScreen(
 ) {
     var isClicked by remember { mutableStateOf(false) }
     var clickedUserName by remember { mutableStateOf("") }
-    val fontScale = LocalDensity.current.fontScale
-    val freezeRootScroll =
-        if (fontScale <= 1.2f) {
-            Modifier.pointerInput(Unit) {
-                // This modifier lives on the scaffold root and observes at Initial pass, before the
-                // parent verticalScroll can claim the gesture. The previous child-level drag
-                // detector ran too late, so Add Click still scrolled/collapsed its root header.
-                awaitEachGesture {
-                    while (true) {
-                        val event = awaitPointerEvent(PointerEventPass.Initial)
-                        event.changes.forEach { change ->
-                            if (change.pressed && change.previousPressed) {
-                                val dx = change.position.x - change.previousPosition.x
-                                val dy = change.position.y - change.previousPosition.y
-                                if (abs(dy) > abs(dx) && dy != 0f) {
-                                    change.consume()
-                                }
-                            }
-                        }
-                        if (event.changes.none { it.pressed }) break
-                    }
-                }
-            }
-        } else {
-            Modifier
-        }
 
     AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
         AppScreenWithFloatingHeader(
             title = "Add Click",
             subtitle = "Connect in person or join a nearby community",
-            modifier = freezeRootScroll,
+            scrollEnabled = false,
         ) { contentModifier ->
             if (!isClicked) {
                 AddClickContent(
