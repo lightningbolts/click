@@ -12,6 +12,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.uikit.LocalUIViewController
 import androidx.compose.ui.window.ComposeUIViewController
 import compose.project.click.click.ui.theme.PlatformStyleProvider // pragma: allowlist secret
+import platform.UIKit.UIColor
 import platform.UIKit.UIModalPresentationOverFullScreen
 import platform.UIKit.UIView
 import platform.UIKit.UIViewController
@@ -23,13 +24,13 @@ import platform.UIKit.UIViewController
  * A detached ComposeUIViewController never participates in the presentation hierarchy, so its
  * safe-area guide can remain at y=0 and native Liquid Glass chrome is laid over the status bar.
  * Presenting the controller over full-screen gives it the same UIKit safe-area/layout contract as
- * the working chat media path while keeping the underlying profile sheet's view/composition mounted
- * for restoration.
+ * the working chat media path while keeping the underlying native sheet stack mounted.
  */
 @Composable
 actual fun PlatformOverlayAbovePresentedSheets(
     liftAbovePresentedSheets: Boolean,
     dismissing: Boolean,
+    revealUnderlyingPresentation: Boolean,
     content: @Composable () -> Unit,
 ) {
     if (!liftAbovePresentedSheets) {
@@ -58,11 +59,18 @@ actual fun PlatformOverlayAbovePresentedSheets(
             }
         }
 
-    DisposableEffect(host, overlayController) {
+    DisposableEffect(host, overlayController, revealUnderlyingPresentation) {
         val presenter = host.presentationRootController().topmostPresentedController()
         val overlayView = overlayController.view
         overlayView.alpha = 1.0
         overlayView.userInteractionEnabled = true
+        if (revealUnderlyingPresentation) {
+            // Event Hub interactive-back must expose the still-mounted Event/Nearby sheet as the
+            // foreground route moves with the finger. Keep only this portal host transparent; the
+            // profile-media portal retains its existing opaque presentation behavior.
+            overlayView.backgroundColor = UIColor.clearColor
+            overlayView.setOpaque(false)
+        }
         if (overlayController.presentingViewController == null) {
             presenter.presentViewController(
                 viewControllerToPresent = overlayController,
