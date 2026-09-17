@@ -7,6 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.TextFieldColors
@@ -26,6 +27,9 @@ import compose.project.click.click.data.AppDataManager
 import compose.project.click.click.data.models.ChatWithDetails
 import compose.project.click.click.data.models.User
 import compose.project.click.click.ui.components.ClickCircularIconButton
+import compose.project.click.click.ui.components.HubSheetHeaderAction
+import compose.project.click.click.ui.components.LocalUseNativeHubSheetHeaderControls
+import compose.project.click.click.ui.components.PlatformHubSheetHeaderButton
 import compose.project.click.click.ui.components.platformPressScale
 import compose.project.click.click.ui.theme.LocalPlatformStyle
 import compose.project.click.click.ui.theme.MotionTokens
@@ -135,6 +139,26 @@ internal fun ChatHeaderIconButton(
     iconSize: Dp = 22.dp,
     showBorder: Boolean = false,
 ) {
+    val nativeSheetAction =
+        if (LocalUseNativeHubSheetHeaderControls.current && LocalPlatformStyle.current.isIOS && enabled) {
+            when (contentDescription) {
+                "Back" -> HubSheetHeaderAction.Back
+                "Hub settings" -> HubSheetHeaderAction.More
+                else -> null
+            }
+        } else {
+            null
+        }
+    if (nativeSheetAction != null) {
+        PlatformHubSheetHeaderButton(
+            action = nativeSheetAction,
+            contentDescription = contentDescription,
+            onClick = onClick,
+            modifier = modifier.size(if (size < 44.dp) 44.dp else size),
+        )
+        return
+    }
+
     ClickCircularIconButton(
         icon = icon,
         contentDescription = contentDescription,
@@ -159,11 +183,14 @@ internal fun ChatLiquidGlassPlate(
 ) {
     @Suppress("UNUSED_VARIABLE")
     val ignoredBlur = blurRadius
+    val nativeSheetHeader =
+        LocalUseNativeHubSheetHeaderControls.current && LocalPlatformStyle.current.isIOS
+    val background = if (nativeSheetHeader) tint.copy(alpha = 0.86f) else tint
     Box(
         modifier =
             modifier
                 .graphicsLayer { clip = true }
-                .background(tint)
+                .background(background)
                 .testTag(testTag),
     )
 }
