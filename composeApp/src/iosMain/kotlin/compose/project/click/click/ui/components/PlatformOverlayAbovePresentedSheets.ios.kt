@@ -20,10 +20,10 @@ import platform.UIKit.UIModalPresentationOverFullScreen
 import platform.UIKit.UIView
 import platform.UIKit.UIViewController
 
-private const val ModalLiftEnterSeconds = 0.28
-private const val ModalLiftExitSeconds = 0.22
-private const val ModalLiftEnterOffsetPt = 30.0
-private const val ModalLiftExitOffsetPt = 22.0
+private const val MODAL_LIFT_ENTER_SECONDS = 0.28
+private const val MODAL_LIFT_EXIT_SECONDS = 0.22
+private const val MODAL_LIFT_ENTER_OFFSET_PT = 30.0
+private const val MODAL_LIFT_EXIT_OFFSET_PT = 22.0
 
 /**
  * Full-screen iOS portal for content launched from an already-presented native sheet.
@@ -82,7 +82,7 @@ actual fun PlatformOverlayAbovePresentedSheets(
         overlayView.transform = CGAffineTransformMakeTranslation(0.0, 0.0)
         if (presentationMotion == PlatformOverlayPresentationMotion.ModalLift) {
             overlayView.alpha = 0.0
-            overlayView.transform = CGAffineTransformMakeTranslation(0.0, ModalLiftEnterOffsetPt)
+            overlayView.transform = CGAffineTransformMakeTranslation(0.0, MODAL_LIFT_ENTER_OFFSET_PT)
         } else {
             overlayView.alpha = 1.0
         }
@@ -97,7 +97,7 @@ actual fun PlatformOverlayAbovePresentedSheets(
                 completion = {
                     if (presentationMotion == PlatformOverlayPresentationMotion.ModalLift) {
                         UIView.animateWithDuration(
-                            ModalLiftEnterSeconds,
+                            MODAL_LIFT_ENTER_SECONDS,
                             animations = {
                                 overlayView.alpha = 1.0
                                 overlayView.transform = CGAffineTransformMakeTranslation(0.0, 0.0)
@@ -133,11 +133,11 @@ actual fun PlatformOverlayAbovePresentedSheets(
                 }
                 PlatformOverlayPresentationMotion.ModalLift -> {
                     UIView.animateWithDuration(
-                        ModalLiftExitSeconds,
+                        MODAL_LIFT_EXIT_SECONDS,
                         animations = {
                             overlayView.alpha = 0.0
                             overlayView.transform =
-                                CGAffineTransformMakeTranslation(0.0, ModalLiftExitOffsetPt)
+                                CGAffineTransformMakeTranslation(0.0, MODAL_LIFT_EXIT_OFFSET_PT)
                         },
                     )
                 }
