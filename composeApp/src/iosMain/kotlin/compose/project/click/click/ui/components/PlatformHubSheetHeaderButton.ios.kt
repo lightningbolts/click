@@ -2,15 +2,16 @@
 
 package compose.project.click.click.ui.components
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.viewinterop.UIKitView
 import compose.project.click.click.platform.rememberReduceTransparencyEnabled
-import compose.project.click.click.ui.theme.LocalIsDarkMode
 import kotlinx.cinterop.BetaInteropApi
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.ObjCAction
@@ -38,7 +39,9 @@ actual fun PlatformHubSheetHeaderButton(
 ) {
     val target = remember { HubSheetHeaderTapTarget() }
     val onClickState by rememberUpdatedState(onClick)
-    val isDark = LocalIsDarkMode.current
+    // This lives in the detached native sheet ComposeUIViewController. MaterialTheme is explicitly
+    // propagated into that host; app-level CompositionLocals are not, so derive contrast here.
+    val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val reduceTransparency = rememberReduceTransparencyEnabled()
     val usesNativeLiquidGlass =
         remember(reduceTransparency) {
