@@ -47,6 +47,24 @@ internal fun AppEventHubChatSheet(
 ) {
     if (args == null && !loading && errorMessage == null) return
 
+    // Own the HubChat ViewModelStore in AppMainShell's composition, not inside the detached
+    // ComposeUIViewController created by the native sheet. UIKit can re-layout/re-host sheet
+    // content while moving between medium/large detents; that must not tear down and recreate
+    // Supabase realtime collectors. The store is cleared exactly when this sheet route leaves.
+    val owner =
+        remember(args?.realtimeChannel, currentUserId) {
+            if (args == null) {
+                null
+            } else {
+                object : ViewModelStoreOwner {
+                    override val viewModelStore = ViewModelStore()
+                }
+            }
+        }
+    DisposableEffect(owner) {
+        onDispose { owner?.viewModelStore?.clear() }
+    }
+
     // This state is owned by AppMainShell, but the presentation originates inside the native
     // Nearby/Event sheet stack. Re-parent the sheet host to UIKit's currently presented controller
     // so Event Hub stacks above that dialog instead of replacing/dismissing it from the root host.
@@ -59,16 +77,7 @@ internal fun AppEventHubChatSheet(
             contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
         ) {
             when {
-                args != null -> {
-                    val owner =
-                        remember(args.realtimeChannel, currentUserId) {
-                            object : ViewModelStoreOwner {
-                                override val viewModelStore = ViewModelStore()
-                            }
-                        }
-                    DisposableEffect(owner) {
-                        onDispose { owner.viewModelStore.clear() }
-                    }
+                args != null && owner != null -> {
                     CompositionLocalProvider(
                         LocalViewModelStoreOwner provides owner,
                         LocalUseNativeHubSheetHeaderControls provides true,
