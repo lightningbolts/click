@@ -48,8 +48,10 @@ internal fun rememberTimestampPeekRevealPx(): Float {
 }
 
 /** Sub-pixel threshold so a settled peek of ~0 does not block interactive back. */
-internal fun isTimestampPeekRevealed(visualPx: Float, epsilonPx: Float = 0.5f): Boolean =
-    visualPx > epsilonPx
+internal fun isTimestampPeekRevealed(
+    visualPx: Float,
+    epsilonPx: Float = 0.5f,
+): Boolean = visualPx > epsilonPx
 
 /** Soft knee in px — matches reply swipe [ChatMessageBubble] `swipeSoftKneePx`. */
 @Composable
