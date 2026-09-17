@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.BluetoothSearching
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.GroupAdd
+import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.QrCode
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material3.*
@@ -30,7 +31,6 @@ import compose.project.click.click.ui.components.AppScreenWithFloatingHeader // 
 import compose.project.click.click.ui.components.ClickButton // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickContentCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickListRow // pragma: allowlist secret
-import compose.project.click.click.ui.components.ClickScreenSpacing // pragma: allowlist secret
 import compose.project.click.click.ui.components.CreateHubModal // pragma: allowlist secret
 import compose.project.click.click.ui.components.JoinCommunityHubSheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.SuccessBeat // pragma: allowlist secret
@@ -45,6 +45,7 @@ fun AddClickScreen(
     onNavigateToNfc: () -> Unit = {},
     onShowMyQRCode: () -> Unit = {},
     onScanQRCode: () -> Unit = {},
+    onCreateGroupChat: () -> Unit = {},
     /** Hub slug from venue (e.g. local_point); runs proximity check then opens hub chat. */
     onJoinCommunityHub: (hubId: String) -> Unit = {},
     /** After POST `/api/hub/create`, verify geofence and open hub chat. */
@@ -59,6 +60,7 @@ fun AddClickScreen(
         AppScreenWithFloatingHeader(
             title = "Add Click",
             subtitle = "Connect in person or join a nearby community",
+            scrollEnabled = false,
         ) { contentModifier ->
             if (!isClicked) {
                 AddClickContent(
@@ -70,6 +72,7 @@ fun AddClickScreen(
                     onNavigateToNfc = onNavigateToNfc,
                     onShowMyQRCode = onShowMyQRCode,
                     onScanQRCode = onScanQRCode,
+                    onCreateGroupChat = onCreateGroupChat,
                     onJoinCommunityHub = onJoinCommunityHub,
                     locationService = locationService,
                     onCommunityHubCreated = onCommunityHubCreated,
@@ -94,6 +97,7 @@ fun AddClickContent(
     onNavigateToNfc: () -> Unit,
     onShowMyQRCode: () -> Unit,
     onScanQRCode: () -> Unit,
+    onCreateGroupChat: () -> Unit = {},
     onJoinCommunityHub: (hubId: String) -> Unit = {},
     locationService: LocationService,
     onCommunityHubCreated: (hubId: String) -> Unit = {},
@@ -124,14 +128,17 @@ fun AddClickContent(
     Column(
         modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(ClickScreenSpacing.Section),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         ClickContentCard(
-            modifier = Modifier.fillMaxWidth(),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .minimumInteractiveComponentSize(),
             onClick = onNavigateToNfc,
             showBorder = false,
             containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.58f),
-            contentPadding = 20.dp,
+            contentPadding = 18.dp,
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -192,6 +199,12 @@ fun AddClickContent(
                 onClick = onScanQRCode,
             )
             AddClickSecondaryRow(
+                title = "Create Group Chat",
+                subtitle = "Start a verified group with your Clicks",
+                icon = Icons.Filled.Groups,
+                onClick = onCreateGroupChat,
+            )
+            AddClickSecondaryRow(
                 title = "Create Community Hub",
                 subtitle = "Host a venue for nearby Clicks",
                 icon = Icons.Filled.Campaign,
@@ -217,6 +230,7 @@ private fun AddClickSecondaryRow(
     showDivider: Boolean = true,
 ) {
     ClickListRow(
+        modifier = Modifier.minimumInteractiveComponentSize(),
         title = title,
         subtitle = subtitle,
         onClick = onClick,
@@ -292,7 +306,13 @@ fun ClickedSuccessContent(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            ClickButton(onClick = onStartChatting, modifier = Modifier.fillMaxWidth()) {
+            ClickButton(
+                onClick = onStartChatting,
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .minimumInteractiveComponentSize(),
+            ) {
                 Text("Open chat")
             }
         }

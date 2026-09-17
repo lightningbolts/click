@@ -111,6 +111,7 @@ import compose.project.click.click.ui.components.GlassSheetTokens // pragma: all
 import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeftPeek // pragma: allowlist secret
 import compose.project.click.click.ui.components.LocalGlassAlertAnimatedDismiss // pragma: allowlist secret
 import compose.project.click.click.ui.components.NativeChromeAction // pragma: allowlist secret
+import compose.project.click.click.ui.components.NativeHeaderMetrics // pragma: allowlist secret
 import compose.project.click.click.ui.components.UnifiedPopupFormDialog // pragma: allowlist secret
 import compose.project.click.click.ui.components.platformNativeHeaderClearance // pragma: allowlist secret
 import compose.project.click.click.ui.components.sheetPageBackground // pragma: allowlist secret
@@ -147,6 +148,13 @@ fun HubChatScreen(
     integrateTimestampPeekWithSwipeBackContainer: Boolean = false,
     onRegisterSwipeBackRightToLeftPeek: (InteractiveSwipeBackRightToLeftPeek?) -> Unit = {},
     parentInteractiveBackSwipePx: androidx.compose.runtime.MutableFloatState? = null,
+    /**
+     * Sheet-origin event chats keep platform identity/keyboard behavior but render their own local
+     * header instead of binding the root app UINavigationBar/UITabBar chrome.
+     */
+    embeddedInSheet: Boolean = false,
+    /** Use the persistent native X control for modal full-screen presentations. */
+    nativeLeadingClose: Boolean = false,
     keyboardHeightProvider: KeyboardHeightProvider = rememberKeyboardHeightProvider(),
 ) {
     val viewModel: HubChatViewModel =
@@ -174,7 +182,7 @@ fun HubChatScreen(
     val resolvedCreatorId by viewModel.resolvedCreatorId.collectAsState()
     val hubDetails by viewModel.hubDetails.collectAsState()
     var settingsMenuExpanded by remember { mutableStateOf(false) }
-    val nativeNavChrome = LocalPlatformStyle.current.isIOS
+    val nativeNavChrome = LocalPlatformStyle.current.isIOS && !embeddedInSheet
     if (nativeNavChrome) {
         BindPlatformNativeNavigationBar(
             title = hubDetails.name.ifBlank { args.hubTitle },
@@ -189,6 +197,7 @@ fun HubChatScreen(
                     ),
                 ),
             collapseFraction = 1f,
+            leadingClose = nativeLeadingClose,
         )
     }
     var showEditDialog by remember { mutableStateOf(false) }
@@ -265,7 +274,12 @@ fun HubChatScreen(
     // Standalone proximity hubs use the three-person lobby threshold. Event hubs are already
     // authorized by host/RSVP/check-in membership and must be testable/usable below three people.
     val inLobby = !isEventHub && occupantCount < 3
-    val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val topInset =
+        if (embeddedInSheet) {
+            0.dp
+        } else {
+            WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+        }
     val hubHasSubtitle = true
     val hubNativeClearance =
         platformNativeHeaderClearance(
@@ -273,7 +287,7 @@ fun HubChatScreen(
             collapseFraction = 1f,
             hasSubtitle = hubHasSubtitle,
             growCompactSubtitle = true,
-        )
+        ) + NativeHeaderMetrics.GlassFadeExtensionPt.dp
     val realtimeState by viewModel.realtimeState.collectAsState()
     val channelReady = realtimeState is HubRealtimeState.Ready
     val channelError = (realtimeState as? HubRealtimeState.Error)?.message
@@ -575,7 +589,7 @@ fun HubChatScreen(
                                         .fillMaxWidth()
                                         .chatComposerKeyboardMotion(
                                             nativeKeyboardLiftPxState = nativeKeyboardInsets.liftPxState,
-                                            clearNativeTabBar = true,
+                                            clearNativeTabBar = !embeddedInSheet,
                                         ),
                             ) {
                                 HubChatInputBar(

@@ -649,6 +649,7 @@ fun ChatView(
                                 mediaPickers = mediaPickers,
                                 tetherChannelId = tetherChannelId,
                                 tetherSenderAckState = tetherSenderAckState,
+                                onOpenUserProfile = onOpenUserProfile,
                                 onOpenDisposableRoll = onOpenDisposableRoll,
                                 onOpenDisposableRollForChat = onOpenDisposableRollForChat,
                                 shareableBeacons = shareableBeacons,

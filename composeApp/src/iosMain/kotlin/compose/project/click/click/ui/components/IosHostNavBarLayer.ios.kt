@@ -123,6 +123,7 @@ internal class IosHostNavBarLayer {
     internal val searchButton = makeChromeButton()
     internal val avatarButton = makeChromeButton()
     internal val actionButtons = List(4) { makeChromeButton() }
+    internal val trailingGlyphs = mutableMapOf<UIButton, UIImageView>()
     private var heightConstraint: NSLayoutConstraint? = null
     internal var titleLeadingToBar: NSLayoutConstraint? = null
     internal var titleLeadingToBack: NSLayoutConstraint? = null
@@ -374,7 +375,7 @@ internal class IosHostNavBarLayer {
     }
 
     fun attach(host: UIViewController) {
-        if (attachedHost === host && bar.superview == host.view && chromeRow.superview == host.view) {
+        if (attachedHost == host && bar.superview == host.view && chromeRow.superview == host.view) {
             return
         }
         detachFromSuperview()
@@ -393,10 +394,18 @@ internal class IosHostNavBarLayer {
                 }
         NSLayoutConstraint.activateConstraints(
             listOf(
+                // Profile media uses a presented full-screen controller. Its safe area updates
+                // through presentation/rotation and includes any controller-specific insets.
                 bar.topAnchor.constraintEqualToAnchor(hostView.safeAreaLayoutGuide.topAnchor),
                 bar.leadingAnchor.constraintEqualToAnchor(hostView.leadingAnchor),
                 bar.trailingAnchor.constraintEqualToAnchor(hostView.trailingAnchor),
                 height,
+                // These sibling constraints are removed by UIKit when chrome moves between hosts.
+                // Reinstall them on every attachment; the controls inside chromeRow stay mounted.
+                chromeRow.topAnchor.constraintEqualToAnchor(bar.topAnchor),
+                chromeRow.leadingAnchor.constraintEqualToAnchor(hostView.safeAreaLayoutGuide.leadingAnchor),
+                chromeRow.trailingAnchor.constraintEqualToAnchor(hostView.safeAreaLayoutGuide.trailingAnchor),
+                chromeRow.bottomAnchor.constraintEqualToAnchor(bar.bottomAnchor),
                 glassPlate.topAnchor.constraintEqualToAnchor(hostView.topAnchor),
                 glassPlate.leadingAnchor.constraintEqualToAnchor(hostView.leadingAnchor),
                 glassPlate.trailingAnchor.constraintEqualToAnchor(hostView.trailingAnchor),
@@ -441,6 +450,8 @@ internal class IosHostNavBarLayer {
         }
         usesGlassButtons = nextGlass
         chromeButtons().forEach { button -> button.tintColor = titleColor }
+        backGlyph.tintColor = titleColor
+        trailingGlyphs.values.forEach { it.tintColor = titleColor }
         applyClusterChrome()
         val clear = UIColor.clearColor
         val appearance =
@@ -514,7 +525,7 @@ internal class IosHostNavBarLayer {
                 overlayUnderlyingOwner = ownerToken
             }
         }
-        if (attachedHost !== host) attach(host)
+        if (attachedHost != host) attach(host)
         ownerToken = owner
         val fraction = collapseFraction.coerceIn(0f, 1f)
         val stackIdentity = identity != null
@@ -744,6 +755,15 @@ internal class IosHostNavBarLayer {
                 menuClicksByKey["$index:$itemIndex"] = item.onClick
             }
         }
+        // The action button carried through an interactive pop is still the Search control.
+        // Refresh its callback as well as the dedicated search target on subsequent root renders.
+        if (showSearch && trailingActions.isEmpty()) {
+            actionButtons.forEachIndexed { index, button ->
+                if (paintedSymbols[button] == "magnifyingglass" && !button.hidden) {
+                    actionTargets[index].handler = onOpenSearch
+                }
+            }
+        }
         val compactTabRoot =
             NativeHeaderMetrics.isCompactTabRootChrome(
                 collapseFraction = collapseFraction,
@@ -756,7 +776,8 @@ internal class IosHostNavBarLayer {
             val previousSignature = lastButtonSignature
             lastButtonSignature = signature
             val showBack = onNavigateBack != null
-            if (backButton.hidden != !showBack) backButton.hidden = !showBack
+            val keepRootMenu = !showBack && backButton.showsMenuAsPrimaryAction && backButton.menu != null
+            if (!keepRootMenu && backButton.hidden != !showBack) backButton.hidden = !showBack
             val previousLeading = previousSignature?.take(2)
             val trailingChanged = previousSignature == null || previousSignature.drop(2) != signature.drop(2)
             if (trailingChanged) syncTrailingButtons(trailingActions, showSearch)

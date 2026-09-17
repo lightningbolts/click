@@ -238,6 +238,22 @@ internal fun AppMainShell(
     val hubChatCloseJobState = remember { mutableStateOf<Job?>(null) }
     var hubChatCloseJob by hubChatCloseJobState
 
+    val eventHubSheetArgsState = remember { mutableStateOf<HubChatNavArgs?>(null) }
+    var eventHubSheetArgs by eventHubSheetArgsState
+    var lastEventHubSheetArgs by remember { mutableStateOf<HubChatNavArgs?>(null) }
+    var eventHubSheetLoading by remember { mutableStateOf(false) }
+    var eventHubSheetPendingTitle by remember { mutableStateOf<String?>(null) }
+    var eventHubSheetError by remember { mutableStateOf<String?>(null) }
+    var eventHubSheetRequestGeneration by remember { mutableIntStateOf(0) }
+
+    fun dismissEventHubSheet() {
+        eventHubSheetRequestGeneration += 1
+        eventHubSheetArgs = null
+        eventHubSheetLoading = false
+        eventHubSheetPendingTitle = null
+        eventHubSheetError = null
+    }
+
     fun closeHubChat(mode: NavigationTransitionMode) {
         hubChatCloseJob?.cancel()
         hubChatTransitionMode = mode
@@ -276,6 +292,7 @@ internal fun AppMainShell(
             hubChatCloseJob?.cancel()
             hubChatCloseJob = null
             hubChatArgs = null
+            dismissEventHubSheet()
             connectionRevealState = null
             pendingChatId = null
             pendingTargetMessageId = null
@@ -439,35 +456,42 @@ internal fun AppMainShell(
         }
     }
 
-    fun launchEventHubJoin(
+    fun launchEventHubSheetJoin(
         hubId: String,
         title: String,
         knownCreatorId: String? = null,
     ) {
         if (hubId.isBlank() || currentUser.id.isBlank()) return
-        hubChatCloseJob?.cancel()
-        hubChatCloseJob = null
-        val cached = lastHubChatArgs
+        val generation = eventHubSheetRequestGeneration + 1
+        eventHubSheetRequestGeneration = generation
+        eventHubSheetPendingTitle = title
+        eventHubSheetError = null
+        eventHubSheetLoading = true
+        eventHubSheetArgs = null
+
+        val cached = lastEventHubSheetArgs
         if (cached != null && cached.hubId == hubId) {
-            hubChatArgs =
+            eventHubSheetArgs =
                 cached.copy(
                     creatorId = cached.creatorId ?: knownCreatorId,
                     isEventHub = true,
                     hubCategory = if (cached.hubCategory.isBlank()) "event" else cached.hubCategory,
                     hubTitle = title.ifBlank { cached.hubTitle },
                 )
+            eventHubSheetLoading = false
             return
         }
+
         connectionScope.launch {
-            hubVerifyInProgress = true
             try {
                 val jwt =
                     EnsureFreshAccessToken
                         .get(tokenStorage)
                         ?.trim()
                         ?.takeIf { it.isNotEmpty() }
+                if (generation != eventHubSheetRequestGeneration) return@launch
                 if (jwt.isNullOrBlank()) {
-                    toastState.show(connectionScope, "Please sign in again to join the hub.")
+                    eventHubSheetError = "Please sign in again to join the event chat."
                     return@launch
                 }
                 when (
@@ -479,6 +503,7 @@ internal fun AppMainShell(
                         )
                 ) {
                     is HubVerifyResult.Success -> {
+                        if (generation != eventHubSheetRequestGeneration) return@launch
                         val creatorId = outcome.creatorId ?: knownCreatorId
                         val args =
                             HubChatNavArgs(
@@ -489,8 +514,8 @@ internal fun AppMainShell(
                                 hubCategory = "event",
                                 isEventHub = true,
                             )
-                        lastHubChatArgs = args
-                        hubChatArgs = args
+                        lastEventHubSheetArgs = args
+                        eventHubSheetArgs = args
                         AppDataManager.registerActiveHub(
                             ActiveHubEntry(
                                 hubId = outcome.hubId,
@@ -507,11 +532,15 @@ internal fun AppMainShell(
                         )
                     }
                     is HubVerifyResult.Failure -> {
-                        toastState.show(connectionScope, outcome.userMessage)
+                        if (generation == eventHubSheetRequestGeneration) {
+                            eventHubSheetError = outcome.userMessage
+                        }
                     }
                 }
             } finally {
-                hubVerifyInProgress = false
+                if (generation == eventHubSheetRequestGeneration) {
+                    eventHubSheetLoading = false
+                }
             }
         }
     }
@@ -521,7 +550,7 @@ internal fun AppMainShell(
         val pending = pendingEventHub ?: return@LaunchedEffect
         if (currentUser.id.isBlank()) return@LaunchedEffect
         ChatDeepLinkManager.consumePendingEventHub()
-        launchEventHubJoin(pending.hubId, pending.title, pending.creatorId)
+        launchEventHubSheetJoin(pending.hubId, pending.title, pending.creatorId)
     }
 
     LaunchedEffect(pendingCommunityHubId, currentUser.id) {
@@ -668,11 +697,15 @@ internal fun AppMainShell(
         }
     }
 
+    val eventHubSheetVisible =
+        eventHubSheetArgs != null || eventHubSheetLoading || eventHubSheetError != null
+
     // Platform back handler — intercepts Android back gesture/button
     compose.project.click.click.ui.components.PlatformBackHandler( // pragma: allowlist secret
         enabled =
             (
-                eventsSheetExpanded ||
+                eventHubSheetVisible ||
+                    eventsSheetExpanded ||
                     showUnifiedSearchSheet ||
                     hubChatArgs != null ||
                     showMyQRCode ||
@@ -685,6 +718,7 @@ internal fun AppMainShell(
                 !iOSSwipeOwnsBack,
     ) {
         when {
+            eventHubSheetVisible -> dismissEventHubSheet()
             eventsSheetExpanded -> eventsSheetExpanded = false
             showUnifiedSearchSheet -> showUnifiedSearchSheet = false
             hubChatArgs != null -> closeHubChat(NavigationTransitionMode.Tap)
@@ -810,6 +844,15 @@ internal fun AppMainShell(
                         resolveHubGatekeeperLocationForChat = { resolveHubGatekeeperLocationForChat() },
                         hubChatArgsState = hubChatArgsState,
                         lastHubChatArgsState = lastHubChatArgsState,
+                    )
+
+                    AppEventHubChatSheet(
+                        args = eventHubSheetArgs,
+                        pendingTitle = eventHubSheetPendingTitle,
+                        loading = eventHubSheetLoading,
+                        errorMessage = eventHubSheetError,
+                        currentUserId = currentUser.id,
+                        onDismissRequest = ::dismissEventHubSheet,
                     )
 
                     AppSyncStatusCard(

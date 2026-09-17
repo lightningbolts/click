@@ -217,6 +217,14 @@ internal fun AppPrimaryTabsHost(
                             onNavigateToNfc = { showNfcScreen = true },
                             onShowMyQRCode = { showMyQRCode = true },
                             onScanQRCode = { showQRScanner = true },
+                            onCreateGroupChat = {
+                                verifiedCliqueProximityAutofillIntent =
+                                    VerifiedCliqueProximityIntent(
+                                        preselectFriendIds = emptyList(),
+                                        matchedUsers = emptyList(),
+                                    )
+                                navigateTo(NavigationItem.Connections.route)
+                            },
                             onJoinCommunityHub = { hubId ->
                                 launchCommunityHubJoin(hubId, null)
                             },
@@ -409,7 +417,8 @@ internal fun AppPrimaryTabsHost(
             modifier =
                 Modifier
                     .fillMaxSize()
-                    .interactiveSwipeBackUnderlay(addClickBackHost),
+                    .interactiveSwipeBackUnderlay(addClickBackHost)
+                    .interactiveSwipeBackUnderlay(HubChatInteractiveBackBridge.state),
         ) {
             AnimatedContent(
                 // Primary tabs (Home/AddClick/Connections/Map/Settings) all go through
@@ -435,23 +444,11 @@ internal fun AppPrimaryTabsHost(
 
                         val initialIndex =
                             routeOrder.indexOf(initialState).let {
-                                if (it >=
-                                    0
-                                ) {
-                                    it
-                                } else {
-                                    0
-                                }
+                                if (it >= 0) it else 0
                             }
                         val targetIndex =
                             routeOrder.indexOf(targetState).let {
-                                if (it >=
-                                    0
-                                ) {
-                                    it
-                                } else {
-                                    0
-                                }
+                                if (it >= 0) it else 0
                             }
                         val movingForward = targetIndex >= initialIndex
 
@@ -510,7 +507,14 @@ internal fun AppPrimaryTabsHost(
                     LocalNativeChromeActive provides
                         (animatedScreen == screenKey),
                 ) {
-                    renderScreen(animatedScreen)
+                    // Primary tabs are peers selected by the persistent tab bar. They are not a
+                    // push stack, so never synthesize an iOS back-pop from Add Click/Map/Me to Home.
+                    // Pushed screens (settings subpages, chats, QR/NFC/My QR) own independent
+                    // InteractiveSwipeBackContainers and remain fully gesture-enabled.
+                    renderScreen(
+                        animatedScreen = animatedScreen,
+                        allowInteractiveSwipeBack = false,
+                    )
                 }
             }
         }

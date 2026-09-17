@@ -113,6 +113,7 @@ internal fun ColumnScope.ChatViewTimelinePane(
     mediaPickers: ChatMediaPickerHandles,
     tetherChannelId: String,
     tetherSenderAckState: MutableState<String?>,
+    onOpenUserProfile: (String) -> Unit,
     onOpenDisposableRoll: ((connectionId: String) -> Unit)?,
     onOpenDisposableRollForChat: ((chatId: String) -> Unit)?,
     shareableBeacons: List<compose.project.click.click.data.models.MapBeacon>,
@@ -403,6 +404,7 @@ internal fun ColumnScope.ChatViewTimelinePane(
                                 onForward = { msgId -> forwardMessageId = msgId },
                                 onLongPress = { contextMenuMessage = it },
                                 onSwipeReply = { viewModel.startReplyTo(it) },
+                                onPeerAvatarClick = onOpenUserProfile,
                                 onDownloadAttachment = { mwu, env ->
                                     viewModel.downloadChatAttachment(mwu.message.id, env, mwu.message)
                                 },

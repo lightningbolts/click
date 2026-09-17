@@ -7,6 +7,9 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import platform.AVFAudio.AVAudioSession
+import platform.AVFAudio.AVAudioSessionCategoryPlayback
+import platform.AVFAudio.setActive
 import platform.AVFoundation.AVPlayer
 import platform.AVFoundation.AVPlayerItem
 import platform.AVFoundation.AVPlayerItemDidPlayToEndTimeNotification
@@ -18,15 +21,15 @@ import platform.AVFoundation.play
 import platform.AVFoundation.removeTimeObserver
 import platform.AVFoundation.replaceCurrentItemWithPlayerItem
 import platform.AVFoundation.seekToTime
-import platform.AVFAudio.AVAudioSession
-import platform.AVFAudio.AVAudioSessionCategoryPlayback
-import platform.AVFAudio.setActive
 import platform.CoreMedia.CMTimeGetSeconds
 import platform.CoreMedia.CMTimeMakeWithSeconds
 import platform.Foundation.NSFileManager
 import platform.Foundation.NSNotificationCenter
 import platform.Foundation.NSOperationQueue
 import platform.Foundation.NSURL
+import platform.darwin.DISPATCH_QUEUE_PRIORITY_DEFAULT
+import platform.darwin.dispatch_async
+import platform.darwin.dispatch_get_global_queue
 import platform.darwin.dispatch_get_main_queue
 
 @Composable
@@ -52,11 +55,16 @@ private class IosChatAudioPlayer(
     private val avPlayer: AVPlayer
     private val isPlayingState = mutableStateOf(false)
     private val positionMsState = mutableFloatStateOf(0f)
-    private val durationMsState = mutableFloatStateOf(
-        durationHintMs.coerceAtLeast(0L).toFloat().takeIf { it > 0f } ?: 0f
-    )
+    private val durationMsState =
+        mutableFloatStateOf(
+            durationHintMs.coerceAtLeast(0L).toFloat().takeIf { it > 0f } ?: 0f,
+        )
     private var timeObserver: Any? = null
     private var playbackEndObserver: Any? = null
+    private var wantsPlayback = false
+    private var audioSessionReady = false
+    private var audioSessionPreparing = false
+    private var disposed = false
 
     override val isPlaying: Boolean get() = isPlayingState.value
 
@@ -65,35 +73,38 @@ private class IosChatAudioPlayer(
     override val durationMs: Long get() = durationMsState.floatValue.toLong()
 
     init {
-        prepareAudioSessionForPlayback()
         avPlayer = AVPlayer()
         val nsUrl = resolvePlaybackNsUrl(localFilePath, remoteUrl)
         if (nsUrl != null) {
             val item = AVPlayerItem(uRL = nsUrl)
             avPlayer.replaceCurrentItemWithPlayerItem(item)
-            playbackEndObserver = NSNotificationCenter.defaultCenter.addObserverForName(
-                name = AVPlayerItemDidPlayToEndTimeNotification,
-                `object` = item,
-                queue = NSOperationQueue.mainQueue,
-            ) { _ ->
-                isPlayingState.value = false
-                avPlayer.seekToTime(CMTimeMakeWithSeconds(0.0, 1000)) { _ ->
-                    refreshProgressFromPlayer()
+            playbackEndObserver =
+                NSNotificationCenter.defaultCenter.addObserverForName(
+                    name = AVPlayerItemDidPlayToEndTimeNotification,
+                    `object` = item,
+                    queue = NSOperationQueue.mainQueue,
+                ) { _ ->
+                    wantsPlayback = false
+                    isPlayingState.value = false
+                    avPlayer.seekToTime(CMTimeMakeWithSeconds(0.0, 1000)) { _ ->
+                        refreshProgressFromPlayer()
+                    }
                 }
-            }
         }
         val interval = CMTimeMakeWithSeconds(0.12, 600)
-        timeObserver = avPlayer.addPeriodicTimeObserverForInterval(
-            interval = interval,
-            queue = dispatch_get_main_queue(),
-        ) { _ ->
-            refreshProgressFromPlayer()
-        }
+        timeObserver =
+            avPlayer.addPeriodicTimeObserverForInterval(
+                interval = interval,
+                queue = dispatch_get_main_queue(),
+            ) { _ ->
+                refreshProgressFromPlayer()
+            }
     }
 
     private fun refreshProgressFromPlayer() {
         val item = avPlayer.currentItem
         if (item != null && item.error != null) {
+            wantsPlayback = false
             if (isPlayingState.value) {
                 isPlayingState.value = false
             }
@@ -108,37 +119,71 @@ private class IosChatAudioPlayer(
     }
 
     override fun togglePlayPause() {
-        if (isPlayingState.value) {
+        if (isPlayingState.value || wantsPlayback) {
+            wantsPlayback = false
             avPlayer.pause()
             isPlayingState.value = false
-        } else {
-            if (prepareAudioSessionForPlayback()) {
-                avPlayer.play()
-                isPlayingState.value = true
-            }
+            refreshProgressFromPlayer()
+            return
         }
-        refreshProgressFromPlayer()
+
+        wantsPlayback = true
+        ensureAudioSessionThenPlay()
     }
 
-    private fun prepareAudioSessionForPlayback(): Boolean {
-        return try {
-            val session = AVAudioSession.sharedInstance()
-            // Playback category only: `defaultToSpeaker` is invalid here (requires playAndRecord).
-            session.setCategory(AVAudioSessionCategoryPlayback, error = null)
-            session.setActive(true, error = null)
-            true
-        } catch (_: Throwable) {
-            false
+    /**
+     * AVAudioSession category/activation can block while iOS negotiates the active route. Do that
+     * work away from the UI thread, then touch AVPlayer/Compose state only after returning to main.
+     */
+    private fun ensureAudioSessionThenPlay() {
+        if (audioSessionReady) {
+            startPlaybackIfRequested()
+            return
         }
+        if (audioSessionPreparing || disposed) return
+        audioSessionPreparing = true
+
+        dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT.toLong(), 0u)) {
+            val ready =
+                try {
+                    val session = AVAudioSession.sharedInstance()
+                    // Playback category only: `defaultToSpeaker` is invalid here (requires playAndRecord).
+                    session.setCategory(AVAudioSessionCategoryPlayback, error = null)
+                    session.setActive(true, error = null)
+                    true
+                } catch (_: Throwable) {
+                    false
+                }
+            dispatch_async(dispatch_get_main_queue()) {
+                audioSessionPreparing = false
+                if (!disposed) {
+                    audioSessionReady = ready
+                    if (ready) {
+                        startPlaybackIfRequested()
+                    } else {
+                        wantsPlayback = false
+                        isPlayingState.value = false
+                    }
+                }
+            }
+        }
+    }
+
+    private fun startPlaybackIfRequested() {
+        if (disposed || !wantsPlayback) return
+        avPlayer.play()
+        isPlayingState.value = true
+        refreshProgressFromPlayer()
     }
 
     override fun seekTo(positionMs: Long) {
         val dur = durationMsState.floatValue.toDouble()
-        val targetSec = if (dur > 0) {
-            positionMs.coerceIn(0L, dur.toLong()) / 1000.0
-        } else {
-            positionMs.coerceAtLeast(0L) / 1000.0
-        }
+        val targetSec =
+            if (dur > 0) {
+                positionMs.coerceIn(0L, dur.toLong()) / 1000.0
+            } else {
+                positionMs.coerceAtLeast(0L) / 1000.0
+            }
         val time = CMTimeMakeWithSeconds(targetSec, 1000)
         avPlayer.seekToTime(time) { _ ->
             refreshProgressFromPlayer()
@@ -146,6 +191,8 @@ private class IosChatAudioPlayer(
     }
 
     override fun dispose() {
+        disposed = true
+        wantsPlayback = false
         playbackEndObserver?.let { NSNotificationCenter.defaultCenter.removeObserver(it) }
         playbackEndObserver = null
         timeObserver?.let { avPlayer.removeTimeObserver(it) }
@@ -155,13 +202,17 @@ private class IosChatAudioPlayer(
     }
 }
 
-private fun resolvePlaybackNsUrl(localPath: String?, remote: String): NSURL? {
+private fun resolvePlaybackNsUrl(
+    localPath: String?,
+    remote: String,
+): NSURL? {
     val trimmedLocal = localPath?.trim()?.takeIf { it.isNotEmpty() }
     if (!trimmedLocal.isNullOrEmpty()) {
-        val fsPath = when {
-            trimmedLocal.startsWith("file://") -> trimmedLocal.removePrefix("file://")
-            else -> trimmedLocal
-        }
+        val fsPath =
+            when {
+                trimmedLocal.startsWith("file://") -> trimmedLocal.removePrefix("file://")
+                else -> trimmedLocal
+            }
         if (NSFileManager.defaultManager.fileExistsAtPath(fsPath)) {
             return NSURL.fileURLWithPath(fsPath)
         }
@@ -195,17 +246,18 @@ private fun percentEncodeHttpUrlStringPreservingExistingPctEncoding(s: String): 
                 i += 3
                 continue
             }
-            val mustEncode = c.isISOControl() ||
-                c == ' ' ||
-                c.code > 127 ||
-                c == '|' ||
-                c == '"' ||
-                c == '<' ||
-                c == '>' ||
-                c == '{' ||
-                c == '}' ||
-                c == '\\' ||
-                c == '`'
+            val mustEncode =
+                c.isISOControl() ||
+                    c == ' ' ||
+                    c.code > 127 ||
+                    c == '|' ||
+                    c == '"' ||
+                    c == '<' ||
+                    c == '>' ||
+                    c == '{' ||
+                    c == '}' ||
+                    c == '\\' ||
+                    c == '`'
             if (!mustEncode) {
                 append(c)
                 i++
@@ -221,5 +273,4 @@ private fun percentEncodeHttpUrlStringPreservingExistingPctEncoding(s: String): 
     }
 }
 
-private fun Char.isHexDigit(): Boolean =
-    this in '0'..'9' || this in 'A'..'F' || this in 'a'..'f'
+private fun Char.isHexDigit(): Boolean = this in '0'..'9' || this in 'A'..'F' || this in 'a'..'f'

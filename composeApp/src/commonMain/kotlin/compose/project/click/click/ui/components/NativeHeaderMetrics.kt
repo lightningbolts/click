@@ -154,6 +154,15 @@ object NativeHeaderMetrics {
 
     fun overlayUncoverLeadingWidthPt(offsetPt: Double): Double = if (offsetPt <= OverlayUncoverEpsilonPt) 0.0 else offsetPt
 
+    fun rootTitleParallaxOffsetPt(
+        hostWidthPt: Double,
+        progress: Float,
+        centered: Boolean,
+    ): Double {
+        val fraction = if (centered) 0.34 else 0.22
+        return -hostWidthPt.coerceAtLeast(0.0) * fraction * (1.0 - progress.coerceIn(0f, 1f))
+    }
+
     fun stackedIdentityColumnHeightPt(): Double = CompactTitlePointSize + StackedIdentitySpacingPt + StackedIdentitySubtitlePointSize
 
     fun isCompactTabRootChrome(

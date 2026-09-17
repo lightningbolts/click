@@ -11,13 +11,16 @@ import kotlinx.cinterop.cValue
 import kotlinx.cinterop.useContents
 import platform.CoreGraphics.CGAffineTransform
 import platform.CoreGraphics.CGRectMake
+import platform.QuartzCore.CALayer
 import platform.QuartzCore.CATransaction
 import platform.UIKit.NSTextAlignmentCenter
 import platform.UIKit.NSTextAlignmentLeft
+import platform.UIKit.UIButton
 import platform.UIKit.UIColor
 import platform.UIKit.UIFont
 import platform.UIKit.UILabel
 import platform.UIKit.UILayoutConstraintAxisVertical
+import platform.UIKit.UIMenu
 import platform.UIKit.UIView
 
 private data class NativeTitleSnapshot(
@@ -41,6 +44,12 @@ private data class NativeTitleSnapshot(
     val subtitleHeight: Double,
     val glassAlpha: Double,
     val centered: Boolean,
+    val hostWidth: Double,
+)
+
+private data class NativeRootDestinationSnapshot(
+    val title: NativeTitleSnapshot,
+    val searchHandler: (() -> Unit)?,
 )
 
 private class NativeTitleTransitionViews {
@@ -61,18 +70,54 @@ private data class NativeLeadingSemanticSnapshot(
     val accessibility: String,
 )
 
-private data class NativeLeadingVisualSnapshot(
+private data class NativeButtonVisualSnapshot(
     val symbol: String,
     val accessibility: String,
 )
 
+private class NativeTrailingTransitionState(
+    val sourceButtons: List<UIButton>,
+    val destinationSearchHandler: () -> Unit,
+    val carrierButton: UIButton,
+    val carrierTarget: IosBarButtonTarget,
+    val sourceCarrierHandler: (() -> Unit)?,
+    val sourceCarrierMenu: UIMenu?,
+    val sourceCarrierShowsMenuAsPrimaryAction: Boolean,
+    val sourceCarrierSymbol: String,
+    val sourceCarrierAccessibility: String,
+    val sourceStackSpacing: Double,
+) {
+    private val extraButtonCount = (sourceButtons.size - 1).coerceAtLeast(0)
+    val sourceExtraWidth =
+        extraButtonCount * (NativeHeaderMetrics.ChromeButtonSizePt + sourceStackSpacing)
+    val spacerInitialWidth =
+        if (extraButtonCount > 0) {
+            (sourceExtraWidth - sourceStackSpacing).coerceAtLeast(0.0)
+        } else {
+            0.0
+        }
+    val spacer =
+        UIView().apply {
+            translatesAutoresizingMaskIntoConstraints = false
+            userInteractionEnabled = false
+        }
+    val spacerWidthConstraint =
+        spacer.widthAnchor.constraintEqualToConstant(spacerInitialWidth).apply {
+            active = true
+        }
+    var destinationApplied = false
+}
+
 private val transitionViewsByLayer = mutableMapOf<IosHostNavBarLayer, NativeTitleTransitionViews>()
-private val lastRootSnapshotByLayer = mutableMapOf<IosHostNavBarLayer, NativeTitleSnapshot>()
+private val lastRootDestinationByLayer = mutableMapOf<IosHostNavBarLayer, NativeRootDestinationSnapshot>()
 private val leadingSemanticSnapshotByLayer = mutableMapOf<IosHostNavBarLayer, NativeLeadingSemanticSnapshot>()
 private val leadingDestinationAppliedByLayer = mutableMapOf<IosHostNavBarLayer, Boolean>()
-private val lastSettledLeadingVisualByLayer = mutableMapOf<IosHostNavBarLayer, NativeLeadingVisualSnapshot>()
+private val trailingTransitionByLayer = mutableMapOf<IosHostNavBarLayer, NativeTrailingTransitionState>()
+private val lastSettledLeadingVisualByLayer = mutableMapOf<IosHostNavBarLayer, NativeButtonVisualSnapshot>()
+private val lastSettledTrailingVisualByLayer = mutableMapOf<IosHostNavBarLayer, List<NativeButtonVisualSnapshot>>()
 private val suppressNextSemanticSettleByLayer = mutableSetOf<IosHostNavBarLayer>()
 private val semanticAnimationGenerationByLayer = mutableMapOf<IosHostNavBarLayer, Int>()
+private val rootMenuShapeByLayer = mutableMapOf<IosHostNavBarLayer, String>()
 
 /**
  * Controls remain persistent, but route text does not semantically morph. UIKit navigation keeps
@@ -83,10 +128,17 @@ private val semanticAnimationGenerationByLayer = mutableMapOf<IosHostNavBarLayer
  * while the control is at the compressed midpoint of the morph, not after the control has already
  * expanded into the destination. Reversing/cancelling the gesture restores the source semantic at
  * the same midpoint, keeping icon and material motion one continuous interaction.
+ *
+ * Root-pop trailing actions use the same contract. The existing Liquid Glass capsule never fades or
+ * gets replaced: the right-most source button remains the physical carrier throughout the gesture,
+ * changes semantic at the midpoint, and the surplus leading width collapses through the second half.
  */
 @OptIn(ExperimentalForeignApi::class)
 internal fun IosHostNavBarLayer.applyPersistentChromeMorphProgress(progress: Float) {
     val p = progress.coerceIn(0f, 1f)
+    applyRouteTitleTransition(p)
+    applyTrailingRootSearchTransition(p)
+
     val distanceFromMid = kotlin.math.abs(p - 0.5f) / 0.5f
     val scale = 0.88 + (0.12 * distanceFromMid)
     val alpha = 0.94 + (0.06 * distanceFromMid)
@@ -100,24 +152,35 @@ internal fun IosHostNavBarLayer.applyPersistentChromeMorphProgress(progress: Flo
     trailingCluster.alpha = alpha
     CATransaction.commit()
 
-    applyRouteTitleTransition(p)
     applyLeadingRouteSemanticTransition(p)
 }
 
 @OptIn(ExperimentalForeignApi::class)
 internal fun IosHostNavBarLayer.resetPersistentChromeMorphVisuals(animated: Boolean) {
     val destinationWasApplied = leadingDestinationAppliedByLayer[this] == true
+    val trailingState = trailingTransitionByLayer.remove(this)
+    val transitionWasActive = transitionViewsByLayer[this]?.active == true
+
     if (destinationWasApplied) {
-        // A completed pop has already crossed the semantic midpoint. Do not repaint the source
-        // chevron/xmark during source disposal and then immediately paint the destination again.
-        // That one-frame rebound was the remaining post-pop flicker on physical devices.
+        // Finish the destination snapshot before source disposal. Keep that snapshot mounted until
+        // root reconciliation has updated the real title underneath it; otherwise the old route title
+        // becomes visible for one frame and the root title appears to "rerender" after Back.
+        if (transitionWasActive) {
+            applyRouteTitleTransition(1f)
+        }
         leadingSemanticSnapshotByLayer.remove(this)
         leadingDestinationAppliedByLayer.remove(this)
+        trailingState?.let(::finishTrailingDestinationTransition)
         suppressNextSemanticSettleByLayer += this
     } else {
         restoreLeadingRouteSemanticIfNeeded()
+        if (trailingState?.destinationApplied == true) {
+            restoreSourceTrailingTransition(trailingState)
+        }
+        clearRouteTitleTransition()
     }
-    clearRouteTitleTransition()
+
+    val keepDestinationTitle = destinationWasApplied && transitionViewsByLayer[this]?.active == true
     val identity = identityTransform()
     val apply = {
         backButton.transform = identity
@@ -125,8 +188,8 @@ internal fun IosHostNavBarLayer.resetPersistentChromeMorphVisuals(animated: Bool
         avatarButton.transform = identity
         backButton.alpha = 1.0
         trailingCluster.alpha = 1.0
-        avatarButton.alpha = 1.0
-        titleColumn.alpha = 1.0
+        avatarButton.alpha = if (keepDestinationTitle) 0.0 else 1.0
+        titleColumn.alpha = if (keepDestinationTitle) 0.0 else 1.0
     }
     if (animated) {
         UIView.animateWithDuration(0.16, animations = apply)
@@ -140,70 +203,71 @@ internal fun IosHostNavBarLayer.resetPersistentChromeMorphVisuals(animated: Bool
 
 @OptIn(ExperimentalForeignApi::class)
 internal fun IosHostNavBarLayer.animatePersistentSemanticSettle(enabled: Boolean) {
-    repairPersistentLeadingControlIfNeeded()
     titleLabel.layer.removeAllAnimations()
     subtitleLabel.layer.removeAllAnimations()
+    val suppressSettle = suppressNextSemanticSettleByLayer.remove(this)
+    if (!suppressSettle) repairPersistentLeadingControlIfNeeded()
 
-    val destinationVisual =
-        NativeLeadingVisualSnapshot(
-            symbol = paintedSymbols[backButton] ?: "none",
-            accessibility = paintedAccessibility[backButton] ?: "",
+    fun visual(button: UIButton) =
+        NativeButtonVisualSnapshot(
+            symbol = paintedSymbols[button] ?: "none",
+            accessibility = paintedAccessibility[button] ?: "",
         )
-    val sourceVisual = lastSettledLeadingVisualByLayer[this]
-    lastSettledLeadingVisualByLayer[this] = destinationVisual
+    val trailingButtons = trailingStack.arrangedSubviews.mapNotNull { it as? UIButton }
+    val destinationLeading = visual(backButton)
+    val destinationTrailing = trailingButtons.map(::visual)
+    val sourceLeading = lastSettledLeadingVisualByLayer.put(this, destinationLeading)
+    val sourceTrailing = lastSettledTrailingVisualByLayer.put(this, destinationTrailing).orEmpty()
 
-    if (suppressNextSemanticSettleByLayer.remove(this)) {
-        // The committed interactive/programmatic pop already completed its compress -> semantic
-        // midpoint -> expand sequence. Rendering the destination must not start a second pulse.
-        clearRouteTitleTransition()
+    if (suppressSettle) {
+        // The gesture already committed these exact controls. Reveal the reconciled title without
+        // replaying the menu/search animation after the source screen is disposed.
+        clearRouteTitleTransition(restoreDestination = true)
         backButton.userInteractionEnabled = true
+        trailingCluster.userInteractionEnabled = true
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        backButton.transform = identityTransform()
+        trailingCluster.transform = identityTransform()
+        backButton.alpha = 1.0
+        trailingCluster.alpha = 1.0
+        CATransaction.commit()
         return
     }
     if (!enabled) return
 
+    val changes = mutableListOf<Triple<UIButton, NativeButtonVisualSnapshot, NativeButtonVisualSnapshot>>()
+    if (sourceLeading != null && sourceLeading != destinationLeading && !backButton.hidden) {
+        changes += Triple(backButton, sourceLeading, destinationLeading)
+    }
+    // Match from the fixed trailing edge, including transitions between a capsule and one action.
+    trailingButtons.asReversed().forEachIndexed { index, button ->
+        val source = sourceTrailing.asReversed().getOrNull(index)
+        val destination = visual(button)
+        if (source != null && source != destination) changes += Triple(button, source, destination)
+    }
+    if (changes.isEmpty()) return
+
+    fun paintChanges(destination: Boolean) {
+        changes.forEach { (button, sourceVisual, destinationVisual) ->
+            val snapshot = if (destination) destinationVisual else sourceVisual
+            paintChromeButton(button, snapshot.symbol, snapshot.accessibility, clustered = button != backButton)
+        }
+    }
     clearRouteTitleTransition()
     val generation = (semanticAnimationGenerationByLayer[this] ?: 0) + 1
     semanticAnimationGenerationByLayer[this] = generation
     backButton.layer.removeAllAnimations()
     trailingCluster.layer.removeAllAnimations()
-
-    if (sourceVisual == null || sourceVisual == destinationVisual || backButton.hidden) {
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        val compressed = scaleTransform(0.9)
-        backButton.transform = compressed
-        trailingCluster.transform = compressed
-        backButton.alpha = 0.94
-        trailingCluster.alpha = 0.94
-        titleColumn.alpha = 1.0
-        CATransaction.commit()
-        UIView.animateWithDuration(0.16) {
-            val identity = identityTransform()
-            backButton.transform = identity
-            trailingCluster.transform = identity
-            backButton.alpha = 1.0
-            trailingCluster.alpha = 1.0
-        }
-        return
-    }
-
-    // For immediate semantic transitions such as media xmark -> chat chevron, render the previous
-    // symbol while the same physical glass control compresses, swap at the compressed midpoint,
-    // then expand. The destination handler/menu is already authoritative; only the visual is held
-    // until the midpoint, so route ownership cannot oscillate.
     CATransaction.begin()
     CATransaction.setDisableActions(true)
-    paintChromeButton(
-        button = backButton,
-        symbol = sourceVisual.symbol,
-        accessibility = sourceVisual.accessibility,
-        clustered = false,
-    )
+    paintChanges(destination = false)
     backButton.transform = identityTransform()
     trailingCluster.transform = identityTransform()
     backButton.alpha = 1.0
     trailingCluster.alpha = 1.0
     backButton.userInteractionEnabled = false
+    trailingCluster.userInteractionEnabled = false
     CATransaction.commit()
 
     UIView.animateWithDuration(
@@ -216,43 +280,33 @@ internal fun IosHostNavBarLayer.animatePersistentSemanticSettle(enabled: Boolean
             trailingCluster.alpha = 0.94
         },
         completion = { _ ->
-            if (semanticAnimationGenerationByLayer[this] != generation) {
-                backButton.userInteractionEnabled = true
-                return@animateWithDuration
+            if (semanticAnimationGenerationByLayer[this] == generation) {
+                CATransaction.begin()
+                CATransaction.setDisableActions(true)
+                paintChanges(destination = true)
+                CATransaction.commit()
+                UIView.animateWithDuration(
+                    duration = 0.1,
+                    animations = {
+                        backButton.transform = identityTransform()
+                        trailingCluster.transform = identityTransform()
+                        backButton.alpha = 1.0
+                        trailingCluster.alpha = 1.0
+                    },
+                    completion = { _ ->
+                        if (semanticAnimationGenerationByLayer[this] == generation) {
+                            backButton.userInteractionEnabled = true
+                            trailingCluster.userInteractionEnabled = true
+                        }
+                    },
+                )
             }
-            CATransaction.begin()
-            CATransaction.setDisableActions(true)
-            paintChromeButton(
-                button = backButton,
-                symbol = destinationVisual.symbol,
-                accessibility = destinationVisual.accessibility,
-                clustered = false,
-            )
-            CATransaction.commit()
-            UIView.animateWithDuration(
-                duration = 0.1,
-                animations = {
-                    val identity = identityTransform()
-                    backButton.transform = identity
-                    trailingCluster.transform = identity
-                    backButton.alpha = 1.0
-                    trailingCluster.alpha = 1.0
-                },
-                completion = { _ ->
-                    if (semanticAnimationGenerationByLayer[this] == generation) {
-                        backButton.userInteractionEnabled = true
-                    }
-                },
-            )
         },
     )
 }
 
 @OptIn(ExperimentalForeignApi::class)
 private fun IosHostNavBarLayer.applyLeadingRouteSemanticTransition(progress: Float) {
-    // The existing route-title transition is only created when the cached root route is actually
-    // the pop destination, so use that as the semantic handoff contract as well. This avoids
-    // guessing that every pushed-to-pushed transition should become the root overflow menu.
     val routeTransition = transitionViewsByLayer[this]
     if (routeTransition?.active != true || routeTransition.destinationSnapshot == null) return
 
@@ -286,6 +340,140 @@ private fun IosHostNavBarLayer.applyLeadingRouteSemanticTransition(progress: Flo
     }
     CATransaction.commit()
     leadingDestinationAppliedByLayer[this] = shouldShowDestination
+}
+
+@OptIn(ExperimentalForeignApi::class)
+private fun IosHostNavBarLayer.applyTrailingRootSearchTransition(progress: Float) {
+    val routeTransition = transitionViewsByLayer[this]
+    if (routeTransition?.active != true || routeTransition.destinationSnapshot == null) return
+    val rootDestination = lastRootDestinationByLayer[this] ?: return
+    val destinationSearch = rootDestination.searchHandler ?: return
+
+    val state =
+        trailingTransitionByLayer.getOrPut(this) {
+            val sourceButtons = trailingStack.arrangedSubviews.mapNotNull { it as? UIButton }
+            if (sourceButtons.isEmpty()) return
+            val carrierButton = sourceButtons.firstOrNull { it == searchButton } ?: sourceButtons.last()
+            val carrierTarget =
+                if (carrierButton == searchButton) {
+                    searchTarget
+                } else {
+                    val carrierIndex = actionButtons.indexOfFirst { it == carrierButton }
+                    if (carrierIndex < 0) return
+                    actionTargets[carrierIndex]
+                }
+            NativeTrailingTransitionState(
+                sourceButtons = sourceButtons,
+                destinationSearchHandler = destinationSearch,
+                carrierButton = carrierButton,
+                carrierTarget = carrierTarget,
+                sourceCarrierHandler = carrierTarget.handler,
+                sourceCarrierMenu = carrierButton.menu,
+                sourceCarrierShowsMenuAsPrimaryAction = carrierButton.showsMenuAsPrimaryAction,
+                sourceCarrierSymbol = paintedSymbols[carrierButton] ?: "ellipsis",
+                sourceCarrierAccessibility = paintedAccessibility[carrierButton] ?: "Action",
+                sourceStackSpacing = trailingStack.spacing,
+            )
+        }
+
+    val shouldShowDestination = progress >= 0.5f
+    if (shouldShowDestination != state.destinationApplied) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        if (shouldShowDestination) {
+            showDestinationSearchTransition(state)
+        } else {
+            restoreSourceTrailingTransition(state)
+        }
+        CATransaction.commit()
+    }
+
+    if (state.destinationApplied && state.sourceExtraWidth > 0.0) {
+        val secondHalfProgress = ((progress - 0.5f) / 0.5f).coerceIn(0f, 1f).toDouble()
+        val remaining = 1.0 - secondHalfProgress
+        val spacerWidth = state.spacerInitialWidth * remaining
+        val spacing = state.sourceStackSpacing * remaining
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        state.spacerWidthConstraint.constant = spacerWidth
+        trailingStack.spacing = spacing
+        state.carrierButton.transform = translationTransform(spacerWidth + spacing)
+        trailingCluster.superview?.layoutIfNeeded()
+        CATransaction.commit()
+    }
+}
+
+@OptIn(ExperimentalForeignApi::class)
+private fun IosHostNavBarLayer.showDestinationSearchTransition(state: NativeTrailingTransitionState) {
+    // Keep the exact source UIButton mounted as the semantic carrier. The temporary trailing spacer
+    // occupies the removed leading action's width; as it contracts, the carrier transform contracts
+    // by the same amount, keeping the button at one fixed screen coordinate like the leading control.
+    state.sourceButtons
+        .filterNot { it == state.carrierButton }
+        .forEach { button ->
+            trailingStack.removeArrangedSubview(button)
+            button.removeFromSuperview()
+        }
+    state.carrierButton.hidden = false
+    state.carrierButton.menu = null
+    state.carrierButton.showsMenuAsPrimaryAction = false
+    state.carrierTarget.handler = state.destinationSearchHandler
+    paintChromeButton(state.carrierButton, "magnifyingglass", "Search", clustered = true)
+    trailingStack.spacing = state.sourceStackSpacing
+    state.spacerWidthConstraint.constant = state.spacerInitialWidth
+    if (state.sourceExtraWidth > 0.0 && state.spacer.superview == null) {
+        trailingStack.addArrangedSubview(state.spacer)
+        state.carrierButton.transform = translationTransform(state.sourceExtraWidth)
+    } else {
+        state.carrierButton.transform = identityTransform()
+    }
+    trailingCluster.hidden = false
+    trailingCluster.superview?.layoutIfNeeded()
+    state.destinationApplied = true
+}
+
+@OptIn(ExperimentalForeignApi::class)
+private fun IosHostNavBarLayer.restoreSourceTrailingTransition(state: NativeTrailingTransitionState) {
+    if (state.spacer.superview != null) {
+        trailingStack.removeArrangedSubview(state.spacer)
+        state.spacer.removeFromSuperview()
+    }
+    if (state.carrierButton.superview != null) {
+        trailingStack.removeArrangedSubview(state.carrierButton)
+        state.carrierButton.removeFromSuperview()
+    }
+    state.carrierButton.transform = identityTransform()
+    trailingStack.spacing = state.sourceStackSpacing
+    state.carrierTarget.handler = state.sourceCarrierHandler
+    state.carrierButton.menu = state.sourceCarrierMenu
+    state.carrierButton.showsMenuAsPrimaryAction = state.sourceCarrierShowsMenuAsPrimaryAction
+    paintChromeButton(
+        state.carrierButton,
+        state.sourceCarrierSymbol,
+        state.sourceCarrierAccessibility,
+        clustered = true,
+    )
+    state.sourceButtons.forEach { button ->
+        button.hidden = false
+        trailingStack.addArrangedSubview(button)
+    }
+    trailingCluster.hidden = state.sourceButtons.isEmpty()
+    trailingCluster.superview?.layoutIfNeeded()
+    state.destinationApplied = false
+}
+
+@OptIn(ExperimentalForeignApi::class)
+private fun IosHostNavBarLayer.finishTrailingDestinationTransition(state: NativeTrailingTransitionState) {
+    if (!state.destinationApplied) return
+    state.spacerWidthConstraint.constant = 0.0
+    trailingStack.spacing = 0.0
+    state.carrierButton.transform = identityTransform()
+    if (state.spacer.superview != null) {
+        trailingStack.removeArrangedSubview(state.spacer)
+        state.spacer.removeFromSuperview()
+    }
+    trailingStack.spacing = state.sourceStackSpacing
+    trailingCluster.superview?.layoutIfNeeded()
 }
 
 @OptIn(ExperimentalForeignApi::class)
@@ -357,25 +545,50 @@ private fun IosHostNavBarLayer.captureCurrentTitleSnapshot(): NativeTitleSnapsho
         height = height.coerceAtLeast(NativeHeaderMetrics.CompactBarHeightPt),
         titleX = titleX,
         titleY = titleY,
-        titleWidth = titleWidth.coerceAtLeast(width),
+        titleWidth = titleWidth.coerceAtLeast(1.0),
         titleHeight = titleHeight.coerceAtLeast(1.0),
         subtitleX = subtitleX,
         subtitleY = subtitleY,
-        subtitleWidth = subtitleWidth.coerceAtLeast(width),
+        subtitleWidth = subtitleWidth.coerceAtLeast(1.0),
         subtitleHeight = subtitleHeight.coerceAtLeast(1.0),
         glassAlpha = glassPlate.alpha,
         centered = titleLabel.textAlignment == NSTextAlignmentCenter,
+        hostWidth = chromeRow.bounds.useContents { size.width },
     )
 }
 
 @OptIn(ExperimentalForeignApi::class)
 private fun IosHostNavBarLayer.rememberRootTitleSnapshot() {
-    lastRootSnapshotByLayer[this] = captureCurrentTitleSnapshot()
+    val titleSnapshot = captureCurrentTitleSnapshot()
+    val arrangedButtons = trailingStack.arrangedSubviews.mapNotNull { it as? UIButton }
+    val nativeSearch =
+        searchTarget.handler?.takeIf {
+            arrangedButtons.any { button -> button == searchButton }
+        }
+    var carriedSearch: (() -> Unit)? = null
+    if (nativeSearch == null) {
+        actionButtons.forEachIndexed { index, button ->
+            if (
+                carriedSearch == null &&
+                arrangedButtons.any { arranged -> arranged == button } &&
+                paintedSymbols[button] == "magnifyingglass" &&
+                paintedAccessibility[button] == "Search"
+            ) {
+                carriedSearch = actionTargets[index].handler
+            }
+        }
+    }
+    lastRootDestinationByLayer[this] =
+        NativeRootDestinationSnapshot(
+            title = titleSnapshot,
+            searchHandler = nativeSearch ?: carriedSearch,
+        )
 }
 
 @OptIn(ExperimentalForeignApi::class)
 private fun IosHostNavBarLayer.applyRouteTitleTransition(progress: Float) {
-    val destinationSnapshot = lastRootSnapshotByLayer[this]
+    val hostWidth = chromeRow.bounds.useContents { size.width }.coerceAtLeast(1.0)
+    val destinationSnapshot = lastRootDestinationByLayer[this]?.title?.fittedToHostWidth(hostWidth)
     if (progress <= 0.001f || destinationSnapshot == null) {
         clearRouteTitleTransition()
         return
@@ -409,10 +622,19 @@ private fun IosHostNavBarLayer.applyRouteTitleTransition(progress: Float) {
 
     val source = views.sourceSnapshot ?: return
     val destination = views.destinationSnapshot ?: return
-    val hostWidth = chromeRow.bounds.useContents { size.width }.coerceAtLeast(1.0)
     val p = progress.coerceIn(0f, 1f).toDouble()
     val transitionGlassAlpha =
         source.glassAlpha + (destination.glassAlpha - source.glassAlpha) * p
+    // The destination is the underlay revealed from the leading edge. Always start it to the left
+    // of its settled position and let it parallax right as the foreground page is dismissed. This
+    // is especially visible for centered compact root titles such as "Clicks".
+    val destinationX =
+        destination.x +
+            NativeHeaderMetrics.rootTitleParallaxOffsetPt(
+                hostWidthPt = hostWidth,
+                progress = progress,
+                centered = destination.centered,
+            )
 
     CATransaction.begin()
     CATransaction.setDisableActions(true)
@@ -427,12 +649,13 @@ private fun IosHostNavBarLayer.applyRouteTitleTransition(progress: Float) {
     )
     views.destination.setFrame(
         CGRectMake(
-            destination.x - hostWidth * 0.22 * (1.0 - p),
+            destinationX,
             destination.y,
             destination.width,
             destination.height,
         ),
     )
+    clipDestinationToRevealedRegion(views.destination, hostWidth * p)
     views.source.alpha = (1.0 - 0.14 * p).coerceIn(0.0, 1.0)
     views.destination.alpha = (0.82 + 0.18 * p).coerceIn(0.0, 1.0)
     avatarButton.transform = translationTransform(hostWidth * p)
@@ -440,6 +663,44 @@ private fun IosHostNavBarLayer.applyRouteTitleTransition(progress: Float) {
     glassPlate.alpha = transitionGlassAlpha
     glassPlate.hidden = transitionGlassAlpha < 0.02
     CATransaction.commit()
+}
+
+/** A rotation or split-view resize may occur while the root is covered by another route. */
+private fun NativeTitleSnapshot.fittedToHostWidth(currentWidth: Double): NativeTitleSnapshot {
+    if (kotlin.math.abs(currentWidth - hostWidth) < 0.5) return this
+    val laneWidth = (width + currentWidth - hostWidth).coerceAtLeast(1.0)
+    val labelWidth = titleWidth.coerceIn(1.0, laneWidth)
+    return copy(
+        hostWidth = currentWidth,
+        width = laneWidth,
+        titleX = if (centered) (laneWidth - labelWidth) / 2.0 else titleX,
+        titleWidth = labelWidth,
+        subtitleWidth = laneWidth,
+    )
+}
+
+@OptIn(ExperimentalForeignApi::class)
+private fun clipDestinationToRevealedRegion(
+    container: UIView,
+    revealWidth: Double,
+) {
+    var frameX = 0.0
+    var width = 0.0
+    var height = 0.0
+    container.frame.useContents {
+        frameX = origin.x
+        width = size.width
+        height = size.height
+    }
+    val localStart = (-frameX).coerceIn(0.0, width)
+    val localEnd = (revealWidth - frameX).coerceIn(0.0, width)
+    val visibleWidth = (localEnd - localStart).coerceAtLeast(0.0)
+    val mask =
+        container.layer.mask ?: CALayer().apply {
+            backgroundColor = UIColor.blackColor.CGColor
+        }
+    mask.frame = CGRectMake(localStart, 0.0, visibleWidth, height.coerceAtLeast(1.0))
+    container.layer.mask = mask
 }
 
 @OptIn(ExperimentalForeignApi::class)
@@ -451,6 +712,7 @@ private fun configureTransitionContainer(
 ) {
     container.backgroundColor = UIColor.clearColor
     container.userInteractionEnabled = false
+    container.layer.mask = null
     container.setFrame(CGRectMake(snapshot.x, snapshot.y, snapshot.width, snapshot.height))
     container.subviews.map { it as UIView }.forEach { it.removeFromSuperview() }
 
@@ -460,14 +722,7 @@ private fun configureTransitionContainer(
     title.textAlignment = if (snapshot.centered) NSTextAlignmentCenter else NSTextAlignmentLeft
     title.numberOfLines = 1
     title.userInteractionEnabled = false
-    title.setFrame(
-        CGRectMake(
-            snapshot.titleX,
-            snapshot.titleY,
-            snapshot.titleWidth,
-            snapshot.titleHeight,
-        ),
-    )
+    title.setFrame(CGRectMake(snapshot.titleX, snapshot.titleY, snapshot.titleWidth, snapshot.titleHeight))
 
     subtitle.text = snapshot.subtitle
     subtitle.font = UIFont.systemFontOfSize(snapshot.subtitleFontSize)
@@ -490,7 +745,7 @@ private fun configureTransitionContainer(
 }
 
 @OptIn(ExperimentalForeignApi::class)
-private fun IosHostNavBarLayer.clearRouteTitleTransition() {
+private fun IosHostNavBarLayer.clearRouteTitleTransition(restoreDestination: Boolean = false) {
     val views =
         transitionViewsByLayer[this] ?: run {
             titleColumn.alpha = 1.0
@@ -498,10 +753,18 @@ private fun IosHostNavBarLayer.clearRouteTitleTransition() {
             avatarButton.alpha = 1.0
             return
         }
-    views.sourceSnapshot?.let { source ->
-        glassPlate.alpha = source.glassAlpha
-        glassPlate.hidden = source.glassAlpha < 0.02
+    val restoreSnapshot =
+        if (restoreDestination) {
+            views.destinationSnapshot
+        } else {
+            views.sourceSnapshot
+        }
+    restoreSnapshot?.let { snapshot ->
+        glassPlate.alpha = snapshot.glassAlpha
+        glassPlate.hidden = snapshot.glassAlpha < 0.02
     }
+    views.source.layer.mask = null
+    views.destination.layer.mask = null
     views.source.removeFromSuperview()
     views.destination.removeFromSuperview()
     views.sourceSnapshot = null
@@ -609,6 +872,7 @@ internal fun IosHostNavBarLayer.applyPersistentRootMenu(
         .forEach(menuClicksByKey::remove)
 
     if (items.isEmpty()) {
+        rootMenuShapeByLayer.remove(this)
         backButton.hidden = true
         backButton.menu = null
         backButton.showsMenuAsPrimaryAction = false
@@ -619,6 +883,25 @@ internal fun IosHostNavBarLayer.applyPersistentRootMenu(
     items.forEachIndexed { index, item ->
         menuClicksByKey["-2:$index"] = item.onClick
     }
+
+    val menuShape =
+        items.joinToString(separator = "|") { item ->
+            "${item.title}:${item.sfSymbol.orEmpty()}"
+        }
+    val canReuseExistingMenu =
+        rootMenuShapeByLayer[this] == menuShape &&
+            backButton.showsMenuAsPrimaryAction &&
+            backButton.menu != null &&
+            paintedSymbols[backButton] == "ellipsis" &&
+            paintedAccessibility[backButton] == "Menu"
+    if (canReuseExistingMenu) {
+        // UIActions dispatch through menuClicksByKey, which was refreshed above. Keeping the same
+        // UIMenu/UIButton prevents the one-frame Liquid Glass rematerialization after every pop.
+        backButton.hidden = false
+        backTarget.handler = null
+        return
+    }
+
     val menuAction =
         NativeChromeAction(
             sfSymbol = "ellipsis",
@@ -635,4 +918,5 @@ internal fun IosHostNavBarLayer.applyPersistentRootMenu(
         accessibility = "Menu",
         clustered = false,
     )
+    rootMenuShapeByLayer[this] = menuShape
 }

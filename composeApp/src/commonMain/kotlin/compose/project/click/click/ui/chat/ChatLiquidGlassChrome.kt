@@ -11,7 +11,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.TextFieldColors
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -20,10 +22,15 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import compose.project.click.click.data.AppDataManager
+import compose.project.click.click.data.models.ChatWithDetails
+import compose.project.click.click.data.models.User
 import compose.project.click.click.ui.components.ClickCircularIconButton
 import compose.project.click.click.ui.components.platformPressScale
 import compose.project.click.click.ui.theme.LocalPlatformStyle
 import compose.project.click.click.ui.theme.MotionTokens
+import kotlinx.coroutines.delay
+import kotlinx.datetime.Clock
 
 /** Shared horizontal inset for chat header row and composer strip (outer edges align). */
 internal val ChatChromeHorizontalPadding: Dp = 16.dp
@@ -35,12 +42,80 @@ internal val ChatChromeHorizontalPadding: Dp = 16.dp
 internal fun chatPeerStatusSubtitle(
     isTyping: Boolean,
     isOnline: Boolean,
+    lastSeenAtMs: Long? = null,
+    nowMs: Long = Clock.System.now().toEpochMilliseconds(),
 ): String =
     when {
         isTyping -> "Typing…"
         isOnline -> "Online"
+        lastSeenAtMs != null && lastSeenAtMs > 0L -> "Last seen ${formatLastSeenElapsed(lastSeenAtMs, nowMs)}"
         else -> "Offline"
     }
+
+internal fun formatLastSeenElapsed(
+    lastSeenAtMs: Long,
+    nowMs: Long = Clock.System.now().toEpochMilliseconds(),
+): String {
+    val elapsedMs = (nowMs - lastSeenAtMs).coerceAtLeast(0L)
+    return when {
+        elapsedMs < 60_000L -> "just now"
+        elapsedMs < 3_600_000L -> "${elapsedMs / 60_000L}m ago"
+        elapsedMs < 86_400_000L -> "${elapsedMs / 3_600_000L}h ago"
+        elapsedMs < 604_800_000L -> "${elapsedMs / 86_400_000L}d ago"
+        else -> "${elapsedMs / 604_800_000L}w ago"
+    }
+}
+
+internal fun chatGroupPresenceSubtitle(
+    memberLastSeenAtMs: List<Long?>,
+    onlineMemberCount: Int,
+    nowMs: Long = Clock.System.now().toEpochMilliseconds(),
+): String? =
+    when {
+        onlineMemberCount > 0 -> "$onlineMemberCount online"
+        else ->
+            memberLastSeenAtMs.filterNotNull().filter { it > 0L }.maxOrNull()?.let {
+                "Last active ${formatLastSeenElapsed(it, nowMs)}"
+            }
+    }
+
+/** One presence subtitle for Compose, native navigation, and profile media headers. */
+@Composable
+internal fun rememberChatPresenceSubtitle(
+    chatDetails: ChatWithDetails?,
+    isGroupChat: Boolean,
+    isTyping: Boolean = false,
+    isPeerOnline: Boolean = false,
+): String? {
+    if (chatDetails == null) return null
+    val onlineUsers by AppDataManager.onlineUsers.collectAsState()
+    val lastSeen by AppDataManager.lastSeenAtMs.collectAsState()
+    val currentUser by AppDataManager.currentUser.collectAsState()
+    val connectedUsers by AppDataManager.connectedUsers.collectAsState()
+    val nowMs by produceState(Clock.System.now().toEpochMilliseconds()) {
+        while (true) {
+            delay(60_000L)
+            value = Clock.System.now().toEpochMilliseconds()
+        }
+    }
+
+    fun lastSeenAt(user: User): Long? =
+        listOfNotNull(user.lastPolled, connectedUsers[user.id]?.lastPolled, lastSeen[user.id])
+            .filter { it > 0L }
+            .maxOrNull()
+
+    return if (isGroupChat) {
+        val peers = chatDetails.groupMemberUsers.filter { it.id != currentUser?.id }.distinctBy { it.id }
+        chatGroupPresenceSubtitle(peers.map(::lastSeenAt), peers.count { it.id in onlineUsers }, nowMs)
+    } else {
+        chatPeerStatusSubtitle(
+            isTyping = isTyping,
+            isOnline = isPeerOnline || chatDetails.otherUser.id in onlineUsers,
+            lastSeenAtMs = lastSeenAt(chatDetails.otherUser),
+            nowMs = nowMs,
+        )
+    }
+}
 
 /**
  * Circular header action for chat / hub threads.

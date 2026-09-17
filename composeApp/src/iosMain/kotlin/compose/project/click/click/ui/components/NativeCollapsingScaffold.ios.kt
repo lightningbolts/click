@@ -182,6 +182,7 @@ actual fun NativeCollapsingScrollScaffold(
     onNavigateBack: (() -> Unit)?,
     nativeTrailingActions: List<NativeChromeAction>,
     horizontalPadding: Dp,
+    scrollEnabled: Boolean,
     content: @Composable (Modifier) -> Unit,
 ) {
     val scrollState = rememberScrollState()
@@ -197,7 +198,12 @@ actual fun NativeCollapsingScrollScaffold(
             scrollBehavior.state.heightOffsetLimit = -extraPx
         }
     }
-    val collapseFraction = if (onNavigateBack != null) 1f else scrollBehavior.state.collapsedFraction
+    val collapseFraction =
+        when {
+            onNavigateBack != null -> 1f
+            !scrollEnabled -> 0f
+            else -> scrollBehavior.state.collapsedFraction
+        }
     val chromeActive = LocalNativeChromeActive.current
     rememberIosHostNavBar(
         title = title,
@@ -230,13 +236,19 @@ actual fun NativeCollapsingScrollScaffold(
         modifier =
             modifier
                 .fillMaxSize()
-                .nestedScroll(scrollBehavior.nestedScrollConnection),
+                .then(
+                    if (scrollEnabled) {
+                        Modifier.nestedScroll(scrollBehavior.nestedScrollConnection)
+                    } else {
+                        Modifier
+                    },
+                ),
     ) {
         Column(
             modifier =
                 Modifier
                     .fillMaxSize()
-                    .verticalScroll(scrollState)
+                    .verticalScroll(scrollState, enabled = scrollEnabled)
                     .padding(
                         start = horizontalPadding,
                         end = horizontalPadding,

@@ -109,6 +109,7 @@ fun AppScreenScaffoldScroll(
     onNavigateBack: (() -> Unit)? = null,
     nativeTrailingActions: List<NativeChromeAction> = emptyList(),
     horizontalPadding: Dp = AppScreenDefaults.HorizontalPadding,
+    scrollEnabled: Boolean = true,
     content: @Composable (Modifier) -> Unit,
 ) {
     NativeCollapsingScrollScaffold(
@@ -122,6 +123,7 @@ fun AppScreenScaffoldScroll(
         onNavigateBack = onNavigateBack,
         nativeTrailingActions = nativeTrailingActions,
         horizontalPadding = horizontalPadding,
+        scrollEnabled = scrollEnabled,
         content = content,
     )
 }
@@ -153,7 +155,8 @@ fun LazyListState.headerCollapseFraction(thresholdPx: Int): Float =
     )
 
 /**
- * Scrollable screens (e.g. Add Click) with a native collapsing header.
+ * Screens with a native floating header and a column body. Set [scrollEnabled] false for static
+ * tab roots whose content is intentionally fixed in place.
  */
 @Composable
 fun AppScreenWithFloatingHeader(
@@ -167,6 +170,7 @@ fun AppScreenWithFloatingHeader(
     onNavigateBack: (() -> Unit)? = null,
     nativeTrailingActions: List<NativeChromeAction> = emptyList(),
     horizontalPadding: Dp = AppScreenDefaults.HorizontalPadding,
+    scrollEnabled: Boolean = true,
     content: @Composable (Modifier) -> Unit,
 ) {
     NativeCollapsingScrollScaffold(
@@ -180,6 +184,7 @@ fun AppScreenWithFloatingHeader(
         onNavigateBack = onNavigateBack,
         nativeTrailingActions = nativeTrailingActions,
         horizontalPadding = horizontalPadding,
+        scrollEnabled = scrollEnabled,
         content = content,
     )
 }

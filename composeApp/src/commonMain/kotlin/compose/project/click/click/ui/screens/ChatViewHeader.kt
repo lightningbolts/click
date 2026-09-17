@@ -44,8 +44,8 @@ import compose.project.click.click.ui.chat.ChatChromeHorizontalPadding // pragma
 import compose.project.click.click.ui.chat.ChatGlassHeaderPlateTestTag // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatHeaderIconButton // pragma: allowlist secret
 import compose.project.click.click.ui.chat.GroupMembersPickerContext // pragma: allowlist secret
-import compose.project.click.click.ui.chat.chatPeerStatusSubtitle // pragma: allowlist secret
 import compose.project.click.click.ui.chat.groupMembersPickerContextFrom // pragma: allowlist secret
+import compose.project.click.click.ui.chat.rememberChatPresenceSubtitle // pragma: allowlist secret
 import compose.project.click.click.ui.components.AvatarWithOnlineIndicator // pragma: allowlist secret
 import compose.project.click.click.ui.components.BindPlatformNativeNavigationBar // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionListUserAvatarFace // pragma: allowlist secret
@@ -80,6 +80,8 @@ internal fun ChatViewSuccessHeader(
     val isPeerTyping by viewModel.isPeerTyping.collectAsState()
     val isPeerOnline by viewModel.isPeerOnline.collectAsState()
     val onlineUsers by AppDataManager.onlineUsers.collectAsState()
+    val presenceSubtitle = rememberChatPresenceSubtitle(chatDetails, isGroupChat, isPeerTyping, isPeerOnline)
+    val groupPresenceSubtitle = presenceSubtitle.takeIf { isGroupChat }
     var showConnectionSheet by showConnectionSheetState
     var showRenameGroupDialog by showRenameGroupDialogState
     var renameGroupDraft by renameGroupDraftState
@@ -191,9 +193,9 @@ internal fun ChatViewSuccessHeader(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    if (isGroupChat && memberSummaryLine != null) {
+                    if (isGroupChat && (memberSummaryLine != null || groupPresenceSubtitle != null)) {
                         Text(
-                            text = memberSummaryLine,
+                            text = listOfNotNull(memberSummaryLine, groupPresenceSubtitle).joinToString(" · "),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
                             maxLines = 2,
@@ -202,11 +204,7 @@ internal fun ChatViewSuccessHeader(
                     } else if (!isGroupChat) {
                         val subtitleOnline =
                             chatDetails.otherUser.id in onlineUsers || isPeerOnline
-                        val statusText =
-                            chatPeerStatusSubtitle(
-                                isTyping = isPeerTyping,
-                                isOnline = subtitleOnline,
-                            )
+                        val statusText = presenceSubtitle.orEmpty()
                         val showOnlineDot = subtitleOnline && !isPeerTyping
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -319,14 +317,8 @@ internal fun ChatViewNativeNavBinding(
         val onlineUsers by AppDataManager.onlineUsers.collectAsState()
         val peerId = successChat?.chatDetails?.otherUser?.id ?: hintedChatRow?.otherUser?.id
         val bindOnline = if (bindIsGroup) null else peerId?.let { it in onlineUsers || isPeerOnline }
-        val bindStatusSubtitle =
-            if (bindIsGroup) {
-                null
-            } else if (bindOnline != null || successChat != null || hintedChatRow != null) {
-                chatPeerStatusSubtitle(isTyping = isPeerTyping, isOnline = bindOnline == true)
-            } else {
-                null
-            }
+        val boundDetails = successChat?.chatDetails ?: hintedChatRow
+        val bindStatusSubtitle = rememberChatPresenceSubtitle(boundDetails, bindIsGroup, isPeerTyping, isPeerOnline)
 
         BindPlatformNativeNavigationBar(
             title = bindTitle,
@@ -393,7 +385,7 @@ internal fun ChatViewNativeNavBinding(
                     }
                     add(
                         NativeChromeAction(
-                            sfSymbol = "ellipsis.circle",
+                            sfSymbol = "ellipsis",
                             contentDescription = "More options",
                             onClick = { showConnectionSheet = true },
                         ),

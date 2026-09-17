@@ -98,7 +98,7 @@ expect fun NativeCollapsingScaffold(
 
 /**
  * Same native collapsing chrome as [NativeCollapsingScaffold] for `verticalScroll` bodies
- * (Add Click, My QR).
+ * (Add Click, My QR). [scrollEnabled] disables both body scrolling and header collapse.
  */
 @Composable
 expect fun NativeCollapsingScrollScaffold(
@@ -112,6 +112,7 @@ expect fun NativeCollapsingScrollScaffold(
     onNavigateBack: (() -> Unit)? = null,
     nativeTrailingActions: List<NativeChromeAction> = emptyList(),
     horizontalPadding: Dp = AppScreenDefaults.HorizontalPadding,
+    scrollEnabled: Boolean = true,
     content: @Composable (Modifier) -> Unit,
 )
 

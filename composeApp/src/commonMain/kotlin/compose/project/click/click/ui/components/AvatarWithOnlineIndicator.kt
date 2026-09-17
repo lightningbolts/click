@@ -226,7 +226,7 @@ fun CoreConnectionAvatarFrame(
         if (onClick != null) {
             Modifier.clickable(
                 interactionSource = interactionSource,
-                indication = ripple(bounded = false, radius = outerSize / 2),
+                indication = ripple(bounded = true, radius = outerSize / 2),
                 onClick = onClick,
             )
         } else {

@@ -36,6 +36,7 @@ import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.Message
 import compose.project.click.click.data.models.MessageReaction
 import compose.project.click.click.data.models.MessageWithUser
+import compose.project.click.click.data.models.isBeaconChatMessage
 import compose.project.click.click.viewmodel.SecureChatMediaHost
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
@@ -172,6 +173,7 @@ internal fun ChatMessageTimeline(
     onForward: (messageId: String) -> Unit,
     onLongPress: (MessageWithUser) -> Unit,
     onSwipeReply: (MessageWithUser) -> Unit,
+    onPeerAvatarClick: (String) -> Unit = {},
     onDownloadAttachment: suspend (
         MessageWithUser,
         compose.project.click.click.chat.attachments.AttachmentCrypto.Envelope,
@@ -188,6 +190,7 @@ internal fun ChatMessageTimeline(
     val onForwardState = rememberUpdatedState(onForward)
     val onLongPressState = rememberUpdatedState(onLongPress)
     val onSwipeReplyState = rememberUpdatedState(onSwipeReply)
+    val onPeerAvatarClickState = rememberUpdatedState(onPeerAvatarClick)
     val onDownloadAttachmentState = rememberUpdatedState(onDownloadAttachment)
     val onExpandPhotoState = rememberUpdatedState(onExpandPhoto)
     val onOpenBeaconState = rememberUpdatedState(onOpenBeacon)
@@ -259,6 +262,16 @@ internal fun ChatMessageTimeline(
                         // Beacons are regular actionable messages (timestamp peek, reply swipe,
                         // long-press menu). Only call logs skip the gutter/gesture chrome.
                         val isCallLog = mt == ChatMessageType.CALL_LOG
+                        val timestampBottomReservation =
+                            if (!enableMessageContextMenu && !messageWithUser.message.isBeaconChatMessage()) {
+                                // Hub messages intentionally disable reactions/context actions but
+                                // ChatMessageBubble still reserves the standard reaction slot. Only
+                                // Hub timestamps need compensating for that empty lower reservation;
+                                // ordinary 1:1/group chats keep their existing timestamp geometry.
+                                ChatBubbleTokens.reactionSlotHeight
+                            } else {
+                                0.dp
+                            }
                         Column(Modifier.padding(top = listGapTop)) {
                             ChatMessageRowWithTimestampGutter(
                                 isCallLog = isCallLog,
@@ -266,6 +279,7 @@ internal fun ChatMessageTimeline(
                                 timeCreated = messageWithUser.message.timeCreated,
                                 stripVisualPx = displayTimestampPeekVisualPx,
                                 maxRevealPx = peekRevealPx,
+                                bottomReservedSpace = timestampBottomReservation,
                                 meshConnection = meshConnection,
                                 useHubNeutralMesh = useHubNeutralMesh,
                             ) {
@@ -287,6 +301,7 @@ internal fun ChatMessageTimeline(
                                             onLongPress = { onLongPressState.value(it) },
                                             onSwipeReply = { onSwipeReplyState.value(it) },
                                             showPeerAvatarInGroup = isGroupChat,
+                                            onPeerAvatarClick = { onPeerAvatarClickState.value(it) },
                                             secureMediaHost = secureMediaHost,
                                             activeChatId = activeChatId,
                                             enableMessageContextMenu = enableMessageContextMenu,

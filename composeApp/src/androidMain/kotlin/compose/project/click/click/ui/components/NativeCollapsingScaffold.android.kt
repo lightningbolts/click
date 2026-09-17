@@ -150,6 +150,7 @@ actual fun NativeCollapsingScrollScaffold(
     onNavigateBack: (() -> Unit)?,
     nativeTrailingActions: List<NativeChromeAction>,
     horizontalPadding: Dp,
+    scrollEnabled: Boolean,
     content: @Composable (Modifier) -> Unit,
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
@@ -159,7 +160,13 @@ actual fun NativeCollapsingScrollScaffold(
         modifier =
             modifier
                 .fillMaxSize()
-                .nestedScroll(scrollBehavior.nestedScrollConnection),
+                .then(
+                    if (scrollEnabled) {
+                        Modifier.nestedScroll(scrollBehavior.nestedScrollConnection)
+                    } else {
+                        Modifier
+                    },
+                ),
         containerColor = Color.Transparent,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
@@ -169,7 +176,7 @@ actual fun NativeCollapsingScrollScaffold(
                         title = title,
                         subtitle = subtitle,
                         presenceOnline = presenceOnline,
-                        collapsedFraction = scrollBehavior.state.collapsedFraction,
+                        collapsedFraction = if (scrollEnabled) scrollBehavior.state.collapsedFraction else 0f,
                     )
                 },
                 navigationIcon = { navigationIcon?.invoke() },
@@ -188,7 +195,7 @@ actual fun NativeCollapsingScrollScaffold(
             modifier =
                 Modifier
                     .fillMaxSize()
-                    .verticalScroll(scrollState)
+                    .verticalScroll(scrollState, enabled = scrollEnabled)
                     .padding(
                         start = horizontalPadding,
                         end = horizontalPadding,

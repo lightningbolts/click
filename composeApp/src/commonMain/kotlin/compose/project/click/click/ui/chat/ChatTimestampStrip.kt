@@ -1,3 +1,5 @@
+@file:Suppress("ktlint:standard:function-naming")
+
 package compose.project.click.click.ui.chat // pragma: allowlist secret
 
 import androidx.compose.animation.core.Spring
@@ -6,6 +8,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
@@ -18,11 +21,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.graphicsLayer
-import compose.project.click.click.data.models.Connection // pragma: allowlist secret
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import compose.project.click.click.data.models.Connection // pragma: allowlist secret
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -44,8 +48,10 @@ internal fun rememberTimestampPeekRevealPx(): Float {
 }
 
 /** Sub-pixel threshold so a settled peek of ~0 does not block interactive back. */
-internal fun isTimestampPeekRevealed(visualPx: Float, epsilonPx: Float = 0.5f): Boolean =
-    visualPx > epsilonPx
+internal fun isTimestampPeekRevealed(
+    visualPx: Float,
+    epsilonPx: Float = 0.5f,
+): Boolean = visualPx > epsilonPx
 
 /** Soft knee in px — matches reply swipe [ChatMessageBubble] `swipeSoftKneePx`. */
 @Composable
@@ -188,6 +194,7 @@ internal fun ChatMessageRowWithTimestampGutter(
     timeCreated: Long,
     stripVisualPx: MutableFloatState,
     maxRevealPx: Float,
+    bottomReservedSpace: Dp,
     modifier: Modifier = Modifier,
     @Suppress("UNUSED_PARAMETER") meshConnection: Connection? = null,
     @Suppress("UNUSED_PARAMETER") useHubNeutralMesh: Boolean = false,
@@ -220,6 +227,9 @@ internal fun ChatMessageRowWithTimestampGutter(
             modifier =
                 Modifier
                     .align(Alignment.CenterEnd)
+                    // Move the whole gutter layout, including its clip region. Translating only
+                    // the clipped graphics layer sliced the timestamp into a horizontal strip.
+                    .offset(y = -(bottomReservedSpace / 2f))
                     .width(gutterWidthDp)
                     .clipToBounds()
                     .graphicsLayer {

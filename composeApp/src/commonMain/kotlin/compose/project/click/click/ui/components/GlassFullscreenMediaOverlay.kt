@@ -24,8 +24,8 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material.icons.outlined.Download
+import androidx.compose.material.icons.outlined.Share
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -49,12 +49,9 @@ import compose.project.click.click.ui.theme.LocalPlatformStyle // pragma: allowl
  * which hid the liquid-glass close control and left a header-height sliver of the chat
  * underneath. Click Drops uses the same in-tree cover + exclusive overlay bind.
  *
- * iOS close and trailing actions retarget the existing overlay through
- * [ApplyStableOverlayMediaChrome]. When a chat/hub route already owns native chrome, the media
- * overlay changes the meaning of those exact UIKit buttons instead of rebinding the bar. The
- * route chrome is restored as soon as the exit transition starts, so close -> back and media
- * actions -> chat actions morph during the fade rather than flickering after unmount. Android
- * continues to use [MediaLightboxTopChrome].
+ * iOS chat/hub media retargets the existing native chrome through [ApplyStableOverlayMediaChrome].
+ * Portaled profile media can provide [chrome] so its detached UIKit host uses the same dismissal
+ * transaction as the media content instead of tearing down native controls independently.
  */
 @Composable
 fun GlassFullscreenMediaOverlay(
@@ -64,30 +61,43 @@ fun GlassFullscreenMediaOverlay(
     scrimAlpha: Float = GlassSheetTokens.ScrimBaseAlpha,
     motion: UnifiedPopupMotion = UnifiedPopupMotion.Media,
     nativeTrailingActions: List<NativeChromeAction> = emptyList(),
+    useNativeChrome: Boolean = true,
+    onDismissTransitionStarted: (() -> Unit)? = null,
+    chrome: @Composable (onClose: () -> Unit) -> Unit = {},
     content: @Composable () -> Unit,
 ) {
     val transitionState = remember { MutableTransitionState(false) }
     var userDismissPending by remember { mutableStateOf(false) }
 
-    LaunchedEffect(visible, userDismissPending) {
-        if (userDismissPending) return@LaunchedEffect
-        transitionState.targetState = visible
+    LaunchedEffect(visible) {
+        if (!visible) {
+            userDismissPending = false
+            transitionState.targetState = false
+        } else if (!userDismissPending) {
+            transitionState.targetState = true
+        }
     }
 
     fun requestDismiss() {
-        if (!transitionState.targetState) return
+        if (userDismissPending) return
+        if (!transitionState.currentState && !transitionState.targetState) return
         userDismissPending = true
+        onDismissTransitionStarted?.invoke()
         transitionState.targetState = false
     }
 
-    LaunchedEffect(transitionState.isIdle, transitionState.currentState, transitionState.targetState) {
+    LaunchedEffect(
+        transitionState.isIdle,
+        transitionState.currentState,
+        transitionState.targetState,
+        userDismissPending,
+    ) {
         if (
             transitionState.isIdle &&
             !transitionState.currentState &&
             !transitionState.targetState &&
             userDismissPending
         ) {
-            userDismissPending = false
             onDismissRequest()
         }
     }
@@ -100,12 +110,15 @@ fun GlassFullscreenMediaOverlay(
         OverlayExclusiveBindPolicy.shouldCoverNativeTabBarForMedia(
             isIOS = LocalPlatformStyle.current.isIOS,
         )
-    CompositionLocalProvider(LocalNativeChromeActive provides true) {
-        ApplyStableOverlayMediaChrome(
-            active = transitionState.targetState,
-            onClose = ::requestDismiss,
-            trailing = nativeTrailingActions,
-        )
+    chrome(::requestDismiss)
+    if (useNativeChrome) {
+        CompositionLocalProvider(LocalNativeChromeActive provides true) {
+            ApplyStableOverlayMediaChrome(
+                active = transitionState.targetState,
+                onClose = ::requestDismiss,
+                trailing = nativeTrailingActions,
+            )
+        }
     }
     DisposableEffect(coverNativeTabBar) {
         if (coverNativeTabBar) AppScreenChromeState.acquireNativeTabBarCover()
@@ -157,8 +170,6 @@ fun GlassFullscreenMediaOverlay(
 /**
  * Close control for photo / media lightboxes. Same 40pt liquid-glass circle as compact native
  * chrome, inset from the safe drawing edge — not stacked under the chat header.
- *
- * iOS hides this Compose control; the overlay navigation bar owns the real glass xmark.
  */
 @Composable
 fun MediaLightboxTopChrome(
@@ -230,10 +241,19 @@ internal fun MediaLightboxSaveShareTrailing(
     onSave: () -> Unit,
     onShare: () -> Unit,
 ) {
-    TextButton(onClick = onSave) {
-        Text("Save", color = Color.White)
-    }
-    TextButton(onClick = onShare) {
-        Text("Share", color = Color.White)
-    }
+    val buttonSize = NativeHeaderMetrics.ChromeButtonSizePt.dp
+    ClickCircularGlassIconButton(
+        icon = Icons.Outlined.Download,
+        contentDescription = "Save",
+        onClick = onSave,
+        size = buttonSize,
+        tint = Color.White,
+    )
+    ClickCircularGlassIconButton(
+        icon = Icons.Outlined.Share,
+        contentDescription = "Share",
+        onClick = onShare,
+        size = buttonSize,
+        tint = Color.White,
+    )
 }

@@ -56,6 +56,17 @@ class NativeHeaderMetricsTest {
     }
 
     @Test
+    fun rootTitleParallax_approachesFromLeadingEdge() {
+        val start = NativeHeaderMetrics.rootTitleParallaxOffsetPt(400.0, progress = 0f, centered = true)
+        val middle = NativeHeaderMetrics.rootTitleParallaxOffsetPt(400.0, progress = 0.5f, centered = true)
+        val settled = NativeHeaderMetrics.rootTitleParallaxOffsetPt(400.0, progress = 1f, centered = true)
+
+        assertTrue(start < middle)
+        assertTrue(middle < settled)
+        assertEquals(0.0, settled, 0.01)
+    }
+
+    @Test
     fun compactTabRoot_inlinesOnlyWithoutBackOrIdentity() {
         assertTrue(NativeHeaderMetrics.isCompactTabRootChrome(1f, hasBack = false, hasIdentity = false))
         assertTrue(!NativeHeaderMetrics.isCompactTabRootChrome(1f, hasBack = true, hasIdentity = false))
