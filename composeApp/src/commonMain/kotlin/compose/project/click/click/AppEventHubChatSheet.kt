@@ -15,7 +15,12 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -27,21 +32,22 @@ import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import compose.project.click.click.ui.components.BindPlatformNativeNavigationBar // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickFormBottomSheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.PlatformOverlayAbovePresentedSheets // pragma: allowlist secret
+import compose.project.click.click.ui.components.PlatformOverlayPresentationMotion // pragma: allowlist secret
+import compose.project.click.click.ui.screens.EventHubBottomSheetChatScreen // pragma: allowlist secret
+import compose.project.click.click.ui.screens.EventHubModalChatScreen // pragma: allowlist secret
 import compose.project.click.click.ui.screens.HubChatNavArgs // pragma: allowlist secret
-import compose.project.click.click.ui.screens.HubChatScreen // pragma: allowlist secret
 import compose.project.click.click.ui.theme.LocalPlatformStyle // pragma: allowlist secret
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+
+private const val EventHubModalExitMillis = 230L
 
 /**
  * Event Hub presentation used by event/map/feed entry points.
  *
- * iOS deliberately uses the same real full-screen UIKit portal contract as profile media: the
- * existing Event/Nearby sheet stack stays mounted underneath while the conversation owns a new
- * full-screen ComposeUIViewController and the shared native Liquid Glass chrome. This avoids
- * trying to host Liquid Glass controls inside a UISheetPresentationController/Compose interop
- * boundary, which produced dark rectangular backings and inconsistent interaction.
- *
- * Android retains the existing bottom-sheet presentation. The conversation implementation and
- * [ViewModelStore] are shared on both platforms.
+ * This is deliberately not the Connections/search Hub route. iOS owns a modal full-screen
+ * presentation with X chrome and modal motion; Android retains its sheet-local presentation. Both
+ * share HubChat data/view-model internals without sharing navigation semantics.
  */
 @Composable
 internal fun AppEventHubChatSheet(
@@ -54,8 +60,8 @@ internal fun AppEventHubChatSheet(
 ) {
     if (args == null && !loading && errorMessage == null) return
 
-    // Keep the HubChat ViewModel owned by AppMainShell rather than by a detached presentation
-    // host. Presentation changes must not recreate Supabase realtime collectors.
+    // Keep the HubChat ViewModel owned above the detached iOS presentation host. UIKit
+    // presentation/layout changes must not recreate Supabase realtime collectors.
     val owner =
         remember(args?.realtimeChannel, currentUserId) {
             if (args == null) {
@@ -72,18 +78,33 @@ internal fun AppEventHubChatSheet(
 
     val isIOS = LocalPlatformStyle.current.isIOS
     if (isIOS) {
+        var portalDismissing by remember { mutableStateOf(false) }
+        val dismissScope = rememberCoroutineScope()
+        val latestDismissRequest by rememberUpdatedState(onDismissRequest)
+
+        fun requestModalDismiss() {
+            if (portalDismissing) return
+            portalDismissing = true
+            dismissScope.launch {
+                // Keep the detached controller and its native Liquid Glass chrome alive through the
+                // whole exit animation. Parent state is cleared only after the portal is offscreen.
+                delay(EventHubModalExitMillis)
+                latestDismissRequest()
+            }
+        }
+
         PlatformOverlayAbovePresentedSheets(
             liftAbovePresentedSheets = true,
+            dismissing = portalDismissing,
+            presentationMotion = PlatformOverlayPresentationMotion.ModalLift,
         ) {
             when {
                 args != null && owner != null -> {
                     CompositionLocalProvider(LocalViewModelStoreOwner provides owner) {
-                        HubChatScreen(
+                        EventHubModalChatScreen(
                             args = args,
                             currentUserId = currentUserId,
-                            onNavigateBack = onDismissRequest,
-                            embeddedInSheet = false,
-                            nativeLeadingClose = true,
+                            onClose = ::requestModalDismiss,
                         )
                     }
                 }
@@ -93,7 +114,7 @@ internal fun AppEventHubChatSheet(
                         pendingTitle = pendingTitle,
                         loading = loading,
                         errorMessage = errorMessage,
-                        onDismissRequest = onDismissRequest,
+                        onDismissRequest = ::requestModalDismiss,
                     )
                 }
             }
@@ -111,11 +132,10 @@ internal fun AppEventHubChatSheet(
         when {
             args != null && owner != null -> {
                 CompositionLocalProvider(LocalViewModelStoreOwner provides owner) {
-                    HubChatScreen(
+                    EventHubBottomSheetChatScreen(
                         args = args,
                         currentUserId = currentUserId,
-                        onNavigateBack = onDismissRequest,
-                        embeddedInSheet = true,
+                        onClose = onDismissRequest,
                     )
                 }
             }
