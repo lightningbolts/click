@@ -263,10 +263,14 @@ internal fun ChatMessageTimeline(
                         // long-press menu). Only call logs skip the gutter/gesture chrome.
                         val isCallLog = mt == ChatMessageType.CALL_LOG
                         val timestampBottomReservation =
-                            if (messageWithUser.message.isBeaconChatMessage()) {
-                                0.dp
-                            } else {
+                            if (!enableMessageContextMenu && !messageWithUser.message.isBeaconChatMessage()) {
+                                // Hub messages intentionally disable reactions/context actions but
+                                // ChatMessageBubble still reserves the standard reaction slot. Only
+                                // Hub timestamps need compensating for that empty lower reservation;
+                                // ordinary 1:1/group chats keep their existing timestamp geometry.
                                 ChatBubbleTokens.reactionSlotHeight
+                            } else {
+                                0.dp
                             }
                         Column(Modifier.padding(top = listGapTop)) {
                             ChatMessageRowWithTimestampGutter(
