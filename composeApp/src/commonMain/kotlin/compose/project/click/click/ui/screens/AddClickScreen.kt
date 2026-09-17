@@ -6,6 +6,7 @@
 package compose.project.click.click.ui.screens // pragma: allowlist secret
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -14,6 +15,7 @@ import androidx.compose.material.icons.filled.BluetoothSearching
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.GroupAdd
+import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.QrCode
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material3.*
@@ -22,9 +24,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.ui.components.AdaptiveBackground // pragma: allowlist secret
 import compose.project.click.click.ui.components.AppScreenWithFloatingHeader // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickButton // pragma: allowlist secret
@@ -36,6 +41,8 @@ import compose.project.click.click.ui.components.JoinCommunityHubSheet // pragma
 import compose.project.click.click.ui.components.SuccessBeat // pragma: allowlist secret
 import compose.project.click.click.ui.theme.* // pragma: allowlist secret
 import compose.project.click.click.utils.LocationService // pragma: allowlist secret
+import compose.project.click.click.viewmodel.ConnectionViewModel // pragma: allowlist secret
+import compose.project.click.click.viewmodel.requestVerifiedGroupCreation // pragma: allowlist secret
 
 @Composable
 fun AddClickScreen(
@@ -54,15 +61,28 @@ fun AddClickScreen(
 ) {
     var isClicked by remember { mutableStateOf(false) }
     var clickedUserName by remember { mutableStateOf("") }
+    val connectionViewModel: ConnectionViewModel = viewModel()
+    val fontScale = LocalDensity.current.fontScale
 
     AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
         AppScreenWithFloatingHeader(
             title = "Add Click",
             subtitle = "Connect in person or join a nearby community",
         ) { contentModifier ->
+            // Add Click is a short root menu, not a feed. At normal text sizes consume vertical
+            // drags before the parent collapsing-scroll scaffold so the root cannot collapse/scroll.
+            // Large accessibility text keeps the fallback scroll path so content is never clipped.
+            val rootContentModifier =
+                if (fontScale <= 1.2f) {
+                    contentModifier.pointerInput(Unit) {
+                        detectVerticalDragGestures { change, _ -> change.consume() }
+                    }
+                } else {
+                    contentModifier
+                }
             if (!isClicked) {
                 AddClickContent(
-                    modifier = contentModifier.fillMaxWidth(),
+                    modifier = rootContentModifier.fillMaxWidth(),
                     onClickSuccess = { userName ->
                         isClicked = true
                         clickedUserName = userName
@@ -70,6 +90,7 @@ fun AddClickScreen(
                     onNavigateToNfc = onNavigateToNfc,
                     onShowMyQRCode = onShowMyQRCode,
                     onScanQRCode = onScanQRCode,
+                    onCreateGroupChat = { connectionViewModel.requestVerifiedGroupCreation() },
                     onJoinCommunityHub = onJoinCommunityHub,
                     locationService = locationService,
                     onCommunityHubCreated = onCommunityHubCreated,
@@ -77,7 +98,7 @@ fun AddClickScreen(
                 )
             } else {
                 ClickedSuccessContent(
-                    modifier = contentModifier.fillMaxWidth(),
+                    modifier = rootContentModifier.fillMaxWidth(),
                     userName = clickedUserName,
                     onStartChatting = onStartChatting,
                 )
@@ -94,6 +115,7 @@ fun AddClickContent(
     onNavigateToNfc: () -> Unit,
     onShowMyQRCode: () -> Unit,
     onScanQRCode: () -> Unit,
+    onCreateGroupChat: () -> Unit = {},
     onJoinCommunityHub: (hubId: String) -> Unit = {},
     locationService: LocationService,
     onCommunityHubCreated: (hubId: String) -> Unit = {},
@@ -124,14 +146,17 @@ fun AddClickContent(
     Column(
         modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(ClickScreenSpacing.Section),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         ClickContentCard(
-            modifier = Modifier.fillMaxWidth(),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .minimumInteractiveComponentSize(),
             onClick = onNavigateToNfc,
             showBorder = false,
             containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.58f),
-            contentPadding = 20.dp,
+            contentPadding = 18.dp,
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -192,6 +217,12 @@ fun AddClickContent(
                 onClick = onScanQRCode,
             )
             AddClickSecondaryRow(
+                title = "Create Group Chat",
+                subtitle = "Start a verified group with your Clicks",
+                icon = Icons.Filled.Groups,
+                onClick = onCreateGroupChat,
+            )
+            AddClickSecondaryRow(
                 title = "Create Community Hub",
                 subtitle = "Host a venue for nearby Clicks",
                 icon = Icons.Filled.Campaign,
@@ -217,6 +248,7 @@ private fun AddClickSecondaryRow(
     showDivider: Boolean = true,
 ) {
     ClickListRow(
+        modifier = Modifier.minimumInteractiveComponentSize(),
         title = title,
         subtitle = subtitle,
         onClick = onClick,
@@ -292,7 +324,13 @@ fun ClickedSuccessContent(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            ClickButton(onClick = onStartChatting, modifier = Modifier.fillMaxWidth()) {
+            ClickButton(
+                onClick = onStartChatting,
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .minimumInteractiveComponentSize(),
+            ) {
                 Text("Open chat")
             }
         }
