@@ -6,12 +6,14 @@ package compose.project.click.click.ui.components // pragma: allowlist secret
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.uikit.LocalUIViewController
 import androidx.compose.ui.window.ComposeUIViewController
 import compose.project.click.click.ui.theme.PlatformStyleProvider // pragma: allowlist secret
 import platform.UIKit.UIModalPresentationOverFullScreen
+import platform.UIKit.UIView
 import platform.UIKit.UIViewController
 
 /**
@@ -27,6 +29,7 @@ import platform.UIKit.UIViewController
 @Composable
 actual fun PlatformOverlayAbovePresentedSheets(
     liftAbovePresentedSheets: Boolean,
+    dismissing: Boolean,
     content: @Composable () -> Unit,
 ) {
     if (!liftAbovePresentedSheets) {
@@ -57,6 +60,9 @@ actual fun PlatformOverlayAbovePresentedSheets(
 
     DisposableEffect(host, overlayController) {
         val presenter = host.presentationRootController().topmostPresentedController()
+        val overlayView = overlayController.view
+        overlayView.alpha = 1.0
+        overlayView.userInteractionEnabled = true
         if (overlayController.presentingViewController == null) {
             presenter.presentViewController(
                 viewControllerToPresent = overlayController,
@@ -74,9 +80,26 @@ actual fun PlatformOverlayAbovePresentedSheets(
             }
         }
     }
+
+    LaunchedEffect(dismissing, overlayController) {
+        val overlayView = overlayController.view
+        if (dismissing) {
+            overlayView.userInteractionEnabled = false
+            UIView.animateWithDuration(
+                UnifiedPopupMotion.Media.fadeOutMillis / 1000.0,
+                animations = {
+                    overlayView.alpha = 0.0
+                },
+            )
+        } else {
+            overlayView.alpha = 1.0
+            overlayView.userInteractionEnabled = true
+        }
+    }
 }
 
 private fun UIViewController.presentationRootController(): UIViewController {
+    view.window?.rootViewController?.let { return it }
     var root = this
     while (root.presentingViewController != null) {
         root = root.presentingViewController ?: break
