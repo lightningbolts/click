@@ -104,6 +104,12 @@ fun InteractiveSwipeBackContainer(
      */
     opaquePreviousBackground: Boolean = true,
     /**
+     * Whether the standard black parallax scrim is painted over the previous route during Back.
+     * Disable only when the real destination is a platform view below this Compose host (Event Hub
+     * above the retained iOS sheet stack); otherwise the scrim darkens the native sheets themselves.
+     */
+    dimPreviousLayer: Boolean = true,
+    /**
      * When non-null, horizontal drag offset is stored in this ref (instead of an internal one).
      * Pair with [onBehindLayersVisibleChanged] and apply the same parallax [graphicsLayer] on any
      * content composed *outside* this container (e.g. a single persistent list) so it moves with
@@ -359,6 +365,7 @@ fun InteractiveSwipeBackContainer(
                 Modifier
                     .fillMaxSize()
                     .drawBehind {
+                        if (!dimPreviousLayer) return@drawBehind
                         val w = size.width.coerceAtLeast(1f)
                         val currentSwipeOffset = offsetPx.floatValue.coerceIn(0f, w)
                         if (currentSwipeOffset <= 0.5f && !isSettling) return@drawBehind
