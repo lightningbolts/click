@@ -138,6 +138,10 @@ actual fun PlatformPresentedSheetSuspension(active: Boolean): Boolean {
 }
 
 private fun UIViewController.presentationRootController(): UIViewController {
+    // LocalUIViewController may be the Compose child hosted *inside* a native map/event page sheet.
+    // Walking only presentingViewController from that child yields no sheet stack, so Event Hub is
+    // rendered behind the still-visible map. The UIWindow root owns the actual presentation chain.
+    view.window?.rootViewController?.let { return it }
     var root = this
     while (root.presentingViewController != null) {
         root = root.presentingViewController ?: break
