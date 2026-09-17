@@ -102,7 +102,7 @@ actual fun PlatformHubSheetHeaderButton(
             usesNativeLiquidGlass = usesNativeLiquidGlass,
         )
         if (xPt.isFinite() && yPt.isFinite() && widthPt > 0.0 && heightPt > 0.0) {
-            button.frame = CGRectMake(xPt, yPt, widthPt, heightPt)
+            button.setFrame(CGRectMake(xPt, yPt, widthPt, heightPt))
         }
         host.view.bringSubviewToFront(button)
     }
