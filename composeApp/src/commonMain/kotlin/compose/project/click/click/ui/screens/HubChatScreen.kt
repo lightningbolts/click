@@ -153,6 +153,8 @@ fun HubChatScreen(
      * header instead of binding the root app UINavigationBar/UITabBar chrome.
      */
     embeddedInSheet: Boolean = false,
+    /** Use the persistent native X control for modal full-screen presentations. */
+    nativeLeadingClose: Boolean = false,
     keyboardHeightProvider: KeyboardHeightProvider = rememberKeyboardHeightProvider(),
 ) {
     val viewModel: HubChatViewModel =
@@ -195,6 +197,7 @@ fun HubChatScreen(
                     ),
                 ),
             collapseFraction = 1f,
+            leadingClose = nativeLeadingClose,
         )
     }
     var showEditDialog by remember { mutableStateOf(false) }
