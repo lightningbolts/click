@@ -11,7 +11,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.uikit.LocalUIViewController
 import androidx.compose.ui.window.ComposeUIViewController
 import compose.project.click.click.ui.theme.PlatformStyleProvider // pragma: allowlist secret
-import platform.UIKit.UIModalPresentationFullScreen
+import platform.UIKit.UIModalPresentationOverFullScreen
 import platform.UIKit.UIViewController
 
 /**
@@ -20,8 +20,9 @@ import platform.UIKit.UIViewController
  * This must be a real UIKit presentation, not a detached view manually inserted into UIWindow.
  * A detached ComposeUIViewController never participates in the presentation hierarchy, so its
  * safe-area guide can remain at y=0 and native Liquid Glass chrome is laid over the status bar.
- * Presenting the controller full-screen gives it the same UIKit safe-area/layout contract as the
- * working chat media path while leaving the underlying profile sheet mounted for restoration.
+ * Presenting the controller over full-screen gives it the same UIKit safe-area/layout contract as
+ * the working chat media path while keeping the underlying profile sheet's view/composition mounted
+ * for restoration.
  */
 @Composable
 actual fun PlatformOverlayAbovePresentedSheets(
@@ -49,7 +50,7 @@ actual fun PlatformOverlayAbovePresentedSheets(
                     }
                 }
             }.apply {
-                modalPresentationStyle = UIModalPresentationFullScreen
+                modalPresentationStyle = UIModalPresentationOverFullScreen
                 modalPresentationCapturesStatusBarAppearance = true
             }
         }
