@@ -74,6 +74,19 @@ private fun activityRecapPlaceholder(window: String): ActivityRecapDto =
         since = "",
     )
 
+/**
+ * Home is a relationship surface, not the Clicks Active inbox. Server lifecycle archival only
+ * removes an idle edge from the Active tab; it must not erase that relationship from reconnect,
+ * recent-history, insights, or lifetime stats. Explicit per-user archive/hide still suppresses it.
+ */
+private fun Connection.isVisibleHomeRelationship(
+    archivedIds: Set<String>,
+    hiddenIds: Set<String>,
+): Boolean =
+    id !in archivedIds &&
+        id !in hiddenIds &&
+        normalizedConnectionStatus() != "removed"
+
 class HomeViewModel(
     private val chatRepository: ChatRepository = SupabaseChatRepository(tokenStorage = createTokenStorage()),
     private val connectionRepository: ConnectionRepository = ConnectionRepository(),
@@ -150,6 +163,7 @@ class HomeViewModel(
 
     // Track if data has been loaded already
     private var dataLoaded = false
+    private var lastDerivedConnectionSignature: String? = null
 
     // Realtime channel for connections changes
     private var connectionsChannel: RealtimeChannel? = null
@@ -294,6 +308,7 @@ class HomeViewModel(
                 if (user?.id != lastUserId) {
                     lastUserId = user?.id
                     dataLoaded = false
+                    lastDerivedConnectionSignature = null
                     _reconnectReminders.value = emptyList()
                     _connectionInsights.value = null
                     _pollPairSuggestion.value = null
@@ -314,13 +329,13 @@ class HomeViewModel(
                 when {
                     // Treat an authenticated, hydrated user as render-ready once the load cycle
                     // is no longer active, even if isDataLoaded lags due a cancelled/restarted refresh.
-                    // Also allow immediate render when we already have active connections from cached
-                    // snapshot/state while a background refresh is still in-flight.
+                    // Archived lifecycle rows are still real relationships on Home, even though they
+                    // are intentionally absent from the Clicks Active channel.
                     user != null &&
                         (
                             isDataLoaded ||
                                 !isLoading ||
-                                connections.any { it.isActiveForUser(archivedIds, hiddenIds) }
+                                connections.any { it.isVisibleHomeRelationship(archivedIds, hiddenIds) }
                         ) -> {
                         if (availabilityIntentRefreshJob == null) {
                             availabilityIntentRefreshJob =
@@ -351,34 +366,40 @@ class HomeViewModel(
                                     }
                                 }
                         }
-                        val activeConnections =
+                        val relationshipConnections =
                             collapseOneToOneConnectionsByPeer(
                                 connections =
                                     connections.filter {
-                                        it.isActiveForUser(archivedIds, hiddenIds)
+                                        it.isVisibleHomeRelationship(archivedIds, hiddenIds)
                                     },
                                 viewerUserId = user.id,
                             )
+                        // Availability overlap remains an Active-channel concept; reconnect/history
+                        // intentionally uses the broader relationship set above.
+                        val activeConnections =
+                            relationshipConnections.filter {
+                                it.isActiveForUser(archivedIds, hiddenIds)
+                            }
                         val recentConnections =
-                            activeConnections
+                            relationshipConnections
                                 .sortedByDescending { it.created }
                                 .take(10)
 
                         val uniqueLocations =
-                            activeConnections
+                            relationshipConnections
                                 .mapNotNull { it.semanticLocation }
                                 .distinct()
                                 .size
 
                         val stats =
                             UserStats(
-                                totalConnections = activeConnections.size,
+                                totalConnections = relationshipConnections.size,
                                 recentConnections = recentConnections,
                                 uniqueLocations = uniqueLocations,
                             )
 
                         val grouped =
-                            activeConnections
+                            relationshipConnections
                                 .sortedByDescending { it.created }
                                 .take(10)
                                 .groupBy { it.semanticLocation ?: "Somewhere New" }
@@ -404,7 +425,7 @@ class HomeViewModel(
                             try {
                                 connectionRepository.getPollPairSuggestion(
                                     userId = user.id,
-                                    connections = activeConnections,
+                                    connections = relationshipConnections,
                                     connectedUsers = connectedUsers,
                                 )
                             } catch (e: Exception) {
@@ -414,10 +435,18 @@ class HomeViewModel(
 
                         _homeState.value = HomeState.Success(user, stats)
 
-                        if (!dataLoaded) {
+                        val derivedSignature =
+                            relationshipConnections
+                                .sortedBy { it.id }
+                                .joinToString("|") { connection ->
+                                    "${connection.id}:${connection.normalizedConnectionStatus()}:" +
+                                        "${connection.last_message_at ?: 0L}:${connection.created}"
+                                }
+                        if (!dataLoaded || derivedSignature != lastDerivedConnectionSignature) {
                             dataLoaded = true
+                            lastDerivedConnectionSignature = derivedSignature
                             viewModelScope.launch {
-                                preloadDerivedHomeData(user.id, activeConnections)
+                                preloadDerivedHomeData(user.id, relationshipConnections)
                             }
                         }
                     }
@@ -796,6 +825,7 @@ class HomeViewModel(
      */
     fun refresh() {
         dataLoaded = false
+        lastDerivedConnectionSignature = null
         bookmarksFetchPending = true
         AppDataManager.refresh(force = true)
         retrySavedEventBookmarksIfNeeded()
