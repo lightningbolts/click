@@ -81,6 +81,13 @@ internal const val InteractiveSwipeBackParallaxPeekRatio = 0.3f
 private const val ParallaxBackgroundPeek = InteractiveSwipeBackParallaxPeekRatio
 
 /**
+ * The primary-tab shell is the only caller that opts into a 44dp edge band. Primary tabs are peers
+ * in the persistent tab bar, not a push stack, so that shell gesture must never synthesize a pop to
+ * Home. Pushed routes keep the normal 24dp/default gesture path.
+ */
+private val PrimaryTabRootEdgeSwipeWidth = 44.dp
+
+/**
  * iOS-style interactive back container:
  * - Slide transform uses [Modifier.graphicsLayer] so [translationX] is read only during draw;
  *   the drag offset is never observed during composition (avoids full-tree recompositions per frame).
@@ -133,6 +140,10 @@ fun InteractiveSwipeBackContainer(
     previousContent: @Composable () -> Unit,
     currentContent: @Composable () -> Unit,
 ) {
+    // Tab-root navigation is already represented by the persistent tab bar. The shell historically
+    // used a wider 44dp gesture to pop Add Click / Map / Me back to Home; suppress only that root
+    // gesture while leaving every pushed/subscreen interactive-back container unchanged.
+    val gestureEnabled = enabled && edgeSwipeWidth != PrimaryTabRootEdgeSwipeWidth
     val internalOffsetPx = remember { mutableFloatStateOf(0f) }
     val offsetPx = externalDragOffsetPx ?: internalOffsetPx
     var isGestureActive by remember { mutableStateOf(false) }
@@ -288,7 +299,7 @@ fun InteractiveSwipeBackContainer(
             }
 
         val dragModifier =
-            if (enabled) {
+            if (gestureEnabled) {
                 Modifier.draggable(
                     state = dragState,
                     orientation = Orientation.Horizontal,
@@ -326,7 +337,7 @@ fun InteractiveSwipeBackContainer(
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background)
                 .then(
-                    if (enabled && useFullWidthHorizontalDrag) dragModifier else Modifier,
+                    if (gestureEnabled && useFullWidthHorizontalDrag) dragModifier else Modifier,
                 )
 
         // Keep layer boxes always in the tree (stable slot for [currentContent]). Gating the
@@ -378,7 +389,7 @@ fun InteractiveSwipeBackContainer(
                 currentContent()
             }
 
-            if (enabled && !useFullWidthHorizontalDrag) {
+            if (gestureEnabled && !useFullWidthHorizontalDrag) {
                 Box(
                     modifier =
                         Modifier
