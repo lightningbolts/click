@@ -30,18 +30,22 @@ private data class SuspendedPresentation(
  * and from portaling another ComposeUIViewController above them (which creates a second chrome host).
  */
 private class PresentedSheetSuspensionCoordinator(
-    private val root: UIViewController,
+    private val host: UIViewController,
 ) {
     private var suspended: List<SuspendedPresentation> = emptyList()
+    private var suspensionRoot: UIViewController? = null
     private var isSuspended = false
     private var generation = 0
 
     fun suspendPresentedStack(onReady: () -> Unit) {
         if (isSuspended) {
+            val root = suspensionRoot ?: host.presentationRootController()
             if (root.presentedViewController == null) onReady()
             return
         }
 
+        val root = host.presentationRootController()
+        suspensionRoot = root
         isSuspended = true
         val stack = mutableListOf<SuspendedPresentation>()
         var controller = root.presentedViewController
@@ -80,6 +84,8 @@ private class PresentedSheetSuspensionCoordinator(
         isSuspended = false
         ++generation
 
+        val root = suspensionRoot ?: host.presentationRootController()
+        suspensionRoot = null
         val stack = suspended
         suspended = emptyList()
         if (stack.isEmpty()) return
@@ -116,8 +122,7 @@ private class PresentedSheetSuspensionCoordinator(
 @Composable
 actual fun PlatformPresentedSheetSuspension(active: Boolean): Boolean {
     val host = LocalUIViewController.current
-    val root = remember(host) { host.presentationRootController() }
-    val coordinator = remember(root) { PresentedSheetSuspensionCoordinator(root) }
+    val coordinator = remember(host) { PresentedSheetSuspensionCoordinator(host) }
     var ready by remember(coordinator, active) { mutableStateOf(!active) }
 
     LaunchedEffect(active, coordinator) {
@@ -140,7 +145,8 @@ actual fun PlatformPresentedSheetSuspension(active: Boolean): Boolean {
 private fun UIViewController.presentationRootController(): UIViewController {
     // LocalUIViewController may be the Compose child hosted *inside* a native map/event page sheet.
     // Walking only presentingViewController from that child yields no sheet stack, so Event Hub is
-    // rendered behind the still-visible map. The UIWindow root owns the actual presentation chain.
+    // rendered behind the still-visible map. Resolve from the live UIWindow when the hub actually
+    // opens; the window owns the real presentation chain.
     view.window?.rootViewController?.let { return it }
     var root = this
     while (root.presentingViewController != null) {
