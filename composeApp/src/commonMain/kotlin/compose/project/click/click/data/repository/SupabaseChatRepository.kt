@@ -84,6 +84,8 @@ class SupabaseChatRepository(
     internal var presenceReconnectJob: Job? = null
     internal val _onlineUsers = MutableStateFlow<Set<String>>(emptySet())
     override val onlineUsers: StateFlow<Set<String>> = _onlineUsers.asStateFlow()
+    internal val _lastSeenAtMs = MutableStateFlow<Map<String, Long>>(emptyMap())
+    val lastSeenAtMs: StateFlow<Map<String, Long>> = _lastSeenAtMs.asStateFlow()
     internal val _presenceHealth = MutableStateFlow(PresenceHealth.Idle)
     override val presenceHealth: StateFlow<PresenceHealth> = _presenceHealth.asStateFlow()
 
@@ -135,10 +137,11 @@ class SupabaseChatRepository(
         presenceReconnectJob?.cancel()
         presenceReconnectJob = null
         globalPresenceMutex.withLock {
-            val session = globalPresenceSession ?: return@withLock
+            val session = globalPresenceSession
             globalPresenceSession = null
-            disposeGlobalPresenceSession(session)
+            session?.let { disposeGlobalPresenceSession(it) }
             _onlineUsers.value = emptySet()
+            _lastSeenAtMs.value = emptyMap()
             _presenceHealth.value = PresenceHealth.Idle
         }
     }

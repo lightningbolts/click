@@ -130,6 +130,7 @@ object AppDataManager {
 
     /** Supabase Realtime Presence on channel `room:presence` (user IDs with an active app session). */
     val onlineUsers: StateFlow<Set<String>> get() = chatRepository.onlineUsers
+    val lastSeenAtMs: StateFlow<Map<String, Long>> get() = chatRepository.lastSeenAtMs
 
     /** Coarse health of the shared presence channel; see [PresenceHealth]. */
     val presenceHealth: StateFlow<PresenceHealth>

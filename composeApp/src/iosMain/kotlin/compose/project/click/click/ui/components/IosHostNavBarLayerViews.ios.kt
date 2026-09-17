@@ -40,9 +40,11 @@ import platform.UIKit.UIImage
 import platform.UIKit.UIImageRenderingMode
 import platform.UIKit.UIImageSymbolConfiguration
 import platform.UIKit.UIImageSymbolWeightMedium
+import platform.UIKit.UIImageView
 import platform.UIKit.UILayoutConstraintAxisVertical
 import platform.UIKit.UIMenu
 import platform.UIKit.UIView
+import platform.UIKit.UIViewContentMode
 import platform.UIKit.setAccessibilityLabel
 import platform.darwin.DISPATCH_QUEUE_PRIORITY_DEFAULT
 import platform.darwin.dispatch_async
@@ -185,7 +187,7 @@ internal fun IosHostNavBarLayer.syncTrailingButtons(
     val committedSearchCarrier =
         if (showSearch && trailingActions.isEmpty()) {
             currentButtons.firstOrNull { button ->
-                button !== searchButton &&
+                button != searchButton &&
                     paintedSymbols[button] == "magnifyingglass" &&
                     paintedAccessibility[button] == "Search"
             }
@@ -222,7 +224,7 @@ internal fun IosHostNavBarLayer.syncTrailingButtons(
     }
 
     actionButtons.forEach { button ->
-        if (desired.none { it === button }) {
+        if (desired.none { it == button }) {
             button.hidden = true
             button.menu = null
             button.showsMenuAsPrimaryAction = false
@@ -232,7 +234,7 @@ internal fun IosHostNavBarLayer.syncTrailingButtons(
     val currentArranged = trailingStack.arrangedSubviews.map { it as UIView }
     val ordered =
         currentArranged.size == desired.size &&
-            currentArranged.indices.all { index -> currentArranged[index] === desired[index] }
+            currentArranged.indices.all { index -> currentArranged[index] == desired[index] }
     if (!ordered) {
         currentArranged.forEach { view ->
             trailingStack.removeArrangedSubview(view)
@@ -396,10 +398,6 @@ internal fun IosHostNavBarLayer.installRowIfNeeded() {
     titleColumn.setContentCompressionResistancePriority(1000f, forAxis = UILayoutConstraintAxisVertical)
     NSLayoutConstraint.activateConstraints(
         listOf(
-            chromeRow.topAnchor.constraintEqualToAnchor(bar.topAnchor),
-            chromeRow.leadingAnchor.constraintEqualToAnchor(bar.leadingAnchor),
-            chromeRow.trailingAnchor.constraintEqualToAnchor(bar.trailingAnchor),
-            chromeRow.bottomAnchor.constraintEqualToAnchor(bar.bottomAnchor),
             backButton.leadingAnchor.constraintEqualToAnchor(
                 chromeRow.leadingAnchor,
                 constant = NativeHeaderMetrics.LeadingInsetPt - 8.0,
@@ -470,6 +468,7 @@ internal fun IosHostNavBarLayer.paintChromeButton(
     CATransaction.begin()
     CATransaction.setDisableActions(true)
     if (!clustered && usesGlassButtons) {
+        trailingGlyphs[button]?.hidden = true
         if (!backGlassConfigured || button.configuration == null) {
             val config = UIButtonConfiguration.glassButtonConfiguration()
             config.cornerStyle = UIButtonConfigurationCornerStyleCapsule
@@ -502,10 +501,31 @@ internal fun IosHostNavBarLayer.paintChromeButton(
         } else {
             UIButtonConfiguration.plainButtonConfiguration()
         }
-    config.image = image
+    // Match the leading chevron: change a persistent glyph without reconfiguring its UIButton.
+    // Reassigning configuration.image lets UIKit animate a second symbol replacement independently
+    // of the gesture, which made the trailing ellipsis lag behind the leading control.
+    val glyph =
+        trailingGlyphs.getOrPut(button) {
+            UIImageView().apply {
+                translatesAutoresizingMaskIntoConstraints = false
+                userInteractionEnabled = false
+                contentMode = UIViewContentMode.UIViewContentModeCenter
+                button.addSubview(this)
+                NSLayoutConstraint.activateConstraints(
+                    listOf(
+                        centerXAnchor.constraintEqualToAnchor(button.centerXAnchor),
+                        centerYAnchor.constraintEqualToAnchor(button.centerYAnchor),
+                    ),
+                )
+            }
+        }
+    glyph.image = image?.imageWithRenderingMode(UIImageRenderingMode.UIImageRenderingModeAlwaysTemplate)
+    glyph.tintColor = tint
+    glyph.hidden = false
+    config.image = null
     config.preferredSymbolConfigurationForImage = symbolConfig
     config.contentInsets = NSDirectionalEdgeInsetsMake(0.0, 0.0, 0.0, 0.0)
-    button.configuration = config
+    if (existing == null) button.configuration = config
     button.tintColor = tint
     button.setAccessibilityLabel(accessibility)
     paintedAccessibility[button] = accessibility
@@ -622,7 +642,7 @@ internal fun IosHostNavBarLayer.updateGlassFadeMask() {
         }
         glassPlate.layer.mask = host
     } else {
-        if (mask.superlayer != null && mask.superlayer !== glassPlate.layer) {
+        if (mask.superlayer != null && mask.superlayer != glassPlate.layer) {
             mask.removeFromSuperlayer()
         }
         glassPlate.layer.mask = mask

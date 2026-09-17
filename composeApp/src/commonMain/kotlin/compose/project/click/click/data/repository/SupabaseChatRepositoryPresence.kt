@@ -27,9 +27,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withLock
+import kotlinx.datetime.Clock
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.put
@@ -134,7 +134,9 @@ internal suspend fun SupabaseChatRepository.startGlobalPresenceImpl(userId: Stri
             if (existing.trackedUserId == userId) return@withLock
             disposeGlobalPresenceSession(existing)
             globalPresenceSession = null
+            _lastSeenAtMs.value = emptyMap()
         }
+        _onlineUsers.value = emptySet()
         _presenceHealth.value = PresenceHealth.Connecting
 
         val channel =
@@ -144,7 +146,7 @@ internal suspend fun SupabaseChatRepository.startGlobalPresenceImpl(userId: Stri
                 }
             }
 
-        val presenceKeysOnline = mutableSetOf<String>()
+        val presenceSessions = PresenceSessionTracker()
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         val presenceFlow = channel.presenceChangeFlow()
 
@@ -153,15 +155,18 @@ internal suspend fun SupabaseChatRepository.startGlobalPresenceImpl(userId: Stri
             scope.launch(start = CoroutineStart.UNDISPATCHED) {
                 try {
                     presenceFlow.collect { action ->
-                        action.leaves.keys.forEach { key -> presenceKeysOnline.remove(key) }
-                        action.joins.keys.forEach { key -> presenceKeysOnline.add(key) }
-                        action.joins.values.forEach { p ->
-                            userIdFromPresence(p)?.let { presenceKeysOnline.add(it) }
-                        }
-                        action.leaves.values.forEach { p ->
-                            userIdFromPresence(p)?.let { presenceKeysOnline.remove(it) }
-                        }
-                        _onlineUsers.value = presenceKeysOnline.toSet()
+                        val online =
+                            presenceSessions.update(
+                                joins = action.joins.map { (key, p) -> p.presenceRef to (userIdFromPresence(p) ?: key) }.toMap(),
+                                leftSessionIds =
+                                    action.leaves.values
+                                        .map { it.presenceRef }
+                                        .toSet(),
+                            )
+                        val now = Clock.System.now().toEpochMilliseconds()
+                        val observed = online + (_onlineUsers.value - online)
+                        _lastSeenAtMs.value = _lastSeenAtMs.value + observed.associateWith { now }
+                        _onlineUsers.value = online
                     }
                 } catch (e: CancellationException) {
                     // Session torn down — propagate so the outer scope finishes cleanly.
@@ -256,7 +261,7 @@ internal suspend fun SupabaseChatRepository.joinChatEphemeralChannelImpl(
     val peerOnline = MutableStateFlow(false)
 
     /** Presence keys are configured as each client's user id; diff joins/leaves are authoritative. */
-    val presenceKeysOnline = mutableSetOf<String>()
+    val presenceSessions = PresenceSessionTracker()
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val broadcastFlow = channel.broadcastFlow<SupabaseChatRepository.TypingBroadcastPayload>(event = "typing")
     val presenceFlow = channel.presenceChangeFlow()
@@ -265,15 +270,15 @@ internal suspend fun SupabaseChatRepository.joinChatEphemeralChannelImpl(
         scope.launch(start = CoroutineStart.UNDISPATCHED) {
             try {
                 presenceFlow.collect { action ->
-                    action.leaves.keys.forEach { key -> presenceKeysOnline.remove(key) }
-                    action.joins.keys.forEach { key -> presenceKeysOnline.add(key) }
-                    action.joins.values.forEach { p ->
-                        userIdFromPresence(p)?.let { presenceKeysOnline.add(it) }
-                    }
-                    action.leaves.values.forEach { p ->
-                        userIdFromPresence(p)?.let { presenceKeysOnline.remove(it) }
-                    }
-                    peerOnline.value = peerUserId in presenceKeysOnline
+                    val online =
+                        presenceSessions.update(
+                            joins = action.joins.map { (key, p) -> p.presenceRef to (userIdFromPresence(p) ?: key) }.toMap(),
+                            leftSessionIds =
+                                action.leaves.values
+                                    .map { it.presenceRef }
+                                    .toSet(),
+                        )
+                    peerOnline.value = peerUserId in online
                 }
             } catch (e: CancellationException) {
                 throw e

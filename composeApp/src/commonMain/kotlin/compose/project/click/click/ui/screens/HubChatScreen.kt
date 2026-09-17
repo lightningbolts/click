@@ -111,6 +111,7 @@ import compose.project.click.click.ui.components.GlassSheetTokens // pragma: all
 import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeftPeek // pragma: allowlist secret
 import compose.project.click.click.ui.components.LocalGlassAlertAnimatedDismiss // pragma: allowlist secret
 import compose.project.click.click.ui.components.NativeChromeAction // pragma: allowlist secret
+import compose.project.click.click.ui.components.NativeHeaderMetrics // pragma: allowlist secret
 import compose.project.click.click.ui.components.UnifiedPopupFormDialog // pragma: allowlist secret
 import compose.project.click.click.ui.components.platformNativeHeaderClearance // pragma: allowlist secret
 import compose.project.click.click.ui.components.sheetPageBackground // pragma: allowlist secret
@@ -273,7 +274,7 @@ fun HubChatScreen(
             collapseFraction = 1f,
             hasSubtitle = hubHasSubtitle,
             growCompactSubtitle = true,
-        )
+        ) + NativeHeaderMetrics.GlassFadeExtensionPt.dp
     val realtimeState by viewModel.realtimeState.collectAsState()
     val channelReady = realtimeState is HubRealtimeState.Ready
     val channelError = (realtimeState as? HubRealtimeState.Error)?.message

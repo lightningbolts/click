@@ -32,6 +32,7 @@ import compose.project.click.click.data.repository.ConnectionRepository // pragm
 import compose.project.click.click.ui.chat.ChatAudioBubble // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatAudioChromeKind // pragma: allowlist secret
 import compose.project.click.click.ui.chat.persistLightboxImageToGallery // pragma: allowlist secret
+import compose.project.click.click.ui.chat.rememberChatPresenceSubtitle // pragma: allowlist secret
 import compose.project.click.click.ui.chat.shareLightboxImage // pragma: allowlist secret
 import compose.project.click.click.ui.theme.LocalIsDarkMode // pragma: allowlist secret
 import compose.project.click.click.ui.theme.LocalPlatformStyle // pragma: allowlist secret
@@ -273,7 +274,7 @@ private fun ProfileMediaPortalNativeChrome(
 
     BindPlatformNativeNavigationBar(
         title = title,
-        subtitle = null,
+        subtitle = rememberChatPresenceSubtitle(sourceChat, isGroup),
         presenceOnline = presenceOnline,
         identity = identity,
         onNavigateBack = onClose,

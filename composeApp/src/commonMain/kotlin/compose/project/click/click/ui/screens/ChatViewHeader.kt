@@ -44,9 +44,8 @@ import compose.project.click.click.ui.chat.ChatChromeHorizontalPadding // pragma
 import compose.project.click.click.ui.chat.ChatGlassHeaderPlateTestTag // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatHeaderIconButton // pragma: allowlist secret
 import compose.project.click.click.ui.chat.GroupMembersPickerContext // pragma: allowlist secret
-import compose.project.click.click.ui.chat.chatGroupPresenceSubtitle // pragma: allowlist secret
-import compose.project.click.click.ui.chat.chatPeerStatusSubtitle // pragma: allowlist secret
 import compose.project.click.click.ui.chat.groupMembersPickerContextFrom // pragma: allowlist secret
+import compose.project.click.click.ui.chat.rememberChatPresenceSubtitle // pragma: allowlist secret
 import compose.project.click.click.ui.components.AvatarWithOnlineIndicator // pragma: allowlist secret
 import compose.project.click.click.ui.components.BindPlatformNativeNavigationBar // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionListUserAvatarFace // pragma: allowlist secret
@@ -81,15 +80,8 @@ internal fun ChatViewSuccessHeader(
     val isPeerTyping by viewModel.isPeerTyping.collectAsState()
     val isPeerOnline by viewModel.isPeerOnline.collectAsState()
     val onlineUsers by AppDataManager.onlineUsers.collectAsState()
-    val groupPresenceSubtitle =
-        if (isGroupChat) {
-            chatGroupPresenceSubtitle(
-                memberLastSeenAtMs = chatDetails.groupMemberUsers.map { it.lastPolled },
-                onlineMemberCount = chatDetails.groupMemberUsers.count { it.id in onlineUsers },
-            )
-        } else {
-            null
-        }
+    val presenceSubtitle = rememberChatPresenceSubtitle(chatDetails, isGroupChat, isPeerTyping, isPeerOnline)
+    val groupPresenceSubtitle = presenceSubtitle.takeIf { isGroupChat }
     var showConnectionSheet by showConnectionSheetState
     var showRenameGroupDialog by showRenameGroupDialogState
     var renameGroupDraft by renameGroupDraftState
@@ -212,12 +204,7 @@ internal fun ChatViewSuccessHeader(
                     } else if (!isGroupChat) {
                         val subtitleOnline =
                             chatDetails.otherUser.id in onlineUsers || isPeerOnline
-                        val statusText =
-                            chatPeerStatusSubtitle(
-                                isTyping = isPeerTyping,
-                                isOnline = subtitleOnline,
-                                lastSeenAtMs = chatDetails.otherUser.lastPolled,
-                            )
+                        val statusText = presenceSubtitle.orEmpty()
                         val showOnlineDot = subtitleOnline && !isPeerTyping
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -331,23 +318,7 @@ internal fun ChatViewNativeNavBinding(
         val peerId = successChat?.chatDetails?.otherUser?.id ?: hintedChatRow?.otherUser?.id
         val bindOnline = if (bindIsGroup) null else peerId?.let { it in onlineUsers || isPeerOnline }
         val boundDetails = successChat?.chatDetails ?: hintedChatRow
-        val bindStatusSubtitle =
-            if (bindIsGroup) {
-                boundDetails?.groupMemberUsers?.let { members ->
-                    chatGroupPresenceSubtitle(
-                        memberLastSeenAtMs = members.map { it.lastPolled },
-                        onlineMemberCount = members.count { it.id in onlineUsers },
-                    )
-                }
-            } else if (bindOnline != null || successChat != null || hintedChatRow != null) {
-                chatPeerStatusSubtitle(
-                    isTyping = isPeerTyping,
-                    isOnline = bindOnline == true,
-                    lastSeenAtMs = boundDetails?.otherUser?.lastPolled,
-                )
-            } else {
-                null
-            }
+        val bindStatusSubtitle = rememberChatPresenceSubtitle(boundDetails, bindIsGroup, isPeerTyping, isPeerOnline)
 
         BindPlatformNativeNavigationBar(
             title = bindTitle,
