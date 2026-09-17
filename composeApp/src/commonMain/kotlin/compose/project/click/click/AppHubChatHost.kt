@@ -160,6 +160,10 @@ internal fun AppHubChatHost(
                 InteractiveSwipeBackContainer(
                     enabled = true,
                     opaquePreviousBackground = false,
+                    // Event Hub's real destination is the retained native Event/Nearby sheet below
+                    // this portal, not a Compose previousContent. The normal Compose back scrim was
+                    // therefore painting a black veil over the sheet stack during the gesture.
+                    dimPreviousLayer = !(isIOS && activeHubArgs.isEventHub),
                     externalDragOffsetPx = hubSwipeDragPx,
                     onBehindLayersVisibleChanged = {},
                     onBack = {
