@@ -7,19 +7,24 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.uikit.LocalUIViewController
 import compose.project.click.click.platform.rememberReduceTransparencyEnabled
 import kotlinx.cinterop.BetaInteropApi
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.ObjCAction
 import kotlinx.cinterop.useContents
+import platform.CoreGraphics.CGRectMake
 import platform.Foundation.NSProcessInfo
 import platform.Foundation.NSSelectorFromString
 import platform.UIKit.NSDirectionalEdgeInsetsMake
-import platform.UIKit.NSLayoutConstraint
 import platform.UIKit.UIButton
 import platform.UIKit.UIButtonConfiguration
 import platform.UIKit.UIButtonTypeSystem
@@ -33,9 +38,10 @@ import platform.UIKit.setAccessibilityLabel
 import platform.darwin.NSObject
 
 /**
- * Event-Hub sheet controls must be real host-sibling UIKit buttons, just like the app's map and
- * navigation chrome. Keeping a glass button inside `UIKitView` leaves it inside Compose interop and
- * prevents iOS 26 from giving it the same Liquid Glass interaction/deformation as native chrome.
+ * Event-Hub sheet controls are real host-sibling UIKit buttons, like the app's persistent native
+ * navigation/map chrome. The Compose slot only measures their exact position. This keeps the button
+ * out of UIKitView interop so iOS 26 owns the Liquid Glass interaction/deformation while preserving
+ * the sheet header's Compose layout.
  */
 @OptIn(ExperimentalForeignApi::class, BetaInteropApi::class)
 @Composable
@@ -46,6 +52,7 @@ actual fun PlatformHubSheetHeaderButton(
     modifier: Modifier,
 ) {
     val host = LocalUIViewController.current
+    val density = LocalDensity.current.density.toDouble()
     val target = remember { HubSheetHeaderTapTarget() }
     val onClickState by rememberUpdatedState(onClick)
     val reduceTransparency = rememberReduceTransparencyEnabled()
@@ -60,27 +67,16 @@ actual fun PlatformHubSheetHeaderButton(
             HubSheetHeaderAction.Back -> "chevron.backward"
             HubSheetHeaderAction.More -> "ellipsis"
         }
+    var xPt by remember { mutableDoubleStateOf(Double.NaN) }
+    var yPt by remember { mutableDoubleStateOf(Double.NaN) }
+    var widthPt by remember { mutableDoubleStateOf(0.0) }
+    var heightPt by remember { mutableDoubleStateOf(0.0) }
 
     DisposableEffect(host, button, action) {
         val hostView = host.view
         button.removeFromSuperview()
-        button.translatesAutoresizingMaskIntoConstraints = false
+        button.translatesAutoresizingMaskIntoConstraints = true
         hostView.addSubview(button)
-        val horizontalConstraint =
-            when (action) {
-                HubSheetHeaderAction.Back ->
-                    button.leadingAnchor.constraintEqualToAnchor(hostView.leadingAnchor, constant = 16.0)
-                HubSheetHeaderAction.More ->
-                    button.trailingAnchor.constraintEqualToAnchor(hostView.trailingAnchor, constant = -16.0)
-            }
-        NSLayoutConstraint.activateConstraints(
-            listOf(
-                horizontalConstraint,
-                button.topAnchor.constraintEqualToAnchor(hostView.topAnchor, constant = 6.0),
-                button.widthAnchor.constraintEqualToConstant(44.0),
-                button.heightAnchor.constraintEqualToConstant(44.0),
-            ),
-        )
         button.addTarget(
             target,
             action = NSSelectorFromString("didTap"),
@@ -104,18 +100,28 @@ actual fun PlatformHubSheetHeaderButton(
             contentDescription = contentDescription,
             usesNativeLiquidGlass = usesNativeLiquidGlass,
         )
+        if (xPt.isFinite() && yPt.isFinite() && widthPt > 0.0 && heightPt > 0.0) {
+            button.frame = CGRectMake(xPt, yPt, widthPt, heightPt)
+        }
         host.view.bringSubviewToFront(button)
     }
 
-    // Reserve the exact Compose layout slot while the interactive native control lives as a
-    // sibling of the Compose renderer. This avoids a fake/interposed glass surface entirely.
-    Box(modifier = modifier)
+    Box(
+        modifier =
+            modifier.onGloballyPositioned { coordinates ->
+                val position = coordinates.positionInRoot()
+                xPt = position.x.toDouble() / density
+                yPt = position.y.toDouble() / density
+                widthPt = coordinates.size.width.toDouble() / density
+                heightPt = coordinates.size.height.toDouble() / density
+            },
+    )
 }
 
 @OptIn(ExperimentalForeignApi::class)
 private fun makeHubSheetHeaderButton(): UIButton =
     UIButton.buttonWithType(UIButtonTypeSystem).apply {
-        translatesAutoresizingMaskIntoConstraints = false
+        translatesAutoresizingMaskIntoConstraints = true
         setOpaque(false)
         backgroundColor = UIColor.clearColor
         layer.backgroundColor = UIColor.clearColor.CGColor
