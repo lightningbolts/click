@@ -14,10 +14,16 @@ import androidx.compose.ui.uikit.LocalUIViewController
 import androidx.compose.ui.window.ComposeUIViewController
 import compose.project.click.click.ui.theme.LocalIsDarkMode // pragma: allowlist secret
 import compose.project.click.click.ui.theme.PlatformStyleProvider // pragma: allowlist secret
+import platform.CoreGraphics.CGAffineTransformMakeTranslation
 import platform.UIKit.UIColor
 import platform.UIKit.UIModalPresentationOverFullScreen
 import platform.UIKit.UIView
 import platform.UIKit.UIViewController
+
+private const val ModalLiftEnterSeconds = 0.28
+private const val ModalLiftExitSeconds = 0.22
+private const val ModalLiftEnterOffsetPt = 30.0
+private const val ModalLiftExitOffsetPt = 22.0
 
 /**
  * Full-screen iOS portal for content launched from an already-presented native sheet.
@@ -33,6 +39,7 @@ actual fun PlatformOverlayAbovePresentedSheets(
     liftAbovePresentedSheets: Boolean,
     dismissing: Boolean,
     revealUnderlyingPresentation: Boolean,
+    presentationMotion: PlatformOverlayPresentationMotion,
     content: @Composable () -> Unit,
 ) {
     if (!liftAbovePresentedSheets) {
@@ -68,15 +75,18 @@ actual fun PlatformOverlayAbovePresentedSheets(
             }
         }
 
-    DisposableEffect(host, overlayController, revealUnderlyingPresentation) {
+    DisposableEffect(host, overlayController, revealUnderlyingPresentation, presentationMotion) {
         val presenter = host.presentationRootController().topmostPresentedController()
         val overlayView = overlayController.view
-        overlayView.alpha = 1.0
         overlayView.userInteractionEnabled = true
+        overlayView.transform = CGAffineTransformMakeTranslation(0.0, 0.0)
+        if (presentationMotion == PlatformOverlayPresentationMotion.ModalLift) {
+            overlayView.alpha = 0.0
+            overlayView.transform = CGAffineTransformMakeTranslation(0.0, ModalLiftEnterOffsetPt)
+        } else {
+            overlayView.alpha = 1.0
+        }
         if (revealUnderlyingPresentation) {
-            // Event Hub interactive-back must expose the still-mounted Event/Nearby sheet as the
-            // foreground route moves with the finger. Keep only this portal host transparent; the
-            // profile-media portal retains its existing opaque presentation behavior.
             overlayView.backgroundColor = UIColor.clearColor
             overlayView.setOpaque(false)
         }
@@ -84,7 +94,17 @@ actual fun PlatformOverlayAbovePresentedSheets(
             presenter.presentViewController(
                 viewControllerToPresent = overlayController,
                 animated = false,
-                completion = null,
+                completion = {
+                    if (presentationMotion == PlatformOverlayPresentationMotion.ModalLift) {
+                        UIView.animateWithDuration(
+                            ModalLiftEnterSeconds,
+                            animations = {
+                                overlayView.alpha = 1.0
+                                overlayView.transform = CGAffineTransformMakeTranslation(0.0, 0.0)
+                            },
+                        )
+                    }
+                },
             )
         }
 
@@ -98,18 +118,35 @@ actual fun PlatformOverlayAbovePresentedSheets(
         }
     }
 
-    LaunchedEffect(dismissing, overlayController) {
+    LaunchedEffect(dismissing, presentationMotion, overlayController) {
         val overlayView = overlayController.view
         if (dismissing) {
             overlayView.userInteractionEnabled = false
-            UIView.animateWithDuration(
-                UnifiedPopupMotion.Media.fadeOutMillis / 1000.0,
-                animations = {
-                    overlayView.alpha = 0.0
-                },
-            )
-        } else {
+            when (presentationMotion) {
+                PlatformOverlayPresentationMotion.Standard -> {
+                    UIView.animateWithDuration(
+                        UnifiedPopupMotion.Media.fadeOutMillis / 1000.0,
+                        animations = {
+                            overlayView.alpha = 0.0
+                        },
+                    )
+                }
+                PlatformOverlayPresentationMotion.ModalLift -> {
+                    UIView.animateWithDuration(
+                        ModalLiftExitSeconds,
+                        animations = {
+                            overlayView.alpha = 0.0
+                            overlayView.transform =
+                                CGAffineTransformMakeTranslation(0.0, ModalLiftExitOffsetPt)
+                        },
+                    )
+                }
+            }
+        } else if (presentationMotion == PlatformOverlayPresentationMotion.Standard) {
             overlayView.alpha = 1.0
+            overlayView.transform = CGAffineTransformMakeTranslation(0.0, 0.0)
+            overlayView.userInteractionEnabled = true
+        } else {
             overlayView.userInteractionEnabled = true
         }
     }
