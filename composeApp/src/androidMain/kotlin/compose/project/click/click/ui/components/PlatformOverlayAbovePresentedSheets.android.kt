@@ -8,6 +8,7 @@ import androidx.compose.runtime.Composable
 actual fun PlatformOverlayAbovePresentedSheets(
     liftAbovePresentedSheets: Boolean,
     dismissing: Boolean,
+    revealUnderlyingPresentation: Boolean,
     content: @Composable () -> Unit,
 ) {
     content()
