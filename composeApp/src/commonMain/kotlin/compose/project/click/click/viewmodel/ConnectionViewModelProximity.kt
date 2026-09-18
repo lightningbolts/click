@@ -31,6 +31,7 @@ import compose.project.click.click.telemetry.ConnectionFlowTelemetry
 import compose.project.click.click.utils.LocationResult // pragma: allowlist secret
 import compose.project.click.click.utils.LocationService // pragma: allowlist secret
 import io.ktor.client.HttpClient // pragma: allowlist secret
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -303,7 +304,8 @@ internal fun ConnectionViewModel.startTapProximityHandshakeImpl(
     }
     lastTapProximityStartedAtMs = nowMs
     ConnectionFlowTelemetry.recordStarted()
-    viewModelScope.launch {
+    activeTapProximityJob?.cancel()
+    activeTapProximityJob = viewModelScope.launch {
         try {
             lastProximityEncounterLoggedAggregate = true
             val shouldFetchLocation = !skipLocation && AppDataManager.shouldCaptureLocationAtTap()
@@ -434,30 +436,36 @@ internal fun ConnectionViewModel.startTapProximityHandshakeImpl(
                 _connectionState.value = ConnectionState.ProximityResolving
                 val bindResult =
                     withContext(Dispatchers.Default) {
-                        runCatching {
-                            withTimeout(22_000L) {
-                                repository
-                                    .bindProximityHandshake(
-                                        httpClient = httpClient,
-                                        bearerJwt = jwt,
-                                        myToken = myToken,
-                                        heardTokens = heardTokensAudio,
-                                        detectedDevices = detectedDevicesBle,
-                                        latitude = lastProximityLat,
-                                        longitude = lastProximityLng,
-                                        exactBarometricElevationM =
-                                            proximitySensorContext
-                                                ?.exactBarometricElevationMeters
-                                                ?.takeIf { it.isFinite() },
-                                        hardwareVibe = vibe,
-                                        clientContextFirst = true,
-                                        weatherSnapshotLabel = weatherSnapshotLabel,
-                                        bindNoiseLevelCategory = proximitySensorContext?.noiseLevelCategory,
-                                        bindExactNoiseLevelDb = proximitySensorContext?.exactNoiseLevelDb,
-                                        bindHeightCategory = proximitySensorContext?.heightCategory,
-                                        simulatorMock = simulatorMock,
-                                    ).getOrThrow()
-                            }
+                        try {
+                            Result.success(
+                                withTimeout(22_000L) {
+                                    repository
+                                        .bindProximityHandshake(
+                                            httpClient = httpClient,
+                                            bearerJwt = jwt,
+                                            myToken = myToken,
+                                            heardTokens = heardTokensAudio,
+                                            detectedDevices = detectedDevicesBle,
+                                            latitude = lastProximityLat,
+                                            longitude = lastProximityLng,
+                                            exactBarometricElevationM =
+                                                proximitySensorContext
+                                                    ?.exactBarometricElevationMeters
+                                                    ?.takeIf { it.isFinite() },
+                                            hardwareVibe = vibe,
+                                            clientContextFirst = true,
+                                            weatherSnapshotLabel = weatherSnapshotLabel,
+                                            bindNoiseLevelCategory = proximitySensorContext?.noiseLevelCategory,
+                                            bindExactNoiseLevelDb = proximitySensorContext?.exactNoiseLevelDb,
+                                            bindHeightCategory = proximitySensorContext?.heightCategory,
+                                            simulatorMock = simulatorMock,
+                                        ).getOrThrow()
+                                },
+                            )
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            Result.failure(e)
                         }
                     }
 
@@ -509,16 +517,24 @@ internal fun ConnectionViewModel.startTapProximityHandshakeImpl(
                             )
                     } else {
                         ConnectionFlowTelemetry.recordFailed(reason = "bind_failed")
-                        _connectionState.value = ConnectionState.Error(e.message ?: "Proximity handshake failed")
+                        _connectionState.value = ConnectionState.Error("Tap to Connect failed. Please try again.")
                     }
                 }
             }
+        } catch (e: CancellationException) {
+            runCatching { proximityManager.stopAll() }
+            if (isProximityHandshakeInFlight()) {
+                _connectionState.value = ConnectionState.Idle
+            }
+            throw e
         } catch (e: ProximityHardwarePermissionException) {
             ConnectionFlowTelemetry.recordFailed(reason = "hardware_permissions")
             _connectionState.value = ConnectionState.Error(ConnectionViewModel.HARDWARE_PERMISSIONS_MISSING_MESSAGE)
         } catch (e: Exception) {
             ConnectionFlowTelemetry.recordFailed(reason = "handshake_exception")
-            _connectionState.value = ConnectionState.Error(e.message ?: "Proximity handshake failed")
+            _connectionState.value = ConnectionState.Error("Tap to Connect failed. Please try again.")
+        } finally {
+            activeTapProximityJob = null
         }
     }
 }
