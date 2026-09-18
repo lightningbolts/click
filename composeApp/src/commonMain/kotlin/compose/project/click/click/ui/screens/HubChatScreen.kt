@@ -118,6 +118,7 @@ import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeft
 import compose.project.click.click.ui.components.LocalGlassAlertAnimatedDismiss // pragma: allowlist secret
 import compose.project.click.click.ui.components.NativeChromeAction // pragma: allowlist secret
 import compose.project.click.click.ui.components.NativeHeaderMetrics // pragma: allowlist secret
+import compose.project.click.click.ui.components.TabbedUserProfileSheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.UnifiedPopupFormDialog // pragma: allowlist secret
 import compose.project.click.click.ui.components.platformNativeHeaderClearance // pragma: allowlist secret
 import compose.project.click.click.ui.components.sheetPageBackground // pragma: allowlist secret
@@ -184,6 +185,7 @@ fun HubChatScreen(
     var showClickDropsCamera by remember { mutableStateOf(false) }
     var expandedPhotoTarget by remember { mutableStateOf<MessageWithUser?>(null) }
     var contextMenuMessage by remember { mutableStateOf<MessageWithUser?>(null) }
+    var profileUserId by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(messages, expandedPhotoTarget, contextMenuMessage) {
         expandedPhotoTarget?.message?.id?.let { expandedId ->
@@ -573,6 +575,9 @@ fun HubChatScreen(
                                     onForward = {},
                                     onLongPress = { contextMenuMessage = it },
                                     onSwipeReply = viewModel::startReplyTo,
+                                    onPeerAvatarClick = { userId ->
+                                        if (viewModel.canOpenSenderProfile(userId)) profileUserId = userId
+                                    },
                                     onDownloadAttachment = { _, _ ->
                                         ChatAttachmentDownloadOutcome.Failure("Download not available in hub chat.")
                                     },
@@ -643,6 +648,12 @@ fun HubChatScreen(
             onDismiss = { expandedPhotoTarget = null },
         )
     }
+
+    TabbedUserProfileSheet(
+        userId = profileUserId,
+        viewerUserId = currentUserId,
+        onDismiss = { profileUserId = null },
+    )
 
     contextMenuMessage?.let { selected ->
         MessageActionSheet(
