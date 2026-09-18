@@ -37,8 +37,8 @@ private fun safeMarkdownUrl(raw: String): String? {
     val url = raw.trim()
     return if (
         url.startsWith("https://", ignoreCase = true) ||
-            url.startsWith("http://", ignoreCase = true) ||
-            url.startsWith("mailto:", ignoreCase = true)
+        url.startsWith("http://", ignoreCase = true) ||
+        url.startsWith("mailto:", ignoreCase = true)
     ) {
         url
     } else {
