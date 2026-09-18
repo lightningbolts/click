@@ -226,10 +226,7 @@ internal fun HubChatViewModel.deleteHubMessageImpl(messageId: String) {
     val removedIndex = beforeMessages.indexOfFirst { it.message.id == id }
     val removed = beforeMessages.getOrNull(removedIndex) ?: return
     if (!removed.isSent) return
-    val beforeReactions = _messageReactions.value[id].orEmpty()
-
     _messages.value = beforeMessages.filterNot { it.message.id == id }
-    _messageReactions.value = _messageReactions.value - id
     if (_replyingTo.value?.message?.id == id) _replyingTo.value = null
     if (_editingMessageId.value == id) cancelHubEditImpl()
     persistHubMessagesToDisk(_messages.value)
@@ -246,17 +243,13 @@ internal fun HubChatViewModel.deleteHubMessageImpl(messageId: String) {
                     userLong = location.longitude,
                     authToken = jwt,
                 ).getOrThrow()
+            _messageReactions.value = _messageReactions.value - id
+            persistHubMessagesToDisk(_messages.value)
         } catch (e: Exception) {
             if (_messages.value.none { it.message.id == id }) {
                 val restored = _messages.value.toMutableList()
                 restored.add(removedIndex.coerceIn(0, restored.size), removed)
                 _messages.value = restored
-            }
-            if (beforeReactions.isNotEmpty()) {
-                _messageReactions.value =
-                    _messageReactions.value.toMutableMap().apply {
-                        this[id] = beforeReactions
-                    }
             }
             persistHubMessagesToDisk(_messages.value)
             handleHubInteractionFailure(e, "Could not delete message")
