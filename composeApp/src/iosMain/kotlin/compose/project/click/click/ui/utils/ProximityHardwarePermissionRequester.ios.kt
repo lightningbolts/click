@@ -13,6 +13,10 @@ import platform.AVFAudio.AVAudioSessionRecordPermissionDenied
 import platform.AVFAudio.AVAudioSessionRecordPermissionGranted
 import platform.CoreBluetooth.CBCentralManager
 import platform.CoreBluetooth.CBCentralManagerDelegateProtocol
+import platform.CoreBluetooth.CBManagerAuthorizationAllowedAlways
+import platform.CoreBluetooth.CBManagerAuthorizationDenied
+import platform.CoreBluetooth.CBManagerAuthorizationNotDetermined
+import platform.CoreBluetooth.CBManagerAuthorizationRestricted
 import platform.CoreBluetooth.CBManagerStateResetting
 import platform.CoreBluetooth.CBManagerStateUnauthorized
 import platform.CoreBluetooth.CBManagerStateUnknown
@@ -44,6 +48,29 @@ private class IosBluetoothPermissionProbe(
 }
 
 @Composable
+actual fun rememberPlatformProximityHardwarePermissionStatus(): () -> ProximityHardwarePermissionStatus {
+    val session = remember { AVAudioSession.sharedInstance() }
+    return remember(session) {
+        {
+            when (session.recordPermission) {
+                AVAudioSessionRecordPermissionDenied -> ProximityHardwarePermissionStatus.Blocked
+                AVAudioSessionRecordPermissionGranted -> {
+                    when (CBCentralManager.authorization) {
+                        CBManagerAuthorizationNotDetermined -> ProximityHardwarePermissionStatus.NeedsRequest
+                        CBManagerAuthorizationAllowedAlways,
+                        CBManagerAuthorizationDenied,
+                        CBManagerAuthorizationRestricted,
+                        -> ProximityHardwarePermissionStatus.Ready
+                        else -> ProximityHardwarePermissionStatus.Ready
+                    }
+                }
+                else -> ProximityHardwarePermissionStatus.NeedsRequest
+            }
+        }
+    }
+}
+
+@Composable
 actual fun rememberPlatformProximityHardwarePermissionRequester(): ((onResult: (Boolean) -> Unit) -> Unit) {
     val session = remember { AVAudioSession.sharedInstance() }
     var bluetoothProbe by remember { mutableStateOf<IosBluetoothPermissionProbe?>(null) }
@@ -62,17 +89,13 @@ actual fun rememberPlatformProximityHardwarePermissionRequester(): ((onResult: (
     return { onResult ->
         when (session.recordPermission) {
             AVAudioSessionRecordPermissionGranted -> requestBluetooth(onResult)
-            AVAudioSessionRecordPermissionDenied -> {
-                openApplicationSystemSettings()
-                onResult(false)
-            }
+            AVAudioSessionRecordPermissionDenied -> onResult(false)
             else -> {
                 session.requestRecordPermission { micGranted: Boolean ->
                     CoroutineScope(Dispatchers.Main).launch {
                         if (micGranted) {
                             requestBluetooth(onResult)
                         } else {
-                            openApplicationSystemSettings()
                             onResult(false)
                         }
                     }
