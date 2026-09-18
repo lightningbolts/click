@@ -131,12 +131,12 @@ internal fun HubChatViewModel.reconcileHubReactionRealtimeAgainstPending(
     val eventMatchesDesired =
         when (event) {
             is HubReactionRealtimeEvent.Upsert ->
-                state.observeAcknowledged(
+                state.observeRealtimeAcknowledged(
                     enabled = true,
                     canonical = event.reaction,
                 )
             is HubReactionRealtimeEvent.Delete ->
-                state.observeAcknowledged(
+                state.observeRealtimeAcknowledged(
                     enabled = false,
                     canonical = null,
                 )
@@ -144,6 +144,8 @@ internal fun HubChatViewModel.reconcileHubReactionRealtimeAgainstPending(
 
     if (!state.workerRunning && state.desiredEnabled != state.acknowledgedEnabled) {
         ensureHubReactionMutationWorker(key)
+    } else if (!state.workerRunning && state.canRetire()) {
+        hubReactionMutationStates.remove(key)
     }
     return eventMatchesDesired
 }
@@ -162,6 +164,7 @@ internal fun HubChatViewModel.ensureHubReactionMutationWorker(key: HubReactionMu
                 val targetEnabled = currentState.desiredEnabled
                 val requestGeneration = currentState.generation
                 val canonicalIdBeforeRequest = currentState.canonicalReaction?.id
+                currentState.activeRequestTargetEnabled = targetEnabled
 
                 try {
                     val location = resolveGatekeeperLocationOrThrow()
@@ -192,6 +195,7 @@ internal fun HubChatViewModel.ensureHubReactionMutationWorker(key: HubReactionMu
                         }
 
                     val latest = hubReactionMutationStates[key] ?: break
+                    latest.activeRequestTargetEnabled = null
                     latest.observeAcknowledged(
                         enabled = targetEnabled,
                         canonical = canonical,
@@ -200,6 +204,7 @@ internal fun HubChatViewModel.ensureHubReactionMutationWorker(key: HubReactionMu
                     persistHubMessagesToDisk(_messages.value)
                 } catch (e: Exception) {
                     val latest = hubReactionMutationStates[key] ?: break
+                    latest.activeRequestTargetEnabled = null
                     val realtimeConfirmed =
                         latest.acknowledgedEnabled == targetEnabled ||
                             (
@@ -230,8 +235,14 @@ internal fun HubChatViewModel.ensureHubReactionMutationWorker(key: HubReactionMu
                         break
                     }
 
-                    // A newer tap superseded the failed request. Keep the latest
-                    // optimistic intent and let the loop converge the server to it.
+                    // A newer tap superseded an ambiguous failed request. Treat the
+                    // attempted target as potentially committed so the next loop
+                    // always sends the idempotent compensating mutation required by
+                    // the newest intent.
+                    latest.observeAcknowledged(
+                        enabled = targetEnabled,
+                        canonical = if (targetEnabled) latest.canonicalReaction else null,
+                    )
                     reconcileHubReactionIntent(key, latest)
                     persistHubMessagesToDisk(_messages.value)
                 }
@@ -239,10 +250,11 @@ internal fun HubChatViewModel.ensureHubReactionMutationWorker(key: HubReactionMu
         } finally {
             val latest = hubReactionMutationStates[key]
             if (latest != null) {
+                latest.activeRequestTargetEnabled = null
                 latest.workerRunning = false
-                if (latest.desiredEnabled == latest.acknowledgedEnabled) {
+                if (latest.canRetire()) {
                     hubReactionMutationStates.remove(key)
-                } else {
+                } else if (latest.desiredEnabled != latest.acknowledgedEnabled) {
                     ensureHubReactionMutationWorker(key)
                 }
             }
