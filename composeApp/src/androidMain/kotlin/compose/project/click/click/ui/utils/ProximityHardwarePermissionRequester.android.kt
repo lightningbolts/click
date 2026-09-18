@@ -16,6 +16,28 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 
 @Composable
+actual fun rememberPlatformProximityHardwarePermissionStatus(): () -> ProximityHardwarePermissionStatus {
+    val activity = LocalActivity.current as? ComponentActivity
+    return remember(activity) {
+        {
+            val context = activity
+            when {
+                context == null -> ProximityHardwarePermissionStatus.Blocked
+                ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.RECORD_AUDIO,
+                ) == PackageManager.PERMISSION_GRANTED -> ProximityHardwarePermissionStatus.Ready
+                ActivityCompat.shouldShowRequestPermissionRationale(
+                    context,
+                    Manifest.permission.RECORD_AUDIO,
+                ) -> ProximityHardwarePermissionStatus.NeedsRequest
+                else -> ProximityHardwarePermissionStatus.NeedsRequest
+            }
+        }
+    }
+}
+
+@Composable
 actual fun rememberPlatformProximityHardwarePermissionRequester(): ((onResult: (Boolean) -> Unit) -> Unit) {
     val activity = LocalActivity.current as? ComponentActivity
     val requiredPermissions =
@@ -54,19 +76,19 @@ actual fun rememberPlatformProximityHardwarePermissionRequester(): ((onResult: (
                         activity != null &&
                             ContextCompat.checkSelfPermission(activity, requiredAudioPermission) == PackageManager.PERMISSION_GRANTED
                     )
-            if (!granted && activity != null) {
-                val permanentlyDenied =
-                    ContextCompat.checkSelfPermission(activity, requiredAudioPermission) != PackageManager.PERMISSION_GRANTED &&
-                        !ActivityCompat.shouldShowRequestPermissionRationale(activity, requiredAudioPermission)
-                if (permanentlyDenied) {
-                    openApplicationSystemSettings()
-                }
-            }
             complete?.invoke(granted)
         }
 
     return { onResult ->
-        if (hasAllPermissions()) {
+        val context = activity
+        val microphoneGranted =
+            context != null &&
+                ContextCompat.checkSelfPermission(context, requiredAudioPermission) == PackageManager.PERMISSION_GRANTED
+        if (microphoneGranted) {
+            // Bluetooth is an enrichment path. If the user denied it previously, do not
+            // re-present the permission dialog every time Connect is tapped.
+            onResult(true)
+        } else if (hasAllPermissions()) {
             onResult(true)
         } else {
             pendingOnResult = onResult
