@@ -54,9 +54,9 @@ import compose.project.click.click.ui.components.ClickMenuItem // pragma: allowl
 import compose.project.click.click.ui.components.ClickOutlinedTextField // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionEventRecommendationCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.EventDirectoryUserProfileSheet // pragma: allowlist secret
+import compose.project.click.click.ui.components.EventMarkdownText // pragma: allowlist secret
 import compose.project.click.click.ui.components.EventPeopleDirectorySection // pragma: allowlist secret
 import compose.project.click.click.ui.components.EventPeopleDirectorySheetContent // pragma: allowlist secret
-import compose.project.click.click.ui.components.EventMarkdownText // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.theme.* // pragma: allowlist secret
 import compose.project.click.click.ui.utils.* // pragma: allowlist secret
@@ -493,7 +493,10 @@ internal fun EventBeaconDetail(
             )
         }
 
-        val eventDescription = displayBeacon.metadata.description?.trim().orEmpty()
+        val eventDescription =
+            displayBeacon.metadata.description
+                ?.trim()
+                .orEmpty()
         if (eventDescription.isBlank()) {
             Text(
                 text = "No description",
