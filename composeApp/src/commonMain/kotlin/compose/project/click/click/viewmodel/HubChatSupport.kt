@@ -135,7 +135,6 @@ internal fun JsonObject.hubReactionMessageId(): String? =
 internal fun JsonObject.hubReactionHubId(): String? =
     (this["hub_id"] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
 
-
 internal fun hubCreatedAtToEpoch(iso: String): Long {
     val t = iso.trim().replace(" ", "T")
     return runCatching { Instant.parse(t) }.getOrNull()?.toEpochMilliseconds()
