@@ -85,6 +85,7 @@ fun NfcScreen(
     val openMeteoWeather = remember { OpenMeteoWeatherService() }
     val scope = rememberCoroutineScope()
     var ambientNoiseOptIn by remember { mutableStateOf(false) }
+    var barometricContextOptIn by remember { mutableStateOf(false) }
     val locationService =
         remember {
             LocationService()
@@ -94,6 +95,18 @@ fun NfcScreen(
 
     LaunchedEffect(Unit) {
         ambientNoiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: false
+        barometricContextOptIn = tokenStorage.getBarometricContextOptIn() ?: false
+    }
+
+    DisposableEffect(barometricContextOptIn, barometricHeightMonitor) {
+        if (barometricContextOptIn) {
+            barometricHeightMonitor.ensureBackgroundCaching()
+        }
+        onDispose {
+            if (barometricContextOptIn) {
+                barometricHeightMonitor.releaseBackgroundCaching()
+            }
+        }
     }
 
     LaunchedEffect(authToken) {
