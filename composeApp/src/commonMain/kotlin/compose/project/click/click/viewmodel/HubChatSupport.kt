@@ -165,9 +165,10 @@ internal fun applyHubReactionRealtimeEvent(
         is HubReactionRealtimeEvent.Delete -> {
             val messageId =
                 event.messageId
-                    ?: next.entries.firstOrNull { (_, rows) ->
-                        rows.any { it.id == event.reactionId }
-                    }?.key
+                    ?: next.entries
+                        .firstOrNull { (_, rows) ->
+                            rows.any { it.id == event.reactionId }
+                        }?.key
                     ?: return current
             val rows = next[messageId].orEmpty().filterNot { it.id == event.reactionId }
             if (rows.isEmpty()) next.remove(messageId) else next[messageId] = rows
