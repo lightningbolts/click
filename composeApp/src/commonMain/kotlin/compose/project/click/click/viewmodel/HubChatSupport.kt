@@ -108,12 +108,29 @@ internal data class HubMessageRow(
     @SerialName("user_id") val userId: String,
     val body: String,
     @SerialName("created_at") val createdAt: String,
+    @SerialName("edited_at") val editedAt: String? = null,
     @SerialName("message_type") val messageType: String = ChatMessageType.TEXT,
     val metadata: JsonElement? = null,
 )
 
+@Serializable
+internal data class HubReactionRow(
+    val id: String,
+    @SerialName("hub_message_id") val messageId: String,
+    @SerialName("hub_id") val hubId: String,
+    @SerialName("user_id") val userId: String,
+    @SerialName("reaction_type") val reactionType: String,
+    @SerialName("created_at") val createdAt: String,
+)
+
 /** Extract the `id` column out of a realtime `oldRecord` JsonObject (DELETE payloads carry PKs only). */
 internal fun JsonObject.hubMessageRowId(): String? = (this["id"] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
+
+internal fun JsonObject.hubReactionRowId(): String? =
+    (this["id"] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
+
+internal fun JsonObject.hubReactionMessageId(): String? =
+    (this["hub_message_id"] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
 
 internal fun hubCreatedAtToEpoch(iso: String): Long {
     val t = iso.trim().replace(" ", "T")
