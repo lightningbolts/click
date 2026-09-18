@@ -110,9 +110,7 @@ internal fun HubChatViewModel.reconcilePendingHubReactionIntents() {
     }
 }
 
-internal fun HubChatViewModel.reconcileHubReactionRealtimeAgainstPending(
-    event: HubReactionRealtimeEvent,
-): Boolean {
+internal fun HubChatViewModel.reconcileHubReactionRealtimeAgainstPending(event: HubReactionRealtimeEvent): Boolean {
     val key =
         when (event) {
             is HubReactionRealtimeEvent.Upsert -> {
