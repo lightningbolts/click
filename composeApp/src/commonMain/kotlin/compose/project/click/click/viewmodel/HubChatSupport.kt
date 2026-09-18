@@ -137,8 +137,7 @@ internal fun JsonObject.hubReactionHubId(): String? = (this["hub_id"] as? JsonPr
 
 internal fun JsonObject.hubReactionUserId(): String? = (this["user_id"] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
 
-internal fun JsonObject.hubReactionType(): String? =
-    (this["reaction_type"] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
+internal fun JsonObject.hubReactionType(): String? = (this["reaction_type"] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
 
 internal data class HubReactionMutationKey(
     val messageId: String,
