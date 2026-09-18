@@ -126,14 +126,12 @@ internal data class HubReactionRow(
 /** Extract the `id` column out of a realtime `oldRecord` JsonObject (DELETE payloads carry PKs only). */
 internal fun JsonObject.hubMessageRowId(): String? = (this["id"] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
 
-internal fun JsonObject.hubReactionRowId(): String? =
-    (this["id"] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
+internal fun JsonObject.hubReactionRowId(): String? = (this["id"] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
 
 internal fun JsonObject.hubReactionMessageId(): String? =
     (this["hub_message_id"] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
 
-internal fun JsonObject.hubReactionHubId(): String? =
-    (this["hub_id"] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
+internal fun JsonObject.hubReactionHubId(): String? = (this["hub_id"] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
 
 internal fun hubCreatedAtToEpoch(iso: String): Long {
     val t = iso.trim().replace(" ", "T")
