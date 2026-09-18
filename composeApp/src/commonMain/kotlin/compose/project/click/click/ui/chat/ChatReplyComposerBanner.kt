@@ -1,3 +1,5 @@
+@file:Suppress("ktlint:standard:function-naming")
+
 package compose.project.click.click.ui.chat
 
 import androidx.compose.animation.AnimatedVisibility
