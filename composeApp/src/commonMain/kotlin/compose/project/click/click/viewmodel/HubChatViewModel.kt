@@ -308,8 +308,10 @@ class HubChatViewModel(
 
     fun cancelEditMessage() = cancelHubEditImpl()
 
-    fun toggleReaction(messageId: String, reactionType: String) =
-        toggleHubReactionImpl(messageId, reactionType)
+    fun toggleReaction(
+        messageId: String,
+        reactionType: String,
+    ) = toggleHubReactionImpl(messageId, reactionType)
 
     fun deleteMessage(messageId: String) = deleteHubMessageImpl(messageId)
 
