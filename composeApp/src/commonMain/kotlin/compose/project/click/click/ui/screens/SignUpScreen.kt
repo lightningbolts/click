@@ -46,6 +46,7 @@ import compose.project.click.click.ui.chat.rememberChatMediaPickers // pragma: a
 import compose.project.click.click.ui.components.ClickOutlinedTextField // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.birthdayIsoToUtcMidnightMillis // pragma: allowlist secret
+import compose.project.click.click.ui.components.editBirthdayDigitsInput // pragma: allowlist secret
 import compose.project.click.click.ui.components.formatBirthdayDigitsInput // pragma: allowlist secret
 import compose.project.click.click.ui.components.parseBirthdayIsoLocalDate // pragma: allowlist secret
 import compose.project.click.click.ui.components.utcMidnightMillisToBirthdayIso // pragma: allowlist secret
@@ -327,7 +328,7 @@ fun SignUpScreen(
 
             ClickOutlinedTextField(
                 value = birthdayIso,
-                onValueChange = { birthdayIso = formatBirthdayDigitsInput(it) },
+                onValueChange = { incoming -> birthdayIso = editBirthdayDigitsInput(birthdayIso, incoming) },
                 label = { Text("Birthday") },
                 placeholderText = "YYYY-MM-DD",
                 leadingIcon = {
