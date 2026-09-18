@@ -608,6 +608,7 @@ object AppDataManager {
         realtimeChannel: String,
         messages: List<Message>,
         participants: List<User> = emptyList(),
+        reactions: List<MessageReaction> = emptyList(),
     ) {
         if (hubId.isBlank() || realtimeChannel.isBlank()) return
         val boundedMessages = messages.takeLast(HUB_THREAD_CACHE_MAX_MESSAGES)
@@ -618,6 +619,7 @@ object AppDataManager {
                 cachedAtMs = Clock.System.now().toEpochMilliseconds(),
                 messages = boundedMessages,
                 participants = participants.distinctBy { it.id },
+                reactions = reactions,
             )
         _cachedHubThreads.value = _cachedHubThreads.value + (hubId to thread)
         scope.launch { persistSnapshot() }
