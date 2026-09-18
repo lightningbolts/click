@@ -320,7 +320,7 @@ internal fun ConnectionViewModel.startTapProximityHandshakeImpl(
 
             val tokenStorage = createTokenStorage()
             val noiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: true
-            val baroOptIn = tokenStorage.getBarometricContextOptIn() ?: true
+            val baroOptIn = tokenStorage.getBarometricContextOptIn() ?: false
 
             _connectionState.value =
                 if (shouldFetchLocation) {
