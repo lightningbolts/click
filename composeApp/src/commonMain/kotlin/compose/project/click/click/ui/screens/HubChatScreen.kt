@@ -185,9 +185,13 @@ fun HubChatScreen(
     var expandedPhotoTarget by remember { mutableStateOf<MessageWithUser?>(null) }
     var contextMenuMessage by remember { mutableStateOf<MessageWithUser?>(null) }
 
-    LaunchedEffect(messages, expandedPhotoTarget) {
-        val expandedId = expandedPhotoTarget?.message?.id ?: return@LaunchedEffect
-        if (messages.none { it.message.id == expandedId }) expandedPhotoTarget = null
+    LaunchedEffect(messages, expandedPhotoTarget, contextMenuMessage) {
+        expandedPhotoTarget?.message?.id?.let { expandedId ->
+            if (messages.none { it.message.id == expandedId }) expandedPhotoTarget = null
+        }
+        contextMenuMessage?.message?.id?.let { selectedId ->
+            if (messages.none { it.message.id == selectedId }) contextMenuMessage = null
+        }
     }
 
     val isCreator by viewModel.isCreator.collectAsState()
