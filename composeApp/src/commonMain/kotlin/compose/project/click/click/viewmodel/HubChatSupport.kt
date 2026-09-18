@@ -141,7 +141,7 @@ internal sealed interface HubReactionRealtimeEvent {
 
     data class Delete(
         val reactionId: String,
-        val messageId: String,
+        val messageId: String? = null,
     ) : HubReactionRealtimeEvent
 }
 
@@ -163,23 +163,25 @@ internal fun applyHubReactionRealtimeEvent(
             next[reaction.messageId] = rows
         }
         is HubReactionRealtimeEvent.Delete -> {
-            val rows = next[event.messageId].orEmpty().filterNot { it.id == event.reactionId }
-            if (rows.isEmpty()) next.remove(event.messageId) else next[event.messageId] = rows
+            val messageId =
+                event.messageId
+                    ?: next.entries.firstOrNull { (_, rows) ->
+                        rows.any { it.id == event.reactionId }
+                    }?.key
+                    ?: return current
+            val rows = next[messageId].orEmpty().filterNot { it.id == event.reactionId }
+            if (rows.isEmpty()) next.remove(messageId) else next[messageId] = rows
         }
     }
     return next
 }
 
-internal fun hubReactionDeleteEvent(
-    oldRecord: JsonObject,
-    current: Map<String, List<MessageReaction>>,
-): HubReactionRealtimeEvent.Delete? {
+internal fun hubReactionDeleteEvent(oldRecord: JsonObject): HubReactionRealtimeEvent.Delete? {
     val reactionId = oldRecord.hubReactionRowId() ?: return null
-    val messageId =
-        oldRecord.hubReactionMessageId()
-            ?: current.entries.firstOrNull { (_, rows) -> rows.any { it.id == reactionId } }?.key
-            ?: return null
-    return HubReactionRealtimeEvent.Delete(reactionId = reactionId, messageId = messageId)
+    return HubReactionRealtimeEvent.Delete(
+        reactionId = reactionId,
+        messageId = oldRecord.hubReactionMessageId(),
+    )
 }
 
 internal fun rollbackHubReactionMutation(

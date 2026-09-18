@@ -46,16 +46,17 @@ class HubChatSupportTest {
                 reactionType = "❤️",
                 createdAt = 1L,
             )
-        val event =
-            hubReactionDeleteEvent(
-                oldRecord = buildJsonObject { put("id", "reaction-1") },
-                current = mapOf("message-1" to listOf(reaction)),
-            )
+        val event = hubReactionDeleteEvent(buildJsonObject { put("id", "reaction-1") })
+        val state =
+            event?.let {
+                applyHubReactionRealtimeEvent(
+                    current = mapOf("message-1" to listOf(reaction)),
+                    event = it,
+                )
+            }
 
-        assertEquals(
-            HubReactionRealtimeEvent.Delete("reaction-1", "message-1"),
-            event,
-        )
+        assertEquals(HubReactionRealtimeEvent.Delete("reaction-1"), event)
+        assertEquals(null, state?.get("message-1"))
     }
 
     @Test

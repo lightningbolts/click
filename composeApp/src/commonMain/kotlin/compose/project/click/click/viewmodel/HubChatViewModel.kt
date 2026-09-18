@@ -1030,11 +1030,7 @@ class HubChatViewModel(
                         is PostgresAction.Delete -> {
                             val recordHubId = action.oldRecord.hubReactionHubId()
                             if (recordHubId != null && recordHubId != hubId) return@collect
-                            val event =
-                                hubReactionDeleteEvent(
-                                    oldRecord = action.oldRecord,
-                                    current = _messageReactions.value,
-                                ) ?: return@collect
+                            val event = hubReactionDeleteEvent(action.oldRecord) ?: return@collect
                             handleHubReactionRealtimeEvent(event)
                         }
                         else -> Unit
