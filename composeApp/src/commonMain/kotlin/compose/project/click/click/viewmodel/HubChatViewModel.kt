@@ -185,6 +185,7 @@ class HubChatViewModel(
     internal val reactionHydrationMutex = Mutex()
     internal val queuedReactionEvents = mutableListOf<HubReactionRealtimeEvent>()
     internal val realtimeDeletedReactionIds = mutableSetOf<String>()
+    internal val hubReactionMutationStates = mutableMapOf<HubReactionMutationKey, HubReactionMutationState>()
     internal val pendingHubMessageDeletes = mutableMapOf<String, PendingHubMessageDelete>()
     internal var reactionHydrationComplete = false
 
