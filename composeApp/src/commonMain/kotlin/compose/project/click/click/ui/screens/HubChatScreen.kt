@@ -576,7 +576,9 @@ fun HubChatScreen(
                                     onLongPress = { contextMenuMessage = it },
                                     onSwipeReply = viewModel::startReplyTo,
                                     onPeerAvatarClick = { userId ->
-                                        if (viewModel.canOpenSenderProfile(userId)) profileUserId = userId
+                                        if (viewModel.canOpenSenderProfile(userId)) {
+                                            profileUserId = userId
+                                        }
                                     },
                                     onDownloadAttachment = { _, _ ->
                                         ChatAttachmentDownloadOutcome.Failure("Download not available in hub chat.")
