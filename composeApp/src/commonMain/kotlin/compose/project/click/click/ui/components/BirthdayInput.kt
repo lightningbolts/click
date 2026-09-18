@@ -24,6 +24,38 @@ fun formatBirthdayDigitsInput(raw: String): String {
     }
 }
 
+/**
+ * Applies an interactive edit without making auto-inserted separators feel undeletable.
+ *
+ * When a user deletes one of the visual dashes, treat that backspace as deleting the
+ * preceding date digit as well. Other edits and paste operations continue through the
+ * canonical normalizer.
+ */
+fun editBirthdayDigitsInput(
+    previous: String,
+    incoming: String,
+): String {
+    val previousFormatted = formatBirthdayDigitsInput(previous)
+    if (incoming.length == previousFormatted.length - 1) {
+        val firstDifference =
+            previousFormatted.indices.firstOrNull { index ->
+                index >= incoming.length || previousFormatted[index] != incoming[index]
+            } ?: incoming.length
+        if (firstDifference < previousFormatted.length && previousFormatted[firstDifference] == '-') {
+            val digits = previousFormatted.filter(Char::isDigit).toMutableList()
+            val digitIndexBeforeSeparator =
+                previousFormatted
+                    .take(firstDifference)
+                    .count(Char::isDigit) - 1
+            if (digitIndexBeforeSeparator in digits.indices) {
+                digits.removeAt(digitIndexBeforeSeparator)
+                return formatBirthdayDigitsInput(digits.joinToString(""))
+            }
+        }
+    }
+    return formatBirthdayDigitsInput(incoming)
+}
+
 fun parseBirthdayIsoLocalDate(raw: String): LocalDate? {
     val formatted = formatBirthdayDigitsInput(raw)
     if (formatted.length != 10) return null
