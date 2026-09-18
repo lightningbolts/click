@@ -153,7 +153,7 @@ fun EventMarkdownText(
             val lines = block.lines()
 
             when {
-                lines.size == 1 && Regex("""^#{1,3}\s+.+$""").matches(lines.first()) -> {
+                Regex("""^#{1,3}\s+.+$""").matches(lines.first()) -> {
                     val heading = lines.first()
                     val level = heading.takeWhile { it == '#' }.length
                     val body = heading.drop(level).trimStart()
@@ -167,6 +167,13 @@ fun EventMarkdownText(
                             },
                         color = color,
                     )
+                    if (lines.size > 1) {
+                        MarkdownInlineText(
+                            text = lines.drop(1).joinToString("\n"),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = color,
+                        )
+                    }
                 }
 
                 lines.all { Regex("""^\s*[-+*]\s+.+$""").matches(it) } -> {
@@ -192,10 +199,10 @@ fun EventMarkdownText(
 
                 lines.all { Regex("""^\s*\d+\.\s+.+$""").matches(it) } -> {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        lines.forEachIndexed { index, line ->
+                        lines.forEach { line ->
                             Row {
                                 Text(
-                                    text = "${index + 1}.",
+                                    text = "${line.trimStart().substringBefore('.')}.",
                                     style = MaterialTheme.typography.bodyLarge,
                                     color = color,
                                 )
