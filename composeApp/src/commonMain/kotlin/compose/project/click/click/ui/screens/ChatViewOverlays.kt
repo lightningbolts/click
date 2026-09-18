@@ -22,6 +22,8 @@ import compose.project.click.click.ui.chat.ConnectionActionSheet // pragma: allo
 import compose.project.click.click.ui.chat.ConnectionMenuAction // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ConnectionSheetDialog // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ConnectionSheetDialogs // pragma: allowlist secret
+import compose.project.click.click.ui.chat.MessageActionCapabilities // pragma: allowlist secret
+import compose.project.click.click.ui.chat.MessageActionHandlers // pragma: allowlist secret
 import compose.project.click.click.ui.chat.MessageActionSheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickOutlinedTextField // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
@@ -152,9 +154,24 @@ internal fun BoxScope.ChatViewOverlays(
 
     // Message long-press context sheet
     if (contextMenuMessage != null) {
+        val selectedMessage = contextMenuMessage!!
         MessageActionSheet(
-            messageWithUser = contextMenuMessage!!,
-            viewModel = viewModel,
+            messageWithUser = selectedMessage,
+            capabilities =
+                MessageActionCapabilities(
+                    canEdit = selectedMessage.isSent,
+                    canDelete = selectedMessage.isSent,
+                ),
+            handlers =
+                MessageActionHandlers(
+                    onReply = viewModel::startReplyTo,
+                    onReact = { messageId, reaction -> viewModel.addReaction(messageId, reaction) },
+                    fetchDecryptedMediaBytes = viewModel::fetchDecryptedChatMediaBytes,
+                    onEdit = { selected ->
+                        viewModel.startEditMessage(selected.message.id, selected.message.content)
+                    },
+                    onDelete = { selected -> viewModel.deleteMessage(selected.message.id) },
+                ),
             onDismiss = { contextMenuMessage = null },
         )
     }
