@@ -459,13 +459,18 @@ internal fun HubReactionRow.toMessageReaction(): MessageReaction =
         createdAt = hubCreatedAtToEpoch(createdAt),
     )
 
-internal fun HubChatViewModel.mergeHubReactions(reactions: List<MessageReaction>) {
-    reactions.forEach { reaction ->
-        _messageReactions.value =
-            applyHubReactionRealtimeEvent(
-                _messageReactions.value,
-                HubReactionRealtimeEvent.Upsert(reaction),
-            )
+internal suspend fun HubChatViewModel.mergeHubReactions(reactions: List<MessageReaction>) {
+    if (reactions.isEmpty()) return
+    reactionHydrationMutex.withLock {
+        val events = reactions.map { HubReactionRealtimeEvent.Upsert(it) }
+        if (!reactionHydrationComplete) {
+            queuedReactionEvents += events
+            return
+        }
+        events.forEach { event ->
+            _messageReactions.value = applyHubReactionRealtimeEvent(_messageReactions.value, event)
+        }
+        persistHubMessagesToDisk(_messages.value)
     }
 }
 
