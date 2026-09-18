@@ -16,6 +16,18 @@ class BirthdayInputTest {
     }
 
     @Test
+    fun deletingAutoSeparatorRemovesOneAdjacentDigitInsteadOfReinsertingDash() {
+        assertEquals("200-04", editBirthdayDigitsInput("2000-04", "200004"))
+        assertEquals("2000-0", editBirthdayDigitsInput("2000-04-17", "2000-0417"))
+    }
+
+    @Test
+    fun interactiveEditsStillNormalizePasteAndForwardTyping() {
+        assertEquals("2000-04-17", editBirthdayDigitsInput("", "2000/04/17"))
+        assertEquals("2000-04", editBirthdayDigitsInput("2000-0", "2000-04"))
+    }
+
+    @Test
     fun parsesCompleteIsoOnly() {
         assertEquals("2000-04-17", parseBirthdayIsoLocalDate("20000417")?.toString())
         assertNull(parseBirthdayIsoLocalDate("200004"))
