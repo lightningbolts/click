@@ -383,6 +383,9 @@ internal fun HubChatViewModel.clearLocalHubState(clearDiskCache: Boolean = false
     sessionJob = null
     clearHubE2eeV2Session()
     _messages.value = emptyList()
+    _messageReactions.value = emptyMap()
+    _replyingTo.value = null
+    _editingMessageId.value = null
     _draft.value = ""
     _occupantCount.value = 1
     _outOfBounds.value = false
