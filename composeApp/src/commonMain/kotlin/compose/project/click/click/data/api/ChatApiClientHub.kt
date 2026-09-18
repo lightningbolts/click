@@ -74,6 +74,106 @@ internal suspend fun ChatApiClient.sendHubMessageImpl(
         Result.failure(e)
     }
 
+internal suspend fun ChatApiClient.addHubReactionImpl(
+    hubId: String,
+    messageId: String,
+    reactionType: String,
+    userLat: Double,
+    userLong: Double,
+    authToken: String,
+): Result<ChatApiClient.HubReactionApiDto?> =
+    try {
+        val response =
+            client.post("$clickWebBaseUrl/api/hub/reactions") {
+                headers.append(HttpHeaders.Authorization, bearerAuthHeader(authToken))
+                contentType(ContentType.Application.Json)
+                setBody(ClickWebHubReactionBody(hubId, messageId, reactionType, userLat, userLong))
+            }
+        if (response.status.value in 200..299) {
+            Result.success(response.body<ClickWebHubReactionEnvelope>().reaction)
+        } else {
+            val body = runCatching { response.bodyAsText() }.getOrNull().orEmpty()
+            Result.failure(Exception(body.ifBlank { "Failed to add Hub reaction: ${response.status}" }))
+        }
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
+
+internal suspend fun ChatApiClient.removeHubReactionImpl(
+    hubId: String,
+    messageId: String,
+    reactionType: String,
+    userLat: Double,
+    userLong: Double,
+    authToken: String,
+): Result<Unit> =
+    try {
+        val response =
+            client.delete("$clickWebBaseUrl/api/hub/reactions") {
+                headers.append(HttpHeaders.Authorization, bearerAuthHeader(authToken))
+                contentType(ContentType.Application.Json)
+                setBody(ClickWebHubReactionBody(hubId, messageId, reactionType, userLat, userLong))
+            }
+        if (response.status.value in 200..299) {
+            Result.success(Unit)
+        } else {
+            val body = runCatching { response.bodyAsText() }.getOrNull().orEmpty()
+            Result.failure(Exception(body.ifBlank { "Failed to remove Hub reaction: ${response.status}" }))
+        }
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
+
+internal suspend fun ChatApiClient.editHubMessageImpl(
+    hubId: String,
+    messageId: String,
+    body: String,
+    metadata: JsonElement?,
+    userLat: Double,
+    userLong: Double,
+    authToken: String,
+): Result<ChatApiClient.HubMessageApiDto> =
+    try {
+        val response =
+            client.patch("$clickWebBaseUrl/api/hub/messages/$messageId") {
+                headers.append(HttpHeaders.Authorization, bearerAuthHeader(authToken))
+                contentType(ContentType.Application.Json)
+                setBody(ClickWebHubInteractionBody(hubId, userLat, userLong, body, metadata))
+            }
+        if (response.status.value in 200..299) {
+            Result.success(response.body<ClickWebHubMessageEnvelope>().message)
+        } else {
+            val errorBody = runCatching { response.bodyAsText() }.getOrNull().orEmpty()
+            Result.failure(Exception(errorBody.ifBlank { "Failed to edit Hub message: ${response.status}" }))
+        }
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
+
+internal suspend fun ChatApiClient.deleteHubMessageImpl(
+    hubId: String,
+    messageId: String,
+    userLat: Double,
+    userLong: Double,
+    authToken: String,
+): Result<Unit> =
+    try {
+        val response =
+            client.delete("$clickWebBaseUrl/api/hub/messages/$messageId") {
+                headers.append(HttpHeaders.Authorization, bearerAuthHeader(authToken))
+                contentType(ContentType.Application.Json)
+                setBody(ClickWebHubInteractionBody(hubId, userLat, userLong))
+            }
+        if (response.status.value in 200..299) {
+            Result.success(Unit)
+        } else {
+            val errorBody = runCatching { response.bodyAsText() }.getOrNull().orEmpty()
+            Result.failure(Exception(errorBody.ifBlank { "Failed to delete Hub message: ${response.status}" }))
+        }
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
+
 /**
  * Upload hub ciphertext to the private hub-media bucket; [objectPath] must be
  * `{userId}/hub/{hubId}/...`. The returned path is stable; signed URLs are deliberately not
