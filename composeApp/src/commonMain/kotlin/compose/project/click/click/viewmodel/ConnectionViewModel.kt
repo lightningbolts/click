@@ -30,6 +30,7 @@ import compose.project.click.click.utils.LocationService // pragma: allowlist se
 import io.ktor.client.HttpClient // pragma: allowlist secret
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -178,6 +179,7 @@ class ConnectionViewModel : ViewModel() {
     internal var lastProximityAltitudeMeters: Double? = null
     internal var lastProximityHardwareVibe: HardwareVibeSnapshot? = null
     internal var lastTapProximityStartedAtMs: Long = 0L
+    internal var activeTapProximityJob: Job? = null
 
     fun lastProximityCoordinates(): Pair<Double?, Double?> = lastProximityLat to lastProximityLng
 
@@ -393,6 +395,9 @@ class ConnectionViewModel : ViewModel() {
                 reason = "dismissed",
             )
         }
+        activeTapProximityJob?.cancel()
+        activeTapProximityJob = null
+        lastTapProximityStartedAtMs = 0L
         lastProximityEncounterLoggedAggregate = true
         lastProximityHardwareVibe = null
         _connectionState.value = ConnectionState.Idle
