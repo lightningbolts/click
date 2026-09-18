@@ -16,12 +16,12 @@ import compose.project.click.click.data.models.Message // pragma: allowlist secr
 import compose.project.click.click.data.models.MessageDeliveryState // pragma: allowlist secret
 import compose.project.click.click.data.models.MessageReaction // pragma: allowlist secret
 import compose.project.click.click.data.models.MessageWithUser // pragma: allowlist secret
-import compose.project.click.click.data.models.replySnippetForMetadata // pragma: allowlist secret
 import compose.project.click.click.data.models.audioCacheFileExtension // pragma: allowlist secret
 import compose.project.click.click.data.models.hasLocalMediaUri // pragma: allowlist secret
 import compose.project.click.click.data.models.hubMediaPathOrNull // pragma: allowlist secret
 import compose.project.click.click.data.models.isEncryptedMedia // pragma: allowlist secret
 import compose.project.click.click.data.models.mediaUrlOrNull // pragma: allowlist secret
+import compose.project.click.click.data.models.replySnippetForMetadata // pragma: allowlist secret
 import compose.project.click.click.data.realtime.subscribeWithTimeout // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.normalizeEncryptedMediaPayload // pragma: allowlist secret
