@@ -290,6 +290,7 @@ data class CachedHubThread(
     val cachedAtMs: Long,
     val messages: List<Message> = emptyList(),
     val participants: List<User> = emptyList(),
+    val reactions: List<MessageReaction> = emptyList(),
 )
 
 @Serializable
