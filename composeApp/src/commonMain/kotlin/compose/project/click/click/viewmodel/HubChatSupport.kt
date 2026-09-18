@@ -135,6 +135,38 @@ internal fun JsonObject.hubReactionMessageId(): String? =
 
 internal fun JsonObject.hubReactionHubId(): String? = (this["hub_id"] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
 
+internal fun JsonObject.hubReactionUserId(): String? = (this["user_id"] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
+
+internal fun JsonObject.hubReactionType(): String? =
+    (this["reaction_type"] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
+
+internal data class HubReactionMutationKey(
+    val messageId: String,
+    val reactionType: String,
+)
+
+internal data class HubReactionMutationState(
+    var desiredEnabled: Boolean,
+    var acknowledgedEnabled: Boolean,
+    var generation: Long = 0L,
+    var canonicalReaction: MessageReaction? = null,
+    var workerRunning: Boolean = false,
+) {
+    fun toggleIntent() {
+        desiredEnabled = !desiredEnabled
+        generation += 1L
+    }
+
+    fun observeAcknowledged(
+        enabled: Boolean,
+        canonical: MessageReaction? = null,
+    ): Boolean {
+        acknowledgedEnabled = enabled
+        canonicalReaction = if (enabled) canonical ?: canonicalReaction else null
+        return desiredEnabled == acknowledgedEnabled
+    }
+}
+
 internal sealed interface HubReactionRealtimeEvent {
     data class Upsert(
         val reaction: MessageReaction,
@@ -143,6 +175,8 @@ internal sealed interface HubReactionRealtimeEvent {
     data class Delete(
         val reactionId: String,
         val messageId: String? = null,
+        val userId: String? = null,
+        val reactionType: String? = null,
     ) : HubReactionRealtimeEvent
 }
 
@@ -191,6 +225,8 @@ internal fun hubReactionDeleteEvent(oldRecord: JsonObject): HubReactionRealtimeE
     return HubReactionRealtimeEvent.Delete(
         reactionId = reactionId,
         messageId = oldRecord.hubReactionMessageId(),
+        userId = oldRecord.hubReactionUserId(),
+        reactionType = oldRecord.hubReactionType(),
     )
 }
 
