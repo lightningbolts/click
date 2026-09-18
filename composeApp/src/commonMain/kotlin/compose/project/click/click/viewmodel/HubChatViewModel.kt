@@ -313,6 +313,9 @@ class HubChatViewModel(
 
     fun deleteMessage(messageId: String) = deleteHubMessageImpl(messageId)
 
+    fun canOpenSenderProfile(userId: String): Boolean =
+        userId.isNotBlank() && userId != currentUserId && userId in hubParticipantIds
+
     fun retryRealtime() {
         if (!startRealtime) return
         if (AppDataManager.isHubAccessRevoked(hubId)) {
