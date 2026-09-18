@@ -1,7 +1,6 @@
 package compose.project.click.click.sensors
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
@@ -165,13 +164,5 @@ class IosBarometricHeightMonitor : BarometricHeightMonitor {
 }
 
 @Composable
-actual fun rememberBarometricHeightMonitor(): BarometricHeightMonitor {
-    val monitor = remember { IosBarometricHeightMonitor() }
-    DisposableEffect(monitor) {
-        monitor.ensureBackgroundCaching()
-        onDispose {
-            monitor.releaseBackgroundCaching()
-        }
-    }
-    return monitor
-}
+actual fun rememberBarometricHeightMonitor(): BarometricHeightMonitor =
+    remember { IosBarometricHeightMonitor() }
