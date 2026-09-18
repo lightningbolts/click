@@ -181,7 +181,7 @@ class HubChatViewModel(
     internal var participantDenied: Boolean = false
     internal var hubE2eeV2Session: HubE2eeV2Session? = null
     internal var hubParticipantIds: Set<String> = emptySet()
-    internal var hubSenderProfilesVisible: Boolean = !isEventHub
+    internal var hubSenderProfilesVisible: Boolean = true
     internal val reactionHydrationMutex = Mutex()
     internal val queuedReactionEvents = mutableListOf<HubReactionRealtimeEvent>()
     internal var reactionHydrationComplete = false
@@ -323,8 +323,7 @@ class HubChatViewModel(
     fun canOpenSenderProfile(userId: String): Boolean =
         hubSenderProfilesVisible &&
             userId.isNotBlank() &&
-            userId != currentUserId &&
-            userId in hubParticipantIds
+            userId != currentUserId
 
     fun retryRealtime() {
         if (!startRealtime) return
@@ -1052,7 +1051,6 @@ class HubChatViewModel(
                         if (
                             hubSenderProfilesVisible &&
                             row.userId != currentUserId &&
-                            row.userId in hubParticipantIds &&
                             !senderUiCache.containsKey(row.userId)
                         ) {
                             prefetchSenderUi(listOf(row.userId))

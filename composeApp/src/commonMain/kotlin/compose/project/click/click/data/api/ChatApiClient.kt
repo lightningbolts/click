@@ -142,7 +142,7 @@ class ChatApiClient(
         val messages: List<HubMessageApiDto> = emptyList(),
         val reactions: List<HubReactionApiDto> = emptyList(),
         @SerialName("participant_ids") val participantIds: List<String> = emptyList(),
-        @SerialName("sender_profiles_visible") val senderProfilesVisible: Boolean = false,
+        @SerialName("sender_profiles_visible") val senderProfilesVisible: Boolean = true,
         @SerialName("occupant_count") val occupantCount: Int = 1,
         val channel: String? = null,
         val error: String? = null,

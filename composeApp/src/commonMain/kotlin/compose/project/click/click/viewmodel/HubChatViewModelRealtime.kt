@@ -181,8 +181,8 @@ internal fun HubChatViewModel.applyVisibleHubParticipants(
 ) {
     hubParticipantIds = participantIds.toSet()
     hubSenderProfilesVisible = senderProfilesVisible
-    senderUiCache.keys.toList().forEach { userId ->
-        if (!senderProfilesVisible || userId !in hubParticipantIds) senderUiCache.remove(userId)
+    if (!senderProfilesVisible) {
+        senderUiCache.clear()
     }
 }
 
@@ -383,7 +383,7 @@ internal suspend fun HubChatViewModel.mergeMessages(rows: List<HubMessageRow>) {
             .filter { it.hubId == hubId }
             .sortedBy { it.createdAt }
     if (hubSenderProfilesVisible) {
-        prefetchSenderUi(filtered.map { it.userId }.filter { it in hubParticipantIds })
+        prefetchSenderUi(filtered.map { it.userId })
     }
     val merged = filtered.map { rowToMessageWithUser(it) }
     val next = merged + pendingOptimisticOutgoing(merged)
