@@ -5,6 +5,7 @@ import compose.project.click.click.data.api.ChatApiClient // pragma: allowlist s
 import compose.project.click.click.data.auth.EnsureFreshAccessToken // pragma: allowlist secret
 import compose.project.click.click.data.models.ChatMessageType // pragma: allowlist secret
 import compose.project.click.click.data.models.MessageReaction // pragma: allowlist secret
+import compose.project.click.click.data.models.MessageWithUser // pragma: allowlist secret
 import compose.project.click.click.data.storage.TokenStorage // pragma: allowlist secret
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
@@ -145,6 +146,14 @@ internal sealed interface HubReactionRealtimeEvent {
     ) : HubReactionRealtimeEvent
 }
 
+internal data class PendingHubMessageDelete(
+    val removed: MessageWithUser,
+    val index: Int,
+    val latestRealtime: MessageWithUser? = null,
+)
+
+internal fun PendingHubMessageDelete.rollbackMessage(): MessageWithUser = latestRealtime ?: removed
+
 internal fun applyHubReactionRealtimeEvent(
     current: Map<String, List<MessageReaction>>,
     event: HubReactionRealtimeEvent,
@@ -189,9 +198,11 @@ internal fun rollbackHubReactionMutation(
     current: List<MessageReaction>,
     optimisticId: String?,
     removedExisting: MessageReaction?,
+    restoreRemovedExisting: Boolean = true,
 ): List<MessageReaction> =
     when {
         removedExisting != null &&
+            restoreRemovedExisting &&
             current.none {
                 it.userId == removedExisting.userId &&
                     it.reactionType == removedExisting.reactionType
