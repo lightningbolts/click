@@ -42,88 +42,209 @@ internal fun HubChatViewModel.toggleHubReactionImpl(
     val emoji = reactionType.trim()
     if (trimmedId.isEmpty() || trimmedId.startsWith("temp-") || emoji.isEmpty()) return
 
-    val before = _messageReactions.value[trimmedId].orEmpty()
-    val existing = before.firstOrNull { it.userId == currentUserId && it.reactionType == emoji }
-
-    var optimisticId: String? = null
-    if (existing != null) {
-        _messageReactions.value =
-            _messageReactions.value.toMutableMap().apply {
-                this[trimmedId] = before.filterNot { it.id == existing.id }
-            }
-    } else {
-        val optimistic =
-            MessageReaction(
-                id = "temp-$trimmedId-$emoji",
-                messageId = trimmedId,
-                userId = currentUserId,
-                reactionType = emoji,
-                createdAt = Clock.System.now().toEpochMilliseconds(),
+    val key = HubReactionMutationKey(trimmedId, emoji)
+    val state =
+        hubReactionMutationStates.getOrPut(key) {
+            val existing =
+                _messageReactions.value[trimmedId]
+                    .orEmpty()
+                    .firstOrNull { it.userId == currentUserId && it.reactionType == emoji }
+            HubReactionMutationState(
+                desiredEnabled = existing != null,
+                acknowledgedEnabled = existing != null,
+                canonicalReaction = existing?.takeUnless { it.id.startsWith("temp-") },
             )
-        optimisticId = optimistic.id
-        _messageReactions.value =
-            _messageReactions.value.toMutableMap().apply {
-                this[trimmedId] =
-                    before.filterNot { it.userId == currentUserId && it.reactionType == emoji } + optimistic
-            }
+        }
+
+    state.toggleIntent()
+    reconcileHubReactionIntent(key, state)
+    persistHubMessagesToDisk(_messages.value)
+    ensureHubReactionMutationWorker(key)
+}
+
+internal fun HubChatViewModel.reconcileHubReactionIntent(
+    key: HubReactionMutationKey,
+    state: HubReactionMutationState,
+) {
+    val currentMap = _messageReactions.value.toMutableMap()
+    val rows = currentMap[key.messageId].orEmpty()
+    val currentOwn =
+        rows.firstOrNull {
+            it.userId == currentUserId &&
+                it.reactionType == key.reactionType
+        }
+    val withoutOwn =
+        rows.filterNot {
+            it.userId == currentUserId &&
+                it.reactionType == key.reactionType
+        }
+
+    val nextRows =
+        if (state.desiredEnabled) {
+            val reaction =
+                state.canonicalReaction
+                    ?: currentOwn
+                    ?: MessageReaction(
+                        id = "temp-${key.messageId}-${key.reactionType}-${state.generation}",
+                        messageId = key.messageId,
+                        userId = currentUserId,
+                        reactionType = key.reactionType,
+                        createdAt = Clock.System.now().toEpochMilliseconds(),
+                    )
+            withoutOwn + reaction
+        } else {
+            withoutOwn
+        }
+
+    if (nextRows.isEmpty()) {
+        currentMap.remove(key.messageId)
+    } else {
+        currentMap[key.messageId] = nextRows
     }
+    _messageReactions.value = currentMap
+}
+
+internal fun HubChatViewModel.reconcilePendingHubReactionIntents() {
+    hubReactionMutationStates.forEach { (key, state) ->
+        reconcileHubReactionIntent(key, state)
+    }
+}
+
+internal fun HubChatViewModel.reconcileHubReactionRealtimeAgainstPending(
+    event: HubReactionRealtimeEvent,
+): Boolean {
+    val key =
+        when (event) {
+            is HubReactionRealtimeEvent.Upsert -> {
+                if (event.reaction.userId != currentUserId) return true
+                HubReactionMutationKey(event.reaction.messageId, event.reaction.reactionType)
+            }
+            is HubReactionRealtimeEvent.Delete -> {
+                if (event.userId != currentUserId || event.reactionType.isNullOrBlank()) return true
+                val messageId = event.messageId ?: return true
+                HubReactionMutationKey(messageId, event.reactionType)
+            }
+        }
+    val state = hubReactionMutationStates[key] ?: return true
+
+    val eventMatchesDesired =
+        when (event) {
+            is HubReactionRealtimeEvent.Upsert ->
+                state.observeAcknowledged(
+                    enabled = true,
+                    canonical = event.reaction,
+                )
+            is HubReactionRealtimeEvent.Delete ->
+                state.observeAcknowledged(
+                    enabled = false,
+                    canonical = null,
+                )
+        }
+
+    if (!state.workerRunning && state.desiredEnabled != state.acknowledgedEnabled) {
+        ensureHubReactionMutationWorker(key)
+    }
+    return eventMatchesDesired
+}
+
+internal fun HubChatViewModel.ensureHubReactionMutationWorker(key: HubReactionMutationKey) {
+    val state = hubReactionMutationStates[key] ?: return
+    if (state.workerRunning) return
+    state.workerRunning = true
 
     viewModelScope.launch {
         try {
-            val location = resolveGatekeeperLocationOrThrow()
-            val jwt = requireFreshHubJwt()
-            if (existing != null) {
-                chatApi
-                    .removeHubReaction(
-                        hubId,
-                        trimmedId,
-                        emoji,
-                        location.latitude,
-                        location.longitude,
-                        jwt,
-                    ).getOrThrow()
-            } else {
-                val canonical =
-                    chatApi
-                        .addHubReaction(
-                            hubId,
-                            trimmedId,
-                            emoji,
-                            location.latitude,
-                            location.longitude,
-                            jwt,
-                        ).getOrThrow()
-                if (canonical != null) {
-                    val reaction = canonical.toMessageReaction()
-                    val current = _messageReactions.value[trimmedId].orEmpty()
-                    _messageReactions.value =
-                        _messageReactions.value.toMutableMap().apply {
-                            this[trimmedId] =
-                                current
-                                    .filterNot {
-                                        it.userId == reaction.userId &&
-                                            it.reactionType == reaction.reactionType
-                                    } + reaction
+            while (true) {
+                val currentState = hubReactionMutationStates[key] ?: break
+                if (currentState.desiredEnabled == currentState.acknowledgedEnabled) break
+
+                val targetEnabled = currentState.desiredEnabled
+                val requestGeneration = currentState.generation
+                val canonicalIdBeforeRequest = currentState.canonicalReaction?.id
+
+                try {
+                    val location = resolveGatekeeperLocationOrThrow()
+                    val jwt = requireFreshHubJwt()
+                    val canonical =
+                        if (targetEnabled) {
+                            chatApi
+                                .addHubReaction(
+                                    hubId,
+                                    key.messageId,
+                                    key.reactionType,
+                                    location.latitude,
+                                    location.longitude,
+                                    jwt,
+                                ).getOrThrow()
+                                ?.toMessageReaction()
+                        } else {
+                            chatApi
+                                .removeHubReaction(
+                                    hubId,
+                                    key.messageId,
+                                    key.reactionType,
+                                    location.latitude,
+                                    location.longitude,
+                                    jwt,
+                                ).getOrThrow()
+                            null
                         }
+
+                    val latest = hubReactionMutationStates[key] ?: break
+                    latest.observeAcknowledged(
+                        enabled = targetEnabled,
+                        canonical = canonical,
+                    )
+                    reconcileHubReactionIntent(key, latest)
+                    persistHubMessagesToDisk(_messages.value)
+                } catch (e: Exception) {
+                    val latest = hubReactionMutationStates[key] ?: break
+                    val realtimeConfirmed =
+                        latest.acknowledgedEnabled == targetEnabled ||
+                            (
+                                !targetEnabled &&
+                                    canonicalIdBeforeRequest != null &&
+                                    canonicalIdBeforeRequest in realtimeDeletedReactionIds
+                            )
+                    if (realtimeConfirmed) {
+                        latest.observeAcknowledged(
+                            enabled = targetEnabled,
+                            canonical = if (targetEnabled) latest.canonicalReaction else null,
+                        )
+                        reconcileHubReactionIntent(key, latest)
+                        persistHubMessagesToDisk(_messages.value)
+                        continue
+                    }
+
+                    val terminalFailure =
+                        HubChatViewModel.isHubExpired(e) ||
+                            HubChatViewModel.isHubOutOfRange(e) ||
+                            e.message.orEmpty().contains(EVENT_HUB_ACCESS_DENIED_MARKER) ||
+                            e.message.orEmpty().contains("NOT_A_PARTICIPANT")
+                    if (latest.generation == requestGeneration || terminalFailure) {
+                        latest.desiredEnabled = latest.acknowledgedEnabled
+                        reconcileHubReactionIntent(key, latest)
+                        persistHubMessagesToDisk(_messages.value)
+                        handleHubInteractionFailure(e, "Could not update reaction")
+                        break
+                    }
+
+                    // A newer tap superseded the failed request. Keep the latest
+                    // optimistic intent and let the loop converge the server to it.
+                    reconcileHubReactionIntent(key, latest)
+                    persistHubMessagesToDisk(_messages.value)
                 }
             }
-            persistHubMessagesToDisk(_messages.value)
-        } catch (e: Exception) {
-            val current = _messageReactions.value[trimmedId].orEmpty()
-            val rolledBack =
-                rollbackHubReactionMutation(
-                    current = current,
-                    optimisticId = optimisticId,
-                    removedExisting = existing,
-                    restoreRemovedExisting =
-                        existing == null || existing.id !in realtimeDeletedReactionIds,
-                )
-            _messageReactions.value =
-                _messageReactions.value.toMutableMap().apply {
-                    if (rolledBack.isEmpty()) remove(trimmedId) else this[trimmedId] = rolledBack
+        } finally {
+            val latest = hubReactionMutationStates[key]
+            if (latest != null) {
+                latest.workerRunning = false
+                if (latest.desiredEnabled == latest.acknowledgedEnabled) {
+                    hubReactionMutationStates.remove(key)
+                } else {
+                    ensureHubReactionMutationWorker(key)
                 }
-            persistHubMessagesToDisk(_messages.value)
-            handleHubInteractionFailure(e, "Could not update reaction")
+            }
         }
     }
 }
