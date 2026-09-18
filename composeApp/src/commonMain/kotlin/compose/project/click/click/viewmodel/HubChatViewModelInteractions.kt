@@ -253,14 +253,14 @@ internal fun HubChatViewModel.handleHubInteractionFailure(
             raw.contains("NOT_A_PARTICIPANT") -> {
             participantDenied = true
             _sendError.value =
-                if (HubChatViewModel.isHubExpired(error)) HUB_EXPIRED_MESSAGE else HUB_ACCESS_REVOKED_MESSAGE
+                if (HubChatViewModel.isHubExpired(error)) HubChatViewModel.HUB_EXPIRED_MESSAGE else HUB_ACCESS_REVOKED_MESSAGE
             _realtimeState.value = HubRealtimeState.Error(_sendError.value ?: fallback)
             clearLocalHubState(clearDiskCache = true)
             navigationEventChannel.trySend(HubChatNavigationEvent.PopBackToConnections)
         }
         HubChatViewModel.isHubOutOfRange(error) && !_isEventHub.value -> {
             _outOfBounds.value = true
-            _sendError.value = HUB_OUT_OF_RANGE_MESSAGE
+            _sendError.value = HubChatViewModel.HUB_OUT_OF_RANGE_MESSAGE
         }
         else -> {
             _sendError.value = error.redactedRestMessage().ifBlank { fallback }
