@@ -87,6 +87,31 @@ class HubChatSupportTest {
     }
 
     @Test
+    fun supersededReactionMutationWaitsForFinalRealtimeFence() {
+        val state =
+            HubReactionMutationState(
+                desiredEnabled = true,
+                acknowledgedEnabled = false,
+                generation = 1L,
+                activeRequestTargetEnabled = true,
+                workerRunning = true,
+            )
+
+        state.toggleIntent()
+
+        assertFalse(state.desiredEnabled)
+        assertTrue(state.requiresRealtimeFence)
+        assertFalse(state.canRetire())
+
+        state.activeRequestTargetEnabled = false
+        state.observeAcknowledged(enabled = false)
+        assertFalse(state.canRetire())
+
+        assertTrue(state.observeRealtimeAcknowledged(enabled = false))
+        assertTrue(state.canRetire())
+    }
+
+    @Test
     fun staleRealtimeReactionDoesNotReplaceNewerDesiredIntent() {
         val reaction =
             MessageReaction(
