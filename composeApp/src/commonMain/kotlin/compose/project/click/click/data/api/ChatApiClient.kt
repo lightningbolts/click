@@ -107,8 +107,19 @@ class ChatApiClient(
         @SerialName("user_id") val userId: String,
         val body: String,
         @SerialName("created_at") val createdAt: String,
+        @SerialName("edited_at") val editedAt: String? = null,
         @SerialName("message_type") val messageType: String = "text",
         val metadata: JsonElement? = null,
+    )
+
+    @Serializable
+    data class HubReactionApiDto(
+        val id: String,
+        @SerialName("hub_message_id") val messageId: String,
+        @SerialName("hub_id") val hubId: String,
+        @SerialName("user_id") val userId: String,
+        @SerialName("reaction_type") val reactionType: String,
+        @SerialName("created_at") val createdAt: String,
     )
 
     @Serializable
@@ -129,6 +140,7 @@ class ChatApiClient(
     @Serializable
     data class HubThreadResponse(
         val messages: List<HubMessageApiDto> = emptyList(),
+        val reactions: List<HubReactionApiDto> = emptyList(),
         @SerialName("participant_ids") val participantIds: List<String> = emptyList(),
         @SerialName("occupant_count") val occupantCount: Int = 1,
         val channel: String? = null,
@@ -813,6 +825,46 @@ class ChatApiClient(
             messageType = messageType,
             metadata = metadata,
         )
+
+    suspend fun addHubReaction(
+        hubId: String,
+        messageId: String,
+        reactionType: String,
+        userLat: Double,
+        userLong: Double,
+        authToken: String,
+    ): Result<HubReactionApiDto?> =
+        addHubReactionImpl(hubId, messageId, reactionType, userLat, userLong, authToken)
+
+    suspend fun removeHubReaction(
+        hubId: String,
+        messageId: String,
+        reactionType: String,
+        userLat: Double,
+        userLong: Double,
+        authToken: String,
+    ): Result<Unit> =
+        removeHubReactionImpl(hubId, messageId, reactionType, userLat, userLong, authToken)
+
+    suspend fun editHubMessage(
+        hubId: String,
+        messageId: String,
+        body: String,
+        metadata: JsonElement?,
+        userLat: Double,
+        userLong: Double,
+        authToken: String,
+    ): Result<HubMessageApiDto> =
+        editHubMessageImpl(hubId, messageId, body, metadata, userLat, userLong, authToken)
+
+    suspend fun deleteHubMessage(
+        hubId: String,
+        messageId: String,
+        userLat: Double,
+        userLong: Double,
+        authToken: String,
+    ): Result<Unit> =
+        deleteHubMessageImpl(hubId, messageId, userLat, userLong, authToken)
 
     suspend fun uploadHubMedia(
         fileBytes: ByteArray,
