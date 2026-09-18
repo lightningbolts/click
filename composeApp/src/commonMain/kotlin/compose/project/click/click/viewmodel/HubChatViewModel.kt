@@ -668,7 +668,7 @@ class HubChatViewModel(
      * New hub media stores a path, not a bearer URL. Resolve it immediately before download so the
      * server can enforce current check-in/event membership. Older records keep their media_url.
      */
-    private suspend fun resolveHubMediaUrl(message: Message): String? {
+    internal suspend fun resolveHubMediaUrl(message: Message): String? {
         val objectPath = message.hubMediaPathOrNull()
         if (objectPath == null) return message.mediaUrlOrNull()?.takeIf { it.isNotBlank() }
         val jwt = requireFreshHubJwt()
@@ -677,6 +677,32 @@ class HubChatViewModel(
             .getOrNull()
             ?.trim()
             ?.takeIf { it.isNotEmpty() }
+    }
+
+    suspend fun fetchDecryptedHubMediaBytes(message: Message): ByteArray? {
+        secureImageBytesCache.get(message.id)?.takeIf { it.isNotEmpty() }?.let { return it }
+        return withContext(chatMediaDispatcher) {
+            runCatching {
+                val url = resolveHubMediaUrl(message) ?: return@runCatching null
+                val raw = chatApi.downloadUrlBytes(url).getOrElse { return@runCatching null }
+                val normalized = normalizeEncryptedMediaPayload(raw)
+                val v2Metadata = message.hubE2eeV2MediaMetadataOrNull()
+                val bytes =
+                    if (v2Metadata != null) {
+                        val session = hubE2eeV2Session ?: return@runCatching null
+                        val epochKey = session.keyForEpoch(v2Metadata.epoch) ?: return@runCatching null
+                        MessageCryptoV2.decryptMedia(v2Metadata, epochKey, normalized)
+                    } else {
+                        MessageCrypto.decryptMediaBytes(normalized, MessageCrypto.deriveKeysForHub(hubId))
+                    }
+                bytes.takeIf { it.isNotEmpty() }?.also { secureImageBytesCache.put(message.id, it) }
+            }.onFailure { e ->
+                println(
+                    "HubChatViewModel: secure media decrypt failed for message=${message.id}: " +
+                        e.redactedRestMessage(),
+                )
+            }.getOrNull()
+        }
     }
 
     override fun ensureSecureChatImageLoaded(
@@ -698,25 +724,7 @@ class HubChatViewModel(
         if (cur?.imageBytes != null || cur?.loading == true) return
         viewModelScope.launch(chatMediaDispatcher) {
             _secureChatMediaLoadState.update { it + (message.id to SecureChatMediaLoadState(loading = true)) }
-            val bytes =
-                runCatching {
-                    val url = resolveHubMediaUrl(message) ?: return@runCatching null
-                    val raw = chatApi.downloadUrlBytes(url).getOrElse { return@runCatching null }
-                    val normalized = normalizeEncryptedMediaPayload(raw)
-                    if (normalized !== raw) {
-                        println("HubChatViewModel: decoded base64-wrapped encrypted image payload for message=${message.id}")
-                    }
-                    val v2Metadata = message.hubE2eeV2MediaMetadataOrNull()
-                    if (v2Metadata != null) {
-                        val session = hubE2eeV2Session ?: return@runCatching null
-                        val epochKey = session.keyForEpoch(v2Metadata.epoch) ?: return@runCatching null
-                        MessageCryptoV2.decryptMedia(v2Metadata, epochKey, normalized)
-                    } else {
-                        MessageCrypto.decryptMediaBytes(normalized, MessageCrypto.deriveKeysForHub(hubId))
-                    }
-                }.onFailure { e ->
-                    println("HubChatViewModel: secure image decrypt failed for message=${message.id}: ${e.redactedRestMessage()}")
-                }.getOrNull()
+            val bytes = fetchDecryptedHubMediaBytes(message)
             if (bytes == null || bytes.isEmpty()) {
                 println("HubChatViewModel: secure image bytes missing for message=${message.id}")
                 _secureChatMediaLoadState.update {
