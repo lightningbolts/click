@@ -120,9 +120,10 @@ internal fun HubChatViewModel.reconcileHubReactionRealtimeAgainstPending(
                 HubReactionMutationKey(event.reaction.messageId, event.reaction.reactionType)
             }
             is HubReactionRealtimeEvent.Delete -> {
-                if (event.userId != currentUserId || event.reactionType.isNullOrBlank()) return true
+                if (event.userId != currentUserId) return true
                 val messageId = event.messageId ?: return true
-                HubReactionMutationKey(messageId, event.reactionType)
+                val reactionType = event.reactionType?.takeIf { it.isNotBlank() } ?: return true
+                HubReactionMutationKey(messageId, reactionType)
             }
         }
     val state = hubReactionMutationStates[key] ?: return true
