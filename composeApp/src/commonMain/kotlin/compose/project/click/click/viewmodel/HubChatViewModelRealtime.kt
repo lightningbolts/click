@@ -325,7 +325,10 @@ internal fun HubChatViewModel.markOptimisticSendFailed(tempId: String) {
     persistHubMessagesToDisk(next)
 }
 
-internal fun HubChatViewModel.appendOptimisticOutgoing(text: String): String {
+internal fun HubChatViewModel.appendOptimisticOutgoing(
+    text: String,
+    metadata: kotlinx.serialization.json.JsonElement? = null,
+): String {
     val localMs = Clock.System.now().toEpochMilliseconds()
     val tempId = "temp-$localMs-${Random.nextLong()}"
     val optimistic =
@@ -339,7 +342,7 @@ internal fun HubChatViewModel.appendOptimisticOutgoing(text: String): String {
                     timeEdited = null,
                     isRead = false,
                     messageType = ChatMessageType.TEXT,
-                    metadata = null,
+                    metadata = metadata,
                     localSentAt = localMs,
                     deliveryState = MessageDeliveryState.PENDING,
                 ),
