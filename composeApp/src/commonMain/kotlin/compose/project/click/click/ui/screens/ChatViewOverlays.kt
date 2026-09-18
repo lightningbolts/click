@@ -159,6 +159,7 @@ internal fun BoxScope.ChatViewOverlays(
             messageWithUser = selectedMessage,
             capabilities =
                 MessageActionCapabilities(
+                    canReply = selectedMessage.message.messageType.lowercase() != "call_log",
                     canEdit = selectedMessage.isSent,
                     canDelete = selectedMessage.isSent,
                 ),

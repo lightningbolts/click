@@ -65,6 +65,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 import kotlinx.serialization.json.JsonObject
@@ -180,6 +181,9 @@ class HubChatViewModel(
     internal var participantDenied: Boolean = false
     internal var hubE2eeV2Session: HubE2eeV2Session? = null
     internal var hubParticipantIds: Set<String> = emptySet()
+    internal val reactionHydrationMutex = Mutex()
+    internal val queuedReactionEvents = mutableListOf<HubReactionRealtimeEvent>()
+    internal var reactionHydrationComplete = false
 
     internal suspend fun requireFreshHubJwt(forceRefresh: Boolean = false): String = freshHubJwtProvider(forceRefresh)
 
@@ -1019,35 +1023,19 @@ class HubChatViewModel(
                         is PostgresAction.Insert -> {
                             val row = action.decodeRecordOrNull<HubReactionRow>() ?: return@collect
                             if (row.hubId != hubId) return@collect
-                            val reaction = row.toMessageReaction()
-                            val current = _messageReactions.value[reaction.messageId].orEmpty()
-                            _messageReactions.value =
-                                _messageReactions.value.toMutableMap().apply {
-                                    this[reaction.messageId] =
-                                        current
-                                            .filterNot {
-                                                it.id == reaction.id ||
-                                                    (
-                                                        it.userId == reaction.userId &&
-                                                            it.reactionType == reaction.reactionType
-                                                    )
-                                            } + reaction
-                                }
-                            persistHubMessagesToDisk(_messages.value)
+                            handleHubReactionRealtimeEvent(
+                                HubReactionRealtimeEvent.Upsert(row.toMessageReaction()),
+                            )
                         }
                         is PostgresAction.Delete -> {
-                            if (action.oldRecord.hubReactionHubId() != hubId) return@collect
-                            val reactionId = action.oldRecord.hubReactionRowId() ?: return@collect
-                            val messageId = action.oldRecord.hubReactionMessageId() ?: return@collect
-                            val current = _messageReactions.value[messageId].orEmpty()
-                            if (current.any { it.id == reactionId }) {
-                                _messageReactions.value =
-                                    _messageReactions.value.toMutableMap().apply {
-                                        val remaining = current.filterNot { it.id == reactionId }
-                                        if (remaining.isEmpty()) remove(messageId) else this[messageId] = remaining
-                                    }
-                                persistHubMessagesToDisk(_messages.value)
-                            }
+                            val recordHubId = action.oldRecord.hubReactionHubId()
+                            if (recordHubId != null && recordHubId != hubId) return@collect
+                            val event =
+                                hubReactionDeleteEvent(
+                                    oldRecord = action.oldRecord,
+                                    current = _messageReactions.value,
+                                ) ?: return@collect
+                            handleHubReactionRealtimeEvent(event)
                         }
                         else -> Unit
                     }
@@ -1060,7 +1048,11 @@ class HubChatViewModel(
                     is PostgresAction.Insert -> {
                         val row = action.decodeRecordOrNull<HubMessageRow>() ?: return@collect
                         if (row.hubId != hubId) return@collect
-                        if (row.userId != currentUserId && !senderUiCache.containsKey(row.userId)) {
+                        if (
+                            row.userId != currentUserId &&
+                            row.userId in hubParticipantIds &&
+                            !senderUiCache.containsKey(row.userId)
+                        ) {
                             prefetchSenderUi(listOf(row.userId))
                         }
                         applyInsertedHubMessage(rowToMessageWithUser(row).message)

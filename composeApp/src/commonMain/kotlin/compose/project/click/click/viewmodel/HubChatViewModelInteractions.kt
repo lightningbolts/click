@@ -45,6 +45,7 @@ internal fun HubChatViewModel.toggleHubReactionImpl(
     val before = _messageReactions.value[trimmedId].orEmpty()
     val existing = before.firstOrNull { it.userId == currentUserId && it.reactionType == emoji }
 
+    var optimisticId: String? = null
     if (existing != null) {
         _messageReactions.value =
             _messageReactions.value.toMutableMap().apply {
@@ -59,6 +60,7 @@ internal fun HubChatViewModel.toggleHubReactionImpl(
                 reactionType = emoji,
                 createdAt = Clock.System.now().toEpochMilliseconds(),
             )
+        optimisticId = optimistic.id
         _messageReactions.value =
             _messageReactions.value.toMutableMap().apply {
                 this[trimmedId] =
@@ -107,10 +109,18 @@ internal fun HubChatViewModel.toggleHubReactionImpl(
             }
             persistHubMessagesToDisk(_messages.value)
         } catch (e: Exception) {
+            val current = _messageReactions.value[trimmedId].orEmpty()
+            val rolledBack =
+                rollbackHubReactionMutation(
+                    current = current,
+                    optimisticId = optimisticId,
+                    removedExisting = existing,
+                )
             _messageReactions.value =
                 _messageReactions.value.toMutableMap().apply {
-                    this[trimmedId] = before
+                    if (rolledBack.isEmpty()) remove(trimmedId) else this[trimmedId] = rolledBack
                 }
+            persistHubMessagesToDisk(_messages.value)
             handleHubInteractionFailure(e, "Could not update reaction")
         }
     }
@@ -153,9 +163,21 @@ internal fun HubChatViewModel.confirmHubEditImpl(messageId: String) {
                         newContent
                     }
                 val existingMetadata = target.message.metadata as? JsonObject
+                val staleCryptoKeys =
+                    setOf(
+                        "crypto_version",
+                        "cryptoVersion",
+                        "epoch",
+                        "sender_device_id",
+                        "senderDeviceId",
+                        "client_message_id",
+                        "clientMessageId",
+                    )
                 val metadata =
                     buildJsonObject {
-                        existingMetadata?.forEach { (key, value) -> put(key, value) }
+                        existingMetadata?.forEach { (key, value) ->
+                            if (e2ee != null || key !in staleCryptoKeys) put(key, value)
+                        }
                         if (e2ee != null) {
                             put("crypto_version", MessageCryptoV2.CRYPTO_VERSION)
                             put("epoch", e2ee.epoch)

@@ -658,19 +658,23 @@ fun HubChatScreen(
     )
 
     contextMenuMessage?.let { selected ->
+        val canWriteHub = channelReady && !inLobby && (!outOfBounds || isEventHub)
         MessageActionSheet(
             messageWithUser = selected,
             capabilities =
                 MessageActionCapabilities(
-                    canReply = selected.message.messageType.lowercase() != "call_log",
-                    canReact = !outOfBounds || isEventHub,
+                    canReply =
+                        canWriteHub &&
+                            selected.message.messageType.lowercase() != "call_log",
+                    canReact = canWriteHub,
                     canCopy = true,
                     canSaveMedia = selected.message.messageType.lowercase() == ChatMessageType.IMAGE,
                     canShareMedia = selected.message.messageType.lowercase() == ChatMessageType.IMAGE,
                     canEdit =
-                        selected.isSent &&
+                        canWriteHub &&
+                            selected.isSent &&
                             selected.message.messageType.lowercase() == ChatMessageType.TEXT,
-                    canDelete = selected.isSent,
+                    canDelete = canWriteHub && selected.isSent,
                 ),
             handlers =
                 MessageActionHandlers(

@@ -23,6 +23,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 import kotlinx.serialization.json.JsonObject
@@ -36,6 +37,10 @@ internal fun HubChatViewModel.launchRealtimeSession() {
     _realtimeState.value = HubRealtimeState.Loading
     sessionJob =
         viewModelScope.launch {
+            reactionHydrationMutex.withLock {
+                queuedReactionEvents.clear()
+                reactionHydrationComplete = false
+            }
             try {
                 coroutineScope {
                     val override = realtimeSessionOverride
@@ -168,7 +173,10 @@ internal fun HubChatViewModel.hydrateFromDiskCache() {
 }
 
 internal fun HubChatViewModel.persistHubMessagesToDisk(messages: List<MessageWithUser>) {
-    if (messages.isEmpty()) return
+    if (messages.isEmpty()) {
+        AppDataManager.clearHubThreadCache(hubId)
+        return
+    }
     AppDataManager.cacheHubThread(
         hubId = hubId,
         realtimeChannel = realtimeChannelName,
@@ -360,7 +368,7 @@ internal suspend fun HubChatViewModel.mergeMessages(rows: List<HubMessageRow>) {
         rows
             .filter { it.hubId == hubId }
             .sortedBy { it.createdAt }
-    prefetchSenderUi(filtered.map { it.userId })
+    prefetchSenderUi(filtered.map { it.userId }.filter { it in hubParticipantIds })
     val merged = filtered.map { rowToMessageWithUser(it) }
     val next = merged + pendingOptimisticOutgoing(merged)
     _messages.value = next
@@ -436,17 +444,39 @@ internal fun HubReactionRow.toMessageReaction(): MessageReaction =
     )
 
 internal fun HubChatViewModel.mergeHubReactions(reactions: List<MessageReaction>) {
-    if (reactions.isEmpty()) return
-    val next = _messageReactions.value.toMutableMap()
-    reactions.groupBy { it.messageId }.forEach { (messageId, incoming) ->
-        val merged =
-            (next[messageId].orEmpty() + incoming)
-                .distinctBy { Triple(it.userId, it.reactionType, it.id) }
-                .groupBy { it.userId to it.reactionType }
-                .map { (_, rows) -> rows.last() }
-        next[messageId] = merged
+    reactions.forEach { reaction ->
+        _messageReactions.value =
+            applyHubReactionRealtimeEvent(
+                _messageReactions.value,
+                HubReactionRealtimeEvent.Upsert(reaction),
+            )
     }
-    _messageReactions.value = next
+}
+
+internal suspend fun HubChatViewModel.handleHubReactionRealtimeEvent(event: HubReactionRealtimeEvent) {
+    reactionHydrationMutex.withLock {
+        if (!reactionHydrationComplete) {
+            queuedReactionEvents += event
+            return
+        }
+        _messageReactions.value = applyHubReactionRealtimeEvent(_messageReactions.value, event)
+        persistHubMessagesToDisk(_messages.value)
+    }
+}
+
+internal suspend fun HubChatViewModel.finishInitialHubReactionHydration(snapshot: List<MessageReaction>?) {
+    reactionHydrationMutex.withLock {
+        if (snapshot != null) {
+            _messageReactions.value = replayHubReactionEvents(snapshot, queuedReactionEvents)
+        } else {
+            queuedReactionEvents.forEach { event ->
+                _messageReactions.value = applyHubReactionRealtimeEvent(_messageReactions.value, event)
+            }
+        }
+        queuedReactionEvents.clear()
+        reactionHydrationComplete = true
+        persistHubMessagesToDisk(_messages.value)
+    }
 }
 
 internal suspend fun HubChatViewModel.loadInitialMessages() {
@@ -467,8 +497,7 @@ internal suspend fun HubChatViewModel.loadInitialMessages() {
                     }
                     prefetchSenderUi(snapshot.participantIds)
                     mergeMessages(snapshot.messages.map { it.toHubMessageRow() })
-                    _messageReactions.value = snapshot.reactions.map { it.toMessageReaction() }.groupBy { it.messageId }
-                    persistHubMessagesToDisk(_messages.value)
+                    finishInitialHubReactionHydration(snapshot.reactions.map { it.toMessageReaction() })
                     return@withContext
                 },
                 onFailure = { err ->
@@ -494,6 +523,10 @@ internal suspend fun HubChatViewModel.loadInitialMessages() {
                     println("HubChatViewModel: hub thread API failed: ${err.redactedRestMessage()}")
                 },
             )
+            if (_isEventHub.value) {
+                finishInitialHubReactionHydration(null)
+                return@withContext
+            }
             val rows =
                 supabase
                     .from("hub_messages")
@@ -512,9 +545,11 @@ internal suspend fun HubChatViewModel.loadInitialMessages() {
                     println("HubChatViewModel: fallback E2EE v2 session unavailable: ${error.redactedRestMessage()}")
                 }
             mergeMessages(rows)
+            finishInitialHubReactionHydration(null)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
+            finishInitialHubReactionHydration(null)
             println("HubChatViewModel: load messages failed: ${e.redactedRestMessage()}")
         }
     }
@@ -527,12 +562,14 @@ internal suspend fun HubChatViewModel.loadMessagesAround(messageId: String) {
             if (!token.isNullOrBlank()) {
                 val thread = chatApi.fetchHubThread(hubId, token, aroundMessageId = messageId)
                 thread.getOrNull()?.let { snapshot ->
+                    hubParticipantIds = snapshot.participantIds.toSet()
                     prefetchSenderUi(snapshot.participantIds)
                     mergeMessages(snapshot.messages.map { it.toHubMessageRow() })
                     mergeHubReactions(snapshot.reactions.map { it.toMessageReaction() })
                     if (_messages.value.any { it.message.id == messageId }) return@withContext
                 }
             }
+            if (_isEventHub.value) return@withContext
             val target =
                 supabase
                     .from("hub_messages")
