@@ -561,6 +561,7 @@ fun HubChatScreen(
                                     useHubNeutralMesh = true,
                                     isGroupChat = true,
                                     currentUserId = currentUserId,
+                                    reactionsMap = emptyMap(),
                                     reactionsFlow = viewModel.messageReactions,
                                     secureMediaHost = viewModel,
                                     activeChatId = hubIdForSecureMedia,
