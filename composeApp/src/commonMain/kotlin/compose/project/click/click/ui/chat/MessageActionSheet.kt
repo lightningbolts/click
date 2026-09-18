@@ -22,19 +22,16 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material.icons.outlined.Share
-import androidx.compose.material3.BottomSheetDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -52,12 +49,12 @@ import compose.project.click.click.data.models.hubMediaPathOrNull // pragma: all
 import compose.project.click.click.data.models.isEncryptedMedia // pragma: allowlist secret
 import compose.project.click.click.data.models.mediaUrlOrNull // pragma: allowlist secret
 import compose.project.click.click.data.models.originalMimeTypeOrNull // pragma: allowlist secret
-import compose.project.click.click.ui.components.EmojiCatalog // pragma: allowlist secret
-import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
-import compose.project.click.click.ui.components.GlassAlertDialog // pragma: allowlist secret
-import compose.project.click.click.ui.components.ClickActionBottomSheet // pragma: allowlist secret
-import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.BentoGlassOptionRow // pragma: allowlist secret
+import compose.project.click.click.ui.components.ClickActionBottomSheet // pragma: allowlist secret
+import compose.project.click.click.ui.components.EmojiCatalog // pragma: allowlist secret
+import compose.project.click.click.ui.components.GlassAlertDialog // pragma: allowlist secret
+import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
+import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
 import kotlinx.coroutines.launch
 
 internal data class MessageActionCapabilities(
@@ -80,12 +77,8 @@ internal class MessageActionHandlers(
 
 /**
  * Bottom sheet that appears when a user long-presses a message.
- * Shows reply action, emoji reactions strip with full-catalog picker,
- * optional image download, copy, and (for sent messages) edit +
- * two-step delete confirmation.
- *
+ * Presentation is shared; persistence-specific behavior is provided by [handlers].
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun MessageActionSheet(
     messageWithUser: MessageWithUser,
@@ -94,25 +87,19 @@ internal fun MessageActionSheet(
     onDismiss: () -> Unit,
 ) {
     val message = messageWithUser.message
-
     val scope = rememberCoroutineScope()
     val clipboardManager = LocalClipboardManager.current
     var showDeleteMessageConfirm by remember { mutableStateOf(false) }
     var showDeleteMessageFinalConfirm by remember { mutableStateOf(false) }
     var emojiPickMode by remember { mutableStateOf(false) }
 
-    fun dismiss() {
-        onDismiss()
-    }
-
-    // Confirm dialogs must live *inside* the sheet composition so Popup stacks above the
-    // UIKit page sheet (sibling popups on the parent VC render underneath).
     ClickActionBottomSheet(
         onDismissRequest = onDismiss,
     ) {
         val sheetBg = GlassSheetTokens.OledBlack()
         val onSurface = GlassSheetTokens.OnOled()
         val onVariant = GlassSheetTokens.OnOledMuted()
+
         if (showDeleteMessageConfirm) {
             GlassAlertDialog(
                 onDismissRequest = { showDeleteMessageConfirm = false },
@@ -135,6 +122,7 @@ internal fun MessageActionSheet(
                 },
             )
         }
+
         if (showDeleteMessageFinalConfirm) {
             GlassAlertDialog(
                 onDismissRequest = { showDeleteMessageFinalConfirm = false },
@@ -145,7 +133,7 @@ internal fun MessageActionSheet(
                         onClick = {
                             handlers.onDelete(messageWithUser)
                             showDeleteMessageFinalConfirm = false
-                            dismiss()
+                            onDismiss()
                         },
                     ) {
                         Text("Yes, Delete", color = MaterialTheme.colorScheme.error)
@@ -158,18 +146,21 @@ internal fun MessageActionSheet(
                 },
             )
         }
+
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .wrapContentHeight()
-                .background(sheetBg)
-                .padding(bottom = 32.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .wrapContentHeight()
+                    .background(sheetBg)
+                    .padding(bottom = 32.dp),
         ) {
             if (emojiPickMode) {
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     IconButton(onClick = { emojiPickMode = false }) {
@@ -188,75 +179,74 @@ internal fun MessageActionSheet(
                 }
                 LazyVerticalGrid(
                     columns = GridCells.Adaptive(44.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 400.dp)
-                        .padding(horizontal = 8.dp),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 400.dp)
+                            .padding(horizontal = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    items(EmojiCatalog.all, key = { it }) { em ->
+                    items(EmojiCatalog.all, key = { it }) { emoji ->
                         Text(
-                            text = em,
+                            text = emoji,
                             fontSize = 24.sp,
-                            modifier = Modifier
-                                .clickable {
-                                    PlatformHapticsPolicy.lightImpact()
-                                    handlers.onReact(message.id, em)
-                                    dismiss()
-                                }
-                                .padding(8.dp),
+                            modifier =
+                                Modifier
+                                    .clickable {
+                                        PlatformHapticsPolicy.lightImpact()
+                                        handlers.onReact(message.id, emoji)
+                                        onDismiss()
+                                    }.padding(8.dp),
                         )
                     }
                 }
             } else {
                 val optionRadius = 0.dp
+
                 if (capabilities.canReply) {
                     BentoGlassOptionRow(
-                    title = "Reply",
-                    onClick = {
-                        if (message.messageType != "call_log") {
+                        title = "Reply",
+                        onClick = {
                             handlers.onReply(messageWithUser)
-                            dismiss()
-                        }
-                    },
-                    cornerRadius = optionRadius,
-                    showBorder = false,
-                    horizontalInset = 0.dp,
-                    verticalInset = 0.dp,
-                    leading = {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.Reply,
-                            contentDescription = "Reply",
-                            tint = PrimaryBlue,
-                        )
-                    },
+                            onDismiss()
+                        },
+                        cornerRadius = optionRadius,
+                        showBorder = false,
+                        horizontalInset = 0.dp,
+                        verticalInset = 0.dp,
+                        leading = {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.Reply,
+                                contentDescription = "Reply",
+                                tint = PrimaryBlue,
+                            )
+                        },
                     )
                 }
 
                 if (capabilities.canReact) {
                     Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
-                ) {
-                    val emojis = listOf("👍", "❤️", "😂", "😮", "😢", "😡")
-                    emojis.forEach { emoji ->
-                        Text(
-                            text = emoji,
-                            fontSize = 28.sp,
-                            modifier = Modifier
-                                .clickable {
-                                    PlatformHapticsPolicy.lightImpact()
-                                    handlers.onReact(message.id, emoji)
-                                    dismiss()
-                                }
-                                .padding(8.dp),
-                        )
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                    ) {
+                        listOf("👍", "❤️", "😂", "😮", "😢", "😡").forEach { emoji ->
+                            Text(
+                                text = emoji,
+                                fontSize = 28.sp,
+                                modifier =
+                                    Modifier
+                                        .clickable {
+                                            PlatformHapticsPolicy.lightImpact()
+                                            handlers.onReact(message.id, emoji)
+                                            onDismiss()
+                                        }.padding(8.dp),
+                            )
+                        }
                     }
-                }
-
                     TextButton(
                         onClick = { emojiPickMode = true },
                         modifier = Modifier.align(Alignment.CenterHorizontally),
@@ -276,34 +266,34 @@ internal fun MessageActionSheet(
                 ) {
                     if (capabilities.canSaveMedia) {
                         BentoGlassOptionRow(
-                        title = "Save to gallery",
-                        onClick = {
-                            scope.launch {
-                                if (message.isEncryptedMedia()) {
-                                    val bytes = handlers.fetchDecryptedMediaBytes(message)
-                                    if (bytes != null) {
-                                        saveChatImageToGallery(
-                                            imageUrl = imageReference,
-                                            decryptedImageBytes = bytes,
-                                            mimeTypeHint = message.originalMimeTypeOrNull(),
-                                        ).onSuccess { dismiss() }
+                            title = "Save to gallery",
+                            onClick = {
+                                scope.launch {
+                                    if (message.isEncryptedMedia()) {
+                                        val bytes = handlers.fetchDecryptedMediaBytes(message)
+                                        if (bytes != null) {
+                                            saveChatImageToGallery(
+                                                imageUrl = imageReference,
+                                                decryptedImageBytes = bytes,
+                                                mimeTypeHint = message.originalMimeTypeOrNull(),
+                                            ).onSuccess { onDismiss() }
+                                        }
+                                    } else {
+                                        saveChatImageToGallery(imageReference).onSuccess { onDismiss() }
                                     }
-                                } else {
-                                    saveChatImageToGallery(imageReference).onSuccess { dismiss() }
                                 }
-                            }
-                        },
-                        cornerRadius = optionRadius,
-                        showBorder = false,
-                        horizontalInset = 0.dp,
-                        verticalInset = 0.dp,
-                        leading = {
-                            Icon(
-                                imageVector = Icons.Outlined.Save,
-                                contentDescription = "Save to gallery",
-                                tint = PrimaryBlue,
-                            )
-                        },
+                            },
+                            cornerRadius = optionRadius,
+                            showBorder = false,
+                            horizontalInset = 0.dp,
+                            verticalInset = 0.dp,
+                            leading = {
+                                Icon(
+                                    imageVector = Icons.Outlined.Save,
+                                    contentDescription = "Save to gallery",
+                                    tint = PrimaryBlue,
+                                )
+                            },
                         )
                     }
                     if (capabilities.canShareMedia && message.isEncryptedMedia()) {
@@ -313,13 +303,20 @@ internal fun MessageActionSheet(
                                 scope.launch {
                                     val bytes = handlers.fetchDecryptedMediaBytes(message)
                                     if (bytes != null) {
-                                        val ext = when {
-                                            message.originalMimeTypeOrNull()?.contains("png", ignoreCase = true) == true -> "png"
-                                            message.originalMimeTypeOrNull()?.contains("webp", ignoreCase = true) == true -> "webp"
-                                            else -> "jpg"
-                                        }
+                                        val ext =
+                                            when {
+                                                message.originalMimeTypeOrNull()?.contains(
+                                                    "png",
+                                                    ignoreCase = true,
+                                                ) == true -> "png"
+                                                message.originalMimeTypeOrNull()?.contains(
+                                                    "webp",
+                                                    ignoreCase = true,
+                                                ) == true -> "webp"
+                                                else -> "jpg"
+                                            }
                                         shareDecryptedImage(bytes, "click_chat.$ext")
-                                        dismiss()
+                                        onDismiss()
                                     }
                                 }
                             },
@@ -340,26 +337,27 @@ internal fun MessageActionSheet(
 
                 if (capabilities.canCopy) {
                     BentoGlassOptionRow(
-                    title = if (message.messageType.lowercase() == ChatMessageType.IMAGE) {
-                        "Copy caption & link"
-                    } else {
-                        "Copy"
-                    },
-                    onClick = {
-                        clipboardManager.setText(AnnotatedString(message.copyableText()))
-                        dismiss()
-                    },
-                    cornerRadius = optionRadius,
-                    showBorder = false,
-                    horizontalInset = 0.dp,
-                    verticalInset = 0.dp,
-                    leading = {
-                        Icon(
-                            imageVector = Icons.Default.ContentCopy,
-                            contentDescription = "Copy",
-                            tint = onVariant,
-                        )
-                    },
+                        title =
+                            if (message.messageType.lowercase() == ChatMessageType.IMAGE) {
+                                "Copy caption & link"
+                            } else {
+                                "Copy"
+                            },
+                        onClick = {
+                            clipboardManager.setText(AnnotatedString(message.copyableText()))
+                            onDismiss()
+                        },
+                        cornerRadius = optionRadius,
+                        showBorder = false,
+                        horizontalInset = 0.dp,
+                        verticalInset = 0.dp,
+                        leading = {
+                            Icon(
+                                imageVector = Icons.Default.ContentCopy,
+                                contentDescription = "Copy",
+                                tint = onVariant,
+                            )
+                        },
                     )
                 }
 
@@ -368,7 +366,7 @@ internal fun MessageActionSheet(
                         title = "Edit",
                         onClick = {
                             handlers.onEdit(messageWithUser)
-                            dismiss()
+                            onDismiss()
                         },
                         cornerRadius = optionRadius,
                         showBorder = false,
