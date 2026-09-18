@@ -265,10 +265,10 @@ internal fun ChatMessageTimeline(
                         val timestampBottomReservation =
                             if (!enableMessageContextMenu && !messageWithUser.message.isBeaconChatMessage()) {
                                 // Hub messages intentionally disable reactions/context actions but
-                                // ChatMessageBubble still reserves the standard reaction slot. Only
-                                // Hub timestamps need compensating for that empty lower reservation;
+                                // ChatMessageBubble still reserves the standard minimum reaction slot. Only
+                                // Hub timestamps need compensating for that minimum lower reservation;
                                 // ordinary 1:1/group chats keep their existing timestamp geometry.
-                                ChatBubbleTokens.reactionSlotHeight
+                                ChatBubbleTokens.reactionSlotMinHeight
                             } else {
                                 0.dp
                             }
