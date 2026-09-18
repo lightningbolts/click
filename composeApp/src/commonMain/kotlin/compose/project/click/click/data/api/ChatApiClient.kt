@@ -833,8 +833,7 @@ class ChatApiClient(
         userLat: Double,
         userLong: Double,
         authToken: String,
-    ): Result<HubReactionApiDto?> =
-        addHubReactionImpl(hubId, messageId, reactionType, userLat, userLong, authToken)
+    ): Result<HubReactionApiDto?> = addHubReactionImpl(hubId, messageId, reactionType, userLat, userLong, authToken)
 
     suspend fun removeHubReaction(
         hubId: String,
@@ -843,8 +842,7 @@ class ChatApiClient(
         userLat: Double,
         userLong: Double,
         authToken: String,
-    ): Result<Unit> =
-        removeHubReactionImpl(hubId, messageId, reactionType, userLat, userLong, authToken)
+    ): Result<Unit> = removeHubReactionImpl(hubId, messageId, reactionType, userLat, userLong, authToken)
 
     suspend fun editHubMessage(
         hubId: String,
@@ -854,8 +852,7 @@ class ChatApiClient(
         userLat: Double,
         userLong: Double,
         authToken: String,
-    ): Result<HubMessageApiDto> =
-        editHubMessageImpl(hubId, messageId, body, metadata, userLat, userLong, authToken)
+    ): Result<HubMessageApiDto> = editHubMessageImpl(hubId, messageId, body, metadata, userLat, userLong, authToken)
 
     suspend fun deleteHubMessage(
         hubId: String,
@@ -863,8 +860,7 @@ class ChatApiClient(
         userLat: Double,
         userLong: Double,
         authToken: String,
-    ): Result<Unit> =
-        deleteHubMessageImpl(hubId, messageId, userLat, userLong, authToken)
+    ): Result<Unit> = deleteHubMessageImpl(hubId, messageId, userLat, userLong, authToken)
 
     suspend fun uploadHubMedia(
         fileBytes: ByteArray,
