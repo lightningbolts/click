@@ -932,6 +932,10 @@ class HubChatViewModel(
             channel.postgresChangeFlow<PostgresAction>(schema = "public") {
                 table = "hub_messages"
             }
+        val hubReactionChanges =
+            channel.postgresChangeFlow<PostgresAction>(schema = "public") {
+                table = "hub_message_reactions"
+            }
 
         val occupantKeys = mutableSetOf<String>()
 
@@ -984,6 +988,48 @@ class HubChatViewModel(
                 }
             }
 
+        val reactionJob =
+            launch {
+                hubReactionChanges.collect { action ->
+                    when (action) {
+                        is PostgresAction.Insert -> {
+                            val row = action.decodeRecordOrNull<HubReactionRow>() ?: return@collect
+                            if (row.hubId != hubId) return@collect
+                            val reaction = row.toMessageReaction()
+                            val current = _messageReactions.value[reaction.messageId].orEmpty()
+                            _messageReactions.value =
+                                _messageReactions.value.toMutableMap().apply {
+                                    this[reaction.messageId] =
+                                        current
+                                            .filterNot {
+                                                it.id == reaction.id ||
+                                                    (
+                                                        it.userId == reaction.userId &&
+                                                            it.reactionType == reaction.reactionType
+                                                    )
+                                            } + reaction
+                                }
+                            persistHubMessagesToDisk(_messages.value)
+                        }
+                        is PostgresAction.Delete -> {
+                            if (action.oldRecord.hubReactionHubId() != hubId) return@collect
+                            val reactionId = action.oldRecord.hubReactionRowId() ?: return@collect
+                            val messageId = action.oldRecord.hubReactionMessageId() ?: return@collect
+                            val current = _messageReactions.value[messageId].orEmpty()
+                            if (current.any { it.id == reactionId }) {
+                                _messageReactions.value =
+                                    _messageReactions.value.toMutableMap().apply {
+                                        val remaining = current.filterNot { it.id == reactionId }
+                                        if (remaining.isEmpty()) remove(messageId) else this[messageId] = remaining
+                                    }
+                                persistHubMessagesToDisk(_messages.value)
+                            }
+                        }
+                        else -> Unit
+                    }
+                }
+            }
+
         try {
             hubMessageChanges.collect { action ->
                 when (action) {
@@ -1027,6 +1073,9 @@ class HubChatViewModel(
                         if (current.any { it.message.id == deletedId }) {
                             val next = current.filterNot { it.message.id == deletedId }
                             _messages.value = next
+                            _messageReactions.value = _messageReactions.value - deletedId
+                            if (_replyingTo.value?.message?.id == deletedId) _replyingTo.value = null
+                            if (_editingMessageId.value == deletedId) cancelHubEditImpl()
                             persistHubMessagesToDisk(next)
                         }
                     }
@@ -1034,6 +1083,7 @@ class HubChatViewModel(
                 }
             }
         } finally {
+            reactionJob.cancel()
             refreshJob.cancel()
             presenceJob.cancel()
             val ch = hubChannel
