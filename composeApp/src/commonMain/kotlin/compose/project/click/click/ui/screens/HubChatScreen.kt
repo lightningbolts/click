@@ -88,10 +88,10 @@ import compose.project.click.click.ui.chat.ChatLiquidGlassPlate // pragma: allow
 import compose.project.click.click.ui.chat.ChatMediaPickerHandles // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatMessageTimeline // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatReplyComposerBanner // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatThreadAutoFollowEffects // pragma: allowlist secret
 import compose.project.click.click.ui.chat.MessageActionCapabilities // pragma: allowlist secret
 import compose.project.click.click.ui.chat.MessageActionHandlers // pragma: allowlist secret
 import compose.project.click.click.ui.chat.MessageActionSheet // pragma: allowlist secret
-import compose.project.click.click.ui.chat.ChatThreadAutoFollowEffects // pragma: allowlist secret
 import compose.project.click.click.ui.chat.applyTimestampPeekDragStep // pragma: allowlist secret
 import compose.project.click.click.ui.chat.buildChatTimelineEntriesNewestFirst // pragma: allowlist secret
 import compose.project.click.click.ui.chat.chatComposerKeyboardMotion // pragma: allowlist secret
