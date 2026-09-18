@@ -28,6 +28,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PhotoCamera
@@ -66,6 +67,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
+import compose.project.click.click.data.models.ChatMessageType // pragma: allowlist secret
 import compose.project.click.click.data.models.MessageWithUser // pragma: allowlist secret
 import compose.project.click.click.platform.KeyboardHeightProvider // pragma: allowlist secret
 import compose.project.click.click.platform.rememberKeyboardHeightProvider // pragma: allowlist secret
@@ -85,7 +87,11 @@ import compose.project.click.click.ui.chat.ChatInterMessageHubBaseCompact // pra
 import compose.project.click.click.ui.chat.ChatLiquidGlassPlate // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatMediaPickerHandles // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatMessageTimeline // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatReplyComposerBanner // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatThreadAutoFollowEffects // pragma: allowlist secret
+import compose.project.click.click.ui.chat.MessageActionCapabilities // pragma: allowlist secret
+import compose.project.click.click.ui.chat.MessageActionHandlers // pragma: allowlist secret
+import compose.project.click.click.ui.chat.MessageActionSheet // pragma: allowlist secret
 import compose.project.click.click.ui.chat.applyTimestampPeekDragStep // pragma: allowlist secret
 import compose.project.click.click.ui.chat.buildChatTimelineEntriesNewestFirst // pragma: allowlist secret
 import compose.project.click.click.ui.chat.chatComposerKeyboardMotion // pragma: allowlist secret
@@ -112,6 +118,7 @@ import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeft
 import compose.project.click.click.ui.components.LocalGlassAlertAnimatedDismiss // pragma: allowlist secret
 import compose.project.click.click.ui.components.NativeChromeAction // pragma: allowlist secret
 import compose.project.click.click.ui.components.NativeHeaderMetrics // pragma: allowlist secret
+import compose.project.click.click.ui.components.TabbedUserProfileSheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.UnifiedPopupFormDialog // pragma: allowlist secret
 import compose.project.click.click.ui.components.platformNativeHeaderClearance // pragma: allowlist secret
 import compose.project.click.click.ui.components.sheetPageBackground // pragma: allowlist secret
@@ -177,6 +184,17 @@ fun HubChatScreen(
     val isEventHub by viewModel.isEventHubFlow.collectAsState()
     var showClickDropsCamera by remember { mutableStateOf(false) }
     var expandedPhotoTarget by remember { mutableStateOf<MessageWithUser?>(null) }
+    var contextMenuMessage by remember { mutableStateOf<MessageWithUser?>(null) }
+    var profileUserId by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(messages, expandedPhotoTarget, contextMenuMessage) {
+        expandedPhotoTarget?.message?.id?.let { expandedId ->
+            if (messages.none { it.message.id == expandedId }) expandedPhotoTarget = null
+        }
+        contextMenuMessage?.message?.id?.let { selectedId ->
+            if (messages.none { it.message.id == selectedId }) contextMenuMessage = null
+        }
+    }
 
     val isCreator by viewModel.isCreator.collectAsState()
     val resolvedCreatorId by viewModel.resolvedCreatorId.collectAsState()
@@ -550,18 +568,24 @@ fun HubChatScreen(
                                     isGroupChat = true,
                                     currentUserId = currentUserId,
                                     reactionsMap = emptyMap(),
+                                    reactionsFlow = viewModel.messageReactions,
                                     secureMediaHost = viewModel,
                                     activeChatId = hubIdForSecureMedia,
-                                    onToggleReaction = { _, _ -> },
+                                    onToggleReaction = viewModel::toggleReaction,
                                     onForward = {},
-                                    onLongPress = {},
-                                    onSwipeReply = {},
+                                    onLongPress = { contextMenuMessage = it },
+                                    onSwipeReply = viewModel::startReplyTo,
+                                    onPeerAvatarClick = { userId ->
+                                        if (viewModel.canOpenSenderProfile(userId)) {
+                                            profileUserId = userId
+                                        }
+                                    },
                                     onDownloadAttachment = { _, _ ->
                                         ChatAttachmentDownloadOutcome.Failure("Download not available in hub chat.")
                                     },
                                     onExpandPhoto = { expandedPhotoTarget = it },
                                     interMessageBaseCompact = ChatInterMessageHubBaseCompact,
-                                    enableMessageContextMenu = false,
+                                    enableMessageContextMenu = true,
                                     highlightedMessageId = focusedSearchMessageId,
                                     modifier =
                                         Modifier
@@ -624,6 +648,43 @@ fun HubChatScreen(
             target = expandedPhotoTarget,
             secureMediaHost = viewModel,
             onDismiss = { expandedPhotoTarget = null },
+        )
+    }
+
+    TabbedUserProfileSheet(
+        userId = profileUserId,
+        viewerUserId = currentUserId,
+        onDismiss = { profileUserId = null },
+    )
+
+    contextMenuMessage?.let { selected ->
+        val canWriteHub = channelReady && !inLobby && (!outOfBounds || isEventHub)
+        MessageActionSheet(
+            messageWithUser = selected,
+            capabilities =
+                MessageActionCapabilities(
+                    canReply =
+                        canWriteHub &&
+                            selected.message.messageType.lowercase() != "call_log",
+                    canReact = canWriteHub,
+                    canCopy = true,
+                    canSaveMedia = selected.message.messageType.lowercase() == ChatMessageType.IMAGE,
+                    canShareMedia = selected.message.messageType.lowercase() == ChatMessageType.IMAGE,
+                    canEdit =
+                        canWriteHub &&
+                            selected.isSent &&
+                            selected.message.messageType.lowercase() == ChatMessageType.TEXT,
+                    canDelete = canWriteHub && selected.isSent,
+                ),
+            handlers =
+                MessageActionHandlers(
+                    onReply = viewModel::startReplyTo,
+                    onReact = { messageId, reaction -> viewModel.toggleReaction(messageId, reaction) },
+                    fetchDecryptedMediaBytes = viewModel::fetchDecryptedHubMediaBytes,
+                    onEdit = viewModel::startEditMessage,
+                    onDelete = { message -> viewModel.deleteMessage(message.message.id) },
+                ),
+            onDismiss = { contextMenuMessage = null },
         )
     }
 
@@ -835,6 +896,8 @@ private fun HubChatInputBar(
     val draft by viewModel.draft.collectAsState()
     val isSending by viewModel.isSending.collectAsState()
     val sendError by viewModel.sendError.collectAsState()
+    val replyingTo by viewModel.replyingTo.collectAsState()
+    val editingMessageId by viewModel.editingMessageId.collectAsState()
 
     val composerStyle = LocalPlatformStyle.current
     val composerRowVPad = if (composerStyle.isIOS) 6.dp else 8.dp
@@ -864,6 +927,27 @@ private fun HubChatInputBar(
                     .fillMaxWidth()
                     .padding(horizontal = composerRowHPad, vertical = composerRowVPad),
         ) {
+            ChatReplyComposerBanner(
+                replyingTo = replyingTo,
+                editingMessageId = editingMessageId,
+                onCancel = viewModel::cancelReply,
+            )
+            if (editingMessageId != null) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        "Editing message",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(onClick = viewModel::cancelEditMessage) {
+                        Text("Cancel")
+                    }
+                }
+            }
             sendError?.let { err ->
                 Text(
                     text = "$err · Review and tap send to retry",
@@ -879,20 +963,22 @@ private fun HubChatInputBar(
                 value = draft,
                 onValueChange = viewModel::updateDraft,
                 placeholder =
-                    if (inLobby) {
-                        "Chat unlocks when 3+ join"
-                    } else if (isOutOfBounds) {
-                        "You are no longer at this location"
-                    } else {
-                        "Message the hub…"
+                    when {
+                        editingMessageId != null -> "Edit message…"
+                        inLobby -> "Chat unlocks when 3+ join"
+                        isOutOfBounds -> "You are no longer at this location"
+                        else -> "Message the hub…"
                     },
                 enabled = enabled,
                 externallySending = isSending,
-                sendIcon = Icons.AutoMirrored.Filled.Send,
-                sendContentDescription = "Send",
+                sendIcon =
+                    if (editingMessageId != null) Icons.Filled.Check else Icons.AutoMirrored.Filled.Send,
+                sendContentDescription = if (editingMessageId != null) "Confirm edit" else "Send",
                 onSend = viewModel::sendMessage,
                 attachmentMenuExpanded = attachmentMenuExpanded,
-                onAttachmentMenuExpandedChange = { attachmentMenuExpanded = it },
+                onAttachmentMenuExpandedChange = { expanded ->
+                    attachmentMenuExpanded = expanded && editingMessageId == null
+                },
                 attachmentMenuContent = {
                     Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
                         ChatAttachmentMenuRow(

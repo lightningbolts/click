@@ -283,6 +283,30 @@ internal data class ClickWebHubMessageEnvelope(
 )
 
 @Serializable
+internal data class ClickWebHubInteractionBody(
+    val hubId: String,
+    val userLat: Double,
+    val userLong: Double,
+    val body: String? = null,
+    val metadata: JsonElement? = null,
+)
+
+@Serializable
+internal data class ClickWebHubReactionBody(
+    val hubId: String,
+    val messageId: String,
+    val reactionType: String,
+    val userLat: Double,
+    val userLong: Double,
+)
+
+@Serializable
+internal data class ClickWebHubReactionEnvelope(
+    val action: String? = null,
+    val reaction: ChatApiClient.HubReactionApiDto? = null,
+)
+
+@Serializable
 internal data class ConversationSearchEnvelope(
     val hits: List<ChatApiClient.ConversationSearchHitDto> = emptyList(),
 )

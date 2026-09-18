@@ -14,12 +14,14 @@ import compose.project.click.click.data.api.E2eeV2MediaUploadRequest // pragma: 
 import compose.project.click.click.data.models.ChatMessageType // pragma: allowlist secret
 import compose.project.click.click.data.models.Message // pragma: allowlist secret
 import compose.project.click.click.data.models.MessageDeliveryState // pragma: allowlist secret
+import compose.project.click.click.data.models.MessageReaction // pragma: allowlist secret
 import compose.project.click.click.data.models.MessageWithUser // pragma: allowlist secret
 import compose.project.click.click.data.models.audioCacheFileExtension // pragma: allowlist secret
 import compose.project.click.click.data.models.hasLocalMediaUri // pragma: allowlist secret
 import compose.project.click.click.data.models.hubMediaPathOrNull // pragma: allowlist secret
 import compose.project.click.click.data.models.isEncryptedMedia // pragma: allowlist secret
 import compose.project.click.click.data.models.mediaUrlOrNull // pragma: allowlist secret
+import compose.project.click.click.data.models.replySnippetForMetadata // pragma: allowlist secret
 import compose.project.click.click.data.realtime.subscribeWithTimeout // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.normalizeEncryptedMediaPayload // pragma: allowlist secret
@@ -63,6 +65,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 import kotlinx.serialization.json.JsonObject
@@ -98,6 +101,15 @@ class HubChatViewModel(
 
     internal val _messages = MutableStateFlow<List<MessageWithUser>>(emptyList())
     val messages: StateFlow<List<MessageWithUser>> = _messages.asStateFlow()
+
+    internal val _messageReactions = MutableStateFlow<Map<String, List<MessageReaction>>>(emptyMap())
+    val messageReactions: StateFlow<Map<String, List<MessageReaction>>> = _messageReactions.asStateFlow()
+
+    internal val _replyingTo = MutableStateFlow<MessageWithUser?>(null)
+    val replyingTo: StateFlow<MessageWithUser?> = _replyingTo.asStateFlow()
+
+    internal val _editingMessageId = MutableStateFlow<String?>(null)
+    val editingMessageId: StateFlow<String?> = _editingMessageId.asStateFlow()
 
     internal val _occupantCount = MutableStateFlow(1)
     val occupantCount: StateFlow<Int> = _occupantCount.asStateFlow()
@@ -169,6 +181,13 @@ class HubChatViewModel(
     internal var participantDenied: Boolean = false
     internal var hubE2eeV2Session: HubE2eeV2Session? = null
     internal var hubParticipantIds: Set<String> = emptySet()
+    internal var hubSenderProfilesVisible: Boolean = false
+    internal val reactionHydrationMutex = Mutex()
+    internal val queuedReactionEvents = mutableListOf<HubReactionRealtimeEvent>()
+    internal val realtimeDeletedReactionIds = mutableSetOf<String>()
+    internal val hubReactionMutationStates = mutableMapOf<HubReactionMutationKey, HubReactionMutationState>()
+    internal val pendingHubMessageDeletes = mutableMapOf<String, PendingHubMessageDelete>()
+    internal var reactionHydrationComplete = false
 
     internal suspend fun requireFreshHubJwt(forceRefresh: Boolean = false): String = freshHubJwtProvider(forceRefresh)
 
@@ -289,6 +308,26 @@ class HubChatViewModel(
         _draft.value = text.take(HUB_CHAT_DRAFT_MAX_LENGTH)
     }
 
+    fun startReplyTo(target: MessageWithUser) = startHubReplyImpl(target)
+
+    fun cancelReply() = cancelHubReplyImpl()
+
+    fun startEditMessage(target: MessageWithUser) = startHubEditImpl(target)
+
+    fun cancelEditMessage() = cancelHubEditImpl()
+
+    fun toggleReaction(
+        messageId: String,
+        reactionType: String,
+    ) = toggleHubReactionImpl(messageId, reactionType)
+
+    fun deleteMessage(messageId: String) = deleteHubMessageImpl(messageId)
+
+    fun canOpenSenderProfile(userId: String): Boolean =
+        hubSenderProfilesVisible &&
+            userId.isNotBlank() &&
+            userId != currentUserId
+
     fun retryRealtime() {
         if (!startRealtime) return
         if (AppDataManager.isHubAccessRevoked(hubId)) {
@@ -329,12 +368,27 @@ class HubChatViewModel(
     }
 
     fun sendMessage() {
+        _editingMessageId.value?.let { messageId ->
+            confirmHubEditImpl(messageId)
+            return
+        }
+
         val text = _draft.value.trim()
         if (text.isEmpty()) return
 
+        val replyTarget = _replyingTo.value
+        val replyMetadata =
+            replyTarget?.let { target ->
+                buildJsonObject {
+                    put("reply_to_id", target.message.id)
+                    put("reply_to_content", replySnippetForMetadata(target.message.content))
+                }
+            }
+
         _draft.value = ""
+        _replyingTo.value = null
         _sendError.value = null
-        val tempId = appendOptimisticOutgoing(text)
+        val tempId = appendOptimisticOutgoing(text, replyMetadata)
 
         viewModelScope.launch {
             try {
@@ -360,14 +414,15 @@ class HubChatViewModel(
                             text
                         }
                     val outgoingMetadata =
-                        e2ee?.let {
-                            buildJsonObject {
+                        buildJsonObject {
+                            replyMetadata?.forEach { (key, value) -> put(key, value) }
+                            e2ee?.let {
                                 put("crypto_version", MessageCryptoV2.CRYPTO_VERSION)
                                 put("epoch", it.epoch)
                                 put("sender_device_id", it.senderDeviceId)
                                 put("client_message_id", clientMessageId!!)
                             }
-                        }
+                        }.takeIf { it.isNotEmpty() }
                     val dto =
                         chatApi
                             .sendHubMessage(
@@ -398,6 +453,7 @@ class HubChatViewModel(
             } catch (e: Exception) {
                 markOptimisticSendFailed(tempId)
                 _draft.value = text
+                if (_replyingTo.value == null) _replyingTo.value = replyTarget
                 if (isHubExpired(e)) {
                     _sendError.value = HUB_EXPIRED_MESSAGE
                 } else if (isHubOutOfRange(e) && !_isEventHub.value) {
@@ -418,6 +474,7 @@ class HubChatViewModel(
         mimeType: String,
     ) {
         if (imageBytes.isEmpty() || _isSending.value) return
+        val replyTarget = _replyingTo.value
         viewModelScope.launch {
             _isSending.value = true
             _sendError.value = null
@@ -469,6 +526,10 @@ class HubChatViewModel(
                             ).getOrElse { e -> throw e }
                     val metadata: JsonObject =
                         buildJsonObject {
+                            replyTarget?.let { target ->
+                                put("reply_to_id", target.message.id)
+                                put("reply_to_content", replySnippetForMetadata(target.message.content))
+                            }
                             put("media_path", JsonPrimitive(path))
                             put("media_bucket", JsonPrimitive("hub-media"))
                             put("is_encrypted_media", JsonPrimitive(true))
@@ -504,6 +565,7 @@ class HubChatViewModel(
                             messageType = ChatMessageType.IMAGE,
                             metadata = metadata,
                         ).getOrElse { e -> throw e }
+                    if (_replyingTo.value == replyTarget) _replyingTo.value = null
                 }
             } catch (e: Exception) {
                 if (isHubExpired(e)) {
@@ -525,6 +587,7 @@ class HubChatViewModel(
         mimeType: String = "image/jpeg",
     ) {
         if (imageBytes.isEmpty() || _isSending.value) return
+        val replyTarget = _replyingTo.value
         viewModelScope.launch {
             _isSending.value = true
             _sendError.value = null
@@ -570,6 +633,10 @@ class HubChatViewModel(
                     val revealTtlIso = computeClickDropRevealTtlIso()
                     val metadata: JsonObject =
                         buildJsonObject {
+                            replyTarget?.let { target ->
+                                put("reply_to_id", target.message.id)
+                                put("reply_to_content", replySnippetForMetadata(target.message.content))
+                            }
                             put("media_path", JsonPrimitive(path))
                             put("media_bucket", JsonPrimitive("hub-media"))
                             put("is_encrypted_media", JsonPrimitive(true))
@@ -607,6 +674,7 @@ class HubChatViewModel(
                             messageType = ChatMessageType.IMAGE,
                             metadata = metadata,
                         ).getOrElse { e -> throw e }
+                    if (_replyingTo.value == replyTarget) _replyingTo.value = null
                 }
             } catch (e: Exception) {
                 if (isHubExpired(e)) {
@@ -627,7 +695,7 @@ class HubChatViewModel(
      * New hub media stores a path, not a bearer URL. Resolve it immediately before download so the
      * server can enforce current check-in/event membership. Older records keep their media_url.
      */
-    private suspend fun resolveHubMediaUrl(message: Message): String? {
+    internal suspend fun resolveHubMediaUrl(message: Message): String? {
         val objectPath = message.hubMediaPathOrNull()
         if (objectPath == null) return message.mediaUrlOrNull()?.takeIf { it.isNotBlank() }
         val jwt = requireFreshHubJwt()
@@ -636,6 +704,32 @@ class HubChatViewModel(
             .getOrNull()
             ?.trim()
             ?.takeIf { it.isNotEmpty() }
+    }
+
+    suspend fun fetchDecryptedHubMediaBytes(message: Message): ByteArray? {
+        secureImageBytesCache.get(message.id)?.takeIf { it.isNotEmpty() }?.let { return it }
+        return withContext(chatMediaDispatcher) {
+            runCatching {
+                val url = resolveHubMediaUrl(message) ?: return@runCatching null
+                val raw = chatApi.downloadUrlBytes(url).getOrElse { return@runCatching null }
+                val normalized = normalizeEncryptedMediaPayload(raw)
+                val v2Metadata = message.hubE2eeV2MediaMetadataOrNull()
+                val bytes =
+                    if (v2Metadata != null) {
+                        val session = hubE2eeV2Session ?: return@runCatching null
+                        val epochKey = session.keyForEpoch(v2Metadata.epoch) ?: return@runCatching null
+                        MessageCryptoV2.decryptMedia(v2Metadata, epochKey, normalized)
+                    } else {
+                        MessageCrypto.decryptMediaBytes(normalized, MessageCrypto.deriveKeysForHub(hubId))
+                    }
+                bytes.takeIf { it.isNotEmpty() }?.also { secureImageBytesCache.put(message.id, it) }
+            }.onFailure { e ->
+                println(
+                    "HubChatViewModel: secure media decrypt failed for message=${message.id}: " +
+                        e.redactedRestMessage(),
+                )
+            }.getOrNull()
+        }
     }
 
     override fun ensureSecureChatImageLoaded(
@@ -657,25 +751,7 @@ class HubChatViewModel(
         if (cur?.imageBytes != null || cur?.loading == true) return
         viewModelScope.launch(chatMediaDispatcher) {
             _secureChatMediaLoadState.update { it + (message.id to SecureChatMediaLoadState(loading = true)) }
-            val bytes =
-                runCatching {
-                    val url = resolveHubMediaUrl(message) ?: return@runCatching null
-                    val raw = chatApi.downloadUrlBytes(url).getOrElse { return@runCatching null }
-                    val normalized = normalizeEncryptedMediaPayload(raw)
-                    if (normalized !== raw) {
-                        println("HubChatViewModel: decoded base64-wrapped encrypted image payload for message=${message.id}")
-                    }
-                    val v2Metadata = message.hubE2eeV2MediaMetadataOrNull()
-                    if (v2Metadata != null) {
-                        val session = hubE2eeV2Session ?: return@runCatching null
-                        val epochKey = session.keyForEpoch(v2Metadata.epoch) ?: return@runCatching null
-                        MessageCryptoV2.decryptMedia(v2Metadata, epochKey, normalized)
-                    } else {
-                        MessageCrypto.decryptMediaBytes(normalized, MessageCrypto.deriveKeysForHub(hubId))
-                    }
-                }.onFailure { e ->
-                    println("HubChatViewModel: secure image decrypt failed for message=${message.id}: ${e.redactedRestMessage()}")
-                }.getOrNull()
+            val bytes = fetchDecryptedHubMediaBytes(message)
             if (bytes == null || bytes.isEmpty()) {
                 println("HubChatViewModel: secure image bytes missing for message=${message.id}")
                 _secureChatMediaLoadState.update {
@@ -891,6 +967,10 @@ class HubChatViewModel(
             channel.postgresChangeFlow<PostgresAction>(schema = "public") {
                 table = "hub_messages"
             }
+        val hubReactionChanges =
+            channel.postgresChangeFlow<PostgresAction>(schema = "public") {
+                table = "hub_message_reactions"
+            }
 
         val occupantKeys = mutableSetOf<String>()
 
@@ -943,13 +1023,39 @@ class HubChatViewModel(
                 }
             }
 
+        val reactionJob =
+            launch {
+                hubReactionChanges.collect { action ->
+                    when (action) {
+                        is PostgresAction.Insert -> {
+                            val row = action.decodeRecordOrNull<HubReactionRow>() ?: return@collect
+                            if (row.hubId != hubId) return@collect
+                            handleHubReactionRealtimeEvent(
+                                HubReactionRealtimeEvent.Upsert(row.toMessageReaction()),
+                            )
+                        }
+                        is PostgresAction.Delete -> {
+                            val recordHubId = action.oldRecord.hubReactionHubId()
+                            if (recordHubId != null && recordHubId != hubId) return@collect
+                            val event = hubReactionDeleteEvent(action.oldRecord) ?: return@collect
+                            handleHubReactionRealtimeEvent(event)
+                        }
+                        else -> Unit
+                    }
+                }
+            }
+
         try {
             hubMessageChanges.collect { action ->
                 when (action) {
                     is PostgresAction.Insert -> {
                         val row = action.decodeRecordOrNull<HubMessageRow>() ?: return@collect
                         if (row.hubId != hubId) return@collect
-                        if (row.userId != currentUserId && !senderUiCache.containsKey(row.userId)) {
+                        if (
+                            hubSenderProfilesVisible &&
+                            row.userId != currentUserId &&
+                            !senderUiCache.containsKey(row.userId)
+                        ) {
                             prefetchSenderUi(listOf(row.userId))
                         }
                         applyInsertedHubMessage(rowToMessageWithUser(row).message)
@@ -978,21 +1084,31 @@ class HubChatViewModel(
                                 }
                             _messages.value = next
                             persistHubMessagesToDisk(next)
+                        } else {
+                            pendingHubMessageDeletes[row.id]?.let { pending ->
+                                pendingHubMessageDeletes[row.id] =
+                                    pending.copy(latestRealtime = rowToMessageWithUser(row))
+                            }
                         }
                     }
                     is PostgresAction.Delete -> {
                         val deletedId = action.oldRecord.hubMessageRowId() ?: return@collect
+                        pendingHubMessageDeletes.remove(deletedId)
                         val current = _messages.value
-                        if (current.any { it.message.id == deletedId }) {
-                            val next = current.filterNot { it.message.id == deletedId }
+                        val next = current.filterNot { it.message.id == deletedId }
+                        if (next.size != current.size) {
                             _messages.value = next
-                            persistHubMessagesToDisk(next)
                         }
+                        _messageReactions.value = _messageReactions.value - deletedId
+                        if (_replyingTo.value?.message?.id == deletedId) _replyingTo.value = null
+                        if (_editingMessageId.value == deletedId) cancelHubEditImpl()
+                        persistHubMessagesToDisk(next)
                     }
                     else -> Unit
                 }
             }
         } finally {
+            reactionJob.cancel()
             refreshJob.cancel()
             presenceJob.cancel()
             val ch = hubChannel

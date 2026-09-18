@@ -8,6 +8,7 @@ import compose.project.click.click.data.api.ChatApiClient // pragma: allowlist s
 import compose.project.click.click.data.models.ChatMessageType // pragma: allowlist secret
 import compose.project.click.click.data.models.Message // pragma: allowlist secret
 import compose.project.click.click.data.models.MessageDeliveryState // pragma: allowlist secret
+import compose.project.click.click.data.models.MessageReaction // pragma: allowlist secret
 import compose.project.click.click.data.models.MessageWithUser // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.realtime.rebindRealtimeSocket // pragma: allowlist secret
@@ -22,6 +23,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 import kotlinx.serialization.json.JsonObject
@@ -35,6 +37,10 @@ internal fun HubChatViewModel.launchRealtimeSession() {
     _realtimeState.value = HubRealtimeState.Loading
     sessionJob =
         viewModelScope.launch {
+            reactionHydrationMutex.withLock {
+                queuedReactionEvents.clear()
+                reactionHydrationComplete = false
+            }
             try {
                 coroutineScope {
                     val override = realtimeSessionOverride
@@ -111,7 +117,7 @@ internal fun HubChatViewModel.rowToMessageWithUser(row: HubMessageRow): MessageW
             user_id = row.userId,
             content = decryptHubBody(row),
             timeCreated = hubCreatedAtToEpoch(row.createdAt),
-            timeEdited = null,
+            timeEdited = row.editedAt?.let(::hubCreatedAtToEpoch),
             isRead = false,
             messageType = row.messageType,
             metadata = row.metadata,
@@ -155,23 +161,42 @@ internal fun HubChatViewModel.messageWithUserFromCached(
 internal fun HubChatViewModel.hydrateFromDiskCache() {
     val cached = AppDataManager.cachedHubThreadFor(hubId) ?: return
     if (cached.messages.isEmpty()) return
-    cached.participants.forEach { user ->
+    // Event guest-list visibility is server-authoritative. Do not restore cached
+    // identities before the current visibility policy has been fetched.
+    val cachedParticipants = if (hubSenderProfilesVisible) cached.participants else emptyList()
+    cachedParticipants.forEach { user ->
         if (user.id != currentUserId) {
             val label = user.name?.takeIf { it.isNotBlank() } ?: "Member"
             val avatar = user.image?.trim()?.takeIf { it.isNotEmpty() }
             senderUiCache[user.id] = label to avatar
         }
     }
-    _messages.value = cached.messages.map { messageWithUserFromCached(it, cached.participants) }
+    _messages.value = cached.messages.map { messageWithUserFromCached(it, cachedParticipants) }
+    _messageReactions.value = cached.reactions.groupBy { it.messageId }
+}
+
+internal fun HubChatViewModel.applyVisibleHubParticipants(
+    participantIds: Collection<String>,
+    senderProfilesVisible: Boolean,
+) {
+    hubParticipantIds = participantIds.toSet()
+    hubSenderProfilesVisible = senderProfilesVisible
+    if (!senderProfilesVisible) {
+        senderUiCache.clear()
+    }
 }
 
 internal fun HubChatViewModel.persistHubMessagesToDisk(messages: List<MessageWithUser>) {
-    if (messages.isEmpty()) return
+    if (messages.isEmpty()) {
+        AppDataManager.clearHubThreadCache(hubId)
+        return
+    }
     AppDataManager.cacheHubThread(
         hubId = hubId,
         realtimeChannel = realtimeChannelName,
         messages = messages.map { it.message },
         participants = messages.map { it.user }.distinctBy { it.id },
+        reactions = _messageReactions.value.values.flatten(),
     )
 }
 
@@ -322,7 +347,10 @@ internal fun HubChatViewModel.markOptimisticSendFailed(tempId: String) {
     persistHubMessagesToDisk(next)
 }
 
-internal fun HubChatViewModel.appendOptimisticOutgoing(text: String): String {
+internal fun HubChatViewModel.appendOptimisticOutgoing(
+    text: String,
+    metadata: kotlinx.serialization.json.JsonElement? = null,
+): String {
     val localMs = Clock.System.now().toEpochMilliseconds()
     val tempId = "temp-$localMs-${Random.nextLong()}"
     val optimistic =
@@ -336,7 +364,7 @@ internal fun HubChatViewModel.appendOptimisticOutgoing(text: String): String {
                     timeEdited = null,
                     isRead = false,
                     messageType = ChatMessageType.TEXT,
-                    metadata = null,
+                    metadata = metadata,
                     localSentAt = localMs,
                     deliveryState = MessageDeliveryState.PENDING,
                 ),
@@ -354,7 +382,9 @@ internal suspend fun HubChatViewModel.mergeMessages(rows: List<HubMessageRow>) {
         rows
             .filter { it.hubId == hubId }
             .sortedBy { it.createdAt }
-    prefetchSenderUi(filtered.map { it.userId })
+    if (hubSenderProfilesVisible) {
+        prefetchSenderUi(filtered.map { it.userId })
+    }
     val merged = filtered.map { rowToMessageWithUser(it) }
     val next = merged + pendingOptimisticOutgoing(merged)
     _messages.value = next
@@ -377,6 +407,12 @@ internal fun HubChatViewModel.clearLocalHubState(clearDiskCache: Boolean = false
     sessionJob = null
     clearHubE2eeV2Session()
     _messages.value = emptyList()
+    _messageReactions.value = emptyMap()
+    _replyingTo.value = null
+    _editingMessageId.value = null
+    realtimeDeletedReactionIds.clear()
+    hubReactionMutationStates.clear()
+    pendingHubMessageDeletes.clear()
     _draft.value = ""
     _occupantCount.value = 1
     _outOfBounds.value = false
@@ -403,9 +439,83 @@ internal fun ChatApiClient.HubMessageApiDto.toHubMessageRow(): HubMessageRow =
         userId = userId,
         body = body,
         createdAt = createdAt,
+        editedAt = editedAt,
         messageType = messageType,
         metadata = metadata,
     )
+
+internal fun ChatApiClient.HubReactionApiDto.toMessageReaction(): MessageReaction =
+    MessageReaction(
+        id = id,
+        messageId = messageId,
+        userId = userId,
+        reactionType = reactionType,
+        createdAt = hubCreatedAtToEpoch(createdAt),
+    )
+
+internal fun HubReactionRow.toMessageReaction(): MessageReaction =
+    MessageReaction(
+        id = id,
+        messageId = messageId,
+        userId = userId,
+        reactionType = reactionType,
+        createdAt = hubCreatedAtToEpoch(createdAt),
+    )
+
+internal suspend fun HubChatViewModel.mergeHubReactions(reactions: List<MessageReaction>) {
+    reactionHydrationMutex.withLock {
+        val events = reactions.map { HubReactionRealtimeEvent.Upsert(it) }
+        if (!reactionHydrationComplete) {
+            queuedReactionEvents += events
+        } else {
+            events.forEach { event ->
+                _messageReactions.value = applyHubReactionRealtimeEvent(_messageReactions.value, event)
+            }
+            persistHubMessagesToDisk(_messages.value)
+        }
+    }
+    viewModelScope.launch {
+        reconcilePendingHubReactionIntents()
+        persistHubMessagesToDisk(_messages.value)
+    }
+}
+
+internal suspend fun HubChatViewModel.handleHubReactionRealtimeEvent(event: HubReactionRealtimeEvent) {
+    reactionHydrationMutex.withLock {
+        when (event) {
+            is HubReactionRealtimeEvent.Upsert -> realtimeDeletedReactionIds.remove(event.reaction.id)
+            is HubReactionRealtimeEvent.Delete -> realtimeDeletedReactionIds.add(event.reactionId)
+        }
+        val shouldApply = reconcileHubReactionRealtimeAgainstPending(event)
+        if (!reactionHydrationComplete) {
+            if (shouldApply) queuedReactionEvents += event
+            return
+        }
+        if (shouldApply) {
+            _messageReactions.value = applyHubReactionRealtimeEvent(_messageReactions.value, event)
+        }
+        persistHubMessagesToDisk(_messages.value)
+    }
+}
+
+internal suspend fun HubChatViewModel.finishInitialHubReactionHydration(snapshot: List<MessageReaction>?) {
+    reactionHydrationMutex.withLock {
+        if (snapshot != null) {
+            _messageReactions.value = replayHubReactionEvents(snapshot, queuedReactionEvents)
+        } else {
+            queuedReactionEvents.forEach { event ->
+                _messageReactions.value = applyHubReactionRealtimeEvent(_messageReactions.value, event)
+            }
+        }
+        queuedReactionEvents.clear()
+        reactionHydrationComplete = true
+        persistHubMessagesToDisk(_messages.value)
+    }
+    viewModelScope.launch {
+        reconcilePendingHubReactionIntents()
+        persistHubMessagesToDisk(_messages.value)
+    }
+}
 
 internal suspend fun HubChatViewModel.loadInitialMessages() {
     withContext(Dispatchers.Default) {
@@ -414,7 +524,10 @@ internal suspend fun HubChatViewModel.loadInitialMessages() {
             val thread = chatApi.fetchHubThread(hubId, token)
             thread.fold(
                 onSuccess = { snapshot ->
-                    hubParticipantIds = snapshot.participantIds.toSet()
+                    applyVisibleHubParticipants(
+                        participantIds = snapshot.participantIds,
+                        senderProfilesVisible = snapshot.senderProfilesVisible,
+                    )
                     runCatching { ensureHubE2eeV2Session(hubParticipantIds) }
                         .onFailure { error ->
                             clearHubE2eeV2Session()
@@ -423,8 +536,11 @@ internal suspend fun HubChatViewModel.loadInitialMessages() {
                     if (snapshot.occupantCount > 0) {
                         _occupantCount.value = snapshot.occupantCount.coerceAtLeast(1)
                     }
-                    prefetchSenderUi(snapshot.participantIds)
+                    if (snapshot.senderProfilesVisible) {
+                        prefetchSenderUi(snapshot.participantIds)
+                    }
                     mergeMessages(snapshot.messages.map { it.toHubMessageRow() })
+                    finishInitialHubReactionHydration(snapshot.reactions.map { it.toMessageReaction() })
                     return@withContext
                 },
                 onFailure = { err ->
@@ -450,6 +566,10 @@ internal suspend fun HubChatViewModel.loadInitialMessages() {
                     println("HubChatViewModel: hub thread API failed: ${err.redactedRestMessage()}")
                 },
             )
+            if (_isEventHub.value) {
+                finishInitialHubReactionHydration(null)
+                return@withContext
+            }
             val rows =
                 supabase
                     .from("hub_messages")
@@ -461,16 +581,21 @@ internal suspend fun HubChatViewModel.loadInitialMessages() {
                         limit(HUB_INITIAL_MESSAGE_LIMIT)
                     }.decodeList<HubMessageRow>()
                     .asReversed()
-            hubParticipantIds = rows.map { it.userId }.toSet() + currentUserId
+            applyVisibleHubParticipants(
+                participantIds = rows.map { it.userId } + currentUserId,
+                senderProfilesVisible = true,
+            )
             runCatching { ensureHubE2eeV2Session(hubParticipantIds) }
                 .onFailure { error ->
                     clearHubE2eeV2Session()
                     println("HubChatViewModel: fallback E2EE v2 session unavailable: ${error.redactedRestMessage()}")
                 }
             mergeMessages(rows)
+            finishInitialHubReactionHydration(null)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
+            finishInitialHubReactionHydration(null)
             println("HubChatViewModel: load messages failed: ${e.redactedRestMessage()}")
         }
     }
@@ -483,11 +608,19 @@ internal suspend fun HubChatViewModel.loadMessagesAround(messageId: String) {
             if (!token.isNullOrBlank()) {
                 val thread = chatApi.fetchHubThread(hubId, token, aroundMessageId = messageId)
                 thread.getOrNull()?.let { snapshot ->
-                    prefetchSenderUi(snapshot.participantIds)
+                    applyVisibleHubParticipants(
+                        participantIds = snapshot.participantIds,
+                        senderProfilesVisible = snapshot.senderProfilesVisible,
+                    )
+                    if (snapshot.senderProfilesVisible) {
+                        prefetchSenderUi(snapshot.participantIds)
+                    }
                     mergeMessages(snapshot.messages.map { it.toHubMessageRow() })
+                    mergeHubReactions(snapshot.reactions.map { it.toMessageReaction() })
                     if (_messages.value.any { it.message.id == messageId }) return@withContext
                 }
             }
+            if (_isEventHub.value) return@withContext
             val target =
                 supabase
                     .from("hub_messages")

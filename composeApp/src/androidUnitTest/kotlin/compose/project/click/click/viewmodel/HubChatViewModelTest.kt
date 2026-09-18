@@ -211,6 +211,25 @@ class HubChatViewModelTest {
         }
 
     @Test
+    fun senderProfileVisibilityDoesNotDependOnGuestDirectory() =
+        runTest {
+            val dispatcher = UnconfinedTestDispatcher(testScheduler)
+            Dispatchers.setMain(dispatcher)
+            try {
+                val viewModel = buildViewModel(FakeHubLifecycleGateway(), FakeActiveHubCache(), dispatcher)
+                viewModel.hubParticipantIds = emptySet()
+                viewModel.hubSenderProfilesVisible = true
+
+                assertTrue(viewModel.canOpenSenderProfile("user_2"))
+
+                viewModel.hubSenderProfilesVisible = false
+                assertFalse(viewModel.canOpenSenderProfile("user_2"))
+            } finally {
+                Dispatchers.resetMain()
+            }
+        }
+
+    @Test
     fun externalRevocation_clearsStateAndClosesOpenHub() =
         runTest {
             val dispatcher = UnconfinedTestDispatcher(testScheduler)

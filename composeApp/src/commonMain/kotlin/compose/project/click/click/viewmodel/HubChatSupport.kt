@@ -4,6 +4,8 @@ import compose.project.click.click.data.AppDataManager // pragma: allowlist secr
 import compose.project.click.click.data.api.ChatApiClient // pragma: allowlist secret
 import compose.project.click.click.data.auth.EnsureFreshAccessToken // pragma: allowlist secret
 import compose.project.click.click.data.models.ChatMessageType // pragma: allowlist secret
+import compose.project.click.click.data.models.MessageReaction // pragma: allowlist secret
+import compose.project.click.click.data.models.MessageWithUser // pragma: allowlist secret
 import compose.project.click.click.data.storage.TokenStorage // pragma: allowlist secret
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
@@ -108,12 +110,168 @@ internal data class HubMessageRow(
     @SerialName("user_id") val userId: String,
     val body: String,
     @SerialName("created_at") val createdAt: String,
+    @SerialName("edited_at") val editedAt: String? = null,
     @SerialName("message_type") val messageType: String = ChatMessageType.TEXT,
     val metadata: JsonElement? = null,
 )
 
+@Serializable
+internal data class HubReactionRow(
+    val id: String,
+    @SerialName("hub_message_id") val messageId: String,
+    @SerialName("hub_id") val hubId: String,
+    @SerialName("user_id") val userId: String,
+    @SerialName("reaction_type") val reactionType: String,
+    @SerialName("created_at") val createdAt: String,
+)
+
 /** Extract the `id` column out of a realtime `oldRecord` JsonObject (DELETE payloads carry PKs only). */
 internal fun JsonObject.hubMessageRowId(): String? = (this["id"] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
+
+internal fun JsonObject.hubReactionRowId(): String? = (this["id"] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
+
+internal fun JsonObject.hubReactionMessageId(): String? =
+    (this["hub_message_id"] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
+
+internal fun JsonObject.hubReactionHubId(): String? = (this["hub_id"] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
+
+internal fun JsonObject.hubReactionUserId(): String? = (this["user_id"] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
+
+internal fun JsonObject.hubReactionType(): String? = (this["reaction_type"] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
+
+internal data class HubReactionMutationKey(
+    val messageId: String,
+    val reactionType: String,
+)
+
+internal data class HubReactionMutationState(
+    var desiredEnabled: Boolean,
+    var acknowledgedEnabled: Boolean,
+    var generation: Long = 0L,
+    var canonicalReaction: MessageReaction? = null,
+    var workerRunning: Boolean = false,
+    var activeRequestTargetEnabled: Boolean? = null,
+    var requiresRealtimeFence: Boolean = false,
+    var lastRealtimeEnabled: Boolean? = null,
+) {
+    fun toggleIntent() {
+        if (activeRequestTargetEnabled != null) {
+            requiresRealtimeFence = true
+        }
+        desiredEnabled = !desiredEnabled
+        generation += 1L
+    }
+
+    fun observeAcknowledged(
+        enabled: Boolean,
+        canonical: MessageReaction? = null,
+    ): Boolean {
+        acknowledgedEnabled = enabled
+        canonicalReaction = if (enabled) canonical ?: canonicalReaction else null
+        return desiredEnabled == acknowledgedEnabled
+    }
+
+    fun observeRealtimeAcknowledged(
+        enabled: Boolean,
+        canonical: MessageReaction? = null,
+    ): Boolean {
+        lastRealtimeEnabled = enabled
+        return observeAcknowledged(enabled = enabled, canonical = canonical)
+    }
+
+    fun canRetire(): Boolean =
+        desiredEnabled == acknowledgedEnabled &&
+            (!requiresRealtimeFence || lastRealtimeEnabled == desiredEnabled)
+}
+
+internal sealed interface HubReactionRealtimeEvent {
+    data class Upsert(
+        val reaction: MessageReaction,
+    ) : HubReactionRealtimeEvent
+
+    data class Delete(
+        val reactionId: String,
+        val messageId: String? = null,
+        val userId: String? = null,
+        val reactionType: String? = null,
+    ) : HubReactionRealtimeEvent
+}
+
+internal data class PendingHubMessageDelete(
+    val removed: MessageWithUser,
+    val index: Int,
+    val latestRealtime: MessageWithUser? = null,
+)
+
+internal fun PendingHubMessageDelete.rollbackMessage(): MessageWithUser = latestRealtime ?: removed
+
+internal fun applyHubReactionRealtimeEvent(
+    current: Map<String, List<MessageReaction>>,
+    event: HubReactionRealtimeEvent,
+): Map<String, List<MessageReaction>> {
+    val next = current.toMutableMap()
+    when (event) {
+        is HubReactionRealtimeEvent.Upsert -> {
+            val reaction = event.reaction
+            val rows =
+                next[reaction.messageId]
+                    .orEmpty()
+                    .filterNot {
+                        it.id == reaction.id ||
+                            (it.userId == reaction.userId && it.reactionType == reaction.reactionType)
+                    } + reaction
+            next[reaction.messageId] = rows
+        }
+        is HubReactionRealtimeEvent.Delete -> {
+            val messageId =
+                event.messageId
+                    ?: next.entries
+                        .firstOrNull { (_, rows) ->
+                            rows.any { it.id == event.reactionId }
+                        }?.key
+                    ?: return current
+            val rows = next[messageId].orEmpty().filterNot { it.id == event.reactionId }
+            if (rows.isEmpty()) next.remove(messageId) else next[messageId] = rows
+        }
+    }
+    return next
+}
+
+internal fun hubReactionDeleteEvent(oldRecord: JsonObject): HubReactionRealtimeEvent.Delete? {
+    val reactionId = oldRecord.hubReactionRowId() ?: return null
+    return HubReactionRealtimeEvent.Delete(
+        reactionId = reactionId,
+        messageId = oldRecord.hubReactionMessageId(),
+        userId = oldRecord.hubReactionUserId(),
+        reactionType = oldRecord.hubReactionType(),
+    )
+}
+
+internal fun rollbackHubReactionMutation(
+    current: List<MessageReaction>,
+    optimisticId: String?,
+    removedExisting: MessageReaction?,
+    restoreRemovedExisting: Boolean = true,
+): List<MessageReaction> =
+    when {
+        removedExisting != null &&
+            restoreRemovedExisting &&
+            current.none {
+                it.userId == removedExisting.userId &&
+                    it.reactionType == removedExisting.reactionType
+            } -> current + removedExisting
+        removedExisting != null -> current
+        optimisticId != null -> current.filterNot { it.id == optimisticId }
+        else -> current
+    }
+
+internal fun replayHubReactionEvents(
+    snapshot: List<MessageReaction>,
+    events: List<HubReactionRealtimeEvent>,
+): Map<String, List<MessageReaction>> =
+    events.fold(snapshot.groupBy { it.messageId }) { state, event ->
+        applyHubReactionRealtimeEvent(state, event)
+    }
 
 internal fun hubCreatedAtToEpoch(iso: String): Long {
     val t = iso.trim().replace(" ", "T")
