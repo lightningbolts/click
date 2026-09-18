@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
 import compose.project.click.click.data.models.ChatMessageType // pragma: allowlist secret
+import compose.project.click.click.data.models.Message // pragma: allowlist secret
 import compose.project.click.click.data.models.MessageWithUser // pragma: allowlist secret
 import compose.project.click.click.data.models.copyableText // pragma: allowlist secret
 import compose.project.click.click.data.models.isEncryptedMedia // pragma: allowlist secret
@@ -52,12 +53,29 @@ import compose.project.click.click.data.models.mediaUrlOrNull // pragma: allowli
 import compose.project.click.click.data.models.originalMimeTypeOrNull // pragma: allowlist secret
 import compose.project.click.click.ui.components.EmojiCatalog // pragma: allowlist secret
 import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
-import compose.project.click.click.viewmodel.ChatViewModel // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassAlertDialog // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickActionBottomSheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.BentoGlassOptionRow // pragma: allowlist secret
 import kotlinx.coroutines.launch
+
+internal data class MessageActionCapabilities(
+    val canReply: Boolean = true,
+    val canReact: Boolean = true,
+    val canCopy: Boolean = true,
+    val canSaveMedia: Boolean = true,
+    val canShareMedia: Boolean = true,
+    val canEdit: Boolean = false,
+    val canDelete: Boolean = false,
+)
+
+internal class MessageActionHandlers(
+    val onReply: (MessageWithUser) -> Unit = {},
+    val onReact: (String, String) -> Unit = { _, _ -> },
+    val fetchDecryptedMediaBytes: suspend (Message) -> ByteArray? = { null },
+    val onEdit: (MessageWithUser) -> Unit = {},
+    val onDelete: (MessageWithUser) -> Unit = {},
+)
 
 /**
  * Bottom sheet that appears when a user long-presses a message.
@@ -70,10 +88,10 @@ import kotlinx.coroutines.launch
 @Composable
 internal fun MessageActionSheet(
     messageWithUser: MessageWithUser,
-    viewModel: ChatViewModel,
+    capabilities: MessageActionCapabilities,
+    handlers: MessageActionHandlers,
     onDismiss: () -> Unit,
 ) {
-    val isSent = messageWithUser.isSent
     val message = messageWithUser.message
 
     val scope = rememberCoroutineScope()
@@ -124,7 +142,7 @@ internal fun MessageActionSheet(
                 confirmButton = {
                     TextButton(
                         onClick = {
-                            viewModel.deleteMessage(message.id)
+                            handlers.onDelete(messageWithUser)
                             showDeleteMessageFinalConfirm = false
                             dismiss()
                         },
@@ -183,7 +201,7 @@ internal fun MessageActionSheet(
                             modifier = Modifier
                                 .clickable {
                                     PlatformHapticsPolicy.lightImpact()
-                                    viewModel.addReaction(message.id, em)
+                                    handlers.onReact(message.id, em)
                                     dismiss()
                                 }
                                 .padding(8.dp),
@@ -192,11 +210,12 @@ internal fun MessageActionSheet(
                 }
             } else {
                 val optionRadius = 0.dp
-                BentoGlassOptionRow(
+                if (capabilities.canReply) {
+                    BentoGlassOptionRow(
                     title = "Reply",
                     onClick = {
                         if (message.messageType != "call_log") {
-                            viewModel.startReplyTo(messageWithUser)
+                            handlers.onReply(messageWithUser)
                             dismiss()
                         }
                     },
@@ -211,9 +230,11 @@ internal fun MessageActionSheet(
                             tint = PrimaryBlue,
                         )
                     },
-                )
+                    )
+                }
 
-                Row(
+                if (capabilities.canReact) {
+                    Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 8.dp),
@@ -227,7 +248,7 @@ internal fun MessageActionSheet(
                             modifier = Modifier
                                 .clickable {
                                     PlatformHapticsPolicy.lightImpact()
-                                    viewModel.addReaction(message.id, emoji)
+                                    handlers.onReact(message.id, emoji)
                                     dismiss()
                                 }
                                 .padding(8.dp),
@@ -235,23 +256,29 @@ internal fun MessageActionSheet(
                     }
                 }
 
-                TextButton(
-                    onClick = { emojiPickMode = true },
-                    modifier = Modifier.align(Alignment.CenterHorizontally),
-                ) {
-                    Text("More emojis…", color = PrimaryBlue)
+                    TextButton(
+                        onClick = { emojiPickMode = true },
+                        modifier = Modifier.align(Alignment.CenterHorizontally),
+                    ) {
+                        Text("More emojis…", color = PrimaryBlue)
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(10.dp))
 
                 val imageUrl = message.mediaUrlOrNull()
-                if (message.messageType.lowercase() == ChatMessageType.IMAGE && imageUrl != null) {
-                    BentoGlassOptionRow(
+                if (
+                    message.messageType.lowercase() == ChatMessageType.IMAGE &&
+                    imageUrl != null &&
+                    (capabilities.canSaveMedia || capabilities.canShareMedia)
+                ) {
+                    if (capabilities.canSaveMedia) {
+                        BentoGlassOptionRow(
                         title = "Save to gallery",
                         onClick = {
                             scope.launch {
                                 if (message.isEncryptedMedia()) {
-                                    val bytes = viewModel.fetchDecryptedChatMediaBytes(message)
+                                    val bytes = handlers.fetchDecryptedMediaBytes(message)
                                     if (bytes != null) {
                                         saveChatImageToGallery(
                                             imageUrl = imageUrl,
@@ -275,13 +302,14 @@ internal fun MessageActionSheet(
                                 tint = PrimaryBlue,
                             )
                         },
-                    )
-                    if (message.isEncryptedMedia()) {
+                        )
+                    }
+                    if (capabilities.canShareMedia && message.isEncryptedMedia()) {
                         BentoGlassOptionRow(
                             title = "Share image",
                             onClick = {
                                 scope.launch {
-                                    val bytes = viewModel.fetchDecryptedChatMediaBytes(message)
+                                    val bytes = handlers.fetchDecryptedMediaBytes(message)
                                     if (bytes != null) {
                                         val ext = when {
                                             message.originalMimeTypeOrNull()?.contains("png", ignoreCase = true) == true -> "png"
@@ -308,7 +336,8 @@ internal fun MessageActionSheet(
                     }
                 }
 
-                BentoGlassOptionRow(
+                if (capabilities.canCopy) {
+                    BentoGlassOptionRow(
                     title = if (message.messageType.lowercase() == ChatMessageType.IMAGE) {
                         "Copy caption & link"
                     } else {
@@ -329,13 +358,14 @@ internal fun MessageActionSheet(
                             tint = onVariant,
                         )
                     },
-                )
+                    )
+                }
 
-                if (isSent) {
+                if (capabilities.canEdit) {
                     BentoGlassOptionRow(
                         title = "Edit",
                         onClick = {
-                            viewModel.startEditMessage(message.id, message.content)
+                            handlers.onEdit(messageWithUser)
                             dismiss()
                         },
                         cornerRadius = optionRadius,
@@ -350,7 +380,9 @@ internal fun MessageActionSheet(
                             )
                         },
                     )
+                }
 
+                if (capabilities.canDelete) {
                     BentoGlassOptionRow(
                         title = "Delete",
                         onClick = { showDeleteMessageConfirm = true },
