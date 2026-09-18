@@ -163,7 +163,7 @@ internal fun HubChatViewModel.hydrateFromDiskCache() {
     if (cached.messages.isEmpty()) return
     // Event guest-list visibility is server-authoritative. Do not restore cached
     // identities before the current visibility policy has been fetched.
-    val cachedParticipants = if (_isEventHub.value) emptyList() else cached.participants
+    val cachedParticipants = if (hubSenderProfilesVisible) cached.participants else emptyList()
     cachedParticipants.forEach { user ->
         if (user.id != currentUserId) {
             val label = user.name?.takeIf { it.isNotBlank() } ?: "Member"
@@ -175,10 +175,14 @@ internal fun HubChatViewModel.hydrateFromDiskCache() {
     _messageReactions.value = cached.reactions.groupBy { it.messageId }
 }
 
-internal fun HubChatViewModel.applyVisibleHubParticipants(participantIds: Collection<String>) {
+internal fun HubChatViewModel.applyVisibleHubParticipants(
+    participantIds: Collection<String>,
+    senderProfilesVisible: Boolean,
+) {
     hubParticipantIds = participantIds.toSet()
+    hubSenderProfilesVisible = senderProfilesVisible
     senderUiCache.keys.toList().forEach { userId ->
-        if (userId !in hubParticipantIds) senderUiCache.remove(userId)
+        if (!senderProfilesVisible || userId !in hubParticipantIds) senderUiCache.remove(userId)
     }
 }
 
@@ -378,7 +382,9 @@ internal suspend fun HubChatViewModel.mergeMessages(rows: List<HubMessageRow>) {
         rows
             .filter { it.hubId == hubId }
             .sortedBy { it.createdAt }
-    prefetchSenderUi(filtered.map { it.userId }.filter { it in hubParticipantIds })
+    if (hubSenderProfilesVisible) {
+        prefetchSenderUi(filtered.map { it.userId }.filter { it in hubParticipantIds })
+    }
     val merged = filtered.map { rowToMessageWithUser(it) }
     val next = merged + pendingOptimisticOutgoing(merged)
     _messages.value = next
@@ -496,7 +502,10 @@ internal suspend fun HubChatViewModel.loadInitialMessages() {
             val thread = chatApi.fetchHubThread(hubId, token)
             thread.fold(
                 onSuccess = { snapshot ->
-                    applyVisibleHubParticipants(snapshot.participantIds)
+                    applyVisibleHubParticipants(
+                        participantIds = snapshot.participantIds,
+                        senderProfilesVisible = snapshot.senderProfilesVisible,
+                    )
                     runCatching { ensureHubE2eeV2Session(hubParticipantIds) }
                         .onFailure { error ->
                             clearHubE2eeV2Session()
@@ -548,7 +557,10 @@ internal suspend fun HubChatViewModel.loadInitialMessages() {
                         limit(HUB_INITIAL_MESSAGE_LIMIT)
                     }.decodeList<HubMessageRow>()
                     .asReversed()
-            applyVisibleHubParticipants(rows.map { it.userId } + currentUserId)
+            applyVisibleHubParticipants(
+                participantIds = rows.map { it.userId } + currentUserId,
+                senderProfilesVisible = true,
+            )
             runCatching { ensureHubE2eeV2Session(hubParticipantIds) }
                 .onFailure { error ->
                     clearHubE2eeV2Session()
@@ -572,8 +584,13 @@ internal suspend fun HubChatViewModel.loadMessagesAround(messageId: String) {
             if (!token.isNullOrBlank()) {
                 val thread = chatApi.fetchHubThread(hubId, token, aroundMessageId = messageId)
                 thread.getOrNull()?.let { snapshot ->
-                    applyVisibleHubParticipants(snapshot.participantIds)
-                    prefetchSenderUi(snapshot.participantIds)
+                    applyVisibleHubParticipants(
+                        participantIds = snapshot.participantIds,
+                        senderProfilesVisible = snapshot.senderProfilesVisible,
+                    )
+                    if (snapshot.senderProfilesVisible) {
+                        prefetchSenderUi(snapshot.participantIds)
+                    }
                     mergeMessages(snapshot.messages.map { it.toHubMessageRow() })
                     mergeHubReactions(snapshot.reactions.map { it.toMessageReaction() })
                     if (_messages.value.any { it.message.id == messageId }) return@withContext

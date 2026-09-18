@@ -181,6 +181,7 @@ class HubChatViewModel(
     internal var participantDenied: Boolean = false
     internal var hubE2eeV2Session: HubE2eeV2Session? = null
     internal var hubParticipantIds: Set<String> = emptySet()
+    internal var hubSenderProfilesVisible: Boolean = !isEventHub
     internal val reactionHydrationMutex = Mutex()
     internal val queuedReactionEvents = mutableListOf<HubReactionRealtimeEvent>()
     internal var reactionHydrationComplete = false
@@ -319,7 +320,11 @@ class HubChatViewModel(
 
     fun deleteMessage(messageId: String) = deleteHubMessageImpl(messageId)
 
-    fun canOpenSenderProfile(userId: String): Boolean = userId.isNotBlank() && userId != currentUserId && userId in hubParticipantIds
+    fun canOpenSenderProfile(userId: String): Boolean =
+        hubSenderProfilesVisible &&
+            userId.isNotBlank() &&
+            userId != currentUserId &&
+            userId in hubParticipantIds
 
     fun retryRealtime() {
         if (!startRealtime) return
@@ -1045,6 +1050,7 @@ class HubChatViewModel(
                         val row = action.decodeRecordOrNull<HubMessageRow>() ?: return@collect
                         if (row.hubId != hubId) return@collect
                         if (
+                            hubSenderProfilesVisible &&
                             row.userId != currentUserId &&
                             row.userId in hubParticipantIds &&
                             !senderUiCache.containsKey(row.userId)
