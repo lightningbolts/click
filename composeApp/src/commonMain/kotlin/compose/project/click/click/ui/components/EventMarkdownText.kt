@@ -78,7 +78,7 @@ private fun MarkdownInlineText(
                             withStyle(
                                 SpanStyle(
                                     fontFamily = FontFamily.Monospace,
-                                    color = MaterialTheme.colorScheme.onSurface,
+                                    color = color,
                                 ),
                             ) {
                                 append(token.removePrefix("`").removeSuffix("`"))
