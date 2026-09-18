@@ -115,6 +115,8 @@ internal fun HubChatViewModel.toggleHubReactionImpl(
                     current = current,
                     optimisticId = optimisticId,
                     removedExisting = existing,
+                    restoreRemovedExisting =
+                        existing == null || existing.id !in realtimeDeletedReactionIds,
                 )
             _messageReactions.value =
                 _messageReactions.value.toMutableMap().apply {
@@ -226,6 +228,11 @@ internal fun HubChatViewModel.deleteHubMessageImpl(messageId: String) {
     val removedIndex = beforeMessages.indexOfFirst { it.message.id == id }
     val removed = beforeMessages.getOrNull(removedIndex) ?: return
     if (!removed.isSent) return
+    pendingHubMessageDeletes[id] =
+        PendingHubMessageDelete(
+            removed = removed,
+            index = removedIndex,
+        )
     _messages.value = beforeMessages.filterNot { it.message.id == id }
     if (_replyingTo.value?.message?.id == id) _replyingTo.value = null
     if (_editingMessageId.value == id) cancelHubEditImpl()
@@ -243,12 +250,17 @@ internal fun HubChatViewModel.deleteHubMessageImpl(messageId: String) {
                     userLong = location.longitude,
                     authToken = jwt,
                 ).getOrThrow()
+            pendingHubMessageDeletes.remove(id)
             _messageReactions.value = _messageReactions.value - id
             persistHubMessagesToDisk(_messages.value)
         } catch (e: Exception) {
-            if (_messages.value.none { it.message.id == id }) {
+            val pending = pendingHubMessageDeletes.remove(id)
+            if (pending != null && _messages.value.none { it.message.id == id }) {
                 val restored = _messages.value.toMutableList()
-                restored.add(removedIndex.coerceIn(0, restored.size), removed)
+                restored.add(
+                    pending.index.coerceIn(0, restored.size),
+                    pending.rollbackMessage(),
+                )
                 _messages.value = restored
             }
             persistHubMessagesToDisk(_messages.value)
