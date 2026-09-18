@@ -1095,14 +1095,14 @@ class HubChatViewModel(
                         val deletedId = action.oldRecord.hubMessageRowId() ?: return@collect
                         pendingHubMessageDeletes.remove(deletedId)
                         val current = _messages.value
-                        if (current.any { it.message.id == deletedId }) {
-                            val next = current.filterNot { it.message.id == deletedId }
+                        val next = current.filterNot { it.message.id == deletedId }
+                        if (next.size != current.size) {
                             _messages.value = next
-                            _messageReactions.value = _messageReactions.value - deletedId
-                            if (_replyingTo.value?.message?.id == deletedId) _replyingTo.value = null
-                            if (_editingMessageId.value == deletedId) cancelHubEditImpl()
-                            persistHubMessagesToDisk(next)
                         }
+                        _messageReactions.value = _messageReactions.value - deletedId
+                        if (_replyingTo.value?.message?.id == deletedId) _replyingTo.value = null
+                        if (_editingMessageId.value == deletedId) cancelHubEditImpl()
+                        persistHubMessagesToDisk(next)
                     }
                     else -> Unit
                 }
