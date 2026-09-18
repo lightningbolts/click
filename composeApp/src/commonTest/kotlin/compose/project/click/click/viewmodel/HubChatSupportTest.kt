@@ -8,7 +8,9 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class HubChatSupportTest {
     @Test
@@ -18,11 +20,15 @@ class HubChatSupportTest {
                 put("id", "reaction-1")
                 put("hub_message_id", "message-1")
                 put("hub_id", "hub-1")
+                put("user_id", "user-1")
+                put("reaction_type", "❤️")
             }
 
         assertEquals("reaction-1", record.hubReactionRowId())
         assertEquals("message-1", record.hubReactionMessageId())
         assertEquals("hub-1", record.hubReactionHubId())
+        assertEquals("user-1", record.hubReactionUserId())
+        assertEquals("❤️", record.hubReactionType())
     }
 
     @Test
@@ -60,6 +66,57 @@ class HubChatSupportTest {
 
         assertEquals(HubReactionRealtimeEvent.Delete("reaction-1"), event)
         assertEquals(null, state?.get("message-1"))
+    }
+
+    @Test
+    fun reactionMutationStatePreservesLatestRapidToggleIntent() {
+        val state =
+            HubReactionMutationState(
+                desiredEnabled = false,
+                acknowledgedEnabled = false,
+            )
+
+        state.toggleIntent()
+        assertTrue(state.desiredEnabled)
+        assertEquals(1L, state.generation)
+
+        state.toggleIntent()
+        assertFalse(state.desiredEnabled)
+        assertEquals(2L, state.generation)
+        assertFalse(state.acknowledgedEnabled)
+    }
+
+    @Test
+    fun staleRealtimeReactionDoesNotReplaceNewerDesiredIntent() {
+        val reaction =
+            MessageReaction(
+                id = "reaction-1",
+                messageId = "message-1",
+                userId = "me",
+                reactionType = "👍",
+                createdAt = 1L,
+            )
+        val state =
+            HubReactionMutationState(
+                desiredEnabled = false,
+                acknowledgedEnabled = false,
+                generation = 2L,
+            )
+
+        val matchesDesired =
+            state.observeAcknowledged(
+                enabled = true,
+                canonical = reaction,
+            )
+
+        assertFalse(matchesDesired)
+        assertFalse(state.desiredEnabled)
+        assertTrue(state.acknowledgedEnabled)
+        assertEquals(reaction, state.canonicalReaction)
+
+        assertTrue(state.observeAcknowledged(enabled = false))
+        assertFalse(state.acknowledgedEnabled)
+        assertEquals(null, state.canonicalReaction)
     }
 
     @Test
