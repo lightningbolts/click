@@ -14,7 +14,9 @@ import compose.project.click.click.data.api.E2eeV2MediaUploadRequest // pragma: 
 import compose.project.click.click.data.models.ChatMessageType // pragma: allowlist secret
 import compose.project.click.click.data.models.Message // pragma: allowlist secret
 import compose.project.click.click.data.models.MessageDeliveryState // pragma: allowlist secret
+import compose.project.click.click.data.models.MessageReaction // pragma: allowlist secret
 import compose.project.click.click.data.models.MessageWithUser // pragma: allowlist secret
+import compose.project.click.click.data.models.replySnippetForMetadata // pragma: allowlist secret
 import compose.project.click.click.data.models.audioCacheFileExtension // pragma: allowlist secret
 import compose.project.click.click.data.models.hasLocalMediaUri // pragma: allowlist secret
 import compose.project.click.click.data.models.hubMediaPathOrNull // pragma: allowlist secret
@@ -98,6 +100,15 @@ class HubChatViewModel(
 
     internal val _messages = MutableStateFlow<List<MessageWithUser>>(emptyList())
     val messages: StateFlow<List<MessageWithUser>> = _messages.asStateFlow()
+
+    internal val _messageReactions = MutableStateFlow<Map<String, List<MessageReaction>>>(emptyMap())
+    val messageReactions: StateFlow<Map<String, List<MessageReaction>>> = _messageReactions.asStateFlow()
+
+    internal val _replyingTo = MutableStateFlow<MessageWithUser?>(null)
+    val replyingTo: StateFlow<MessageWithUser?> = _replyingTo.asStateFlow()
+
+    internal val _editingMessageId = MutableStateFlow<String?>(null)
+    val editingMessageId: StateFlow<String?> = _editingMessageId.asStateFlow()
 
     internal val _occupantCount = MutableStateFlow(1)
     val occupantCount: StateFlow<Int> = _occupantCount.asStateFlow()
@@ -289,6 +300,19 @@ class HubChatViewModel(
         _draft.value = text.take(HUB_CHAT_DRAFT_MAX_LENGTH)
     }
 
+    fun startReplyTo(target: MessageWithUser) = startHubReplyImpl(target)
+
+    fun cancelReply() = cancelHubReplyImpl()
+
+    fun startEditMessage(target: MessageWithUser) = startHubEditImpl(target)
+
+    fun cancelEditMessage() = cancelHubEditImpl()
+
+    fun toggleReaction(messageId: String, reactionType: String) =
+        toggleHubReactionImpl(messageId, reactionType)
+
+    fun deleteMessage(messageId: String) = deleteHubMessageImpl(messageId)
+
     fun retryRealtime() {
         if (!startRealtime) return
         if (AppDataManager.isHubAccessRevoked(hubId)) {
@@ -329,12 +353,27 @@ class HubChatViewModel(
     }
 
     fun sendMessage() {
+        _editingMessageId.value?.let { messageId ->
+            confirmHubEditImpl(messageId)
+            return
+        }
+
         val text = _draft.value.trim()
         if (text.isEmpty()) return
 
+        val replyTarget = _replyingTo.value
+        val replyMetadata =
+            replyTarget?.let { target ->
+                buildJsonObject {
+                    put("reply_to_id", target.message.id)
+                    put("reply_to_content", replySnippetForMetadata(target.message.content))
+                }
+            }
+
         _draft.value = ""
+        _replyingTo.value = null
         _sendError.value = null
-        val tempId = appendOptimisticOutgoing(text)
+        val tempId = appendOptimisticOutgoing(text, replyMetadata)
 
         viewModelScope.launch {
             try {
@@ -360,14 +399,15 @@ class HubChatViewModel(
                             text
                         }
                     val outgoingMetadata =
-                        e2ee?.let {
-                            buildJsonObject {
+                        buildJsonObject {
+                            replyMetadata?.forEach { (key, value) -> put(key, value) }
+                            e2ee?.let {
                                 put("crypto_version", MessageCryptoV2.CRYPTO_VERSION)
                                 put("epoch", it.epoch)
                                 put("sender_device_id", it.senderDeviceId)
                                 put("client_message_id", clientMessageId!!)
                             }
-                        }
+                        }.takeIf { it.isNotEmpty() }
                     val dto =
                         chatApi
                             .sendHubMessage(
@@ -398,6 +438,7 @@ class HubChatViewModel(
             } catch (e: Exception) {
                 markOptimisticSendFailed(tempId)
                 _draft.value = text
+                if (_replyingTo.value == null) _replyingTo.value = replyTarget
                 if (isHubExpired(e)) {
                     _sendError.value = HUB_EXPIRED_MESSAGE
                 } else if (isHubOutOfRange(e) && !_isEventHub.value) {
