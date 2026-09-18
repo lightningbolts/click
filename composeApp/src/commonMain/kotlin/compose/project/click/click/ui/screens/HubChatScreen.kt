@@ -874,6 +874,8 @@ private fun HubChatInputBar(
     val draft by viewModel.draft.collectAsState()
     val isSending by viewModel.isSending.collectAsState()
     val sendError by viewModel.sendError.collectAsState()
+    val replyingTo by viewModel.replyingTo.collectAsState()
+    val editingMessageId by viewModel.editingMessageId.collectAsState()
 
     val composerStyle = LocalPlatformStyle.current
     val composerRowVPad = if (composerStyle.isIOS) 6.dp else 8.dp
@@ -903,6 +905,27 @@ private fun HubChatInputBar(
                     .fillMaxWidth()
                     .padding(horizontal = composerRowHPad, vertical = composerRowVPad),
         ) {
+            ChatReplyComposerBanner(
+                replyingTo = replyingTo,
+                editingMessageId = editingMessageId,
+                onCancel = viewModel::cancelReply,
+            )
+            if (editingMessageId != null) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        "Editing message",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(onClick = viewModel::cancelEditMessage) {
+                        Text("Cancel")
+                    }
+                }
+            }
             sendError?.let { err ->
                 Text(
                     text = "$err · Review and tap send to retry",
@@ -918,20 +941,22 @@ private fun HubChatInputBar(
                 value = draft,
                 onValueChange = viewModel::updateDraft,
                 placeholder =
-                    if (inLobby) {
-                        "Chat unlocks when 3+ join"
-                    } else if (isOutOfBounds) {
-                        "You are no longer at this location"
-                    } else {
-                        "Message the hub…"
+                    when {
+                        editingMessageId != null -> "Edit message…"
+                        inLobby -> "Chat unlocks when 3+ join"
+                        isOutOfBounds -> "You are no longer at this location"
+                        else -> "Message the hub…"
                     },
                 enabled = enabled,
                 externallySending = isSending,
-                sendIcon = Icons.AutoMirrored.Filled.Send,
-                sendContentDescription = "Send",
+                sendIcon =
+                    if (editingMessageId != null) Icons.Filled.Check else Icons.AutoMirrored.Filled.Send,
+                sendContentDescription = if (editingMessageId != null) "Confirm edit" else "Send",
                 onSend = viewModel::sendMessage,
                 attachmentMenuExpanded = attachmentMenuExpanded,
-                onAttachmentMenuExpandedChange = { attachmentMenuExpanded = it },
+                onAttachmentMenuExpandedChange = { expanded ->
+                    attachmentMenuExpanded = expanded && editingMessageId == null
+                },
                 attachmentMenuContent = {
                     Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
                         ChatAttachmentMenuRow(
