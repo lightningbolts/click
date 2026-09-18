@@ -39,7 +39,6 @@ internal fun HubChatViewModel.launchRealtimeSession() {
         viewModelScope.launch {
             reactionHydrationMutex.withLock {
                 queuedReactionEvents.clear()
-                realtimeDeletedReactionIds.clear()
                 reactionHydrationComplete = false
             }
             try {
