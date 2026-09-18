@@ -37,6 +37,6 @@ class HubChatSupportTest {
 
     @Test
     fun hubTimestampParsingUsesIsoInstant() {
-        assertEquals(1_789_689_600_000L, hubCreatedAtToEpoch("2026-09-17T00:00:00Z"))
+        assertEquals(1_789_603_200_000L, hubCreatedAtToEpoch("2026-09-17T00:00:00Z"))
     }
 }
