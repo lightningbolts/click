@@ -1,6 +1,9 @@
 package compose.project.click.click.viewmodel
 
+import compose.project.click.click.data.models.Message
 import compose.project.click.click.data.models.MessageReaction
+import compose.project.click.click.data.models.MessageWithUser
+import compose.project.click.click.data.models.User
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlin.test.Test
@@ -145,6 +148,62 @@ class HubChatSupportTest {
             )
 
         assertEquals(setOf("peer", "canonical"), afterFailedAdd.map { it.id }.toSet())
+    }
+
+    @Test
+    fun reactionRollbackDoesNotResurrectRealtimeDeletedRow() {
+        val removed =
+            MessageReaction(
+                id = "mine",
+                messageId = "message-1",
+                userId = "me",
+                reactionType = "👍",
+                createdAt = 1L,
+            )
+
+        val rolledBack =
+            rollbackHubReactionMutation(
+                current = emptyList(),
+                optimisticId = null,
+                removedExisting = removed,
+                restoreRemovedExisting = false,
+            )
+
+        assertEquals(emptyList(), rolledBack)
+    }
+
+    @Test
+    fun messageDeleteRollbackUsesNewestRealtimeVersion() {
+        val original =
+            MessageWithUser(
+                message =
+                    Message(
+                        id = "message-1",
+                        user_id = "me",
+                        content = "old",
+                        timeCreated = 1L,
+                    ),
+                user = User(id = "me", name = "You"),
+                isSent = true,
+            )
+        val updated =
+            original.copy(
+                message =
+                    original.message.copy(
+                        content = "new",
+                        timeEdited = 2L,
+                    ),
+            )
+
+        val pending =
+            PendingHubMessageDelete(
+                removed = original,
+                index = 0,
+                latestRealtime = updated,
+            )
+
+        assertEquals("new", pending.rollbackMessage().message.content)
+        assertEquals(2L, pending.rollbackMessage().message.timeEdited)
     }
 
     @Test
