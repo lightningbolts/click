@@ -411,6 +411,7 @@ internal fun HubChatViewModel.clearLocalHubState(clearDiskCache: Boolean = false
     _replyingTo.value = null
     _editingMessageId.value = null
     realtimeDeletedReactionIds.clear()
+    hubReactionMutationStates.clear()
     pendingHubMessageDeletes.clear()
     _draft.value = ""
     _occupantCount.value = 1
@@ -482,11 +483,14 @@ internal suspend fun HubChatViewModel.handleHubReactionRealtimeEvent(event: HubR
             is HubReactionRealtimeEvent.Upsert -> realtimeDeletedReactionIds.remove(event.reaction.id)
             is HubReactionRealtimeEvent.Delete -> realtimeDeletedReactionIds.add(event.reactionId)
         }
+        val shouldApply = reconcileHubReactionRealtimeAgainstPending(event)
         if (!reactionHydrationComplete) {
-            queuedReactionEvents += event
+            if (shouldApply) queuedReactionEvents += event
             return
         }
-        _messageReactions.value = applyHubReactionRealtimeEvent(_messageReactions.value, event)
+        if (shouldApply) {
+            _messageReactions.value = applyHubReactionRealtimeEvent(_messageReactions.value, event)
+        }
         persistHubMessagesToDisk(_messages.value)
     }
 }
@@ -502,6 +506,10 @@ internal suspend fun HubChatViewModel.finishInitialHubReactionHydration(snapshot
         }
         queuedReactionEvents.clear()
         reactionHydrationComplete = true
+        persistHubMessagesToDisk(_messages.value)
+    }
+    viewModelScope.launch {
+        reconcilePendingHubReactionIntents()
         persistHubMessagesToDisk(_messages.value)
     }
 }
