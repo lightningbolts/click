@@ -181,9 +181,11 @@ class HubChatViewModel(
     internal var participantDenied: Boolean = false
     internal var hubE2eeV2Session: HubE2eeV2Session? = null
     internal var hubParticipantIds: Set<String> = emptySet()
-    internal var hubSenderProfilesVisible: Boolean = true
+    internal var hubSenderProfilesVisible: Boolean = false
     internal val reactionHydrationMutex = Mutex()
     internal val queuedReactionEvents = mutableListOf<HubReactionRealtimeEvent>()
+    internal val realtimeDeletedReactionIds = mutableSetOf<String>()
+    internal val pendingHubMessageDeletes = mutableMapOf<String, PendingHubMessageDelete>()
     internal var reactionHydrationComplete = false
 
     internal suspend fun requireFreshHubJwt(forceRefresh: Boolean = false): String = freshHubJwtProvider(forceRefresh)
