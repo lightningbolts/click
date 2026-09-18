@@ -459,6 +459,7 @@ class HubChatViewModel(
         mimeType: String,
     ) {
         if (imageBytes.isEmpty() || _isSending.value) return
+        val replyTarget = _replyingTo.value
         viewModelScope.launch {
             _isSending.value = true
             _sendError.value = null
@@ -510,6 +511,10 @@ class HubChatViewModel(
                             ).getOrElse { e -> throw e }
                     val metadata: JsonObject =
                         buildJsonObject {
+                            replyTarget?.let { target ->
+                                put("reply_to_id", target.message.id)
+                                put("reply_to_content", replySnippetForMetadata(target.message.content))
+                            }
                             put("media_path", JsonPrimitive(path))
                             put("media_bucket", JsonPrimitive("hub-media"))
                             put("is_encrypted_media", JsonPrimitive(true))
@@ -545,6 +550,7 @@ class HubChatViewModel(
                             messageType = ChatMessageType.IMAGE,
                             metadata = metadata,
                         ).getOrElse { e -> throw e }
+                    if (_replyingTo.value == replyTarget) _replyingTo.value = null
                 }
             } catch (e: Exception) {
                 if (isHubExpired(e)) {
@@ -566,6 +572,7 @@ class HubChatViewModel(
         mimeType: String = "image/jpeg",
     ) {
         if (imageBytes.isEmpty() || _isSending.value) return
+        val replyTarget = _replyingTo.value
         viewModelScope.launch {
             _isSending.value = true
             _sendError.value = null
@@ -611,6 +618,10 @@ class HubChatViewModel(
                     val revealTtlIso = computeClickDropRevealTtlIso()
                     val metadata: JsonObject =
                         buildJsonObject {
+                            replyTarget?.let { target ->
+                                put("reply_to_id", target.message.id)
+                                put("reply_to_content", replySnippetForMetadata(target.message.content))
+                            }
                             put("media_path", JsonPrimitive(path))
                             put("media_bucket", JsonPrimitive("hub-media"))
                             put("is_encrypted_media", JsonPrimitive(true))
@@ -648,6 +659,7 @@ class HubChatViewModel(
                             messageType = ChatMessageType.IMAGE,
                             metadata = metadata,
                         ).getOrElse { e -> throw e }
+                    if (_replyingTo.value == replyTarget) _replyingTo.value = null
                 }
             } catch (e: Exception) {
                 if (isHubExpired(e)) {
