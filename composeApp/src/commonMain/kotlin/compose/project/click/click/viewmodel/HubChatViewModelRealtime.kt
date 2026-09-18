@@ -39,6 +39,7 @@ internal fun HubChatViewModel.launchRealtimeSession() {
         viewModelScope.launch {
             reactionHydrationMutex.withLock {
                 queuedReactionEvents.clear()
+                realtimeDeletedReactionIds.clear()
                 reactionHydrationComplete = false
             }
             try {
@@ -410,6 +411,8 @@ internal fun HubChatViewModel.clearLocalHubState(clearDiskCache: Boolean = false
     _messageReactions.value = emptyMap()
     _replyingTo.value = null
     _editingMessageId.value = null
+    realtimeDeletedReactionIds.clear()
+    pendingHubMessageDeletes.clear()
     _draft.value = ""
     _occupantCount.value = 1
     _outOfBounds.value = false
@@ -476,6 +479,10 @@ internal suspend fun HubChatViewModel.mergeHubReactions(reactions: List<MessageR
 
 internal suspend fun HubChatViewModel.handleHubReactionRealtimeEvent(event: HubReactionRealtimeEvent) {
     reactionHydrationMutex.withLock {
+        when (event) {
+            is HubReactionRealtimeEvent.Upsert -> realtimeDeletedReactionIds.remove(event.reaction.id)
+            is HubReactionRealtimeEvent.Delete -> realtimeDeletedReactionIds.add(event.reactionId)
+        }
         if (!reactionHydrationComplete) {
             queuedReactionEvents += event
             return
@@ -519,7 +526,9 @@ internal suspend fun HubChatViewModel.loadInitialMessages() {
                     if (snapshot.occupantCount > 0) {
                         _occupantCount.value = snapshot.occupantCount.coerceAtLeast(1)
                     }
-                    prefetchSenderUi(snapshot.participantIds)
+                    if (snapshot.senderProfilesVisible) {
+                        prefetchSenderUi(snapshot.participantIds)
+                    }
                     mergeMessages(snapshot.messages.map { it.toHubMessageRow() })
                     finishInitialHubReactionHydration(snapshot.reactions.map { it.toMessageReaction() })
                     return@withContext
