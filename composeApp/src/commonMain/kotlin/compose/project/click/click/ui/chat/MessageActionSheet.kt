@@ -48,6 +48,7 @@ import compose.project.click.click.data.models.ChatMessageType // pragma: allowl
 import compose.project.click.click.data.models.Message // pragma: allowlist secret
 import compose.project.click.click.data.models.MessageWithUser // pragma: allowlist secret
 import compose.project.click.click.data.models.copyableText // pragma: allowlist secret
+import compose.project.click.click.data.models.hubMediaPathOrNull // pragma: allowlist secret
 import compose.project.click.click.data.models.isEncryptedMedia // pragma: allowlist secret
 import compose.project.click.click.data.models.mediaUrlOrNull // pragma: allowlist secret
 import compose.project.click.click.data.models.originalMimeTypeOrNull // pragma: allowlist secret
@@ -267,9 +268,10 @@ internal fun MessageActionSheet(
                 Spacer(modifier = Modifier.height(10.dp))
 
                 val imageUrl = message.mediaUrlOrNull()
+                val imageReference = imageUrl ?: message.hubMediaPathOrNull()
                 if (
                     message.messageType.lowercase() == ChatMessageType.IMAGE &&
-                    imageUrl != null &&
+                    imageReference != null &&
                     (capabilities.canSaveMedia || capabilities.canShareMedia)
                 ) {
                     if (capabilities.canSaveMedia) {
@@ -281,13 +283,13 @@ internal fun MessageActionSheet(
                                     val bytes = handlers.fetchDecryptedMediaBytes(message)
                                     if (bytes != null) {
                                         saveChatImageToGallery(
-                                            imageUrl = imageUrl,
+                                            imageUrl = imageReference,
                                             decryptedImageBytes = bytes,
                                             mimeTypeHint = message.originalMimeTypeOrNull(),
                                         ).onSuccess { dismiss() }
                                     }
                                 } else {
-                                    saveChatImageToGallery(imageUrl).onSuccess { dismiss() }
+                                    saveChatImageToGallery(imageReference).onSuccess { dismiss() }
                                 }
                             }
                         },
