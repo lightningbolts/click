@@ -56,6 +56,7 @@ import compose.project.click.click.ui.components.ConnectionEventRecommendationCa
 import compose.project.click.click.ui.components.EventDirectoryUserProfileSheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.EventPeopleDirectorySection // pragma: allowlist secret
 import compose.project.click.click.ui.components.EventPeopleDirectorySheetContent // pragma: allowlist secret
+import compose.project.click.click.ui.components.EventMarkdownText // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.theme.* // pragma: allowlist secret
 import compose.project.click.click.ui.utils.* // pragma: allowlist secret
@@ -492,15 +493,20 @@ internal fun EventBeaconDetail(
             )
         }
 
-        Text(
-            text =
-                displayBeacon.metadata.description
-                    ?.trim()
-                    .orEmpty()
-                    .ifBlank { "No description" },
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
+        val eventDescription = displayBeacon.metadata.description?.trim().orEmpty()
+        if (eventDescription.isBlank()) {
+            Text(
+                text = "No description",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+        } else {
+            EventMarkdownText(
+                markdown = eventDescription,
+                modifier = Modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+        }
 
         displayBeacon.createdAtEpochMs?.let { createdMs ->
             Text(
