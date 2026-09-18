@@ -52,6 +52,7 @@ import compose.project.click.click.data.repository.SupabaseRepository
 import compose.project.click.click.ui.components.ClickOutlinedTextField
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.birthdayIsoToUtcMidnightMillis
+import compose.project.click.click.ui.components.editBirthdayDigitsInput
 import compose.project.click.click.ui.components.formatBirthdayDigitsInput
 import compose.project.click.click.ui.components.parseBirthdayIsoLocalDate
 import compose.project.click.click.ui.components.utcMidnightMillisToBirthdayIso
@@ -170,7 +171,7 @@ fun ProfileBasicsGateScreen(
         if (requireBirthday) {
             ClickOutlinedTextField(
                 value = birthdayIso,
-                onValueChange = { birthdayIso = formatBirthdayDigitsInput(it) },
+                onValueChange = { incoming -> birthdayIso = editBirthdayDigitsInput(birthdayIso, incoming) },
                 label = { Text("Birthday") },
                 placeholderText = "YYYY-MM-DD",
                 trailingIcon = {
