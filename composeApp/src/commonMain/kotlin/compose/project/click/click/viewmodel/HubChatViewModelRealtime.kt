@@ -161,15 +161,25 @@ internal fun HubChatViewModel.messageWithUserFromCached(
 internal fun HubChatViewModel.hydrateFromDiskCache() {
     val cached = AppDataManager.cachedHubThreadFor(hubId) ?: return
     if (cached.messages.isEmpty()) return
-    cached.participants.forEach { user ->
+    // Event guest-list visibility is server-authoritative. Do not restore cached
+    // identities before the current visibility policy has been fetched.
+    val cachedParticipants = if (_isEventHub.value) emptyList() else cached.participants
+    cachedParticipants.forEach { user ->
         if (user.id != currentUserId) {
             val label = user.name?.takeIf { it.isNotBlank() } ?: "Member"
             val avatar = user.image?.trim()?.takeIf { it.isNotEmpty() }
             senderUiCache[user.id] = label to avatar
         }
     }
-    _messages.value = cached.messages.map { messageWithUserFromCached(it, cached.participants) }
+    _messages.value = cached.messages.map { messageWithUserFromCached(it, cachedParticipants) }
     _messageReactions.value = cached.reactions.groupBy { it.messageId }
+}
+
+internal fun HubChatViewModel.applyVisibleHubParticipants(participantIds: Collection<String>) {
+    hubParticipantIds = participantIds.toSet()
+    senderUiCache.keys.toList().forEach { userId ->
+        if (userId !in hubParticipantIds) senderUiCache.remove(userId)
+    }
 }
 
 internal fun HubChatViewModel.persistHubMessagesToDisk(messages: List<MessageWithUser>) {
@@ -486,7 +496,7 @@ internal suspend fun HubChatViewModel.loadInitialMessages() {
             val thread = chatApi.fetchHubThread(hubId, token)
             thread.fold(
                 onSuccess = { snapshot ->
-                    hubParticipantIds = snapshot.participantIds.toSet()
+                    applyVisibleHubParticipants(snapshot.participantIds)
                     runCatching { ensureHubE2eeV2Session(hubParticipantIds) }
                         .onFailure { error ->
                             clearHubE2eeV2Session()
@@ -538,7 +548,7 @@ internal suspend fun HubChatViewModel.loadInitialMessages() {
                         limit(HUB_INITIAL_MESSAGE_LIMIT)
                     }.decodeList<HubMessageRow>()
                     .asReversed()
-            hubParticipantIds = rows.map { it.userId }.toSet() + currentUserId
+            applyVisibleHubParticipants(rows.map { it.userId } + currentUserId)
             runCatching { ensureHubE2eeV2Session(hubParticipantIds) }
                 .onFailure { error ->
                     clearHubE2eeV2Session()
@@ -562,7 +572,7 @@ internal suspend fun HubChatViewModel.loadMessagesAround(messageId: String) {
             if (!token.isNullOrBlank()) {
                 val thread = chatApi.fetchHubThread(hubId, token, aroundMessageId = messageId)
                 thread.getOrNull()?.let { snapshot ->
-                    hubParticipantIds = snapshot.participantIds.toSet()
+                    applyVisibleHubParticipants(snapshot.participantIds)
                     prefetchSenderUi(snapshot.participantIds)
                     mergeMessages(snapshot.messages.map { it.toHubMessageRow() })
                     mergeHubReactions(snapshot.reactions.map { it.toMessageReaction() })
