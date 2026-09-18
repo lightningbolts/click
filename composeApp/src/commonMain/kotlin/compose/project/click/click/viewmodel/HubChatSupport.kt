@@ -151,8 +151,14 @@ internal data class HubReactionMutationState(
     var generation: Long = 0L,
     var canonicalReaction: MessageReaction? = null,
     var workerRunning: Boolean = false,
+    var activeRequestTargetEnabled: Boolean? = null,
+    var requiresRealtimeFence: Boolean = false,
+    var lastRealtimeEnabled: Boolean? = null,
 ) {
     fun toggleIntent() {
+        if (activeRequestTargetEnabled != null) {
+            requiresRealtimeFence = true
+        }
         desiredEnabled = !desiredEnabled
         generation += 1L
     }
@@ -165,6 +171,18 @@ internal data class HubReactionMutationState(
         canonicalReaction = if (enabled) canonical ?: canonicalReaction else null
         return desiredEnabled == acknowledgedEnabled
     }
+
+    fun observeRealtimeAcknowledged(
+        enabled: Boolean,
+        canonical: MessageReaction? = null,
+    ): Boolean {
+        lastRealtimeEnabled = enabled
+        return observeAcknowledged(enabled = enabled, canonical = canonical)
+    }
+
+    fun canRetire(): Boolean =
+        desiredEnabled == acknowledgedEnabled &&
+            (!requiresRealtimeFence || lastRealtimeEnabled == desiredEnabled)
 }
 
 internal sealed interface HubReactionRealtimeEvent {
