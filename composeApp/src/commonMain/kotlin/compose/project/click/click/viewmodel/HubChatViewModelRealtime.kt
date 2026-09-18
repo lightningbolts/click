@@ -8,6 +8,7 @@ import compose.project.click.click.data.api.ChatApiClient // pragma: allowlist s
 import compose.project.click.click.data.models.ChatMessageType // pragma: allowlist secret
 import compose.project.click.click.data.models.Message // pragma: allowlist secret
 import compose.project.click.click.data.models.MessageDeliveryState // pragma: allowlist secret
+import compose.project.click.click.data.models.MessageReaction // pragma: allowlist secret
 import compose.project.click.click.data.models.MessageWithUser // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.realtime.rebindRealtimeSocket // pragma: allowlist secret
@@ -111,7 +112,7 @@ internal fun HubChatViewModel.rowToMessageWithUser(row: HubMessageRow): MessageW
             user_id = row.userId,
             content = decryptHubBody(row),
             timeCreated = hubCreatedAtToEpoch(row.createdAt),
-            timeEdited = null,
+            timeEdited = row.editedAt?.let(::hubCreatedAtToEpoch),
             isRead = false,
             messageType = row.messageType,
             metadata = row.metadata,
@@ -163,6 +164,7 @@ internal fun HubChatViewModel.hydrateFromDiskCache() {
         }
     }
     _messages.value = cached.messages.map { messageWithUserFromCached(it, cached.participants) }
+    _messageReactions.value = cached.reactions.groupBy { it.messageId }
 }
 
 internal fun HubChatViewModel.persistHubMessagesToDisk(messages: List<MessageWithUser>) {
@@ -172,6 +174,7 @@ internal fun HubChatViewModel.persistHubMessagesToDisk(messages: List<MessageWit
         realtimeChannel = realtimeChannelName,
         messages = messages.map { it.message },
         participants = messages.map { it.user }.distinctBy { it.id },
+        reactions = _messageReactions.value.values.flatten(),
     )
 }
 
@@ -403,9 +406,42 @@ internal fun ChatApiClient.HubMessageApiDto.toHubMessageRow(): HubMessageRow =
         userId = userId,
         body = body,
         createdAt = createdAt,
+        editedAt = editedAt,
         messageType = messageType,
         metadata = metadata,
     )
+
+internal fun ChatApiClient.HubReactionApiDto.toMessageReaction(): MessageReaction =
+    MessageReaction(
+        id = id,
+        messageId = messageId,
+        userId = userId,
+        reactionType = reactionType,
+        createdAt = hubCreatedAtToEpoch(createdAt),
+    )
+
+internal fun HubReactionRow.toMessageReaction(): MessageReaction =
+    MessageReaction(
+        id = id,
+        messageId = messageId,
+        userId = userId,
+        reactionType = reactionType,
+        createdAt = hubCreatedAtToEpoch(createdAt),
+    )
+
+internal fun HubChatViewModel.mergeHubReactions(reactions: List<MessageReaction>) {
+    if (reactions.isEmpty()) return
+    val next = _messageReactions.value.toMutableMap()
+    reactions.groupBy { it.messageId }.forEach { (messageId, incoming) ->
+        val merged =
+            (next[messageId].orEmpty() + incoming)
+                .distinctBy { Triple(it.userId, it.reactionType, it.id) }
+                .groupBy { it.userId to it.reactionType }
+                .map { (_, rows) -> rows.last() }
+        next[messageId] = merged
+    }
+    _messageReactions.value = next
+}
 
 internal suspend fun HubChatViewModel.loadInitialMessages() {
     withContext(Dispatchers.Default) {
@@ -425,6 +461,8 @@ internal suspend fun HubChatViewModel.loadInitialMessages() {
                     }
                     prefetchSenderUi(snapshot.participantIds)
                     mergeMessages(snapshot.messages.map { it.toHubMessageRow() })
+                    _messageReactions.value = snapshot.reactions.map { it.toMessageReaction() }.groupBy { it.messageId }
+                    persistHubMessagesToDisk(_messages.value)
                     return@withContext
                 },
                 onFailure = { err ->
@@ -485,6 +523,7 @@ internal suspend fun HubChatViewModel.loadMessagesAround(messageId: String) {
                 thread.getOrNull()?.let { snapshot ->
                     prefetchSenderUi(snapshot.participantIds)
                     mergeMessages(snapshot.messages.map { it.toHubMessageRow() })
+                    mergeHubReactions(snapshot.reactions.map { it.toMessageReaction() })
                     if (_messages.value.any { it.message.id == messageId }) return@withContext
                 }
             }
