@@ -1083,10 +1083,16 @@ class HubChatViewModel(
                                 }
                             _messages.value = next
                             persistHubMessagesToDisk(next)
+                        } else {
+                            pendingHubMessageDeletes[row.id]?.let { pending ->
+                                pendingHubMessageDeletes[row.id] =
+                                    pending.copy(latestRealtime = rowToMessageWithUser(row))
+                            }
                         }
                     }
                     is PostgresAction.Delete -> {
                         val deletedId = action.oldRecord.hubMessageRowId() ?: return@collect
+                        pendingHubMessageDeletes.remove(deletedId)
                         val current = _messages.value
                         if (current.any { it.message.id == deletedId }) {
                             val next = current.filterNot { it.message.id == deletedId }
