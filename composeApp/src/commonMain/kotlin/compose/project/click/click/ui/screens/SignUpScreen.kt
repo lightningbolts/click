@@ -43,9 +43,9 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
 import compose.project.click.click.ui.chat.rememberChatMediaPickers // pragma: allowlist secret
+import compose.project.click.click.ui.components.BirthdayVisualTransformation // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickOutlinedTextField // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
-import compose.project.click.click.ui.components.BirthdayVisualTransformation // pragma: allowlist secret
 import compose.project.click.click.ui.components.birthdayDigitsInput // pragma: allowlist secret
 import compose.project.click.click.ui.components.birthdayIsoToUtcMidnightMillis // pragma: allowlist secret
 import compose.project.click.click.ui.components.formatBirthdayDigitsInput // pragma: allowlist secret
