@@ -222,23 +222,17 @@ internal fun buildProfileSheetFile(
     metadata: JsonElement?,
     timestamp: String,
 ): ProfileSheetFile {
-    val envelope = AttachmentCrypto.resolveEnvelope(content, metadata)
+    val presentation =
+        AttachmentCrypto.resolvePresentation(
+            content = content,
+            metadata = metadata,
+            isFileMessage = true,
+        )
+    val envelope = presentation?.envelope
     val meta = metadata as? JsonObject
-    val fileName =
-        envelope?.name?.takeIf { it.isNotBlank() }
-            ?: meta?.firstString("attachment_name", "file_name", "filename", "name")
-            ?: content
-                .takeUnless { it.isLikelyWireEncrypted() || AttachmentCrypto.isAttachmentEnvelope(it) }
-                ?.takeIf { it.isNotBlank() }
-            ?: "Attachment"
-    val size =
-        envelope?.size
-            ?: meta?.firstLong("attachment_size", "file_size", "size_bytes", "size")
-            ?: 0L
-    val mime =
-        envelope?.mime?.takeIf { it.isNotBlank() }
-            ?: meta?.firstString("attachment_mime", "mime_type", "content_type")
-            ?: "application/octet-stream"
+    val fileName = presentation?.name ?: "Attachment"
+    val size = presentation?.size ?: 0L
+    val mime = presentation?.mime ?: "application/octet-stream"
     val attachmentPath =
         envelope?.path?.takeIf { it.isNotBlank() }
             ?: meta?.stringAt("attachment_path")
