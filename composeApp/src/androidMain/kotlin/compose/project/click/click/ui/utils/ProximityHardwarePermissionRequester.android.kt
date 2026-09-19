@@ -85,6 +85,11 @@ actual fun rememberPlatformProximityHardwarePermissionRequester(): ((onResult: (
         rememberLauncherForActivityResult(
             contract = ActivityResultContracts.RequestMultiplePermissions(),
         ) { results ->
+            activity
+                ?.getSharedPreferences(PROXIMITY_PERMISSION_PREFS, Context.MODE_PRIVATE)
+                ?.edit()
+                ?.putBoolean(PROXIMITY_PERMISSION_REQUESTED, true)
+                ?.apply()
             val complete = pendingOnResult
             pendingOnResult = null
             val granted =
@@ -116,7 +121,6 @@ actual fun rememberPlatformProximityHardwarePermissionRequester(): ((onResult: (
                 microphoneGranted && (bluetoothGranted || requestedBefore) -> onResult(true)
                 requestedBefore && !microphoneGranted -> onResult(false)
                 else -> {
-                    prefs.edit().putBoolean(PROXIMITY_PERMISSION_REQUESTED, true).apply()
                     pendingOnResult = onResult
                     launcher.launch(requiredPermissions.toTypedArray())
                 }
