@@ -20,8 +20,10 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
@@ -61,11 +63,11 @@ object RealtimeCoordinator {
     val connectionJunctionChanged: SharedFlow<Unit> = _connectionJunctionChanged.asSharedFlow()
 
     /** Monotonic counter bumped on message insert or connection junction change. */
-    private val _inboxVersion = MutableSharedFlow<Long>(replay = 1, extraBufferCapacity = 1)
-    val inboxVersion: SharedFlow<Long> = _inboxVersion.asSharedFlow()
-    private var inboxVersionCounter = 0L
+    private val _inboxVersion = MutableStateFlow(0L)
+    val inboxVersion: SharedFlow<Long> = _inboxVersion.asStateFlow()
+    private val inboxVersionMutex = Mutex()
 
-    fun currentInboxVersion(): Long = inboxVersionCounter
+    fun currentInboxVersion(): Long = _inboxVersion.value
 
     suspend fun ensureStarted(userId: String) {
         if (userId.isBlank()) return
@@ -80,13 +82,14 @@ object RealtimeCoordinator {
 
     fun bumpInboxVersion() {
         scope.launch {
-            startMutex.withLock { bumpInboxVersionLocked() }
+            bumpInboxVersionSerialized()
         }
     }
 
-    private fun bumpInboxVersionLocked() {
-        inboxVersionCounter += 1L
-        _inboxVersion.tryEmit(inboxVersionCounter)
+    private suspend fun bumpInboxVersionSerialized() {
+        inboxVersionMutex.withLock {
+            _inboxVersion.value = _inboxVersion.value + 1L
+        }
     }
 
     fun stop() {
@@ -133,7 +136,7 @@ object RealtimeCoordinator {
                         subscription.attach()
                         attempt = 0
                         flow.collect { event ->
-                            bumpInboxVersionLocked()
+                            bumpInboxVersionSerialized()
                             _messageInserts.emit(event)
                         }
                         return@launch
@@ -209,20 +212,19 @@ object RealtimeCoordinator {
                             val updatesJob =
                                 launch {
                                     connectionUpdateFlow.collect {
-                                        bumpInboxVersionLocked()
+                                        bumpInboxVersionSerialized()
                                     }
                                 }
                             try {
                                 // All postgres flows are created before subscribe so the initial
                                 // connection/chat insert cannot fall into a registration gap.
                                 activeChannel.subscribe()
-                                attempt = 0
                                 junctionFlow.collect {
                                     debounceJob?.cancel()
                                     debounceJob =
                                         launch {
                                             delay(CONNECTIONS_DEBOUNCE_MS)
-                                            bumpInboxVersionLocked()
+                                            bumpInboxVersionSerialized()
                                             _connectionJunctionChanged.emit(Unit)
                                         }
                                 }
