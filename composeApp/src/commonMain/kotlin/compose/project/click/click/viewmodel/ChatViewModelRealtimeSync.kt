@@ -89,7 +89,8 @@ internal fun ChatViewModel.subscribeToNewMessages(
                                 is ChatRealtimeEvent.Message ->
                                     when (val event = envelope.event) {
                                         is MessageChangeEvent.Insert -> {
-                                            val vaulted = vaultMessagesForUi(chatId, userId, listOf(event.message)).first()
+                                            val vaulted =
+                                                vaultMessagesForUi(chatId, userId, listOf(event.message)).first()
                                             val cachedUser = resolveMessageUserCached(vaulted.user_id)
                                             val user =
                                                 cachedUser
@@ -407,8 +408,7 @@ internal fun ChatViewModel.resolveMessageUserCached(userId: String): User? {
 internal suspend fun ChatViewModel.resolveMessageUser(
     userId: String,
     chatId: String,
-): User? =
-    resolveMessageUserCached(userId) ?: chatRepository.getUserById(userId)
+): User? = resolveMessageUserCached(userId) ?: chatRepository.getUserById(userId)
 
 internal fun ChatViewModel.hydrateInsertedMessageUser(
     messageId: String,
