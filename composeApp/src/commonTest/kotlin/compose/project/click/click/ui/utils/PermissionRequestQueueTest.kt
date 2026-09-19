@@ -63,6 +63,20 @@ class PermissionRequestQueueTest {
     }
 
     @Test
+    fun proximityPrimerCancellationDoesNotReportPermissionDenial() {
+        var granted: Boolean? = null
+        PermissionRequestQueue.enqueue(
+            PermissionKind.ProximityHardware,
+            onResult = { granted = it },
+        )
+
+        PermissionRequestQueue.cancelCurrentWithoutResult()
+
+        assertNull(granted)
+        assertNull(PermissionRequestQueue.current.value)
+    }
+
+    @Test
     fun proximityDismissReportsNotGranted() {
         var granted: Boolean? = null
         PermissionRequestQueue.enqueue(
