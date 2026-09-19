@@ -55,6 +55,17 @@ object PermissionRequestQueue {
         pump()
     }
 
+    /**
+     * Cancels the primer without pretending the OS denied anything.
+     *
+     * Proximity uses this path because "Not now" is user cancellation, not a permission
+     * decision; the Connect screen should remain idle and retryable.
+     */
+    fun cancelCurrentWithoutResult() {
+        _current.value = null
+        pump()
+    }
+
     fun resetForTests() {
         waiting.clear()
         _current.value = null
