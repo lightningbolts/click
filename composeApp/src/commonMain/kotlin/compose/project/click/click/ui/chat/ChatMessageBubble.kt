@@ -180,15 +180,19 @@ fun ChatMessageBubble(
     val isImageMessage =
         mt == ChatMessageType.IMAGE &&
             (!mediaReference.isNullOrBlank() || secureSt?.imageBytes != null)
-    val attachmentEnvelope =
-        remember(message.id, message.content, message.metadata) {
+    val attachmentPresentation =
+        remember(message.id, message.content, message.metadata, mt) {
             if (mt == ChatMessageType.FILE || AttachmentCrypto.isAttachmentEnvelope(message.content)) {
-                AttachmentCrypto.resolveEnvelope(message.content, message.metadata)
+                AttachmentCrypto.resolvePresentation(
+                    content = message.content,
+                    metadata = message.metadata,
+                    isFileMessage = mt == ChatMessageType.FILE,
+                )
             } else {
                 null
             }
         }
-    val isAttachment = attachmentEnvelope != null
+    val isAttachment = attachmentPresentation != null
 
     val onRequestSecureAudio =
         remember(message.id, activeChatId, currentUserId, secureMediaHost) {
@@ -564,11 +568,11 @@ fun ChatMessageBubble(
                                                     }
                                                 }
                                             }
-                                            isAttachment && attachmentEnvelope != null -> {
+                                            isAttachment && attachmentPresentation != null -> {
                                                 ChatAttachmentBubble(
-                                                    envelope = attachmentEnvelope,
+                                                    presentation = attachmentPresentation,
                                                     isSent = true,
-                                                    onDownload = { onDownloadAttachment(messageWithUser, attachmentEnvelope) },
+                                                    onDownload = { envelope -> onDownloadAttachment(messageWithUser, envelope) },
                                                     maxCardWidth = bubbleContentMaxWidth,
                                                 )
                                             }
@@ -742,11 +746,11 @@ fun ChatMessageBubble(
                                                     }
                                                 }
                                             }
-                                            isAttachment && attachmentEnvelope != null -> {
+                                            isAttachment && attachmentPresentation != null -> {
                                                 ChatAttachmentBubble(
-                                                    envelope = attachmentEnvelope,
+                                                    presentation = attachmentPresentation,
                                                     isSent = false,
-                                                    onDownload = { onDownloadAttachment(messageWithUser, attachmentEnvelope) },
+                                                    onDownload = { envelope -> onDownloadAttachment(messageWithUser, envelope) },
                                                     maxCardWidth = bubbleContentMaxWidth,
                                                 )
                                             }
