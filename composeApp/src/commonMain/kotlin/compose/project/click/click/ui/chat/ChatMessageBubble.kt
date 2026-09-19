@@ -1035,7 +1035,6 @@ private fun BeaconChatMessageBubble(
     }
 }
 
-
 @Composable
 private fun pendingChatAttachmentBubble(
     presentation: AttachmentCrypto.Presentation,
