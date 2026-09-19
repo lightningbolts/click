@@ -49,9 +49,9 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.data.repository.SupabaseRepository
+import compose.project.click.click.ui.components.BirthdayVisualTransformation
 import compose.project.click.click.ui.components.ClickOutlinedTextField
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
-import compose.project.click.click.ui.components.BirthdayVisualTransformation
 import compose.project.click.click.ui.components.birthdayDigitsInput
 import compose.project.click.click.ui.components.birthdayIsoToUtcMidnightMillis
 import compose.project.click.click.ui.components.formatBirthdayDigitsInput
