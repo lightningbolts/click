@@ -60,14 +60,17 @@ import kotlin.math.pow
  */
 @Composable
 fun ChatAttachmentBubble(
-    envelope: AttachmentCrypto.Envelope,
+    presentation: AttachmentCrypto.Presentation,
     isSent: Boolean,
-    onDownload: suspend () -> ChatAttachmentDownloadOutcome,
+    onDownload: suspend (AttachmentCrypto.Envelope) -> ChatAttachmentDownloadOutcome,
     /** Caps card width (e.g. fraction of chat row from [ChatMessageBubble]). */
     maxCardWidth: Dp = ChatBubbleTokens.contentMaxWidth,
 ) {
     val scope = rememberCoroutineScope()
-    var state: ChatAttachmentUiState by remember(envelope.path) {
+    val envelope = presentation.envelope
+    val presentationKey =
+        envelope?.path ?: "pending:${presentation.name}:${presentation.mime}:${presentation.size}"
+    var state: ChatAttachmentUiState by remember(presentationKey) {
         mutableStateOf(ChatAttachmentUiState.Idle)
     }
 
@@ -115,7 +118,7 @@ fun ChatAttachmentBubble(
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
-                    imageVector = iconForMime(envelope.mime),
+                    imageVector = iconForMime(presentation.mime),
                     contentDescription = null,
                     tint = PrimaryBlue,
                     modifier = Modifier.size(chatBubbleScaledDp(33f)),
@@ -123,7 +126,7 @@ fun ChatAttachmentBubble(
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = envelope.name,
+                    text = presentation.name,
                     style = chatBubbleMessageTextStyle(),
                     fontWeight = FontWeight.SemiBold,
                     color = titleColor,
@@ -132,10 +135,10 @@ fun ChatAttachmentBubble(
                 )
                 Text(
                     text = buildString {
-                        append(formatBytes(envelope.size))
-                        if (envelope.mime.isNotBlank()) {
+                        append(formatBytes(presentation.size))
+                        if (presentation.mime.isNotBlank()) {
                             append(" · ")
-                            append(envelope.mime)
+                            append(presentation.mime)
                         }
                     },
                     style = chatBubbleReplyLabelStyle(),
@@ -144,7 +147,17 @@ fun ChatAttachmentBubble(
                     overflow = TextOverflow.Ellipsis,
                 )
                 when (val s = state) {
-                    ChatAttachmentUiState.Idle, ChatAttachmentUiState.Running -> Unit
+                    ChatAttachmentUiState.Idle -> {
+                        if (!presentation.isReady) {
+                            Spacer(Modifier.height(chatBubbleScaledDp(3f)))
+                            Text(
+                                text = "Uploading…",
+                                style = chatBubbleReplyLabelStyle(),
+                                color = subColor,
+                            )
+                        }
+                    }
+                    ChatAttachmentUiState.Running -> Unit
                     is ChatAttachmentUiState.Done -> {
                         Spacer(Modifier.height(chatBubbleScaledDp(3f)))
                         Row(
@@ -188,8 +201,8 @@ fun ChatAttachmentBubble(
                 }
             }
             Spacer(Modifier.width(2.dp))
-            when (state) {
-                ChatAttachmentUiState.Running -> {
+            when {
+                !presentation.isReady || state is ChatAttachmentUiState.Running -> {
                     CircularProgressIndicator(
                         modifier = Modifier.size(chatBubbleScaledDp(36f)),
                         strokeWidth = chatBubbleScaledDp(3f),
@@ -199,10 +212,11 @@ fun ChatAttachmentBubble(
                 else -> {
                     IconButton(
                         onClick = {
+                            val readyEnvelope = envelope ?: return@IconButton
                             if (state is ChatAttachmentUiState.Running) return@IconButton
                             state = ChatAttachmentUiState.Running
                             scope.launch {
-                                state = when (val result = onDownload()) {
+                                state = when (val result = onDownload(readyEnvelope)) {
                                     is ChatAttachmentDownloadOutcome.Success ->
                                         ChatAttachmentUiState.Done(result.savedPath)
                                     is ChatAttachmentDownloadOutcome.Failure ->
@@ -222,7 +236,7 @@ fun ChatAttachmentBubble(
         }
     }
 
-    LaunchedEffect(envelope.path) {
+    LaunchedEffect(presentationKey) {
         state = ChatAttachmentUiState.Idle
     }
 }
