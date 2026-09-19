@@ -83,14 +83,16 @@ internal fun chatAudioPlaybackSource(
     hubMediaPath: String?,
     decryptedLocalPath: String?,
 ): ChatAudioPlaybackSource? {
+    val localPath = decryptedLocalPath?.trim()?.takeIf { it.isNotEmpty() }
     val hasReference =
-        !mediaUrl.isNullOrBlank() || !hubMediaPath.isNullOrBlank()
+        !mediaUrl.isNullOrBlank() || !hubMediaPath.isNullOrBlank() || localPath != null
     if (!hasReference) return null
     return ChatAudioPlaybackSource(
         // A hub path is only a gatekeeper reference; ChatAudioBubble must receive an empty
-        // network URL and wait for the decrypted local file instead.
+        // network URL and wait for the decrypted local file instead. Optimistic outgoing
+        // audio can likewise render from its local vault path before upload completes.
         mediaUrl = mediaUrl?.trim().orEmpty(),
-        localFilePath = decryptedLocalPath?.trim()?.takeIf { it.isNotEmpty() },
+        localFilePath = localPath,
     )
 }
 
