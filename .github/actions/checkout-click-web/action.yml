@@ -1,5 +1,5 @@
 name: Checkout click-web source of truth
-description: Check out the matching click-web PR branch when available, otherwise main.
+description: Check out lightningbolts/click-web main as the shared source of truth.
 
 inputs:
   token:
@@ -9,37 +9,15 @@ inputs:
     description: Destination path relative to github.workspace
     required: false
     default: _click-web
-  candidate_ref:
-    description: Optional same-named click-web branch to validate for coordinated cross-repo changes
-    required: false
-    default: ""
 
 runs:
   using: composite
   steps:
-    - name: Resolve click-web source ref
-      id: source-ref
-      shell: bash
-      env:
-        CLICK_WEB_READ_TOKEN: ${{ inputs.token }}
-        CANDIDATE_REF: ${{ inputs.candidate_ref }}
-      run: |
-        set -euo pipefail
-        source_ref="main"
-        if [[ -n "$CANDIDATE_REF" ]]; then
-          remote="https://x-access-token:${CLICK_WEB_READ_TOKEN}@github.com/lightningbolts/click-web.git"
-          if git ls-remote --exit-code --heads "$remote" "refs/heads/$CANDIDATE_REF" >/dev/null 2>&1; then
-            source_ref="$CANDIDATE_REF"
-          fi
-        fi
-        echo "Using click-web ref: $source_ref"
-        echo "ref=$source_ref" >> "$GITHUB_OUTPUT"
-
     - name: Checkout click-web
       uses: actions/checkout@v4
       with:
         repository: lightningbolts/click-web
-        ref: ${{ steps.source-ref.outputs.ref }}
+        ref: main
         path: ${{ inputs.path }}
         fetch-depth: 0
         token: ${{ inputs.token }}
