@@ -63,6 +63,7 @@ fun ChatAttachmentBubble(
     presentation: AttachmentCrypto.Presentation,
     isSent: Boolean,
     onDownload: suspend (AttachmentCrypto.Envelope) -> ChatAttachmentDownloadOutcome,
+    uploadFailed: Boolean = false,
     /** Caps card width (e.g. fraction of chat row from [ChatMessageBubble]). */
     maxCardWidth: Dp = ChatBubbleTokens.contentMaxWidth,
 ) {
@@ -148,7 +149,14 @@ fun ChatAttachmentBubble(
                 )
                 when (val s = state) {
                     ChatAttachmentUiState.Idle -> {
-                        if (!presentation.isReady) {
+                        if (uploadFailed) {
+                            Spacer(Modifier.height(chatBubbleScaledDp(3f)))
+                            Text(
+                                text = "Upload failed",
+                                style = chatBubbleReplyLabelStyle(),
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        } else if (!presentation.isReady) {
                             Spacer(Modifier.height(chatBubbleScaledDp(3f)))
                             Text(
                                 text = "Uploading…",
@@ -202,6 +210,14 @@ fun ChatAttachmentBubble(
             }
             Spacer(Modifier.width(2.dp))
             when {
+                uploadFailed -> {
+                    Icon(
+                        Icons.Filled.ErrorOutline,
+                        contentDescription = "Attachment upload failed",
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(chatBubbleScaledDp(30f)),
+                    )
+                }
                 !presentation.isReady || state is ChatAttachmentUiState.Running -> {
                     CircularProgressIndicator(
                         modifier = Modifier.size(chatBubbleScaledDp(36f)),
