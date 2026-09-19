@@ -33,6 +33,7 @@ import compose.project.click.click.utils.LocationService // pragma: allowlist se
 import io.ktor.client.HttpClient // pragma: allowlist secret
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -534,7 +535,9 @@ internal fun ConnectionViewModel.startTapProximityHandshakeImpl(
             ConnectionFlowTelemetry.recordFailed(reason = "handshake_exception")
             _connectionState.value = ConnectionState.Error("Tap to Connect failed. Please try again.")
         } finally {
-            activeTapProximityJob = null
+            if (activeTapProximityJob === ownedJob) {
+                activeTapProximityJob = null
+            }
         }
     }
 }
