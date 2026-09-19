@@ -149,7 +149,7 @@ class ConnectionViewModel : ViewModel() {
         const val RECONNECTION_ENCOUNTER_COOLDOWN_MESSAGE: String =
             "You recently crossed paths with this person! Wait a bit before logging another memory."
         const val HARDWARE_PERMISSIONS_MISSING_MESSAGE: String =
-            "Hardware Permissions Missing: enable Bluetooth and Microphone access to use Tap to Connect."
+            "Microphone access is required for Tap to Connect. Enable it in Settings and try again."
         const val PROXIMITY_PENDING_MATCH_MESSAGE: String =
             "Handshake saved! Waiting for the other user to come online..."
         const val PROXIMITY_OFFLINE_SYNC_MESSAGE: String =
