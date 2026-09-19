@@ -525,9 +525,11 @@ internal fun ConnectionViewModel.startTapProximityHandshakeImpl(
                     }
                 }
             } catch (e: CancellationException) {
-                runCatching { proximityManager.stopAll() }
-                if (isProximityHandshakeInFlight()) {
-                    _connectionState.value = ConnectionState.Idle
+                if (activeTapProximityJob === ownedJob) {
+                    runCatching { proximityManager.stopAll() }
+                    if (isProximityHandshakeInFlight()) {
+                        _connectionState.value = ConnectionState.Idle
+                    }
                 }
                 throw e
             } catch (e: ProximityHardwarePermissionException) {
