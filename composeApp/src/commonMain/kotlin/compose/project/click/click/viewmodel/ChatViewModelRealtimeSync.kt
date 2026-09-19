@@ -416,7 +416,14 @@ internal fun ChatViewModel.hydrateInsertedMessageUser(
     chatId: String,
 ) {
     viewModelScope.launch {
-        val fetched = chatRepository.getUserById(senderUserId) ?: return@launch
+        val fetched =
+            try {
+                chatRepository.getUserById(senderUserId)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                null
+            } ?: return@launch
         val current = _chatMessagesState.value as? ChatMessagesState.Success ?: return@launch
         if (current.chatDetails.chat.id != chatId) return@launch
         val index = current.messages.indexOfFirst { it.message.id == messageId }
