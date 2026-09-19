@@ -30,6 +30,7 @@ import compose.project.click.click.utils.LocationService // pragma: allowlist se
 import io.ktor.client.HttpClient // pragma: allowlist secret
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -148,7 +149,7 @@ class ConnectionViewModel : ViewModel() {
         const val RECONNECTION_ENCOUNTER_COOLDOWN_MESSAGE: String =
             "You recently crossed paths with this person! Wait a bit before logging another memory."
         const val HARDWARE_PERMISSIONS_MISSING_MESSAGE: String =
-            "Hardware Permissions Missing: enable Bluetooth and Microphone access to use Tap to Connect."
+            "Microphone access is required for Tap to Connect. Enable it in Settings and try again."
         const val PROXIMITY_PENDING_MATCH_MESSAGE: String =
             "Handshake saved! Waiting for the other user to come online..."
         const val PROXIMITY_OFFLINE_SYNC_MESSAGE: String =
@@ -178,6 +179,7 @@ class ConnectionViewModel : ViewModel() {
     internal var lastProximityAltitudeMeters: Double? = null
     internal var lastProximityHardwareVibe: HardwareVibeSnapshot? = null
     internal var lastTapProximityStartedAtMs: Long = 0L
+    internal var activeTapProximityJob: Job? = null
 
     fun lastProximityCoordinates(): Pair<Double?, Double?> = lastProximityLat to lastProximityLng
 
@@ -393,6 +395,9 @@ class ConnectionViewModel : ViewModel() {
                 reason = "dismissed",
             )
         }
+        activeTapProximityJob?.cancel()
+        activeTapProximityJob = null
+        lastTapProximityStartedAtMs = 0L
         lastProximityEncounterLoggedAggregate = true
         lastProximityHardwareVibe = null
         _connectionState.value = ConnectionState.Idle

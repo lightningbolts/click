@@ -17,15 +17,16 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
-import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -62,16 +63,16 @@ object RealtimeCoordinator {
     val connectionJunctionChanged: SharedFlow<Unit> = _connectionJunctionChanged.asSharedFlow()
 
     /** Monotonic counter bumped on message insert or connection junction change. */
-    private val _inboxVersion = MutableSharedFlow<Long>(replay = 1, extraBufferCapacity = 1)
-    val inboxVersion: SharedFlow<Long> = _inboxVersion.asSharedFlow()
-    private var inboxVersionCounter = 0L
+    private val _inboxVersion = MutableStateFlow(0L)
+    val inboxVersion: SharedFlow<Long> = _inboxVersion.asStateFlow()
+    private val inboxVersionMutex = Mutex()
 
-    fun currentInboxVersion(): Long = inboxVersionCounter
+    fun currentInboxVersion(): Long = _inboxVersion.value
 
     suspend fun ensureStarted(userId: String) {
         if (userId.isBlank()) return
         startMutex.withLock {
-            if (boundUserId == userId && messageCollectJob?.isActive == true) return
+            if (boundUserId == userId && messageCollectJob?.isActive == true && connectionsCollectJob?.isActive == true) return
             stopLocked()
             boundUserId = userId
             startMessageListenerLocked()
@@ -81,13 +82,14 @@ object RealtimeCoordinator {
 
     fun bumpInboxVersion() {
         scope.launch {
-            startMutex.withLock { bumpInboxVersionLocked() }
+            bumpInboxVersionSerialized()
         }
     }
 
-    private fun bumpInboxVersionLocked() {
-        inboxVersionCounter += 1L
-        _inboxVersion.tryEmit(inboxVersionCounter)
+    private suspend fun bumpInboxVersionSerialized() {
+        inboxVersionMutex.withLock {
+            _inboxVersion.value = _inboxVersion.value + 1L
+        }
     }
 
     fun stop() {
@@ -134,7 +136,7 @@ object RealtimeCoordinator {
                         subscription.attach()
                         attempt = 0
                         flow.collect { event ->
-                            bumpInboxVersionLocked()
+                            bumpInboxVersionSerialized()
                             _messageInserts.emit(event)
                         }
                         return@launch
@@ -158,49 +160,95 @@ object RealtimeCoordinator {
     private fun startConnectionsListenerLocked(userId: String) {
         connectionsCollectJob =
             scope.launch {
-                var debounceJob: Job? = null
-                try {
-                    compose.project.click.click.data.auth.EnsureFreshAccessToken
-                        .get()
-                    runCatching { SupabaseConfig.client.realtime.connect() }
-                    val channel = SupabaseConfig.client.channel("app:connections:$userId")
-                    connectionsChannel = channel
-                    merge(
-                        channel
-                            .postgresChangeFlow<PostgresAction>(schema = "public") { table = "connections" }
-                            .filter { it is PostgresAction.Insert }
-                            .map { },
-                        channel.postgresChangeFlow<PostgresAction>(schema = "public") { table = "connection_archives" }.map { },
-                        channel.postgresChangeFlow<PostgresAction>(schema = "public") { table = "connection_hidden" }.map { },
-                        channel.postgresChangeFlow<PostgresAction>(schema = "public") { table = "connection_core" }.map { },
-                        channel
-                            .postgresChangeFlow<PostgresAction>(schema = "public") { table = "chats" }
-                            .filter { it is PostgresAction.Insert }
-                            .map { },
-                        channel
-                            .postgresChangeFlow<PostgresAction>(schema = "public") { table = "group_members" }
-                            .filter { action ->
-                                action is PostgresAction.Insert &&
-                                    groupMemberUserId(action) == userId
-                            }.map { },
-                    ).onEach {
-                        debounceJob?.cancel()
-                        debounceJob =
-                            scope.launch {
-                                delay(CONNECTIONS_DEBOUNCE_MS)
-                                bumpInboxVersionLocked()
-                                _connectionJunctionChanged.emit(Unit)
+                var attempt = 0
+                while (isActive) {
+                    var channel: RealtimeChannel? = null
+                    var debounceJob: Job? = null
+                    try {
+                        compose.project.click.click.data.auth.EnsureFreshAccessToken
+                            .get()
+                        runCatching { SupabaseConfig.client.realtime.connect() }
+
+                        val activeChannel = SupabaseConfig.client.channel("app:connections:$userId")
+                        channel = activeChannel
+                        connectionsChannel = activeChannel
+
+                        // Register every postgres flow before subscribe so the first junction
+                        // change cannot land in a listener-registration gap.
+                        coroutineScope {
+                            val junctionFlow =
+                                merge(
+                                    activeChannel
+                                        .postgresChangeFlow<PostgresAction>(schema = "public") { table = "connections" }
+                                        .filter { it is PostgresAction.Insert }
+                                        .map { },
+                                    activeChannel
+                                        .postgresChangeFlow<PostgresAction>(
+                                            schema = "public",
+                                        ) { table = "connection_archives" }
+                                        .map { },
+                                    activeChannel
+                                        .postgresChangeFlow<PostgresAction>(schema = "public") { table = "connection_hidden" }
+                                        .map { },
+                                    activeChannel
+                                        .postgresChangeFlow<PostgresAction>(schema = "public") { table = "connection_core" }
+                                        .map { },
+                                    activeChannel
+                                        .postgresChangeFlow<PostgresAction>(schema = "public") { table = "chats" }
+                                        .filter { it is PostgresAction.Insert }
+                                        .map { },
+                                    activeChannel
+                                        .postgresChangeFlow<PostgresAction>(schema = "public") { table = "group_members" }
+                                        .filter { action ->
+                                            action is PostgresAction.Insert &&
+                                                groupMemberUserId(action) == userId
+                                        }.map { },
+                                )
+                            val connectionUpdateFlow =
+                                activeChannel
+                                    .postgresChangeFlow<PostgresAction>(schema = "public") { table = "connections" }
+                                    .filter { it is PostgresAction.Update }
+
+                            val updatesJob =
+                                launch {
+                                    connectionUpdateFlow.collect {
+                                        bumpInboxVersionSerialized()
+                                    }
+                                }
+                            try {
+                                // All postgres flows are created before subscribe so the initial
+                                // connection/chat insert cannot fall into a registration gap.
+                                activeChannel.subscribe()
+                                junctionFlow.collect {
+                                    debounceJob?.cancel()
+                                    debounceJob =
+                                        launch {
+                                            delay(CONNECTIONS_DEBOUNCE_MS)
+                                            bumpInboxVersionSerialized()
+                                            _connectionJunctionChanged.emit(Unit)
+                                        }
+                                }
+                                error("Connections realtime flow completed unexpectedly")
+                            } finally {
+                                updatesJob.cancel()
                             }
-                    }.launchIn(this)
-                    channel
-                        .postgresChangeFlow<PostgresAction>(schema = "public") { table = "connections" }
-                        .filter { it is PostgresAction.Update }
-                        .onEach {
-                            bumpInboxVersionLocked()
-                        }.launchIn(this)
-                    channel.subscribe()
-                } catch (e: Exception) {
-                    println("RealtimeCoordinator: connections listener failed: ${e.redactedRestMessage()}")
+                        }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        attempt++
+                        println(
+                            "RealtimeCoordinator: connections listener failed (attempt $attempt): " +
+                                e.redactedRestMessage(),
+                        )
+                        delay(minOf(30_000L, 500L * attempt))
+                    } finally {
+                        debounceJob?.cancel()
+                        if (connectionsChannel === channel) {
+                            connectionsChannel = null
+                        }
+                        runCatching { channel?.unsubscribe() }
+                    }
                 }
             }
     }

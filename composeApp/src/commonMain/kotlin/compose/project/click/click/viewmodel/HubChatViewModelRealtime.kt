@@ -171,8 +171,10 @@ internal fun HubChatViewModel.hydrateFromDiskCache() {
             senderUiCache[user.id] = label to avatar
         }
     }
-    _messages.value = cached.messages.map { messageWithUserFromCached(it, cachedParticipants) }
+    // Publish reaction state first so the first frame containing cached messages already
+    // has its chips; otherwise reactions visibly pop in one state update later.
     _messageReactions.value = cached.reactions.groupBy { it.messageId }
+    _messages.value = cached.messages.map { messageWithUserFromCached(it, cachedParticipants) }
 }
 
 internal fun HubChatViewModel.applyVisibleHubParticipants(
@@ -539,8 +541,10 @@ internal suspend fun HubChatViewModel.loadInitialMessages() {
                     if (snapshot.senderProfilesVisible) {
                         prefetchSenderUi(snapshot.participantIds)
                     }
-                    mergeMessages(snapshot.messages.map { it.toHubMessageRow() })
+                    // The API returns messages + reactions as one snapshot. Hydrate reactions
+                    // before publishing the message rows so they cannot appear a frame later.
                     finishInitialHubReactionHydration(snapshot.reactions.map { it.toMessageReaction() })
+                    mergeMessages(snapshot.messages.map { it.toHubMessageRow() })
                     return@withContext
                 },
                 onFailure = { err ->

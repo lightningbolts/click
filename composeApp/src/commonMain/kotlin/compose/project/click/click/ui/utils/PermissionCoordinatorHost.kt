@@ -36,7 +36,13 @@ fun PermissionCoordinatorHost() {
     AnimatedClickDialog(
         visible = pending != null && !launchingOs,
         onDismissRequest = {
-            if (!launchingOs) PermissionRequestQueue.dismissCurrent()
+            if (!launchingOs) {
+                if (PermissionRequestQueue.current.value?.kind == PermissionKind.ProximityHardware) {
+                    PermissionRequestQueue.cancelCurrentWithoutResult()
+                } else {
+                    PermissionRequestQueue.dismissCurrent()
+                }
+            }
         },
         title = title,
         confirmLabel = "Continue",

@@ -8,10 +8,10 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
@@ -267,6 +267,73 @@ object AttachmentCrypto {
         )
     }
 
+    data class Presentation(
+        val name: String,
+        val mime: String,
+        val size: Long,
+        val envelope: Envelope?,
+    ) {
+        val isReady: Boolean
+            get() = envelope != null
+    }
+
+    /**
+     * Resolves the stable display model separately from the download/decryption envelope.
+     *
+     * Optimistic file messages only know name/MIME/size until upload finishes. Returning a
+     * presentation for those rows keeps them visually typed as files without inventing a
+     * storage path, digest, or key.
+     */
+    fun resolvePresentation(
+        content: String,
+        metadata: JsonElement?,
+        isFileMessage: Boolean,
+    ): Presentation? {
+        val envelope = resolveEnvelope(content, metadata)
+        if (envelope != null) {
+            return Presentation(
+                name = envelope.name,
+                mime = envelope.mime,
+                size = envelope.size,
+                envelope = envelope,
+            )
+        }
+        if (!isFileMessage) return null
+
+        val meta = metadata as? JsonObject
+        val fileName =
+            meta.stringAt("attachment_name")
+                ?: meta.stringAt("file_name")
+                ?: meta.stringAt("filename")
+                ?: meta.stringAt("name")
+                ?: content
+                    .trim()
+                    .takeIf { value ->
+                        value.isNotEmpty() &&
+                            !isAttachmentEnvelope(value) &&
+                            !value.startsWith("e2e:", ignoreCase = true)
+                    }
+                ?: "Attachment"
+        val mimeType =
+            meta.stringAt("attachment_mime")
+                ?: meta.stringAt("mime_type")
+                ?: meta.stringAt("content_type")
+                ?: "application/octet-stream"
+        val size =
+            meta.longAt("attachment_size")
+                ?: meta.longAt("file_size")
+                ?: meta.longAt("size_bytes")
+                ?: meta.longAt("size")
+                ?: 0L
+
+        return Presentation(
+            name = fileName,
+            mime = mimeType,
+            size = size.coerceAtLeast(0L),
+            envelope = null,
+        )
+    }
+
     fun isAttachmentEnvelope(content: String): Boolean = content.startsWith(ENVELOPE_PREFIX) || content.startsWith(E2EE_V2_ENVELOPE_PREFIX)
 
     private fun V2Descriptor.toEnvelope(): Envelope =
@@ -288,19 +355,17 @@ object AttachmentCrypto {
     }
 
     private fun JsonObject?.stringAt(key: String): String? =
-        this
-            ?.get(key)
-            ?.jsonPrimitive
+        (this?.get(key) as? JsonPrimitive)
             ?.contentOrNull
             ?.takeIf { it.isNotBlank() }
 
     private fun JsonObject?.longAt(key: String): Long? {
-        val primitive = this?.get(key)?.jsonPrimitive ?: return null
+        val primitive = this?.get(key) as? JsonPrimitive ?: return null
         return primitive.longOrNull ?: primitive.contentOrNull?.toLongOrNull()
     }
 
     private fun JsonObject?.intAt(key: String): Int? {
-        val primitive = this?.get(key)?.jsonPrimitive ?: return null
+        val primitive = this?.get(key) as? JsonPrimitive ?: return null
         return primitive.intOrNull ?: primitive.contentOrNull?.toIntOrNull()
     }
 }

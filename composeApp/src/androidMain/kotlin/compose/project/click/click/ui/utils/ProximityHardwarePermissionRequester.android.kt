@@ -1,6 +1,7 @@
 package compose.project.click.click.ui.utils
 
 import android.Manifest
+import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.ComponentActivity
@@ -12,8 +13,56 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+
+private const val PROXIMITY_PERMISSION_PREFS = "click_proximity_permissions"
+private const val PROXIMITY_PERMISSION_REQUESTED = "hardware_request_completed"
+
+@Composable
+actual fun rememberPlatformProximityHardwarePermissionStatus(): () -> ProximityHardwarePermissionStatus {
+    val activity = LocalActivity.current as? ComponentActivity
+    return remember(activity) {
+        {
+            val context = activity
+            if (context == null) {
+                ProximityHardwarePermissionStatus.Blocked
+            } else {
+                val microphoneGranted =
+                    ContextCompat.checkSelfPermission(
+                        context,
+                        Manifest.permission.RECORD_AUDIO,
+                    ) == PackageManager.PERMISSION_GRANTED
+                val bluetoothPermissions =
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        listOf(
+                            Manifest.permission.BLUETOOTH_SCAN,
+                            Manifest.permission.BLUETOOTH_ADVERTISE,
+                            Manifest.permission.BLUETOOTH_CONNECT,
+                        )
+                    } else {
+                        emptyList()
+                    }
+                val bluetoothGranted =
+                    bluetoothPermissions.all { permission ->
+                        ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
+                    }
+                val requestedBefore =
+                    context
+                        .getSharedPreferences(PROXIMITY_PERMISSION_PREFS, Context.MODE_PRIVATE)
+                        .getBoolean(PROXIMITY_PERMISSION_REQUESTED, false)
+
+                when {
+                    microphoneGranted && (bluetoothGranted || requestedBefore) ->
+                        ProximityHardwarePermissionStatus.Ready
+                    requestedBefore && !microphoneGranted ->
+                        ProximityHardwarePermissionStatus.Blocked
+                    else ->
+                        ProximityHardwarePermissionStatus.NeedsRequest
+                }
+            }
+        }
+    }
+}
 
 @Composable
 actual fun rememberPlatformProximityHardwarePermissionRequester(): ((onResult: (Boolean) -> Unit) -> Unit) {
@@ -32,20 +81,15 @@ actual fun rememberPlatformProximityHardwarePermissionRequester(): ((onResult: (
     val requiredAudioPermission = Manifest.permission.RECORD_AUDIO
     var pendingOnResult by remember { mutableStateOf<((Boolean) -> Unit)?>(null) }
 
-    fun hasAllPermissions(): Boolean {
-        val context = activity ?: return false
-        // Check every proximity permission (including Android 12+ Bluetooth grants),
-        // not just the microphone — otherwise the BLE permission dialog is never
-        // shown once audio has been granted and BLE silently degrades.
-        return requiredPermissions.all { permission ->
-            ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
-        }
-    }
-
     val launcher =
         rememberLauncherForActivityResult(
             contract = ActivityResultContracts.RequestMultiplePermissions(),
         ) { results ->
+            activity
+                ?.getSharedPreferences(PROXIMITY_PERMISSION_PREFS, Context.MODE_PRIVATE)
+                ?.edit()
+                ?.putBoolean(PROXIMITY_PERMISSION_REQUESTED, true)
+                ?.apply()
             val complete = pendingOnResult
             pendingOnResult = null
             val granted =
@@ -54,23 +98,33 @@ actual fun rememberPlatformProximityHardwarePermissionRequester(): ((onResult: (
                         activity != null &&
                             ContextCompat.checkSelfPermission(activity, requiredAudioPermission) == PackageManager.PERMISSION_GRANTED
                     )
-            if (!granted && activity != null) {
-                val permanentlyDenied =
-                    ContextCompat.checkSelfPermission(activity, requiredAudioPermission) != PackageManager.PERMISSION_GRANTED &&
-                        !ActivityCompat.shouldShowRequestPermissionRationale(activity, requiredAudioPermission)
-                if (permanentlyDenied) {
-                    openApplicationSystemSettings()
-                }
-            }
             complete?.invoke(granted)
         }
 
     return { onResult ->
-        if (hasAllPermissions()) {
-            onResult(true)
+        val context = activity
+        if (context == null) {
+            onResult(false)
         } else {
-            pendingOnResult = onResult
-            launcher.launch(requiredPermissions.toTypedArray())
+            val microphoneGranted =
+                ContextCompat.checkSelfPermission(context, requiredAudioPermission) == PackageManager.PERMISSION_GRANTED
+            val bluetoothGranted =
+                requiredPermissions
+                    .filterNot { it == requiredAudioPermission }
+                    .all { permission ->
+                        ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
+                    }
+            val prefs = context.getSharedPreferences(PROXIMITY_PERMISSION_PREFS, Context.MODE_PRIVATE)
+            val requestedBefore = prefs.getBoolean(PROXIMITY_PERMISSION_REQUESTED, false)
+
+            when {
+                microphoneGranted && (bluetoothGranted || requestedBefore) -> onResult(true)
+                requestedBefore && !microphoneGranted -> onResult(false)
+                else -> {
+                    pendingOnResult = onResult
+                    launcher.launch(requiredPermissions.toTypedArray())
+                }
+            }
         }
     }
 }

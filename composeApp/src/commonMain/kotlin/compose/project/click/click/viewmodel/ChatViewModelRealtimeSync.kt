@@ -89,11 +89,22 @@ internal fun ChatViewModel.subscribeToNewMessages(
                                 is ChatRealtimeEvent.Message ->
                                     when (val event = envelope.event) {
                                         is MessageChangeEvent.Insert -> {
-                                            val vaulted = vaultMessagesForUi(chatId, userId, listOf(event.message)).first()
+                                            val vaulted =
+                                                vaultMessagesForUi(chatId, userId, listOf(event.message)).first()
+                                            val cachedUser = resolveMessageUserCached(vaulted.user_id)
                                             val user =
-                                                resolveMessageUser(vaulted.user_id, chatId)
+                                                cachedUser
                                                     ?: User(id = vaulted.user_id, name = null, createdAt = 0L)
+                                            // Never block message visibility on a profile lookup. The row is
+                                            // committed immediately, then an unknown sender is hydrated in place.
                                             applyInsertedMessage(vaulted, user, userId)
+                                            if (cachedUser == null) {
+                                                hydrateInsertedMessageUser(
+                                                    messageId = vaulted.id,
+                                                    senderUserId = vaulted.user_id,
+                                                    chatId = chatId,
+                                                )
+                                            }
                                             if (vaulted.user_id != userId) {
                                                 if (vaulted.deliveredAt == null) {
                                                     enqueueInboundDeliveredAck(chatId, userId, listOf(vaulted))
@@ -382,10 +393,7 @@ internal fun ChatViewModel.enqueueInboundDeliveredAck(
     }
 }
 
-internal suspend fun ChatViewModel.resolveMessageUser(
-    userId: String,
-    chatId: String,
-): User? {
+internal fun ChatViewModel.resolveMessageUserCached(userId: String): User? {
     val currentState = _chatMessagesState.value as? ChatMessagesState.Success
     if (currentState != null) {
         currentState.messages.firstOrNull { it.user.id == userId }?.let { return it.user }
@@ -394,20 +402,50 @@ internal suspend fun ChatViewModel.resolveMessageUser(
         }
     }
 
-    AppDataManager.currentUser.value
-        ?.takeIf { it.id == userId }
-        ?.let { return it }
-
-    return chatRepository.getUserById(userId)
+    return AppDataManager.currentUser.value?.takeIf { it.id == userId }
 }
 
-internal fun ChatViewModel.migrateOptimisticSecureImage(
+internal suspend fun ChatViewModel.resolveMessageUser(
+    userId: String,
+    chatId: String,
+): User? = resolveMessageUserCached(userId) ?: chatRepository.getUserById(userId)
+
+internal fun ChatViewModel.hydrateInsertedMessageUser(
+    messageId: String,
+    senderUserId: String,
+    chatId: String,
+) {
+    viewModelScope.launch {
+        val fetched =
+            try {
+                chatRepository.getUserById(senderUserId)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                null
+            } ?: return@launch
+        val current = _chatMessagesState.value as? ChatMessagesState.Success ?: return@launch
+        if (current.chatDetails.chat.id != chatId) return@launch
+        val index = current.messages.indexOfFirst { it.message.id == messageId }
+        if (index < 0 || current.messages[index].user == fetched) return@launch
+        _chatMessagesState.value =
+            current.copy(
+                messages =
+                    current.messages.mapIndexed { i, row ->
+                        if (i == index) row.copy(user = fetched) else row
+                    },
+            )
+    }
+}
+
+internal fun ChatViewModel.migrateOptimisticSecureMedia(
     tempId: String,
     serverMessageId: String,
 ) {
-    val cachedBytes =
-        secureImageBytesCache.get(tempId)
-            ?: _secureChatMediaLoadState.value[tempId]?.imageBytes
+    val prior = _secureChatMediaLoadState.value[tempId]
+    val cachedBytes = secureImageBytesCache.get(tempId) ?: prior?.imageBytes
+    val audioPath = secureAudioPathCache.get(tempId) ?: prior?.audioLocalPath
+
     // Keep decoded bitmaps across temp→server id so Click Drop send does not flash blank.
     compose.project.click.click.ui.chat.secureChatImageBitmapCache.get(tempId)?.let { bmp ->
         compose.project.click.click.ui.chat.secureChatImageBitmapCache
@@ -417,32 +455,32 @@ internal fun ChatViewModel.migrateOptimisticSecureImage(
     }
     compose.project.click.click.ui.chat
         .migrateLockedDropBlurCacheKey(tempId, serverMessageId)
+
     if (cachedBytes != null && cachedBytes.isNotEmpty()) {
         secureImageBytesCache.put(serverMessageId, cachedBytes)
         secureImageBytesCache.remove(tempId)
-        val prior = _secureChatMediaLoadState.value[tempId]
-        _secureChatMediaLoadState.update { map ->
-            val withoutTemp = map - tempId
-            if (prior != null) {
-                withoutTemp + (
-                    serverMessageId to
-                        prior.copy(
-                            loading = false,
-                            imageBytes = cachedBytes,
-                        )
-                )
-            } else {
-                withoutTemp + (
-                    serverMessageId to
-                        SecureChatMediaLoadState(
-                            loading = false,
-                            imageBytes = cachedBytes,
-                        )
-                )
-            }
+    }
+    if (!audioPath.isNullOrBlank()) {
+        secureAudioPathCache.remove(tempId)
+        secureAudioPathCache.put(serverMessageId, audioPath)
+    }
+
+    _secureChatMediaLoadState.update { map ->
+        val withoutTemp = map - tempId
+        if (prior != null || cachedBytes != null || audioPath != null) {
+            withoutTemp + (
+                serverMessageId to
+                    SecureChatMediaLoadState(
+                        loading = false,
+                        imageBytes = cachedBytes,
+                        audioLocalPath = audioPath,
+                        error = prior?.error,
+                        uploadProgress = prior?.uploadProgress,
+                    )
+            )
+        } else {
+            withoutTemp
         }
-    } else {
-        _secureChatMediaLoadState.update { it - tempId }
     }
 }
 
@@ -543,7 +581,7 @@ internal fun ChatViewModel.applyInsertedMessage(
     val tempIdToReplace =
         optimisticTempId
             ?: findPendingOptimisticTempId(currentState.messages, message, currentUserId)
-    tempIdToReplace?.let { migrateOptimisticSecureImage(it, message.id) }
+    tempIdToReplace?.let { migrateOptimisticSecureMedia(it, message.id) }
     val mergedMessage = resolveInsertedMessage(message, currentState.messages, tempIdToReplace)
 
     if (tempIdToReplace != null) {

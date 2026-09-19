@@ -43,8 +43,10 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
 import compose.project.click.click.ui.chat.rememberChatMediaPickers // pragma: allowlist secret
+import compose.project.click.click.ui.components.BirthdayVisualTransformation // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickOutlinedTextField // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
+import compose.project.click.click.ui.components.birthdayDigitsInput // pragma: allowlist secret
 import compose.project.click.click.ui.components.birthdayIsoToUtcMidnightMillis // pragma: allowlist secret
 import compose.project.click.click.ui.components.formatBirthdayDigitsInput // pragma: allowlist secret
 import compose.project.click.click.ui.components.parseBirthdayIsoLocalDate // pragma: allowlist secret
@@ -327,7 +329,7 @@ fun SignUpScreen(
 
             ClickOutlinedTextField(
                 value = birthdayIso,
-                onValueChange = { birthdayIso = formatBirthdayDigitsInput(it) },
+                onValueChange = { incoming -> birthdayIso = birthdayDigitsInput(incoming) },
                 label = { Text("Birthday") },
                 placeholderText = "YYYY-MM-DD",
                 leadingIcon = {
@@ -350,6 +352,7 @@ fun SignUpScreen(
                         .fillMaxWidth()
                         .testTag("signup-birthday-field"),
                 singleLine = true,
+                visualTransformation = BirthdayVisualTransformation,
                 keyboardOptions =
                     KeyboardOptions(
                         keyboardType = KeyboardType.Number,
@@ -406,7 +409,7 @@ fun SignUpScreen(
                         TextButton(
                             onClick = {
                                 birthdayPickerState.selectedDateMillis?.let { selectedMillis ->
-                                    birthdayIso = utcMidnightMillisToBirthdayIso(selectedMillis)
+                                    birthdayIso = birthdayDigitsInput(utcMidnightMillisToBirthdayIso(selectedMillis))
                                 }
                                 showBirthdayPicker = false
                                 focusManager.clearFocus()
@@ -529,7 +532,7 @@ fun SignUpScreen(
                                 onEmailSignUp(
                                     firstName.trim(),
                                     lastName.trim(),
-                                    birthdayIso.trim(),
+                                    formatBirthdayDigitsInput(birthdayIso),
                                     email,
                                     password,
                                     pendingAvatarBytes,
@@ -569,7 +572,7 @@ fun SignUpScreen(
                         onEmailSignUp(
                             firstName.trim(),
                             lastName.trim(),
-                            birthdayIso.trim(),
+                            formatBirthdayDigitsInput(birthdayIso),
                             email,
                             password,
                             pendingAvatarBytes,

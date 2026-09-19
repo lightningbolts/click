@@ -288,7 +288,11 @@ internal fun ChatViewModel.loadChatMessagesImpl(chatId: String) {
             } == true
         val rowForDisk = cachedChat ?: cachedChatRowForThreadId(chatId)
         if (rowForDisk != null && hasCachedTimeline && mergedPrefetch != null) {
-            _messageReactions.value = mergedPrefetch.reactionsByMessageId
+            _messageReactions.value =
+                mergeReactionMapsPreserveOptimistic(
+                    _messageReactions.value,
+                    mergedPrefetch.reactionsByMessageId,
+                )
             _icebreakerPrompts.value = mergedPrefetch.icebreakerPrompts
             _showIcebreakerPanel.value = mergedPrefetch.showIcebreakerPanel
             val liveForMerge =
@@ -380,7 +384,11 @@ internal fun ChatViewModel.loadChatMessagesImpl(chatId: String) {
     }
 
     if (cachedChat != null && prefetchedPayload != null) {
-        _messageReactions.value = prefetchedPayload.reactionsByMessageId
+        _messageReactions.value =
+            mergeReactionMapsPreserveOptimistic(
+                _messageReactions.value,
+                prefetchedPayload.reactionsByMessageId,
+            )
         _icebreakerPrompts.value = prefetchedPayload.icebreakerPrompts
         _showIcebreakerPanel.value = prefetchedPayload.showIcebreakerPanel
         // Merge with live timeline so a bounded disk/hot prefetch (80 msgs) never

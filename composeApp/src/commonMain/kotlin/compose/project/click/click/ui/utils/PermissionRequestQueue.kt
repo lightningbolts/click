@@ -55,6 +55,17 @@ object PermissionRequestQueue {
         pump()
     }
 
+    /**
+     * Cancels the primer without pretending the OS denied anything.
+     *
+     * Proximity uses this path because "Not now" is user cancellation, not a permission
+     * decision; the Connect screen should remain idle and retryable.
+     */
+    fun cancelCurrentWithoutResult() {
+        _current.value = null
+        pump()
+    }
+
     fun resetForTests() {
         waiting.clear()
         _current.value = null
@@ -79,7 +90,7 @@ fun permissionPrimeCopy(kind: PermissionKind): Pair<String, String> =
                 "Click uses the camera to scan QR codes and capture Disposable Roll photos."
         PermissionKind.ProximityHardware ->
             "Nearby devices" to
-                "Bluetooth and microphone let Click complete a tap handshake. GPS still works if Bluetooth is off."
+                "Microphone access enables Tap to Connect. Bluetooth improves nearby matching when available, but Click can fall back to ultrasonic audio and GPS if Bluetooth is unavailable."
         PermissionKind.Calendar ->
             "Calendar" to
                 "Click can add events you save to your device calendar."

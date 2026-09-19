@@ -49,8 +49,10 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.data.repository.SupabaseRepository
+import compose.project.click.click.ui.components.BirthdayVisualTransformation
 import compose.project.click.click.ui.components.ClickOutlinedTextField
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
+import compose.project.click.click.ui.components.birthdayDigitsInput
 import compose.project.click.click.ui.components.birthdayIsoToUtcMidnightMillis
 import compose.project.click.click.ui.components.formatBirthdayDigitsInput
 import compose.project.click.click.ui.components.parseBirthdayIsoLocalDate
@@ -94,7 +96,7 @@ fun ProfileBasicsGateScreen(
 ) {
     var firstName by remember { mutableStateOf(initialFirstName) }
     var lastName by remember { mutableStateOf(initialLastName) }
-    var birthdayIso by remember { mutableStateOf(formatBirthdayDigitsInput(initialBirthdayIso)) }
+    var birthdayIso by remember { mutableStateOf(birthdayDigitsInput(initialBirthdayIso)) }
     var showBirthdayPicker by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var saving by remember { mutableStateOf(false) }
@@ -105,7 +107,7 @@ fun ProfileBasicsGateScreen(
     LaunchedEffect(initialFirstName, initialLastName, initialBirthdayIso) {
         val incomingFirst = initialFirstName.trim()
         val incomingLast = initialLastName.trim()
-        val incomingBirthday = formatBirthdayDigitsInput(initialBirthdayIso)
+        val incomingBirthday = birthdayDigitsInput(initialBirthdayIso)
 
         if (firstName.isBlank() && incomingFirst.isNotBlank()) firstName = incomingFirst
         if (lastName.isBlank() && incomingLast.isNotBlank()) lastName = incomingLast
@@ -170,7 +172,7 @@ fun ProfileBasicsGateScreen(
         if (requireBirthday) {
             ClickOutlinedTextField(
                 value = birthdayIso,
-                onValueChange = { birthdayIso = formatBirthdayDigitsInput(it) },
+                onValueChange = { incoming -> birthdayIso = birthdayDigitsInput(incoming) },
                 label = { Text("Birthday") },
                 placeholderText = "YYYY-MM-DD",
                 trailingIcon = {
@@ -181,6 +183,7 @@ fun ProfileBasicsGateScreen(
                 supportingText = birthdayHelper?.let { { Text(it) } },
                 isError = birthdayIso.isNotBlank() && !birthdayValid,
                 singleLine = true,
+                visualTransformation = BirthdayVisualTransformation,
                 keyboardOptions =
                     KeyboardOptions(
                         keyboardType = KeyboardType.Number,
@@ -230,7 +233,7 @@ fun ProfileBasicsGateScreen(
                         TextButton(
                             onClick = {
                                 birthdayPickerState.selectedDateMillis?.let { selectedMillis ->
-                                    birthdayIso = utcMidnightMillisToBirthdayIso(selectedMillis)
+                                    birthdayIso = birthdayDigitsInput(utcMidnightMillisToBirthdayIso(selectedMillis))
                                 }
                                 showBirthdayPicker = false
                             },
@@ -268,7 +271,7 @@ fun ProfileBasicsGateScreen(
                                 userId = userId,
                                 firstName = firstName,
                                 lastName = lastName,
-                                birthdayIso = birthdayIso.trim(),
+                                birthdayIso = formatBirthdayDigitsInput(birthdayIso),
                             )
                         } else {
                             repo.updateUserProfileNames(
