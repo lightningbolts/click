@@ -8,10 +8,10 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
@@ -355,19 +355,17 @@ object AttachmentCrypto {
     }
 
     private fun JsonObject?.stringAt(key: String): String? =
-        this
-            ?.get(key)
-            ?.jsonPrimitive
+        (this?.get(key) as? JsonPrimitive)
             ?.contentOrNull
             ?.takeIf { it.isNotBlank() }
 
     private fun JsonObject?.longAt(key: String): Long? {
-        val primitive = this?.get(key)?.jsonPrimitive ?: return null
+        val primitive = this?.get(key) as? JsonPrimitive ?: return null
         return primitive.longOrNull ?: primitive.contentOrNull?.toLongOrNull()
     }
 
     private fun JsonObject?.intAt(key: String): Int? {
-        val primitive = this?.get(key)?.jsonPrimitive ?: return null
+        val primitive = this?.get(key) as? JsonPrimitive ?: return null
         return primitive.intOrNull ?: primitive.contentOrNull?.toIntOrNull()
     }
 }
