@@ -754,6 +754,7 @@ internal fun NfcErrorContent(
     message: String,
     onRetry: () -> Unit,
     onDismiss: () -> Unit,
+    onOpenSettings: (() -> Unit)? = null,
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -804,6 +805,17 @@ internal fun NfcErrorContent(
                 modifier = Modifier.weight(1f),
             ) {
                 Text("Try Again")
+            }
+        }
+
+        if (onOpenSettings != null) {
+            Spacer(modifier = Modifier.height(12.dp))
+            ClickButton(
+                onClick = onOpenSettings,
+                modifier = Modifier.fillMaxWidth(),
+                variant = ClickButtonVariant.Secondary,
+            ) {
+                Text("Open Settings")
             }
         }
     }
