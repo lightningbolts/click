@@ -80,8 +80,6 @@ fun parseBirthdayIsoLocalDate(raw: String): LocalDate? {
     return runCatching { LocalDate.parse(formatted) }.getOrNull()
 }
 
-fun birthdayIsoToUtcMidnightMillis(iso: String): Long? =
-    parseBirthdayIsoLocalDate(iso)?.let { localDateToUtcMidnightMillis(it) }
+fun birthdayIsoToUtcMidnightMillis(iso: String): Long? = parseBirthdayIsoLocalDate(iso)?.let { localDateToUtcMidnightMillis(it) }
 
-fun utcMidnightMillisToBirthdayIso(ms: Long): String =
-    utcMidnightMillisToLocalDate(ms).toString()
+fun utcMidnightMillisToBirthdayIso(ms: Long): String = utcMidnightMillisToLocalDate(ms).toString()
