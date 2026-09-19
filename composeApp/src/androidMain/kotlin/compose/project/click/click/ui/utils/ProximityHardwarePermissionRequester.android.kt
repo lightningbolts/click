@@ -1,6 +1,7 @@
 package compose.project.click.click.ui.utils
 
 import android.Manifest
+import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.ComponentActivity
@@ -47,7 +48,7 @@ actual fun rememberPlatformProximityHardwarePermissionStatus(): () -> ProximityH
                     }
                 val requestedBefore =
                     context
-                        .getSharedPreferences(PROXIMITY_PERMISSION_PREFS, ComponentActivity.MODE_PRIVATE)
+                        .getSharedPreferences(PROXIMITY_PERMISSION_PREFS, Context.MODE_PRIVATE)
                         .getBoolean(PROXIMITY_PERMISSION_REQUESTED, false)
 
                 when {
@@ -118,7 +119,7 @@ actual fun rememberPlatformProximityHardwarePermissionRequester(): ((onResult: (
             onResult(true)
         } else {
             context
-                ?.getSharedPreferences(PROXIMITY_PERMISSION_PREFS, ComponentActivity.MODE_PRIVATE)
+                ?.getSharedPreferences(PROXIMITY_PERMISSION_PREFS, Context.MODE_PRIVATE)
                 ?.edit()
                 ?.putBoolean(PROXIMITY_PERMISSION_REQUESTED, true)
                 ?.apply()
