@@ -570,13 +570,22 @@ fun ChatMessageBubble(
                                                 }
                                             }
                                             isAttachment && attachmentPresentation != null -> {
-                                                ChatAttachmentBubble(
-                                                    presentation = attachmentPresentation,
-                                                    isSent = true,
-                                                    uploadFailed = message.deliveryState == MessageDeliveryState.ERROR,
-                                                    onDownload = { envelope -> onDownloadAttachment(messageWithUser, envelope) },
-                                                    maxCardWidth = bubbleContentMaxWidth,
-                                                )
+                                                val envelope = attachmentPresentation.envelope
+                                                if (envelope != null) {
+                                                    ChatAttachmentBubble(
+                                                        envelope = envelope,
+                                                        isSent = true,
+                                                        onDownload = { onDownloadAttachment(messageWithUser, envelope) },
+                                                        maxCardWidth = bubbleContentMaxWidth,
+                                                    )
+                                                } else {
+                                                    pendingChatAttachmentBubble(
+                                                        presentation = attachmentPresentation,
+                                                        isSent = true,
+                                                        uploadFailed = message.deliveryState == MessageDeliveryState.ERROR,
+                                                        maxCardWidth = bubbleContentMaxWidth,
+                                                    )
+                                                }
                                             }
                                             else -> {
                                                 ChatBubbleSelectableText(
@@ -749,13 +758,22 @@ fun ChatMessageBubble(
                                                 }
                                             }
                                             isAttachment && attachmentPresentation != null -> {
-                                                ChatAttachmentBubble(
-                                                    presentation = attachmentPresentation,
-                                                    isSent = false,
-                                                    uploadFailed = message.deliveryState == MessageDeliveryState.ERROR,
-                                                    onDownload = { envelope -> onDownloadAttachment(messageWithUser, envelope) },
-                                                    maxCardWidth = bubbleContentMaxWidth,
-                                                )
+                                                val envelope = attachmentPresentation.envelope
+                                                if (envelope != null) {
+                                                    ChatAttachmentBubble(
+                                                        envelope = envelope,
+                                                        isSent = false,
+                                                        onDownload = { onDownloadAttachment(messageWithUser, envelope) },
+                                                        maxCardWidth = bubbleContentMaxWidth,
+                                                    )
+                                                } else {
+                                                    pendingChatAttachmentBubble(
+                                                        presentation = attachmentPresentation,
+                                                        isSent = false,
+                                                        uploadFailed = message.deliveryState == MessageDeliveryState.ERROR,
+                                                        maxCardWidth = bubbleContentMaxWidth,
+                                                    )
+                                                }
                                             }
                                             else -> {
                                                 ChatBubbleSelectableText(
@@ -1012,6 +1030,77 @@ private fun BeaconChatMessageBubble(
                     Modifier
                         .align(Alignment.CenterEnd)
                         .zIndex(0f),
+            )
+        }
+    }
+}
+
+
+@Composable
+private fun pendingChatAttachmentBubble(
+    presentation: AttachmentCrypto.Presentation,
+    isSent: Boolean,
+    uploadFailed: Boolean,
+    maxCardWidth: androidx.compose.ui.unit.Dp,
+) {
+    val shape =
+        RoundedCornerShape(
+            topStart = if (isSent) ChatBubbleTokens.cornerMain else ChatBubbleTokens.cornerTailSmall,
+            topEnd = ChatBubbleTokens.cornerMain,
+            bottomStart = ChatBubbleTokens.cornerMain,
+            bottomEnd = if (isSent) ChatBubbleTokens.cornerTailSmall else ChatBubbleTokens.cornerMain,
+        )
+    val container =
+        if (isSent) {
+            PrimaryBlue.copy(alpha = 0.14f)
+        } else {
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f)
+        }
+    val statusText = if (uploadFailed) "Upload failed" else "Uploading…"
+    val statusColor =
+        if (uploadFailed) {
+            MaterialTheme.colorScheme.error
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        }
+    val sizeLabel =
+        when {
+            presentation.size <= 0L -> ""
+            presentation.size < 1_024L -> "${presentation.size} B"
+            presentation.size < 1_024L * 1_024L -> "${presentation.size / 1_024L} KB"
+            else -> "${(presentation.size * 10L / (1_024L * 1_024L)) / 10.0} MB"
+        }
+
+    Box(
+        modifier =
+            Modifier
+                .widthIn(max = maxCardWidth)
+                .clip(shape)
+                .background(container)
+                .border(1.dp, PrimaryBlue.copy(alpha = 0.24f), shape)
+                .padding(horizontal = chatBubbleScaledDp(15f), vertical = chatBubbleScaledDp(12f)),
+    ) {
+        Column {
+            Text(
+                text = presentation.name,
+                style = chatBubbleMessageTextStyle(),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text =
+                    listOf(sizeLabel, presentation.mime)
+                        .filter { it.isNotBlank() }
+                        .joinToString(" · "),
+                style = chatBubbleReplyLabelStyle(),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = statusText,
+                style = chatBubbleReplyLabelStyle(),
+                color = statusColor,
             )
         }
     }
