@@ -151,6 +151,34 @@ class AttachmentCryptoTest {
     }
 
     @Test
+    fun nonPrimitiveAttachmentMetadataFallsBackWithoutThrowing() {
+        val metadata =
+            buildJsonObject {
+                put(
+                    "attachment_name",
+                    buildJsonObject {
+                        put("unexpected", "object")
+                    },
+                )
+                put("attachment_mime", "text/plain")
+                put("attachment_size", 12L)
+            }
+
+        val presentation =
+            AttachmentCrypto.resolvePresentation(
+                content = "fallback.txt",
+                metadata = metadata,
+                isFileMessage = true,
+            )
+
+        assertNotNull(presentation)
+        assertEquals("fallback.txt", presentation.name)
+        assertEquals("text/plain", presentation.mime)
+        assertEquals(12L, presentation.size)
+        assertNull(presentation.envelope)
+    }
+
+    @Test
     fun plainTextDoesNotBecomeAttachmentPresentation() {
         assertNull(
             AttachmentCrypto.resolvePresentation(
