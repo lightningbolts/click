@@ -572,6 +572,7 @@ fun ChatMessageBubble(
                                                 ChatAttachmentBubble(
                                                     presentation = attachmentPresentation,
                                                     isSent = true,
+                                                    uploadFailed = message.deliveryState == MessageDeliveryState.ERROR,
                                                     onDownload = { envelope -> onDownloadAttachment(messageWithUser, envelope) },
                                                     maxCardWidth = bubbleContentMaxWidth,
                                                 )
@@ -750,6 +751,7 @@ fun ChatMessageBubble(
                                                 ChatAttachmentBubble(
                                                     presentation = attachmentPresentation,
                                                     isSent = false,
+                                                    uploadFailed = message.deliveryState == MessageDeliveryState.ERROR,
                                                     onDownload = { envelope -> onDownloadAttachment(messageWithUser, envelope) },
                                                     maxCardWidth = bubbleContentMaxWidth,
                                                 )
