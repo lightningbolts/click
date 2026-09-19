@@ -34,7 +34,6 @@ jobs:
         uses: ./.github/actions/checkout-click-web
         with:
           token: ${{ secrets.CLICK_WEB_READ_TOKEN || github.token }}
-          candidate_ref: ${{ github.head_ref }}
 
       - name: Verify source-of-truth migration delegate
         run: |
