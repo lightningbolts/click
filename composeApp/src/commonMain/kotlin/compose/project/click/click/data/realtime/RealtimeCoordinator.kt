@@ -169,20 +169,21 @@ object RealtimeCoordinator {
                             .get()
                         runCatching { SupabaseConfig.client.realtime.connect() }
 
-                        channel = SupabaseConfig.client.channel("app:connections:$userId")
-                        connectionsChannel = channel
+                        val activeChannel = SupabaseConfig.client.channel("app:connections:$userId")
+                        channel = activeChannel
+                        connectionsChannel = activeChannel
 
                         // Register every postgres flow before subscribe so the first junction
                         // change cannot land in a listener-registration gap.
                         coroutineScope {
                             merge(
-                                channel
+                                activeChannel
                                     .postgresChangeFlow<PostgresAction>(schema = "public") { table = "connections" }
                                     .filter { it is PostgresAction.Insert }
                                     .map { },
-                                channel.postgresChangeFlow<PostgresAction>(schema = "public") { table = "connection_archives" }.map { },
-                                channel.postgresChangeFlow<PostgresAction>(schema = "public") { table = "connection_hidden" }.map { },
-                                channel.postgresChangeFlow<PostgresAction>(schema = "public") { table = "connection_core" }.map { },
+                                activeChannel.postgresChangeFlow<PostgresAction>(schema = "public") { table = "connection_archives" }.map { },
+                                activeChannel.postgresChangeFlow<PostgresAction>(schema = "public") { table = "connection_hidden" }.map { },
+                                activeChannel.postgresChangeFlow<PostgresAction>(schema = "public") { table = "connection_core" }.map { },
                                 channel
                                     .postgresChangeFlow<PostgresAction>(schema = "public") { table = "chats" }
                                     .filter { it is PostgresAction.Insert }
@@ -203,14 +204,14 @@ object RealtimeCoordinator {
                                     }
                             }.launchIn(this)
 
-                            channel
+                            activeChannel
                                 .postgresChangeFlow<PostgresAction>(schema = "public") { table = "connections" }
                                 .filter { it is PostgresAction.Update }
                                 .onEach {
                                     bumpInboxVersionLocked()
                                 }.launchIn(this)
 
-                            channel.subscribe()
+                            activeChannel.subscribe()
                             attempt = 0
                             awaitCancellation()
                         }
