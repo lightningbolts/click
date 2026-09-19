@@ -307,6 +307,7 @@ internal fun ConnectionViewModel.startTapProximityHandshakeImpl(
     ConnectionFlowTelemetry.recordStarted()
     activeTapProximityJob?.cancel()
     activeTapProximityJob = viewModelScope.launch {
+        val ownedJob = coroutineContext[Job]
         try {
             lastProximityEncounterLoggedAggregate = true
             val shouldFetchLocation = !skipLocation && AppDataManager.shouldCaptureLocationAtTap()
