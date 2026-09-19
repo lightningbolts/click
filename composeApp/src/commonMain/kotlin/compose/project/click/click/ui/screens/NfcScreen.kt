@@ -382,6 +382,12 @@ fun NfcScreen(
                                         startTapAfterHardwarePermissionGate()
                                     },
                                     onDismiss = { connectionViewModel.resetConnectionState() },
+                                    onOpenSettings =
+                                        if (state.message == ConnectionViewModel.HARDWARE_PERMISSIONS_MISSING_MESSAGE) {
+                                            { openApplicationSystemSettings() }
+                                        } else {
+                                            null
+                                        },
                                 )
                             }
                         }
