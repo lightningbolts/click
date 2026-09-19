@@ -79,7 +79,7 @@ fun permissionPrimeCopy(kind: PermissionKind): Pair<String, String> =
                 "Click uses the camera to scan QR codes and capture Disposable Roll photos."
         PermissionKind.ProximityHardware ->
             "Nearby devices" to
-                "Bluetooth and microphone let Click complete a tap handshake. GPS still works if Bluetooth is off."
+                "Microphone access enables Tap to Connect. Bluetooth improves nearby matching when available, but Click can fall back to ultrasonic audio and GPS if Bluetooth is unavailable."
         PermissionKind.Calendar ->
             "Calendar" to
                 "Click can add events you save to your device calendar."
