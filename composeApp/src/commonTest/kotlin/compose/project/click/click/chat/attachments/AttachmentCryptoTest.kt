@@ -1,6 +1,8 @@
 package compose.project.click.click.chat.attachments
 
 import compose.project.click.click.crypto.MessageCrypto
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -124,6 +126,39 @@ class AttachmentCryptoTest {
         val unsafe = "$prefix\"../a\",\"mediaCiphertextSha256\":\"$digest\"}"
         assertNull(AttachmentCrypto.tryDecodeV2AttachmentDescriptor(unknown))
         assertNull(AttachmentCrypto.tryDecodeV2AttachmentDescriptor(unsafe))
+    }
+
+    @Test
+    fun pendingFilePresentationUsesSafeMetadataWithoutInventingEnvelope() {
+        val metadata =
+            buildJsonObject {
+                put("attachment_name", "notes.txt")
+                put("attachment_mime", "text/plain")
+                put("attachment_size", 2048L)
+            }
+        val presentation =
+            AttachmentCrypto.resolvePresentation(
+                content = "notes.txt",
+                metadata = metadata,
+                isFileMessage = true,
+            )
+        assertNotNull(presentation)
+        assertEquals("notes.txt", presentation.name)
+        assertEquals("text/plain", presentation.mime)
+        assertEquals(2048L, presentation.size)
+        assertNull(presentation.envelope)
+        assertTrue(!presentation.isReady)
+    }
+
+    @Test
+    fun plainTextDoesNotBecomeAttachmentPresentation() {
+        assertNull(
+            AttachmentCrypto.resolvePresentation(
+                content = "hello",
+                metadata = null,
+                isFileMessage = false,
+            ),
+        )
     }
 
     @Test
