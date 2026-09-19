@@ -431,48 +431,46 @@ internal fun ChatViewModel.hydrateInsertedMessageUser(
     }
 }
 
-internal fun ChatViewModel.migrateOptimisticSecureImage(
+internal fun ChatViewModel.migrateOptimisticSecureMedia(
     tempId: String,
     serverMessageId: String,
 ) {
-    val cachedBytes =
-        secureImageBytesCache.get(tempId)
-            ?: _secureChatMediaLoadState.value[tempId]?.imageBytes
+    val prior = _secureChatMediaLoadState.value[tempId]
+    val cachedBytes = secureImageBytesCache.get(tempId) ?: prior?.imageBytes
+    val audioPath = secureAudioPathCache.get(tempId) ?: prior?.audioLocalPath
+
     // Keep decoded bitmaps across temp→server id so Click Drop send does not flash blank.
     compose.project.click.click.ui.chat.secureChatImageBitmapCache.get(tempId)?.let { bmp ->
-        compose.project.click.click.ui.chat.secureChatImageBitmapCache
-            .put(serverMessageId, bmp)
-        compose.project.click.click.ui.chat.secureChatImageBitmapCache
-            .remove(tempId)
+        compose.project.click.click.ui.chat.secureChatImageBitmapCache.put(serverMessageId, bmp)
+        compose.project.click.click.ui.chat.secureChatImageBitmapCache.remove(tempId)
     }
-    compose.project.click.click.ui.chat
-        .migrateLockedDropBlurCacheKey(tempId, serverMessageId)
+    compose.project.click.click.ui.chat.migrateLockedDropBlurCacheKey(tempId, serverMessageId)
+
     if (cachedBytes != null && cachedBytes.isNotEmpty()) {
         secureImageBytesCache.put(serverMessageId, cachedBytes)
         secureImageBytesCache.remove(tempId)
-        val prior = _secureChatMediaLoadState.value[tempId]
-        _secureChatMediaLoadState.update { map ->
-            val withoutTemp = map - tempId
-            if (prior != null) {
-                withoutTemp + (
-                    serverMessageId to
-                        prior.copy(
-                            loading = false,
-                            imageBytes = cachedBytes,
-                        )
-                )
-            } else {
-                withoutTemp + (
-                    serverMessageId to
-                        SecureChatMediaLoadState(
-                            loading = false,
-                            imageBytes = cachedBytes,
-                        )
-                )
-            }
+    }
+    if (!audioPath.isNullOrBlank()) {
+        secureAudioPathCache.remove(tempId)
+        secureAudioPathCache.put(serverMessageId, audioPath)
+    }
+
+    _secureChatMediaLoadState.update { map ->
+        val withoutTemp = map - tempId
+        if (prior != null || cachedBytes != null || audioPath != null) {
+            withoutTemp + (
+                serverMessageId to
+                    SecureChatMediaLoadState(
+                        loading = false,
+                        imageBytes = cachedBytes,
+                        audioLocalPath = audioPath,
+                        error = prior?.error,
+                        uploadProgress = prior?.uploadProgress,
+                    )
+            )
+        } else {
+            withoutTemp
         }
-    } else {
-        _secureChatMediaLoadState.update { it - tempId }
     }
 }
 
@@ -573,7 +571,7 @@ internal fun ChatViewModel.applyInsertedMessage(
     val tempIdToReplace =
         optimisticTempId
             ?: findPendingOptimisticTempId(currentState.messages, message, currentUserId)
-    tempIdToReplace?.let { migrateOptimisticSecureImage(it, message.id) }
+    tempIdToReplace?.let { migrateOptimisticSecureMedia(it, message.id) }
     val mergedMessage = resolveInsertedMessage(message, currentState.messages, tempIdToReplace)
 
     if (tempIdToReplace != null) {
