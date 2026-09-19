@@ -582,7 +582,7 @@ fun ChatMessageBubble(
                                                     pendingChatAttachmentBubble(
                                                         presentation = attachmentPresentation,
                                                         isSent = true,
-                                                        uploadFailed = message.deliveryState == MessageDeliveryState.ERROR,
+                                                        deliveryState = message.deliveryState,
                                                         maxCardWidth = bubbleContentMaxWidth,
                                                     )
                                                 }
@@ -770,7 +770,7 @@ fun ChatMessageBubble(
                                                     pendingChatAttachmentBubble(
                                                         presentation = attachmentPresentation,
                                                         isSent = false,
-                                                        uploadFailed = message.deliveryState == MessageDeliveryState.ERROR,
+                                                        deliveryState = message.deliveryState,
                                                         maxCardWidth = bubbleContentMaxWidth,
                                                     )
                                                 }
@@ -1039,7 +1039,7 @@ private fun BeaconChatMessageBubble(
 private fun pendingChatAttachmentBubble(
     presentation: AttachmentCrypto.Presentation,
     isSent: Boolean,
-    uploadFailed: Boolean,
+    deliveryState: MessageDeliveryState,
     maxCardWidth: androidx.compose.ui.unit.Dp,
 ) {
     val shape =
@@ -1055,9 +1055,14 @@ private fun pendingChatAttachmentBubble(
         } else {
             MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f)
         }
-    val statusText = if (uploadFailed) "Upload failed" else "Uploading…"
+    val statusText =
+        when (deliveryState) {
+            MessageDeliveryState.PENDING -> "Uploading…"
+            MessageDeliveryState.ERROR -> "Upload failed"
+            else -> "File unavailable"
+        }
     val statusColor =
-        if (uploadFailed) {
+        if (deliveryState == MessageDeliveryState.ERROR) {
             MaterialTheme.colorScheme.error
         } else {
             MaterialTheme.colorScheme.onSurfaceVariant
