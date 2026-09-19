@@ -17,14 +17,12 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.onEach
@@ -176,52 +174,57 @@ object RealtimeCoordinator {
                         // Register every postgres flow before subscribe so the first junction
                         // change cannot land in a listener-registration gap.
                         coroutineScope {
-                            merge(
-                                activeChannel
-                                    .postgresChangeFlow<PostgresAction>(schema = "public") { table = "connections" }
-                                    .filter { it is PostgresAction.Insert }
-                                    .map { },
-                                activeChannel
-                                    .postgresChangeFlow<PostgresAction>(
-                                        schema = "public",
-                                    ) { table = "connection_archives" }
-                                    .map { },
-                                activeChannel
-                                    .postgresChangeFlow<PostgresAction>(schema = "public") { table = "connection_hidden" }
-                                    .map { },
-                                activeChannel
-                                    .postgresChangeFlow<PostgresAction>(schema = "public") { table = "connection_core" }
-                                    .map { },
-                                activeChannel
-                                    .postgresChangeFlow<PostgresAction>(schema = "public") { table = "chats" }
-                                    .filter { it is PostgresAction.Insert }
-                                    .map { },
-                                activeChannel
-                                    .postgresChangeFlow<PostgresAction>(schema = "public") { table = "group_members" }
-                                    .filter { action ->
-                                        action is PostgresAction.Insert &&
-                                            groupMemberUserId(action) == userId
-                                    }.map { },
-                            ).onEach {
-                                debounceJob?.cancel()
-                                debounceJob =
-                                    launch {
-                                        delay(CONNECTIONS_DEBOUNCE_MS)
-                                        bumpInboxVersionLocked()
-                                        _connectionJunctionChanged.emit(Unit)
-                                    }
-                            }.launchIn(this)
-
-                            activeChannel
-                                .postgresChangeFlow<PostgresAction>(schema = "public") { table = "connections" }
-                                .filter { it is PostgresAction.Update }
-                                .onEach {
-                                    bumpInboxVersionLocked()
-                                }.launchIn(this)
-
-                            activeChannel.subscribe()
-                            attempt = 0
-                            awaitCancellation()
+                            val updatesJob =
+                                launch {
+                                    activeChannel
+                                        .postgresChangeFlow<PostgresAction>(schema = "public") { table = "connections" }
+                                        .filter { it is PostgresAction.Update }
+                                        .collect {
+                                            bumpInboxVersionLocked()
+                                        }
+                                }
+                            try {
+                                activeChannel.subscribe()
+                                attempt = 0
+                                merge(
+                                    activeChannel
+                                        .postgresChangeFlow<PostgresAction>(schema = "public") { table = "connections" }
+                                        .filter { it is PostgresAction.Insert }
+                                        .map { },
+                                    activeChannel
+                                        .postgresChangeFlow<PostgresAction>(
+                                            schema = "public",
+                                        ) { table = "connection_archives" }
+                                        .map { },
+                                    activeChannel
+                                        .postgresChangeFlow<PostgresAction>(schema = "public") { table = "connection_hidden" }
+                                        .map { },
+                                    activeChannel
+                                        .postgresChangeFlow<PostgresAction>(schema = "public") { table = "connection_core" }
+                                        .map { },
+                                    activeChannel
+                                        .postgresChangeFlow<PostgresAction>(schema = "public") { table = "chats" }
+                                        .filter { it is PostgresAction.Insert }
+                                        .map { },
+                                    activeChannel
+                                        .postgresChangeFlow<PostgresAction>(schema = "public") { table = "group_members" }
+                                        .filter { action ->
+                                            action is PostgresAction.Insert &&
+                                                groupMemberUserId(action) == userId
+                                        }.map { },
+                                ).collect {
+                                    debounceJob?.cancel()
+                                    debounceJob =
+                                        launch {
+                                            delay(CONNECTIONS_DEBOUNCE_MS)
+                                            bumpInboxVersionLocked()
+                                            _connectionJunctionChanged.emit(Unit)
+                                        }
+                                }
+                                error("Connections realtime flow completed unexpectedly")
+                            } finally {
+                                updatesJob.cancel()
+                            }
                         }
                     } catch (e: CancellationException) {
                         throw e
