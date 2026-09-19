@@ -37,6 +37,7 @@ jobs:
         uses: ./.github/actions/checkout-click-web
         with:
           token: ${{ secrets.CLICK_WEB_READ_TOKEN || github.token }}
+          candidate_ref: ${{ github.head_ref }}
 
       - name: Select Xcode
         uses: maxim-lobanov/setup-xcode@v1
@@ -83,6 +84,7 @@ jobs:
         uses: ./.github/actions/checkout-click-web
         with:
           token: ${{ secrets.CLICK_WEB_READ_TOKEN || github.token }}
+          candidate_ref: ${{ github.head_ref }}
 
       - name: Select Xcode
         uses: maxim-lobanov/setup-xcode@v1
