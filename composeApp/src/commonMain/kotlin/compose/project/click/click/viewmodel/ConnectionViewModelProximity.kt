@@ -306,241 +306,242 @@ internal fun ConnectionViewModel.startTapProximityHandshakeImpl(
     lastTapProximityStartedAtMs = nowMs
     ConnectionFlowTelemetry.recordStarted()
     activeTapProximityJob?.cancel()
-    activeTapProximityJob = viewModelScope.launch {
-        val ownedJob = coroutineContext[Job]
-        try {
-            lastProximityEncounterLoggedAggregate = true
-            val shouldFetchLocation = !skipLocation && AppDataManager.shouldCaptureLocationAtTap()
+    activeTapProximityJob =
+        viewModelScope.launch {
+            val ownedJob = coroutineContext[Job]
+            try {
+                lastProximityEncounterLoggedAggregate = true
+                val shouldFetchLocation = !skipLocation && AppDataManager.shouldCaptureLocationAtTap()
 
-            val simulatorMock = proximityManager is MockProximityManager || isSimulatorOrEmulatorRuntime()
-            val myToken =
-                if (simulatorMock) {
-                    ConnectionViewModel.SIMULATOR_MOCK_MY_TOKEN
-                } else {
-                    (0..9999).random().toString().padStart(4, '0')
-                }
-
-            val tokenStorage = createTokenStorage()
-            val noiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: true
-            val baroOptIn = tokenStorage.getBarometricContextOptIn() ?: false
-
-            _connectionState.value =
-                if (shouldFetchLocation) {
-                    ConnectionState.ProximityFetchingLocation
-                } else {
-                    ConnectionState.ProximityHandshaking
-                }
-
-            coroutineScope {
-                val locationDeferred =
-                    if (shouldFetchLocation) {
-                        async {
-                            if (!locationService.hasLocationPermission()) {
-                                locationService.requestLocationPermission()
-                                delay(800L)
-                            }
-                            runCatching { locationService.getTelemetryLocation(6500L) }.getOrNull()
-                        }
-                    } else {
-                        null
-                    }
-
-                val weatherDeferred =
-                    if (shouldFetchLocation && weatherService != null) {
-                        async {
-                            val loc = locationDeferred?.await() ?: return@async null
-                            if (
-                                !loc.latitude.isFinite() ||
-                                !loc.longitude.isFinite() ||
-                                (loc.latitude == 0.0 && loc.longitude == 0.0)
-                            ) {
-                                return@async null
-                            }
-                            runCatching {
-                                weatherService
-                                    .fetchWeather(loc.latitude, loc.longitude)
-                                    ?.toConnectionPayloadWeatherJson()
-                            }.getOrNull()
-                        }
-                    } else {
-                        null
-                    }
-
-                val sensorDeferred =
-                    if (ambientNoiseMonitor != null && barometricHeightMonitor != null) {
-                        async {
-                            runCatching {
-                                val locationForSensors = locationDeferred?.awaitWithin(PROXIMITY_SENSOR_LOCATION_WAIT_MS)
-                                captureConnectionSensorContext(
-                                    ambientNoiseMonitor = ambientNoiseMonitor,
-                                    barometricHeightMonitor = barometricHeightMonitor,
-                                    ambientNoiseOptIn = noiseOptIn,
-                                    barometricContextOptIn = baroOptIn,
-                                    latitude = locationForSensors?.latitude,
-                                    longitude = locationForSensors?.longitude,
-                                )
-                            }.getOrNull()
-                        }
-                    } else {
-                        null
-                    }
-
-                val vibeDeferred =
-                    async(Dispatchers.Default) {
-                        runCatching { HardwareVibeMonitor().takeSnapshot() }.getOrNull()
-                    }
-
-                _connectionState.value = ConnectionState.ProximityHandshaking
-                val listenResult: ProximityHandshakeListenResult =
+                val simulatorMock = proximityManager is MockProximityManager || isSimulatorOrEmulatorRuntime()
+                val myToken =
                     if (simulatorMock) {
-                        delay(2_000L)
-                        ProximityHandshakeListenResult(
-                            heardTokens = ConnectionViewModel.SIMULATOR_MOCK_HEARD_TOKENS,
-                            detectedDevices = emptyList(),
-                        )
+                        ConnectionViewModel.SIMULATOR_MOCK_MY_TOKEN
                     } else {
-                        try {
-                            val listen = async { proximityManager.startHandshakeListening(myToken) }
-                            delay(120L)
-                            // Stagger ultrasonic broadcasts so several nearby devices are less likely to talk over each other.
-                            delay(Random.nextLong(0, 400))
-                            proximityManager.startHandshakeBroadcast(myToken)
-                            listen.await()
-                        } finally {
-                            // Broadcast/permission failures and cancellation must still release
-                            // BLE advertise/scan and the microphone, not just the happy path.
-                            runCatching { proximityManager.stopAll() }
-                        }
+                        (0..9999).random().toString().padStart(4, '0')
                     }
 
-                val heardTokensAudio = listenResult.heardTokens
-                val detectedDevicesBle = listenResult.detectedDevices
+                val tokenStorage = createTokenStorage()
+                val noiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: true
+                val baroOptIn = tokenStorage.getBarometricContextOptIn() ?: false
 
-                val location =
-                    locationDeferred?.await()
-                        ?: if (shouldFetchLocation) {
-                            runCatching { locationService.getCurrentLocation() }.getOrNull()
-                                ?: AppDataManager.lastKnownDeviceLocation.value?.let { (la, lo) ->
-                                    LocationResult(latitude = la, longitude = lo)
+                _connectionState.value =
+                    if (shouldFetchLocation) {
+                        ConnectionState.ProximityFetchingLocation
+                    } else {
+                        ConnectionState.ProximityHandshaking
+                    }
+
+                coroutineScope {
+                    val locationDeferred =
+                        if (shouldFetchLocation) {
+                            async {
+                                if (!locationService.hasLocationPermission()) {
+                                    locationService.requestLocationPermission()
+                                    delay(800L)
                                 }
+                                runCatching { locationService.getTelemetryLocation(6500L) }.getOrNull()
+                            }
                         } else {
                             null
                         }
-                lastProximityLat = location?.latitude
-                lastProximityLng = location?.longitude
-                lastProximityAltitudeMeters = location?.altitudeMeters
-                val weatherSnapshotLabel = weatherDeferred?.awaitWithin(2_500L)
 
-                val proximitySensorContext = sensorDeferred?.awaitWithin(PROXIMITY_SENSOR_WAIT_MS)
-                val vibe = vibeDeferred.awaitWithin(PROXIMITY_SENSOR_WAIT_MS)
-                lastProximityHardwareVibe = vibe
-
-                _connectionState.value = ConnectionState.ProximityResolving
-                val bindResult =
-                    withContext(Dispatchers.Default) {
-                        try {
-                            Result.success(
-                                withTimeout(22_000L) {
-                                    repository
-                                        .bindProximityHandshake(
-                                            httpClient = httpClient,
-                                            bearerJwt = jwt,
-                                            myToken = myToken,
-                                            heardTokens = heardTokensAudio,
-                                            detectedDevices = detectedDevicesBle,
-                                            latitude = lastProximityLat,
-                                            longitude = lastProximityLng,
-                                            exactBarometricElevationM =
-                                                proximitySensorContext
-                                                    ?.exactBarometricElevationMeters
-                                                    ?.takeIf { it.isFinite() },
-                                            hardwareVibe = vibe,
-                                            clientContextFirst = true,
-                                            weatherSnapshotLabel = weatherSnapshotLabel,
-                                            bindNoiseLevelCategory = proximitySensorContext?.noiseLevelCategory,
-                                            bindExactNoiseLevelDb = proximitySensorContext?.exactNoiseLevelDb,
-                                            bindHeightCategory = proximitySensorContext?.heightCategory,
-                                            simulatorMock = simulatorMock,
-                                        ).getOrThrow()
-                                },
-                            )
-                        } catch (e: CancellationException) {
-                            throw e
-                        } catch (e: Exception) {
-                            Result.failure(e)
+                    val weatherDeferred =
+                        if (shouldFetchLocation && weatherService != null) {
+                            async {
+                                val loc = locationDeferred?.await() ?: return@async null
+                                if (
+                                    !loc.latitude.isFinite() ||
+                                    !loc.longitude.isFinite() ||
+                                    (loc.latitude == 0.0 && loc.longitude == 0.0)
+                                ) {
+                                    return@async null
+                                }
+                                runCatching {
+                                    weatherService
+                                        .fetchWeather(loc.latitude, loc.longitude)
+                                        ?.toConnectionPayloadWeatherJson()
+                                }.getOrNull()
+                            }
+                        } else {
+                            null
                         }
-                    }
 
-                if (bindResult.isSuccess) {
-                    when (val handshake = bindResult.getOrNull()!!) {
-                        is BindProximityHandshakeResult.PendingServerMatch -> {
-                            ConnectionFlowTelemetry.recordPending()
-                            _connectionState.value =
-                                ConnectionState.ProximityHandshakePendingMatch(
-                                    message = ConnectionViewModel.PROXIMITY_PENDING_MATCH_MESSAGE,
+                    val sensorDeferred =
+                        if (ambientNoiseMonitor != null && barometricHeightMonitor != null) {
+                            async {
+                                runCatching {
+                                    val locationForSensors = locationDeferred?.awaitWithin(PROXIMITY_SENSOR_LOCATION_WAIT_MS)
+                                    captureConnectionSensorContext(
+                                        ambientNoiseMonitor = ambientNoiseMonitor,
+                                        barometricHeightMonitor = barometricHeightMonitor,
+                                        ambientNoiseOptIn = noiseOptIn,
+                                        barometricContextOptIn = baroOptIn,
+                                        latitude = locationForSensors?.latitude,
+                                        longitude = locationForSensors?.longitude,
+                                    )
+                                }.getOrNull()
+                            }
+                        } else {
+                            null
+                        }
+
+                    val vibeDeferred =
+                        async(Dispatchers.Default) {
+                            runCatching { HardwareVibeMonitor().takeSnapshot() }.getOrNull()
+                        }
+
+                    _connectionState.value = ConnectionState.ProximityHandshaking
+                    val listenResult: ProximityHandshakeListenResult =
+                        if (simulatorMock) {
+                            delay(2_000L)
+                            ProximityHandshakeListenResult(
+                                heardTokens = ConnectionViewModel.SIMULATOR_MOCK_HEARD_TOKENS,
+                                detectedDevices = emptyList(),
+                            )
+                        } else {
+                            try {
+                                val listen = async { proximityManager.startHandshakeListening(myToken) }
+                                delay(120L)
+                                // Stagger ultrasonic broadcasts so several nearby devices are less likely to talk over each other.
+                                delay(Random.nextLong(0, 400))
+                                proximityManager.startHandshakeBroadcast(myToken)
+                                listen.await()
+                            } finally {
+                                // Broadcast/permission failures and cancellation must still release
+                                // BLE advertise/scan and the microphone, not just the happy path.
+                                runCatching { proximityManager.stopAll() }
+                            }
+                        }
+
+                    val heardTokensAudio = listenResult.heardTokens
+                    val detectedDevicesBle = listenResult.detectedDevices
+
+                    val location =
+                        locationDeferred?.await()
+                            ?: if (shouldFetchLocation) {
+                                runCatching { locationService.getCurrentLocation() }.getOrNull()
+                                    ?: AppDataManager.lastKnownDeviceLocation.value?.let { (la, lo) ->
+                                        LocationResult(latitude = la, longitude = lo)
+                                    }
+                            } else {
+                                null
+                            }
+                    lastProximityLat = location?.latitude
+                    lastProximityLng = location?.longitude
+                    lastProximityAltitudeMeters = location?.altitudeMeters
+                    val weatherSnapshotLabel = weatherDeferred?.awaitWithin(2_500L)
+
+                    val proximitySensorContext = sensorDeferred?.awaitWithin(PROXIMITY_SENSOR_WAIT_MS)
+                    val vibe = vibeDeferred.awaitWithin(PROXIMITY_SENSOR_WAIT_MS)
+                    lastProximityHardwareVibe = vibe
+
+                    _connectionState.value = ConnectionState.ProximityResolving
+                    val bindResult =
+                        withContext(Dispatchers.Default) {
+                            try {
+                                Result.success(
+                                    withTimeout(22_000L) {
+                                        repository
+                                            .bindProximityHandshake(
+                                                httpClient = httpClient,
+                                                bearerJwt = jwt,
+                                                myToken = myToken,
+                                                heardTokens = heardTokensAudio,
+                                                detectedDevices = detectedDevicesBle,
+                                                latitude = lastProximityLat,
+                                                longitude = lastProximityLng,
+                                                exactBarometricElevationM =
+                                                    proximitySensorContext
+                                                        ?.exactBarometricElevationMeters
+                                                        ?.takeIf { it.isFinite() },
+                                                hardwareVibe = vibe,
+                                                clientContextFirst = true,
+                                                weatherSnapshotLabel = weatherSnapshotLabel,
+                                                bindNoiseLevelCategory = proximitySensorContext?.noiseLevelCategory,
+                                                bindExactNoiseLevelDb = proximitySensorContext?.exactNoiseLevelDb,
+                                                bindHeightCategory = proximitySensorContext?.heightCategory,
+                                                simulatorMock = simulatorMock,
+                                            ).getOrThrow()
+                                    },
                                 )
-                            startPendingProximityRecovery(
-                                pendingHandshakeId = handshake.pendingHandshakeId,
-                                bearerJwt = jwt,
-                                currentUserId = currentUserId,
-                            )
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (e: Exception) {
+                                Result.failure(e)
+                            }
                         }
-                        is BindProximityHandshakeResult.AwaitingHostSelection -> {
-                            handleAwaitingHostSelection(handshake, currentUserId)
+
+                    if (bindResult.isSuccess) {
+                        when (val handshake = bindResult.getOrNull()!!) {
+                            is BindProximityHandshakeResult.PendingServerMatch -> {
+                                ConnectionFlowTelemetry.recordPending()
+                                _connectionState.value =
+                                    ConnectionState.ProximityHandshakePendingMatch(
+                                        message = ConnectionViewModel.PROXIMITY_PENDING_MATCH_MESSAGE,
+                                    )
+                                startPendingProximityRecovery(
+                                    pendingHandshakeId = handshake.pendingHandshakeId,
+                                    bearerJwt = jwt,
+                                    currentUserId = currentUserId,
+                                )
+                            }
+                            is BindProximityHandshakeResult.AwaitingHostSelection -> {
+                                handleAwaitingHostSelection(handshake, currentUserId)
+                            }
+                            is BindProximityHandshakeResult.InstantMatch -> {
+                                handleInstantProximityOutcome(handshake.outcome, currentUserId)
+                            }
                         }
-                        is BindProximityHandshakeResult.InstantMatch -> {
-                            handleInstantProximityOutcome(handshake.outcome, currentUserId)
-                        }
-                    }
-                } else {
-                    val e = bindResult.exceptionOrNull()!!
-                    if (e.isRetryableForProximityBind()) {
-                        ConnectionFlowTelemetry.recordOfflineQueued(reason = "retryable_bind")
-                        repository.enqueuePendingProximityHandshake(
-                            myToken = myToken,
-                            heardTokens = heardTokensAudio,
-                            detectedDevices = detectedDevicesBle,
-                            latitude = lastProximityLat,
-                            longitude = lastProximityLng,
-                            altitudeMeters = lastProximityAltitudeMeters,
-                            hardwareVibe = lastProximityHardwareVibe,
-                            noiseLevel = proximitySensorContext?.noiseLevelCategory?.name,
-                            exactNoiseLevelDb = proximitySensorContext?.exactNoiseLevelDb,
-                            heightCategory = proximitySensorContext?.heightCategory?.name,
-                            exactBarometricElevationM =
-                                proximitySensorContext
-                                    ?.exactBarometricElevationMeters
-                                    ?.takeIf { it.isFinite() },
-                        )
-                        scheduleProximityHandshakeSync()
-                        _connectionState.value =
-                            ConnectionState.ProximityCapturedOfflineSyncing(
-                                message = ConnectionViewModel.PROXIMITY_OFFLINE_SYNC_MESSAGE,
-                            )
                     } else {
-                        ConnectionFlowTelemetry.recordFailed(reason = "bind_failed")
-                        _connectionState.value = ConnectionState.Error("Tap to Connect failed. Please try again.")
+                        val e = bindResult.exceptionOrNull()!!
+                        if (e.isRetryableForProximityBind()) {
+                            ConnectionFlowTelemetry.recordOfflineQueued(reason = "retryable_bind")
+                            repository.enqueuePendingProximityHandshake(
+                                myToken = myToken,
+                                heardTokens = heardTokensAudio,
+                                detectedDevices = detectedDevicesBle,
+                                latitude = lastProximityLat,
+                                longitude = lastProximityLng,
+                                altitudeMeters = lastProximityAltitudeMeters,
+                                hardwareVibe = lastProximityHardwareVibe,
+                                noiseLevel = proximitySensorContext?.noiseLevelCategory?.name,
+                                exactNoiseLevelDb = proximitySensorContext?.exactNoiseLevelDb,
+                                heightCategory = proximitySensorContext?.heightCategory?.name,
+                                exactBarometricElevationM =
+                                    proximitySensorContext
+                                        ?.exactBarometricElevationMeters
+                                        ?.takeIf { it.isFinite() },
+                            )
+                            scheduleProximityHandshakeSync()
+                            _connectionState.value =
+                                ConnectionState.ProximityCapturedOfflineSyncing(
+                                    message = ConnectionViewModel.PROXIMITY_OFFLINE_SYNC_MESSAGE,
+                                )
+                        } else {
+                            ConnectionFlowTelemetry.recordFailed(reason = "bind_failed")
+                            _connectionState.value = ConnectionState.Error("Tap to Connect failed. Please try again.")
+                        }
                     }
                 }
-            }
-        } catch (e: CancellationException) {
-            runCatching { proximityManager.stopAll() }
-            if (isProximityHandshakeInFlight()) {
-                _connectionState.value = ConnectionState.Idle
-            }
-            throw e
-        } catch (e: ProximityHardwarePermissionException) {
-            ConnectionFlowTelemetry.recordFailed(reason = "hardware_permissions")
-            _connectionState.value = ConnectionState.Error(ConnectionViewModel.HARDWARE_PERMISSIONS_MISSING_MESSAGE)
-        } catch (e: Exception) {
-            ConnectionFlowTelemetry.recordFailed(reason = "handshake_exception")
-            _connectionState.value = ConnectionState.Error("Tap to Connect failed. Please try again.")
-        } finally {
-            if (activeTapProximityJob === ownedJob) {
-                activeTapProximityJob = null
+            } catch (e: CancellationException) {
+                runCatching { proximityManager.stopAll() }
+                if (isProximityHandshakeInFlight()) {
+                    _connectionState.value = ConnectionState.Idle
+                }
+                throw e
+            } catch (e: ProximityHardwarePermissionException) {
+                ConnectionFlowTelemetry.recordFailed(reason = "hardware_permissions")
+                _connectionState.value = ConnectionState.Error(ConnectionViewModel.HARDWARE_PERMISSIONS_MISSING_MESSAGE)
+            } catch (e: Exception) {
+                ConnectionFlowTelemetry.recordFailed(reason = "handshake_exception")
+                _connectionState.value = ConnectionState.Error("Tap to Connect failed. Please try again.")
+            } finally {
+                if (activeTapProximityJob === ownedJob) {
+                    activeTapProximityJob = null
+                }
             }
         }
-    }
 }
 
 /**
