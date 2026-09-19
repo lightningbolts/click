@@ -184,11 +184,11 @@ object RealtimeCoordinator {
                                 activeChannel.postgresChangeFlow<PostgresAction>(schema = "public") { table = "connection_archives" }.map { },
                                 activeChannel.postgresChangeFlow<PostgresAction>(schema = "public") { table = "connection_hidden" }.map { },
                                 activeChannel.postgresChangeFlow<PostgresAction>(schema = "public") { table = "connection_core" }.map { },
-                                channel
+                                activeChannel
                                     .postgresChangeFlow<PostgresAction>(schema = "public") { table = "chats" }
                                     .filter { it is PostgresAction.Insert }
                                     .map { },
-                                channel
+                                activeChannel
                                     .postgresChangeFlow<PostgresAction>(schema = "public") { table = "group_members" }
                                     .filter { action ->
                                         action is PostgresAction.Insert &&
