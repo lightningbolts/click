@@ -168,5 +168,4 @@ class IosBarometricHeightMonitor : BarometricHeightMonitor {
 }
 
 @Composable
-actual fun rememberBarometricHeightMonitor(): BarometricHeightMonitor =
-    remember { IosBarometricHeightMonitor() }
+actual fun rememberBarometricHeightMonitor(): BarometricHeightMonitor = remember { IosBarometricHeightMonitor() }
