@@ -53,6 +53,7 @@ import compose.project.click.click.PlatformHapticsPolicy
 import compose.project.click.click.chat.attachments.AttachmentCrypto
 import compose.project.click.click.data.models.ChatMessageType
 import compose.project.click.click.data.models.Message
+import compose.project.click.click.data.models.MessageDeliveryState
 import compose.project.click.click.data.models.MessageReaction
 import compose.project.click.click.data.models.MessageWithUser
 import compose.project.click.click.data.models.hasLocalMediaUri
