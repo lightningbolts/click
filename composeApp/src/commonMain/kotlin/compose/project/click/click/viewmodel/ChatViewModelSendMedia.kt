@@ -201,6 +201,18 @@ internal fun ChatViewModel.sendChatAudioImpl(
                     currentUser,
                 )
                 val ext = extensionForChatMedia(mimeType, isImage = false)
+                cacheSecureAudioOnDisk(tempId!!, bytes, ext)?.let { localPath ->
+                    secureAudioPathCache.put(tempId!!, localPath)
+                    _secureChatMediaLoadState.update {
+                        it + (
+                            tempId!! to
+                                SecureChatMediaLoadState(
+                                    loading = false,
+                                    audioLocalPath = localPath,
+                                )
+                        )
+                    }
+                }
                 val unique = "${Clock.System.now().toEpochMilliseconds()}-${Random.nextInt(1_000_000_000)}"
                 val path = "$userId/$apiChatId/$unique.$ext"
                 val url =
