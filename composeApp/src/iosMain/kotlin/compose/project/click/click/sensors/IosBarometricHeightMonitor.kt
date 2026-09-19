@@ -11,10 +11,10 @@ import platform.Foundation.NSError
 import platform.Foundation.NSLock
 import platform.Foundation.NSOperationQueue
 import platform.darwin.DISPATCH_TIME_NOW
+import platform.darwin.NSEC_PER_MSEC
 import platform.darwin.dispatch_after
 import platform.darwin.dispatch_get_main_queue
 import platform.darwin.dispatch_time
-import platform.darwin.NSEC_PER_MSEC
 import kotlin.coroutines.resume
 
 /**
@@ -41,41 +41,45 @@ private object IosBarometricAltimeterStream {
     }
 
     fun retain() {
-        val needsStart = withLock {
-            refCount++
-            refCount == 1
-        }
+        val needsStart =
+            withLock {
+                refCount++
+                refCount == 1
+            }
         if (needsStart) {
             startAltimeter()
         }
     }
 
     fun release() {
-        val cm = withLock {
-            if (refCount > 0) refCount--
-            if (refCount == 0) {
-                val a = altimeter
-                altimeter = null
-                a
-            } else {
-                null
+        val cm =
+            withLock {
+                if (refCount > 0) refCount--
+                if (refCount == 0) {
+                    val a = altimeter
+                    altimeter = null
+                    a
+                } else {
+                    null
+                }
             }
-        }
         cm?.stopRelativeAltitudeUpdates()
     }
 
-    fun cached(maxAgeMs: Long): BarometricHeightSample? = withLock {
-        val sample = cachedSample ?: return@withLock null
-        val age = Clock.System.now().toEpochMilliseconds() - cacheEpochMs
-        sample.takeIf { age in 0..maxAgeMs }
-    }
+    fun cached(maxAgeMs: Long): BarometricHeightSample? =
+        withLock {
+            val sample = cachedSample ?: return@withLock null
+            val age = Clock.System.now().toEpochMilliseconds() - cacheEpochMs
+            sample.takeIf { age in 0..maxAgeMs }
+        }
 
     private fun startAltimeter() {
         if (!CMAltimeter.isRelativeAltitudeAvailable()) return
-        val cm = withLock {
-            if (altimeter != null) return@withLock null
-            CMAltimeter().also { altimeter = it }
-        } ?: return
+        val cm =
+            withLock {
+                if (altimeter != null) return@withLock null
+                CMAltimeter().also { altimeter = it }
+            } ?: return
         cm.startRelativeAltitudeUpdatesToQueue(
             NSOperationQueue.mainQueue,
             withHandler = baro@{ data: CMAltitudeData?, error: NSError? ->
