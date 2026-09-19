@@ -19,7 +19,14 @@ class ChatMessageBubbleMediaTest {
     }
 
     @Test
-    fun audioWithoutMediaReference_doesNotSelectAudioBranch() {
-        assertNull(chatAudioPlaybackSource(null, null, "/tmp/click/audio.m4a"))
+    fun localOnlyAudio_selectsAudioBranchForOptimisticSend() {
+        val source = chatAudioPlaybackSource(null, null, "/tmp/click/audio.m4a")
+        assertEquals("", source?.mediaUrl)
+        assertEquals("/tmp/click/audio.m4a", source?.localFilePath)
+    }
+
+    @Test
+    fun audioWithoutAnyReference_doesNotSelectAudioBranch() {
+        assertNull(chatAudioPlaybackSource(null, null, null))
     }
 }
