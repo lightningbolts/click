@@ -12,8 +12,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+
+private const val PROXIMITY_PERMISSION_PREFS = "click_proximity_permissions"
+private const val PROXIMITY_PERMISSION_REQUESTED = "hardware_request_completed"
 
 @Composable
 actual fun rememberPlatformProximityHardwarePermissionStatus(): () -> ProximityHardwarePermissionStatus {
@@ -21,17 +23,41 @@ actual fun rememberPlatformProximityHardwarePermissionStatus(): () -> ProximityH
     return remember(activity) {
         {
             val context = activity
-            when {
-                context == null -> ProximityHardwarePermissionStatus.Blocked
-                ContextCompat.checkSelfPermission(
-                    context,
-                    Manifest.permission.RECORD_AUDIO,
-                ) == PackageManager.PERMISSION_GRANTED -> ProximityHardwarePermissionStatus.Ready
-                ActivityCompat.shouldShowRequestPermissionRationale(
-                    context,
-                    Manifest.permission.RECORD_AUDIO,
-                ) -> ProximityHardwarePermissionStatus.NeedsRequest
-                else -> ProximityHardwarePermissionStatus.NeedsRequest
+            if (context == null) {
+                ProximityHardwarePermissionStatus.Blocked
+            } else {
+                val microphoneGranted =
+                    ContextCompat.checkSelfPermission(
+                        context,
+                        Manifest.permission.RECORD_AUDIO,
+                    ) == PackageManager.PERMISSION_GRANTED
+                val bluetoothPermissions =
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        listOf(
+                            Manifest.permission.BLUETOOTH_SCAN,
+                            Manifest.permission.BLUETOOTH_ADVERTISE,
+                            Manifest.permission.BLUETOOTH_CONNECT,
+                        )
+                    } else {
+                        emptyList()
+                    }
+                val bluetoothGranted =
+                    bluetoothPermissions.all { permission ->
+                        ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
+                    }
+                val requestedBefore =
+                    context
+                        .getSharedPreferences(PROXIMITY_PERMISSION_PREFS, ComponentActivity.MODE_PRIVATE)
+                        .getBoolean(PROXIMITY_PERMISSION_REQUESTED, false)
+
+                when {
+                    microphoneGranted && (bluetoothGranted || requestedBefore) ->
+                        ProximityHardwarePermissionStatus.Ready
+                    requestedBefore && !microphoneGranted ->
+                        ProximityHardwarePermissionStatus.Blocked
+                    else ->
+                        ProximityHardwarePermissionStatus.NeedsRequest
+                }
             }
         }
     }
@@ -91,6 +117,11 @@ actual fun rememberPlatformProximityHardwarePermissionRequester(): ((onResult: (
         } else if (hasAllPermissions()) {
             onResult(true)
         } else {
+            context
+                ?.getSharedPreferences(PROXIMITY_PERMISSION_PREFS, ComponentActivity.MODE_PRIVATE)
+                ?.edit()
+                ?.putBoolean(PROXIMITY_PERMISSION_REQUESTED, true)
+                ?.apply()
             pendingOnResult = onResult
             launcher.launch(requiredPermissions.toTypedArray())
         }
