@@ -174,18 +174,7 @@ object RealtimeCoordinator {
                         // Register every postgres flow before subscribe so the first junction
                         // change cannot land in a listener-registration gap.
                         coroutineScope {
-                            val updatesJob =
-                                launch {
-                                    activeChannel
-                                        .postgresChangeFlow<PostgresAction>(schema = "public") { table = "connections" }
-                                        .filter { it is PostgresAction.Update }
-                                        .collect {
-                                            bumpInboxVersionLocked()
-                                        }
-                                }
-                            try {
-                                activeChannel.subscribe()
-                                attempt = 0
+                            val junctionFlow =
                                 merge(
                                     activeChannel
                                         .postgresChangeFlow<PostgresAction>(schema = "public") { table = "connections" }
@@ -212,7 +201,24 @@ object RealtimeCoordinator {
                                             action is PostgresAction.Insert &&
                                                 groupMemberUserId(action) == userId
                                         }.map { },
-                                ).collect {
+                                )
+                            val connectionUpdateFlow =
+                                activeChannel
+                                    .postgresChangeFlow<PostgresAction>(schema = "public") { table = "connections" }
+                                    .filter { it is PostgresAction.Update }
+
+                            val updatesJob =
+                                launch {
+                                    connectionUpdateFlow.collect {
+                                        bumpInboxVersionLocked()
+                                    }
+                                }
+                            try {
+                                // All postgres flows are created before subscribe so the initial
+                                // connection/chat insert cannot fall into a registration gap.
+                                activeChannel.subscribe()
+                                attempt = 0
+                                junctionFlow.collect {
                                     debounceJob?.cancel()
                                     debounceJob =
                                         launch {
