@@ -230,6 +230,9 @@ object AttachmentCrypto {
         val sha =
             meta.stringAt("sha256")
                 ?: meta.stringAt("sha256_base64")
+        val v2Sha =
+            meta.stringAt("media_ciphertext_sha256")
+                ?: meta.stringAt("mediaCiphertextSha256")
 
         if (base != null) {
             return base.copy(
@@ -243,27 +246,55 @@ object AttachmentCrypto {
         }
 
         val attachmentVersion = meta.intAt("attachment_v")
-        if (attachmentVersion != 1) return null
+        if (attachmentVersion == 1) {
+            if (
+                fileName.isNullOrBlank() ||
+                mimeType.isNullOrBlank() ||
+                size == null ||
+                path.isNullOrBlank() ||
+                key.isNullOrBlank() ||
+                sha.isNullOrBlank()
+            ) {
+                return null
+            }
+
+            return Envelope(
+                v = 1,
+                type = "file",
+                name = fileName,
+                mime = mimeType,
+                size = size,
+                path = path,
+                key = key,
+                sha256 = sha,
+            )
+        }
+
+        // E2EE v2 keeps the file key out of message metadata. The upload authorization
+        // metadata still carries everything needed to render and download a file card,
+        // even before/without re-decoding the encrypted message body.
         if (
             fileName.isNullOrBlank() ||
             mimeType.isNullOrBlank() ||
             size == null ||
+            size < 0 ||
             path.isNullOrBlank() ||
-            key.isNullOrBlank() ||
-            sha.isNullOrBlank()
+            path.startsWith("/") ||
+            ".." in path ||
+            v2Sha.isNullOrBlank() ||
+            !isStrictSha256Base64(v2Sha)
         ) {
             return null
         }
-
         return Envelope(
-            v = 1,
+            v = 2,
             type = "file",
             name = fileName,
             mime = mimeType,
             size = size,
             path = path,
-            key = key,
-            sha256 = sha,
+            key = "",
+            sha256 = v2Sha,
         )
     }
 
