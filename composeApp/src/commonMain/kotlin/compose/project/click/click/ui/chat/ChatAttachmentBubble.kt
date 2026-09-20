@@ -1,10 +1,7 @@
-@file:Suppress("ktlint:standard:function-naming")
-
 package compose.project.click.click.ui.chat
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -73,17 +70,6 @@ fun ChatAttachmentBubble(
     var state: ChatAttachmentUiState by remember(envelope.path) {
         mutableStateOf(ChatAttachmentUiState.Idle)
     }
-    fun startDownload() {
-        if (state is ChatAttachmentUiState.Running) return
-        state = ChatAttachmentUiState.Running
-        scope.launch {
-            state =
-                when (val result = onDownload()) {
-                    is ChatAttachmentDownloadOutcome.Success -> ChatAttachmentUiState.Done(result.savedPath)
-                    is ChatAttachmentDownloadOutcome.Failure -> ChatAttachmentUiState.Error(result.message)
-                }
-        }
-    }
 
     val bubbleShape = if (isSent) {
         RoundedCornerShape(
@@ -115,7 +101,6 @@ fun ChatAttachmentBubble(
             .clip(bubbleShape)
             .background(container)
             .border(width = 1.dp, color = borderColor, shape = bubbleShape)
-            .clickable(enabled = state !is ChatAttachmentUiState.Running) { startDownload() }
             .padding(horizontal = chatBubbleScaledDp(15f), vertical = chatBubbleScaledDp(12f)),
     ) {
         Row(
@@ -213,7 +198,18 @@ fun ChatAttachmentBubble(
                 }
                 else -> {
                     IconButton(
-                        onClick = ::startDownload,
+                        onClick = {
+                            if (state is ChatAttachmentUiState.Running) return@IconButton
+                            state = ChatAttachmentUiState.Running
+                            scope.launch {
+                                state = when (val result = onDownload()) {
+                                    is ChatAttachmentDownloadOutcome.Success ->
+                                        ChatAttachmentUiState.Done(result.savedPath)
+                                    is ChatAttachmentDownloadOutcome.Failure ->
+                                        ChatAttachmentUiState.Error(result.message)
+                                }
+                            }
+                        },
                     ) {
                         Icon(
                             imageVector = Icons.Outlined.Download,
