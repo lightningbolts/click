@@ -4,7 +4,8 @@ import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -45,6 +46,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -387,9 +389,12 @@ fun ChatAudioBubble(
                 palette = palette,
                 sliderValue = sliderValue,
                 durationMs = durationMs,
+                onSeekStart = { draggingSlider = true },
                 onSeekFraction = { fraction ->
+                    sliderValue = fraction
                     playerState.value.seekTo((fraction * durationMs).toLong().coerceIn(0L, durationMs))
                 },
+                onSeekEnd = { draggingSlider = false },
             )
             Spacer(Modifier.height(chatBubbleScaledDp(9f)))
             Row(
@@ -571,9 +576,13 @@ private fun AudioSeekTrack(
     palette: VoiceChromePalette,
     sliderValue: Float,
     durationMs: Long,
+    onSeekStart: () -> Unit,
     onSeekFraction: (Float) -> Unit,
+    onSeekEnd: () -> Unit,
 ) {
+    val seekStartHandler = rememberUpdatedState(onSeekStart)
     val seekHandler = rememberUpdatedState(onSeekFraction)
+    val seekEndHandler = rememberUpdatedState(onSeekEnd)
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxWidth()
@@ -581,11 +590,33 @@ private fun AudioSeekTrack(
             .clip(TrackShape)
             .background(palette.trackBg)
             .pointerInput(durationMs) {
-                detectTapGestures { offset ->
-                    val w = size.width.toFloat()
-                    if (w <= 0f || durationMs <= 0L) return@detectTapGestures
-                    val fraction = (offset.x / w).coerceIn(0f, 1f)
-                    seekHandler.value(fraction)
+                if (durationMs <= 0L) return@pointerInput
+                awaitEachGesture {
+                    val down =
+                        awaitFirstDown(
+                            requireUnconsumed = false,
+                            pass = PointerEventPass.Initial,
+                        )
+                    down.consume()
+                    seekStartHandler.value()
+                    val width = size.width.toFloat()
+                    if (width > 0f) {
+                        seekHandler.value((down.position.x / width).coerceIn(0f, 1f))
+                    }
+                    val pointerId = down.id
+                    try {
+                        while (true) {
+                            val event = awaitPointerEvent(PointerEventPass.Initial)
+                            val change = event.changes.firstOrNull { it.id == pointerId } ?: break
+                            change.consume()
+                            if (width > 0f) {
+                                seekHandler.value((change.position.x / width).coerceIn(0f, 1f))
+                            }
+                            if (!change.pressed) break
+                        }
+                    } finally {
+                        seekEndHandler.value()
+                    }
                 }
             },
     ) {
