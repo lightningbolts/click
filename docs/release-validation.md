@@ -13,9 +13,13 @@ Pull-request workflows check out a same-named `click-web` branch when it exists
 so paired PRs stay in lockstep; otherwise they validate against `click-web/main`.
 Main-branch runs always use `click-web/main`. Missing matching web branches must
 not skip the drift or migration-contract checks.
-The signed Android release bundle, Debug and Release iOS simulator apps,
-unsigned Release iOS device compile, and both Maestro Cloud platforms are
-required pull-request checks rather than post-merge-only evidence.
+The signed Android release bundle and iOS PR gate remain pre-merge evidence.
+Post-merge iOS release validation adds Release Kotlin/Native framework links for
+both simulator and device targets plus the iOS Maestro simulator smoke. The PR
+gate already performs the full Debug Xcode integration build, so post-merge
+validation must not rebuild the complete Release Xcode app separately for both
+targets. Xcode Cloud archive remains the full Release-app integration/archive
+evidence.
 `scripts/check-production-security-guards.sh` also blocks an audible handshake
 carrier, ungated simulator fixtures, a public hub-media bucket, or raw push-token
 logging patterns.
