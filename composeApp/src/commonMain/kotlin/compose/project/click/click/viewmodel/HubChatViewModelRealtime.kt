@@ -31,6 +31,11 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlin.random.Random
 
+private const val HUB_THREAD_WARM_CACHE_MAX_AGE_MS = 5 * 60 * 1000L
+
+internal fun isHubThreadWarmCacheFresh(cachedAtMs: Long, nowMs: Long): Boolean =
+    cachedAtMs > 0L && nowMs >= cachedAtMs && nowMs - cachedAtMs <= HUB_THREAD_WARM_CACHE_MAX_AGE_MS
+
 internal fun HubChatViewModel.launchRealtimeSession() {
     sessionJob?.cancel()
     participantDenied = false
@@ -160,6 +165,10 @@ internal fun HubChatViewModel.messageWithUserFromCached(
 
 internal fun HubChatViewModel.hydrateFromDiskCache() {
     val cached = AppDataManager.cachedHubThreadFor(hubId) ?: return
+    if (!isHubThreadWarmCacheFresh(cached.cachedAtMs, Clock.System.now().toEpochMilliseconds())) {
+        AppDataManager.clearHubThreadCache(hubId)
+        return
+    }
     if (cached.messages.isEmpty()) return
     // Event guest-list visibility is server-authoritative. Do not restore cached
     // identities before the current visibility policy has been fetched.
