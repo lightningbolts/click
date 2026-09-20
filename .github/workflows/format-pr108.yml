@@ -1,0 +1,42 @@
+name: Format PR 108
+
+on:
+  push:
+    branches: [fix/chat-attachments-audio-hub-cache]
+    paths:
+      - .github/workflows/format-pr108.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  spotless:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Apply repository formatter
+        run: ./gradlew spotlessApply --no-daemon --no-configuration-cache
+
+      - name: Commit formatter output
+        run: |
+          if git diff --quiet; then
+            echo "Spotless produced no changes."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add composeApp/src
+          git commit -m "style: apply repository Spotless formatter"
+          git push
