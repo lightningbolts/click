@@ -99,7 +99,9 @@ private fun rememberVoiceChromePalette(kind: ChatAudioChromeKind): VoiceChromePa
     ) {
         when (kind) {
             ChatAudioChromeKind.SentBubble -> VoiceChromePalette(
-                shellBg = Color.White.copy(alpha = 0.12f),
+                // Sent voice notes are their own message bubble; do not depend on a second
+                // generic text bubble behind them for the sent-message color.
+                shellBg = PrimaryBlue,
                 shellBorder = Color.White.copy(alpha = 0.25f),
                 playFill = Color.White.copy(alpha = 0.20f),
                 playBorder = Color.White.copy(alpha = 0.30f),
