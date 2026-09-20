@@ -63,9 +63,9 @@ The iOS PR critical path therefore contains distinct coverage only:
 3. Kotlin iOS device-target compilation;
 4. one complete Debug iOS Simulator app build.
 
-Post-merge validation retains release-mode coverage by linking the Release Kotlin/Native framework independently for simulator and device targets. The PR gate already performs a complete Debug Xcode integration build, while Xcode Cloud provides the full Release archive/integration build; duplicating two complete unsigned Release Xcode builds in GitHub Actions added substantial latency without distinct coverage. iOS Maestro smoke remains post-merge/manual release evidence because it performs another complete Debug Simulator build before executing the smoke flow.
+Post-merge GitHub validation checks that the Release Xcode scheme/build settings resolve correctly and then executes the iOS Maestro smoke on a complete Debug Simulator build. The PR gate already compiles both Kotlin iOS targets and performs a complete Debug Xcode integration build, while Xcode Cloud provides the full Release archive/integration build. Separate GitHub-hosted Release Kotlin/Native link jobs were removed after both consistently exceeded 25 minutes even with the Kotlin/Native toolchain cache; they duplicated work already covered by the PR compile gate and Xcode Cloud archive without producing distinct release evidence.
 
-Do not restore duplicate complete Release Simulator + Release device Xcode builds to GitHub Actions unless a concrete class of defect is shown to escape the Release framework-link gates, PR integration build, and Xcode Cloud archive, and the expected coverage gain is documented.
+Do not restore separate Release Simulator/device native link or whole-app Xcode build jobs to GitHub Actions unless a concrete defect is shown to escape the PR target compilation, Release build-settings validation, Maestro smoke, and Xcode Cloud archive, and the expected coverage gain is documented.
 
 ## Remaining work before declaring the entire premium plan empirically closed
 
