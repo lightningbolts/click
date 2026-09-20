@@ -597,6 +597,7 @@ internal fun ChatViewModel.leaveChatRoomImpl(clearMessageSurface: Boolean = true
     currentApiChatId = null
     _stagedChatImages.value = emptyList()
     _stagedBeacon.value = null
+    _messageSendError.value = null
     _isPeerTyping.value = false
     _isPeerOnline.value = false
     _isLocalTypingActive.value = false
