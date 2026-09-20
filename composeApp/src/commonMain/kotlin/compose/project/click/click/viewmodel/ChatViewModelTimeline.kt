@@ -360,6 +360,7 @@ internal fun ChatViewModel.loadChatMessagesImpl(chatId: String) {
     val switchingConnection = currentConnectionId != null && currentConnectionId != connectionId
     if (switchingConnection) {
         currentApiChatId = null
+        _messageSendError.value = null
         _stagedChatImages.value = emptyList()
         _stagedBeacon.value = null
         _replyingTo.value = null

@@ -196,6 +196,18 @@ fun ChatMessageBubble(
             }
         }
     val isAttachment = attachmentPresentation != null
+    // Audio/file controls already provide their own chrome. Keep the text bubble only when
+    // it is actually needed to frame reply/caption content.
+    val useStandaloneRichMediaChrome =
+        replyRef == null &&
+            (
+                isAttachment ||
+                    (
+                        mt == ChatMessageType.AUDIO &&
+                            audioPlaybackSource != null &&
+                            message.content.isBlank()
+                    )
+            )
 
     val onRequestSecureAudio =
         remember(message.id, activeChatId, currentUserId, secureMediaHost) {
@@ -501,14 +513,18 @@ fun ChatMessageBubble(
                             } else {
                                 Box(
                                     modifier =
-                                        Modifier
-                                            .widthIn(max = bubbleContentMaxWidth)
-                                            .clip(sentShape)
-                                            .background(PrimaryBlue)
-                                            .padding(
-                                                horizontal = ChatBubbleTokens.bubblePaddingHorizontal,
-                                                vertical = ChatBubbleTokens.bubblePaddingVertical,
-                                            ),
+                                        if (useStandaloneRichMediaChrome) {
+                                            Modifier.widthIn(max = bubbleContentMaxWidth)
+                                        } else {
+                                            Modifier
+                                                .widthIn(max = bubbleContentMaxWidth)
+                                                .clip(sentShape)
+                                                .background(PrimaryBlue)
+                                                .padding(
+                                                    horizontal = ChatBubbleTokens.bubblePaddingHorizontal,
+                                                    vertical = ChatBubbleTokens.bubblePaddingVertical,
+                                                )
+                                        },
                                 ) {
                                     Column(
                                         horizontalAlignment = Alignment.Start,
@@ -686,15 +702,19 @@ fun ChatMessageBubble(
                             } else {
                                 Box(
                                     modifier =
-                                        Modifier
-                                            .widthIn(max = bubbleContentMaxWidth)
-                                            .border(width = 1.dp, color = PrimaryBlue.copy(alpha = 0.18f), shape = receivedShape)
-                                            .clip(receivedShape)
-                                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f))
-                                            .padding(
-                                                horizontal = ChatBubbleTokens.bubblePaddingHorizontal,
-                                                vertical = ChatBubbleTokens.bubblePaddingVertical,
-                                            ),
+                                        if (useStandaloneRichMediaChrome) {
+                                            Modifier.widthIn(max = bubbleContentMaxWidth)
+                                        } else {
+                                            Modifier
+                                                .widthIn(max = bubbleContentMaxWidth)
+                                                .border(width = 1.dp, color = PrimaryBlue.copy(alpha = 0.18f), shape = receivedShape)
+                                                .clip(receivedShape)
+                                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f))
+                                                .padding(
+                                                    horizontal = ChatBubbleTokens.bubblePaddingHorizontal,
+                                                    vertical = ChatBubbleTokens.bubblePaddingVertical,
+                                                )
+                                        },
                                 ) {
                                     Column(
                                         horizontalAlignment = Alignment.Start,

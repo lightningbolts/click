@@ -1,10 +1,13 @@
+@file:Suppress("ktlint:standard:function-naming")
+
 package compose.project.click.click.ui.chat
 
 import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -38,25 +41,26 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import compose.project.click.click.PlatformHapticsPolicy
 import compose.project.click.click.data.models.mediaUrlLooksLikePlaintextWebChatMediaUpload
 import compose.project.click.click.getPlatform
 import compose.project.click.click.media.rememberChatAudioPlayer
-import compose.project.click.click.PlatformHapticsPolicy
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.theme.PrimaryBlue
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /**
  * Visual chrome aligned with the web chat audio player: frosted pill on sent bubbles,
@@ -96,26 +100,30 @@ private fun rememberVoiceChromePalette(kind: ChatAudioChromeKind): VoiceChromePa
         onOledMuted,
     ) {
         when (kind) {
-            ChatAudioChromeKind.SentBubble -> VoiceChromePalette(
-                shellBg = Color.White.copy(alpha = 0.12f),
-                shellBorder = Color.White.copy(alpha = 0.25f),
-                playFill = Color.White.copy(alpha = 0.20f),
-                playBorder = Color.White.copy(alpha = 0.30f),
-                playIcon = Color.White,
-                trackBg = Color.Black.copy(alpha = 0.25f),
-                progressColor = Color.White,
-                timeColor = Color.White.copy(alpha = 0.75f),
-            )
-            ChatAudioChromeKind.ReceivedBubble -> VoiceChromePalette(
-                shellBg = scheme.surfaceContainerHigh.copy(alpha = 0.94f),
-                shellBorder = scheme.outline.copy(alpha = 0.28f),
-                playFill = PrimaryBlue.copy(alpha = 0.22f),
-                playBorder = PrimaryBlue.copy(alpha = 0.38f),
-                playIcon = Color(0xFFC4A8FF),
-                trackBg = Color.Black.copy(alpha = 0.45f),
-                progressColor = PrimaryBlue,
-                timeColor = scheme.onSurfaceVariant.copy(alpha = 0.92f),
-            )
+            ChatAudioChromeKind.SentBubble ->
+                VoiceChromePalette(
+                    // Sent voice notes are their own message bubble; do not depend on a second
+                    // generic text bubble behind them for the sent-message color.
+                    shellBg = PrimaryBlue,
+                    shellBorder = Color.White.copy(alpha = 0.25f),
+                    playFill = Color.White.copy(alpha = 0.20f),
+                    playBorder = Color.White.copy(alpha = 0.30f),
+                    playIcon = Color.White,
+                    trackBg = Color.Black.copy(alpha = 0.25f),
+                    progressColor = Color.White,
+                    timeColor = Color.White.copy(alpha = 0.75f),
+                )
+            ChatAudioChromeKind.ReceivedBubble ->
+                VoiceChromePalette(
+                    shellBg = scheme.surfaceContainerHigh.copy(alpha = 0.94f),
+                    shellBorder = scheme.outline.copy(alpha = 0.28f),
+                    playFill = PrimaryBlue.copy(alpha = 0.22f),
+                    playBorder = PrimaryBlue.copy(alpha = 0.38f),
+                    playIcon = Color(0xFFC4A8FF),
+                    trackBg = Color.Black.copy(alpha = 0.45f),
+                    progressColor = PrimaryBlue,
+                    timeColor = scheme.onSurfaceVariant.copy(alpha = 0.92f),
+                )
             ChatAudioChromeKind.ProfileSurface -> {
                 val onOledSheet = scheme.surface.luminance() < 0.08f
                 if (onOledSheet) {
@@ -156,13 +164,14 @@ private fun VoiceNoteChromeShell(
     content: @Composable RowScope.() -> Unit,
 ) {
     Row(
-        modifier = modifier
-            // Reserve a stable shell height so decrypt/loading → ready does not jump the timeline.
-            .heightIn(min = chatBubbleScaledDp(72f))
-            .clip(ShellShape)
-            .border(1.dp, palette.shellBorder, ShellShape)
-            .background(palette.shellBg, ShellShape)
-            .padding(horizontal = chatBubbleScaledDp(18f), vertical = chatBubbleScaledDp(15f)),
+        modifier =
+            modifier
+                // Reserve a stable shell height so decrypt/loading → ready does not jump the timeline.
+                .heightIn(min = chatBubbleScaledDp(72f))
+                .clip(ShellShape)
+                .border(1.dp, palette.shellBorder, ShellShape)
+                .background(palette.shellBg, ShellShape)
+                .padding(horizontal = chatBubbleScaledDp(18f), vertical = chatBubbleScaledDp(15f)),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(chatBubbleScaledDp(18f)),
         content = content,
@@ -203,28 +212,32 @@ fun ChatAudioBubble(
             pendingAutoPlayAfterDecrypt = false
         }
     }
-    val hintMs = remember(durationSeconds) {
-        durationSeconds?.takeIf { it > 0 }?.times(1000L) ?: 0L
-    }
-    val totalLabel = remember(durationSeconds, hintMs) {
-        formatChatAudioDuration(
-            durationMs = if (hintMs > 0) hintMs else 0L,
-            fallbackSec = durationSeconds,
-        )
-    }
-    val needsDecryptBeforePlay = isEncrypted && localFilePathForPlayback.isNullOrBlank()
-    val playbackUrl = remember(mediaUrl, localFilePathForPlayback, needsDecryptBeforePlay) {
-        when {
-            needsDecryptBeforePlay -> "secure-audio-pending"
-            !localFilePathForPlayback.isNullOrBlank() -> "file://${localFilePathForPlayback.trim()}"
-            mediaUrl.isNotBlank() -> mediaUrl
-            else -> "audio-empty"
+    val hintMs =
+        remember(durationSeconds) {
+            durationSeconds?.takeIf { it > 0 }?.times(1000L) ?: 0L
         }
-    }
-    val widthModifier = when (effectiveChrome) {
-        ChatAudioChromeKind.ProfileSurface -> modifier.fillMaxWidth()
-        else -> modifier.widthIn(max = messageBubbleMaxWidth)
-    }
+    val totalLabel =
+        remember(durationSeconds, hintMs) {
+            formatChatAudioDuration(
+                durationMs = if (hintMs > 0) hintMs else 0L,
+                fallbackSec = durationSeconds,
+            )
+        }
+    val needsDecryptBeforePlay = isEncrypted && localFilePathForPlayback.isNullOrBlank()
+    val playbackUrl =
+        remember(mediaUrl, localFilePathForPlayback, needsDecryptBeforePlay) {
+            when {
+                needsDecryptBeforePlay -> "secure-audio-pending"
+                !localFilePathForPlayback.isNullOrBlank() -> "file://${localFilePathForPlayback.trim()}"
+                mediaUrl.isNotBlank() -> mediaUrl
+                else -> "audio-empty"
+            }
+        }
+    val widthModifier =
+        when (effectiveChrome) {
+            ChatAudioChromeKind.ProfileSurface -> modifier.fillMaxWidth()
+            else -> modifier.widthIn(max = messageBubbleMaxWidth)
+        }
 
     if (!secureError.isNullOrBlank()) {
         VoiceNoteChromeShell(palette, widthModifier) {
@@ -241,9 +254,10 @@ fun ChatAudioBubble(
     if (secureLoading) {
         VoiceNoteChromeShell(palette, widthModifier) {
             Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .height(chatBubbleScaledDp(54f)),
+                modifier =
+                    Modifier
+                        .weight(1f)
+                        .height(chatBubbleScaledDp(54f)),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
@@ -260,11 +274,12 @@ fun ChatAudioBubble(
         VoiceNoteChromeShell(palette, widthModifier) {
             Column(Modifier.weight(1f)) {
                 Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(chatBubbleScaledDp(12f))
-                        .clip(TrackShape)
-                        .background(palette.trackBg),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .height(chatBubbleScaledDp(12f))
+                            .clip(TrackShape)
+                            .background(palette.trackBg),
                 )
                 Spacer(Modifier.height(chatBubbleScaledDp(9f)))
                 Text(
@@ -313,11 +328,12 @@ fun ChatAudioBubble(
         return
     }
 
-    val player = rememberChatAudioPlayer(
-        mediaUrl = playbackUrl,
-        durationHintMs = hintMs,
-        localFilePathForPlayback = localFilePathForPlayback,
-    )
+    val player =
+        rememberChatAudioPlayer(
+            mediaUrl = playbackUrl,
+            durationHintMs = hintMs,
+            localFilePathForPlayback = localFilePathForPlayback,
+        )
     LaunchedEffect(secureLoading, localFilePathForPlayback, needsDecryptBeforePlay, pendingAutoPlayAfterDecrypt) {
         if (needsDecryptBeforePlay) return@LaunchedEffect
         if (secureLoading) return@LaunchedEffect
@@ -329,13 +345,14 @@ fun ChatAudioBubble(
             player.togglePlayPause()
         }
     }
-    val durationMs = remember(player.durationMs, hintMs) {
-        when {
-            player.durationMs > 0 -> player.durationMs
-            hintMs > 0 -> hintMs
-            else -> 1L
+    val durationMs =
+        remember(player.durationMs, hintMs) {
+            when {
+                player.durationMs > 0 -> player.durationMs
+                hintMs > 0 -> hintMs
+                else -> 1L
+            }
         }
-    }
     var draggingSlider by remember(playbackUrl, localFilePathForPlayback) { mutableStateOf(false) }
     var sliderValue by remember(playbackUrl, localFilePathForPlayback) { mutableFloatStateOf(0f) }
     LaunchedEffect(player.positionMs, durationMs, player.isPlaying, draggingSlider) {
@@ -343,35 +360,39 @@ fun ChatAudioBubble(
             sliderValue = (player.positionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f)
         }
     }
-    val positionDisplayMs = if (draggingSlider) {
-        (sliderValue * durationMs).toLong()
-    } else {
-        player.positionMs
-    }
+    val positionDisplayMs =
+        if (draggingSlider) {
+            (sliderValue * durationMs).toLong()
+        } else {
+            player.positionMs
+        }
     val endTimeLabel = formatChatAudioDuration(durationMs, durationSeconds)
     val playerState = rememberUpdatedState(player)
 
     VoiceNoteChromeShell(palette, widthModifier) {
         val playing = player.isPlaying
         Box(
-            modifier = Modifier
-                .size(chatBubbleScaledDp(60f))
-                .clip(CircleShape)
-                .border(1.dp, palette.playBorder, CircleShape)
-                .background(palette.playFill, CircleShape)
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                    onClick = {
-                        PlatformHapticsPolicy.lightImpact()
-                        player.togglePlayPause()
-                    },
-                ),
+            modifier =
+                Modifier
+                    .size(chatBubbleScaledDp(60f))
+                    .clip(CircleShape)
+                    .border(1.dp, palette.playBorder, CircleShape)
+                    .background(palette.playFill, CircleShape)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = {
+                            PlatformHapticsPolicy.lightImpact()
+                            player.togglePlayPause()
+                        },
+                    ),
             contentAlignment = Alignment.Center,
         ) {
             Crossfade(
                 targetState = playing,
-                animationSpec = androidx.compose.animation.core.tween(120),
+                animationSpec =
+                    androidx.compose.animation.core
+                        .tween(120),
                 label = "voicePlayPause",
             ) { isPlaying ->
                 Icon(
@@ -387,9 +408,12 @@ fun ChatAudioBubble(
                 palette = palette,
                 sliderValue = sliderValue,
                 durationMs = durationMs,
+                onSeekStart = { draggingSlider = true },
                 onSeekFraction = { fraction ->
+                    sliderValue = fraction
                     playerState.value.seekTo((fraction * durationMs).toLong().coerceIn(0L, durationMs))
                 },
+                onSeekEnd = { draggingSlider = false },
             )
             Spacer(Modifier.height(chatBubbleScaledDp(9f)))
             Row(
@@ -441,9 +465,15 @@ private fun shouldUseNativeFileFallbackForWebVoice(
 }
 
 /** Conservative: when true, keep in-app AVPlayer instead of using the native file opener fallback. */
-private fun avPlayerLikelySupportsRemoteAudio(pathOnly: String, mime: String): Boolean {
-    if (pathOnly.endsWith(".mp3") || pathOnly.endsWith(".m4a") || pathOnly.endsWith(".aac") ||
-        pathOnly.endsWith(".wav") || pathOnly.endsWith(".caf")
+private fun avPlayerLikelySupportsRemoteAudio(
+    pathOnly: String,
+    mime: String,
+): Boolean {
+    if (pathOnly.endsWith(".mp3") ||
+        pathOnly.endsWith(".m4a") ||
+        pathOnly.endsWith(".aac") ||
+        pathOnly.endsWith(".wav") ||
+        pathOnly.endsWith(".caf")
     ) {
         return true
     }
@@ -465,36 +495,38 @@ private fun NativeBackedWebVoiceRow(
 ) {
     val scope = rememberCoroutineScope()
     val safeUrl = remember(mediaUrl) { mediaUrl.trim() }
-    val safeMime = remember(mimeTypeHint) {
-        mimeTypeHint?.trim()?.takeIf { it.isNotEmpty() } ?: "audio/webm"
-    }
+    val safeMime =
+        remember(mimeTypeHint) {
+            mimeTypeHint?.trim()?.takeIf { it.isNotEmpty() } ?: "audio/webm"
+        }
     var opening by remember(safeUrl, safeMime) { mutableStateOf(false) }
     VoiceNoteChromeShell(palette, widthModifier) {
         Box(
-            modifier = Modifier
-                .size(chatBubbleScaledDp(60f))
-                .clip(CircleShape)
-                .border(1.dp, palette.playBorder, CircleShape)
-                .background(palette.playFill, CircleShape)
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                    enabled = !opening && safeUrl.isNotBlank(),
-                    onClick = {
-                        opening = true
-                        scope.launch {
-                            val bytes = fetchImageBytesFromUrl(safeUrl)
-                            if (bytes != null && bytes.isNotEmpty()) {
-                                saveDecryptedAttachmentToDownloads(
-                                    bytes = bytes,
-                                    fileName = webVoiceFallbackFileName(safeMime),
-                                    mimeType = safeMime,
-                                )
+            modifier =
+                Modifier
+                    .size(chatBubbleScaledDp(60f))
+                    .clip(CircleShape)
+                    .border(1.dp, palette.playBorder, CircleShape)
+                    .background(palette.playFill, CircleShape)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        enabled = !opening && safeUrl.isNotBlank(),
+                        onClick = {
+                            opening = true
+                            scope.launch {
+                                val bytes = fetchImageBytesFromUrl(safeUrl)
+                                if (bytes != null && bytes.isNotEmpty()) {
+                                    saveDecryptedAttachmentToDownloads(
+                                        bytes = bytes,
+                                        fileName = webVoiceFallbackFileName(safeMime),
+                                        mimeType = safeMime,
+                                    )
+                                }
+                                opening = false
                             }
-                            opening = false
-                        }
-                    },
-                ),
+                        },
+                    ),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
@@ -506,11 +538,12 @@ private fun NativeBackedWebVoiceRow(
         }
         Column(Modifier.weight(1f)) {
             Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(chatBubbleScaledDp(12f))
-                    .clip(TrackShape)
-                    .background(palette.trackBg),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(chatBubbleScaledDp(12f))
+                        .clip(TrackShape)
+                        .background(palette.trackBg),
             )
             Spacer(Modifier.height(chatBubbleScaledDp(6f)))
             Text(
@@ -542,15 +575,16 @@ private fun NativeBackedWebVoiceRow(
 
 private fun webVoiceFallbackFileName(mimeType: String): String {
     val mime = mimeType.lowercase()
-    val ext = when {
-        "webm" in mime -> "webm"
-        "opus" in mime -> "opus"
-        "mpeg" in mime || "mp3" in mime -> "mp3"
-        "aac" in mime -> "aac"
-        "wav" in mime -> "wav"
-        "m4a" in mime || "mp4" in mime -> "m4a"
-        else -> "audio"
-    }
+    val ext =
+        when {
+            "webm" in mime -> "webm"
+            "opus" in mime -> "opus"
+            "mpeg" in mime || "mp3" in mime -> "mp3"
+            "aac" in mime -> "aac"
+            "wav" in mime -> "wav"
+            "m4a" in mime || "mp4" in mime -> "m4a"
+            else -> "audio"
+        }
     return "click_voice_message.$ext"
 }
 
@@ -571,32 +605,60 @@ private fun AudioSeekTrack(
     palette: VoiceChromePalette,
     sliderValue: Float,
     durationMs: Long,
+    onSeekStart: () -> Unit,
     onSeekFraction: (Float) -> Unit,
+    onSeekEnd: () -> Unit,
 ) {
+    val seekStartHandler = rememberUpdatedState(onSeekStart)
     val seekHandler = rememberUpdatedState(onSeekFraction)
+    val seekEndHandler = rememberUpdatedState(onSeekEnd)
     BoxWithConstraints(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(chatBubbleScaledDp(12f))
-            .clip(TrackShape)
-            .background(palette.trackBg)
-            .pointerInput(durationMs) {
-                detectTapGestures { offset ->
-                    val w = size.width.toFloat()
-                    if (w <= 0f || durationMs <= 0L) return@detectTapGestures
-                    val fraction = (offset.x / w).coerceIn(0f, 1f)
-                    seekHandler.value(fraction)
-                }
-            },
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .height(chatBubbleScaledDp(12f))
+                .clip(TrackShape)
+                .background(palette.trackBg)
+                .pointerInput(durationMs) {
+                    if (durationMs <= 0L) return@pointerInput
+                    awaitEachGesture {
+                        val down =
+                            awaitFirstDown(
+                                requireUnconsumed = false,
+                                pass = PointerEventPass.Initial,
+                            )
+                        down.consume()
+                        seekStartHandler.value()
+                        val width = size.width.toFloat()
+                        if (width > 0f) {
+                            seekHandler.value((down.position.x / width).coerceIn(0f, 1f))
+                        }
+                        val pointerId = down.id
+                        try {
+                            while (true) {
+                                val event = awaitPointerEvent(PointerEventPass.Initial)
+                                val change = event.changes.firstOrNull { it.id == pointerId } ?: break
+                                change.consume()
+                                if (width > 0f) {
+                                    seekHandler.value((change.position.x / width).coerceIn(0f, 1f))
+                                }
+                                if (!change.pressed) break
+                            }
+                        } finally {
+                            seekEndHandler.value()
+                        }
+                    }
+                },
     ) {
         val fillW = maxWidth * sliderValue.coerceIn(0f, 1f)
         if (fillW > 0.dp) {
             Box(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .width(fillW)
-                    .clip(TrackShape)
-                    .background(palette.progressColor, TrackShape),
+                modifier =
+                    Modifier
+                        .fillMaxHeight()
+                        .width(fillW)
+                        .clip(TrackShape)
+                        .background(palette.progressColor, TrackShape),
             )
         }
     }
