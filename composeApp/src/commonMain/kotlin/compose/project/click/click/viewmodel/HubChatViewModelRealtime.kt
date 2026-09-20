@@ -33,8 +33,10 @@ import kotlin.random.Random
 
 private const val HUB_THREAD_WARM_CACHE_MAX_AGE_MS = 5 * 60 * 1000L
 
-internal fun isHubThreadWarmCacheFresh(cachedAtMs: Long, nowMs: Long): Boolean =
-    cachedAtMs > 0L && nowMs >= cachedAtMs && nowMs - cachedAtMs <= HUB_THREAD_WARM_CACHE_MAX_AGE_MS
+internal fun isHubThreadWarmCacheFresh(
+    cachedAtMs: Long,
+    nowMs: Long,
+): Boolean = cachedAtMs > 0L && nowMs >= cachedAtMs && nowMs - cachedAtMs <= HUB_THREAD_WARM_CACHE_MAX_AGE_MS
 
 internal fun HubChatViewModel.launchRealtimeSession() {
     sessionJob?.cancel()
