@@ -1,5 +1,3 @@
-@file:Suppress("ktlint:standard:function-naming")
-
 package compose.project.click.click.ui.chat
 
 import androidx.compose.animation.Crossfade
@@ -181,7 +179,7 @@ private fun VoiceNoteChromeShell(
  * the native player is created.
  */
 @Composable
-@Suppress("UNUSED_PARAMETER")
+@Suppress("UNUSED_PARAMETER", "ktlint:standard:function-naming")
 fun ChatAudioBubble(
     mediaUrl: String,
     durationSeconds: Int?,
