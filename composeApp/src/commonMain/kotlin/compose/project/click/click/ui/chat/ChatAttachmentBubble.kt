@@ -1,4 +1,6 @@
-@file:Suppress("ktlint:standard:function-naming")\n\npackage compose.project.click.click.ui.chat
+@file:Suppress("ktlint:standard:function-naming")
+
+package compose.project.click.click.ui.chat
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
