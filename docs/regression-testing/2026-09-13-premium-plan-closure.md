@@ -63,9 +63,9 @@ The iOS PR critical path therefore contains distinct coverage only:
 3. Kotlin iOS device-target compilation;
 4. one complete Debug iOS Simulator app build.
 
-Release Simulator and Release device Xcode builds remain required release evidence, but run as independent jobs on `main`/manual validation rather than serially extending every PR. iOS Maestro smoke remains post-merge/manual release evidence because it performs another complete Debug Simulator build before executing the smoke flow.
+Post-merge validation retains release-mode coverage by linking the Release Kotlin/Native framework independently for simulator and device targets. The PR gate already performs a complete Debug Xcode integration build, while Xcode Cloud provides the full Release archive/integration build; duplicating two complete unsigned Release Xcode builds in GitHub Actions added substantial latency without distinct coverage. iOS Maestro smoke remains post-merge/manual release evidence because it performs another complete Debug Simulator build before executing the smoke flow.
 
-Do not restore serial Release Simulator + Release device builds to the PR critical path unless a concrete class of defect is shown to escape the faster gate and the expected coverage gain is documented.
+Do not restore duplicate complete Release Simulator + Release device Xcode builds to GitHub Actions unless a concrete class of defect is shown to escape the Release framework-link gates, PR integration build, and Xcode Cloud archive, and the expected coverage gain is documented.
 
 ## Remaining work before declaring the entire premium plan empirically closed
 
