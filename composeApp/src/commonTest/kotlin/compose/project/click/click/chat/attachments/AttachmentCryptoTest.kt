@@ -129,6 +129,33 @@ class AttachmentCryptoTest {
     }
 
     @Test
+    fun v2AttachmentMetadataBuildsInteractiveEnvelopeWhenBodyIsUnavailable() {
+        val digest = AttachmentCrypto.sha256Base64(plaintext)
+        val metadata =
+            buildJsonObject {
+                put("attachment_name", "notes.txt")
+                put("attachment_mime", "text/plain")
+                put("attachment_size", 2048L)
+                put("attachment_path", "chat-xyz/me/notes.enc")
+                put("media_ciphertext_sha256", digest)
+            }
+
+        val presentation =
+            AttachmentCrypto.resolvePresentation(
+                content = "e2e:v2:encrypted-body",
+                metadata = metadata,
+                isFileMessage = true,
+            )
+
+        assertNotNull(presentation)
+        assertTrue(presentation.isReady)
+        assertEquals(2, presentation.envelope?.v)
+        assertEquals("chat-xyz/me/notes.enc", presentation.envelope?.path)
+        assertEquals("", presentation.envelope?.key)
+        assertEquals(digest, presentation.envelope?.sha256)
+    }
+
+    @Test
     fun pendingFilePresentationUsesSafeMetadataWithoutInventingEnvelope() {
         val metadata =
             buildJsonObject {
