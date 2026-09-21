@@ -79,16 +79,30 @@ fun DraggableLazyListScrollbar(
     val totalItems = state.layoutInfo.totalItemsCount
     if (totalItems <= 1) return
 
-    // Content size estimates for lazy layouts may evolve as rows are measured. Freeze the first
-    // valid geometry for a given list/viewport so the thumb never "breathes" while scrolling.
-    val stableContentSize =
-        remember(totalItems, viewportSize) {
-            contentSize.coerceAtLeast(viewportSize + 1)
+    // ScrollIndicatorState's lazy-list offset and content size are estimates that evolve together.
+    // Keep those live for position/drag math, but stabilize only the visual thumb length while the
+    // list is moving so estimator corrections cannot make the thumb "breathe".
+    val effectiveContentSize = contentSize.coerceAtLeast(viewportSize + 1)
+    val scrollRangePx = (effectiveContentSize - viewportSize).toFloat().coerceAtLeast(1f)
+    val rawLogicalPosition = (scrollOffset.toFloat() / scrollRangePx).coerceIn(0f, 1f)
+    val logicalPosition =
+        when {
+            !state.canScrollBackward -> 0f
+            !state.canScrollForward -> 1f
+            else -> rawLogicalPosition
         }
-    val scrollRangePx = (stableContentSize - viewportSize).toFloat().coerceAtLeast(1f)
-    val logicalPosition = (scrollOffset.toFloat() / scrollRangePx).coerceIn(0f, 1f)
     val displayPosition = if (reverseLayout) 1f - logicalPosition else logicalPosition
-    val visibleFraction = viewportSize.toFloat() / stableContentSize.toFloat()
+
+    var visualContentSize by
+        remember(totalItems, viewportSize) {
+            mutableIntStateOf(effectiveContentSize)
+        }
+    if (!state.isScrollInProgress && visualContentSize != effectiveContentSize) {
+        visualContentSize = effectiveContentSize
+    }
+    val visibleFraction =
+        viewportSize.toFloat() /
+            visualContentSize.coerceAtLeast(viewportSize + 1).toFloat()
 
     DraggableScrollbarTrack(
         positionFraction = displayPosition,
@@ -289,7 +303,13 @@ private fun DraggableScrollbarTrack(
                                 ) {
                                     val delta = value - previousValue
                                     previousValue = value
-                                    consumeThumbDelta(delta)
+                                    val consumed = consumeThumbDelta(delta)
+                                    if (
+                                        abs(delta) > 0.5f &&
+                                        abs(consumed) < abs(delta) * 0.05f
+                                    ) {
+                                        cancelAnimation()
+                                    }
                                 }
                                 edgePullPx = 0f
                             }
