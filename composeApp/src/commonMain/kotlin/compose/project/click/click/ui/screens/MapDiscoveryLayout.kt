@@ -559,6 +559,7 @@ internal fun EventsDiscoveryFullScreen(
                     DraggableLazyListScrollbar(
                         state = listState,
                         modifier = Modifier.align(Alignment.CenterEnd),
+                        bottomInset = listBottomPad,
                     )
                 }
             }

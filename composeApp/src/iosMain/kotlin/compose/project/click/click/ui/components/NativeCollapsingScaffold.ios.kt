@@ -151,6 +151,8 @@ actual fun NativeCollapsingScaffold(
         DraggableLazyListScrollbar(
             state = lazyListState,
             modifier = Modifier.align(androidx.compose.ui.Alignment.CenterEnd),
+            topInset = headerClearance,
+            bottomInset = bottomChrome,
         )
         if (showHeader) {
             if (!chromeActive) {
@@ -266,6 +268,8 @@ actual fun NativeCollapsingScrollScaffold(
             DraggableScrollStateScrollbar(
                 state = scrollState,
                 modifier = Modifier.align(androidx.compose.ui.Alignment.CenterEnd),
+                topInset = headerClearance,
+                bottomInset = bottomChrome,
             )
         }
         if (!chromeActive) {

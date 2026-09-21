@@ -137,6 +137,8 @@ actual fun NativeCollapsingScaffold(
             DraggableLazyListScrollbar(
                 state = lazyListState,
                 modifier = Modifier.align(Alignment.CenterEnd),
+                topInset = topPad,
+                bottomInset = bottomChrome,
             )
         }
     }
@@ -216,6 +218,8 @@ actual fun NativeCollapsingScrollScaffold(
                 DraggableScrollStateScrollbar(
                     state = scrollState,
                     modifier = Modifier.align(Alignment.CenterEnd),
+                    topInset = innerPadding.calculateTopPadding(),
+                    bottomInset = bottomChrome,
                 )
             }
         }
