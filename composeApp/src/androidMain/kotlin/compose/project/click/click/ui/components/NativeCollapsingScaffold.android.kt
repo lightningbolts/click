@@ -120,19 +120,25 @@ actual fun NativeCollapsingScaffold(
             } else {
                 statusBarTop + 16.dp
             }
-        LazyColumn(
-            state = lazyListState,
-            modifier = Modifier.fillMaxSize(),
-            verticalArrangement = verticalArrangement,
-            contentPadding =
-                PaddingValues(
-                    start = horizontalPadding,
-                    end = horizontalPadding,
-                    top = topPad,
-                    bottom = bottomChrome,
-                ),
-            content = content,
-        )
+        Box(modifier = Modifier.fillMaxSize()) {
+            LazyColumn(
+                state = lazyListState,
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = verticalArrangement,
+                contentPadding =
+                    PaddingValues(
+                        start = horizontalPadding,
+                        end = horizontalPadding,
+                        top = topPad,
+                        bottom = bottomChrome,
+                    ),
+                content = content,
+            )
+            DraggableLazyListScrollbar(
+                state = lazyListState,
+                modifier = Modifier.align(Alignment.CenterEnd),
+            )
+        }
     }
 }
 
@@ -191,19 +197,27 @@ actual fun NativeCollapsingScrollScaffold(
             )
         },
     ) { innerPadding ->
-        Column(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .verticalScroll(scrollState, enabled = scrollEnabled)
-                    .padding(
-                        start = horizontalPadding,
-                        end = horizontalPadding,
-                        top = innerPadding.calculateTopPadding(),
-                        bottom = bottomChrome,
-                    ),
-        ) {
-            content(Modifier.fillMaxWidth())
+        Box(modifier = Modifier.fillMaxSize()) {
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .verticalScroll(scrollState, enabled = scrollEnabled)
+                        .padding(
+                            start = horizontalPadding,
+                            end = horizontalPadding,
+                            top = innerPadding.calculateTopPadding(),
+                            bottom = bottomChrome,
+                        ),
+            ) {
+                content(Modifier.fillMaxWidth())
+            }
+            if (scrollEnabled) {
+                DraggableScrollStateScrollbar(
+                    state = scrollState,
+                    modifier = Modifier.align(Alignment.CenterEnd),
+                )
+            }
         }
     }
 }

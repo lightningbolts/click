@@ -73,6 +73,7 @@ import compose.project.click.click.ui.components.ClickListRow // pragma: allowli
 import compose.project.click.click.ui.components.ClickSearchField // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickSheetDefaults // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionListUserAvatarFace // pragma: allowlist secret
+import compose.project.click.click.ui.components.DraggableLazyListScrollbar // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.ProvideSheetSwipeDismiss // pragma: allowlist secret
 import compose.project.click.click.ui.components.platformPressScale // pragma: allowlist secret
@@ -422,6 +423,10 @@ internal fun ConnectionMemberPickerSheet(
                                     )
                                 }
                             }
+                            DraggableLazyListScrollbar(
+                                state = listState,
+                                modifier = Modifier.align(Alignment.CenterEnd),
+                            )
                         }
                     }
                 }

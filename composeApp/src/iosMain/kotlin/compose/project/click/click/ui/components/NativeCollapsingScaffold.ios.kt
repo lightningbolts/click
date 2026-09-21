@@ -148,6 +148,10 @@ actual fun NativeCollapsingScaffold(
                 ),
             content = content,
         )
+        DraggableLazyListScrollbar(
+            state = lazyListState,
+            modifier = Modifier.align(androidx.compose.ui.Alignment.CenterEnd),
+        )
         if (showHeader) {
             if (!chromeActive) {
                 Column(modifier = Modifier.fillMaxWidth()) {
@@ -257,6 +261,12 @@ actual fun NativeCollapsingScrollScaffold(
                     ),
         ) {
             content(Modifier.fillMaxWidth())
+        }
+        if (scrollEnabled) {
+            DraggableScrollStateScrollbar(
+                state = scrollState,
+                modifier = Modifier.align(androidx.compose.ui.Alignment.CenterEnd),
+            )
         }
         if (!chromeActive) {
             Spacer(Modifier.fillMaxWidth().height(headerClearance))

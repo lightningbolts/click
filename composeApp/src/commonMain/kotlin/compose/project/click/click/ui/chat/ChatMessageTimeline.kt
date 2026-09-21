@@ -37,6 +37,7 @@ import compose.project.click.click.data.models.Message
 import compose.project.click.click.data.models.MessageReaction
 import compose.project.click.click.data.models.MessageWithUser
 import compose.project.click.click.data.models.isBeaconChatMessage
+import compose.project.click.click.ui.components.DraggableLazyListScrollbar
 import compose.project.click.click.viewmodel.SecureChatMediaHost
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
@@ -352,5 +353,10 @@ internal fun ChatMessageTimeline(
                 }
             }
         }
+        DraggableLazyListScrollbar(
+            state = listState,
+            reverseLayout = true,
+            modifier = Modifier.align(Alignment.CenterEnd),
+        )
     }
 }
