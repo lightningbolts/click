@@ -27,6 +27,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -64,6 +65,9 @@ fun DraggableLazyListScrollbar(
     val estimatedVisibleFraction =
         (viewportSizePx.toFloat() / visibleExtentPx.toFloat() * visibleItems.size / totalItems)
             .coerceIn(0f, 1f)
+    // Variable-height rows change the visible sample as the user scrolls. Freezing the
+    // estimate for a stable item count prevents the thumb from visibly breathing while dragging.
+    val stableVisibleFraction = remember(totalItems) { estimatedVisibleFraction }
 
     val first = visibleItems.first()
     val firstItemProgress =
@@ -81,7 +85,7 @@ fun DraggableLazyListScrollbar(
 
     DraggableScrollbarTrack(
         positionFraction = displayPosition,
-        visibleFraction = estimatedVisibleFraction,
+        visibleFraction = stableVisibleFraction,
         modifier = modifier,
         onSeek = { fraction ->
             val logicalFraction = if (reverseLayout) 1f - fraction else fraction
@@ -105,8 +109,9 @@ fun DraggableScrollStateScrollbar(
     val maxValue = state.maxValue
     if (maxValue <= 0) return
 
-    val viewportFraction =
-        if (maxValue == 0) 1f else (1f / (maxValue + 1f)).coerceAtLeast(0.08f)
+    // ScrollState does not expose total content height directly. Keep a stable compact thumb
+    // rather than deriving its size from the changing scroll offset/range during measurement.
+    val viewportFraction = remember(maxValue) { 0.12f }
     val positionFraction = state.value.toFloat() / maxValue.toFloat()
 
     DraggableScrollbarTrack(
@@ -165,6 +170,7 @@ private fun DraggableScrollbarTrack(
                     detectVerticalDragGestures(
                         onDragStart = { offset ->
                             dragging = true
+                            PlatformHapticsPolicy.lightImpact()
                             seekTo(offset.y)
                         },
                         onVerticalDrag = { change, _ ->
