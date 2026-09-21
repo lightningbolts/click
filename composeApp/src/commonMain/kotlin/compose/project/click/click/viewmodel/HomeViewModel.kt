@@ -317,6 +317,7 @@ class HomeViewModel(
                     _connectedUsers.value = emptyMap()
                     _homeAvailabilityIntents.value = emptyList()
                     _homeAvailabilityOverlapMessages.value = emptyList()
+                    activityRecapCache.clear()
                     _activityRecap.value = activityRecapPlaceholder(_recapWindow.value)
                     AvailabilityOverlapCache.clear()
                     ViewerAvailabilityBubblesCache.clear()
@@ -828,6 +829,7 @@ class HomeViewModel(
         dataLoaded = false
         lastDerivedConnectionSignature = null
         bookmarksFetchPending = true
+        activityRecapCache.clear()
         AppDataManager.refresh(force = true)
         retrySavedEventBookmarksIfNeeded()
         viewModelScope.launch { prefetchActivityRecaps() }
