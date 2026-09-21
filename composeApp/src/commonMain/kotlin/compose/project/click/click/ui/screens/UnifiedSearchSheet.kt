@@ -51,6 +51,7 @@ import compose.project.click.click.ui.components.ClickMenuItem // pragma: allowl
 import compose.project.click.click.ui.components.ClickSearchField // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickSheetDefaults // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
+import compose.project.click.click.ui.components.DraggableLazyListScrollbar // pragma: allowlist secret
 import compose.project.click.click.ui.components.LocalSheetOnDismissRequest // pragma: allowlist secret
 import compose.project.click.click.ui.components.ProvideSheetSwipeDismiss // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberSheetScrollAtTop // pragma: allowlist secret
@@ -287,6 +288,10 @@ private fun UnifiedSearchSheetContent(
                                 )
                             }
                         }
+                        DraggableLazyListScrollbar(
+                            state = listState,
+                            modifier = Modifier.align(Alignment.CenterEnd),
+                        )
                     }
                 }
             }
