@@ -58,7 +58,8 @@ fun DraggableLazyListScrollbar(
         (layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset)
             .coerceAtLeast(1)
     val visibleExtentPx =
-        visibleItems.sumOf { item -> item.size.coerceAtLeast(0) }
+        visibleItems
+            .sumOf { item -> item.size.coerceAtLeast(0) }
             .coerceAtLeast(1)
     val estimatedVisibleFraction =
         (viewportSizePx.toFloat() / visibleExtentPx.toFloat() * visibleItems.size / totalItems)
