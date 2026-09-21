@@ -191,14 +191,29 @@ private fun DraggableScrollbarTrack(
                 .coerceAtMost(trackHeightPx.toFloat())
         }
     val baseTravelPx = (trackHeightPx - baseThumbHeightPx).coerceAtLeast(1f)
+    val animatedPosition by
+        animateFloatAsState(
+            targetValue = positionFraction.coerceIn(0f, 1f),
+            animationSpec = spring(dampingRatio = 1f, stiffness = 1_400f),
+        )
     val effectivePosition =
         if (dragging) {
             dragPositionFraction
         } else {
-            positionFraction.coerceIn(0f, 1f)
+            animatedPosition
         }
-    val atStart = effectivePosition <= 0.0001f
-    val atEnd = effectivePosition >= 0.9999f
+    val atStart =
+        if (dragging) {
+            effectivePosition <= 0.0001f
+        } else {
+            positionFraction <= 0.0001f
+        }
+    val atEnd =
+        if (dragging) {
+            effectivePosition >= 0.9999f
+        } else {
+            positionFraction >= 0.9999f
+        }
 
     val activeCompression =
         if (abs(edgePullPx) > 0.5f) {
