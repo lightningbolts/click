@@ -33,8 +33,8 @@ private val FastScrollbarTouchWidth = 28.dp
 private val FastScrollbarVisualWidth = 3.dp
 private val FastScrollbarVisualWidthDragging = 5.dp
 private val FastScrollbarMinThumbHeight = 44.dp
-private const val FastScrollbarEdgeCompression = 0.72f
-private const val FastScrollbarLayoutReadyFraction = 0.75f
+private const val FAST_SCROLLBAR_EDGE_COMPRESSION = 0.72f
+private const val FAST_SCROLLBAR_LAYOUT_READY_FRACTION = 0.75f
 
 /**
  * Draggable fast-scroll thumb for [LazyListState].
@@ -64,7 +64,7 @@ fun DraggableLazyListScrollbar(
             .coerceAtLeast(1)
     val layoutReady =
         visibleItems.all { it.size > 0 } &&
-            visibleExtentPx >= viewportSizePx * FastScrollbarLayoutReadyFraction
+            visibleExtentPx >= viewportSizePx * FAST_SCROLLBAR_LAYOUT_READY_FRACTION
     if (!layoutReady) return
 
     // Freeze the initial reliable row-size estimate for this content/viewport geometry. Re-sampling
@@ -214,7 +214,7 @@ private fun DraggableScrollbarTrack(
         val atEnd = effectivePosition >= 0.9999f
         val thumbHeight =
             if (atStart || atEnd) {
-                (baseThumbHeightPx * FastScrollbarEdgeCompression)
+                (baseThumbHeightPx * FAST_SCROLLBAR_EDGE_COMPRESSION)
                     .coerceAtLeast(visualWidthPx * 2f)
             } else {
                 baseThumbHeightPx
