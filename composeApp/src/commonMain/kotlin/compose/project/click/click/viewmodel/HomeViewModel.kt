@@ -116,6 +116,8 @@ class HomeViewModel(
     private val _recapWindow = MutableStateFlow("week")
     val recapWindow: StateFlow<String> = _recapWindow.asStateFlow()
     private val activityRecapCache = mutableMapOf<String, ActivityRecapDto>()
+    private val activityRecapJobs = mutableMapOf<String, Job>()
+    private var activityRecapGeneration = 0L
 
     private val _dismissedEventReminderKeys = MutableStateFlow<Set<String>>(emptySet())
 
@@ -317,7 +319,7 @@ class HomeViewModel(
                     _connectedUsers.value = emptyMap()
                     _homeAvailabilityIntents.value = emptyList()
                     _homeAvailabilityOverlapMessages.value = emptyList()
-                    activityRecapCache.clear()
+                    invalidateActivityRecaps()
                     _activityRecap.value = activityRecapPlaceholder(_recapWindow.value)
                     AvailabilityOverlapCache.clear()
                     ViewerAvailabilityBubblesCache.clear()
@@ -511,7 +513,7 @@ class HomeViewModel(
             loadReconnectReminders(userId, connections, lastMessageByConnectionId)
             loadHomeEventReminders(userId)
             loadSavedEventBookmarks()
-            prefetchActivityRecaps()
+            prefetchActivityRecaps(userId)
             loadConnectionInsights(userId, connections, lastMessageByConnectionId)
         } catch (e: Exception) {
             println("Error preloading home derived data: ${e.redactedRestMessage()}")
@@ -826,13 +828,16 @@ class HomeViewModel(
      * Force refresh (only when user explicitly requests)
      */
     fun refresh() {
+        val userId = AppDataManager.currentUser.value?.id
         dataLoaded = false
         lastDerivedConnectionSignature = null
         bookmarksFetchPending = true
-        activityRecapCache.clear()
+        invalidateActivityRecaps()
         AppDataManager.refresh(force = true)
         retrySavedEventBookmarksIfNeeded()
-        viewModelScope.launch { prefetchActivityRecaps() }
+        if (userId != null) {
+            viewModelScope.launch { prefetchActivityRecaps(userId) }
+        }
     }
 
     fun setRecapWindow(window: String) {
@@ -847,30 +852,88 @@ class HomeViewModel(
 
         // Keep the previous recap visible until the requested window arrives. Replacing it with
         // a zero placeholder caused the "No activity yet" flash on every Day/Week toggle.
-        viewModelScope.launch {
-            loadActivityRecap(normalized)
-        }
+        requestActivityRecap(normalized)
     }
 
-    private suspend fun prefetchActivityRecaps() {
-        loadActivityRecap(_recapWindow.value)
+    private fun invalidateActivityRecaps() {
+        activityRecapGeneration += 1
+        activityRecapJobs.values.forEach { it.cancel() }
+        activityRecapJobs.clear()
+        activityRecapCache.clear()
+    }
+
+    private fun requestActivityRecap(window: String) {
+        val normalized = if (window == "day") "day" else "week"
+        if (activityRecapJobs[normalized]?.isActive == true) return
+
+        val userId = AppDataManager.currentUser.value?.id ?: return
+        val generation = activityRecapGeneration
+        activityRecapJobs[normalized] =
+            viewModelScope.launch {
+                loadActivityRecap(
+                    window = normalized,
+                    expectedUserId = userId,
+                    expectedGeneration = generation,
+                )
+            }
+    }
+
+    private suspend fun prefetchActivityRecaps(userId: String) {
+        val generation = activityRecapGeneration
+        loadActivityRecap(
+            window = _recapWindow.value,
+            expectedUserId = userId,
+            expectedGeneration = generation,
+        )
+        if (
+            generation != activityRecapGeneration ||
+            AppDataManager.currentUser.value?.id != userId
+        ) {
+            return
+        }
+
         val alternate = if (_recapWindow.value == "day") "week" else "day"
         if (activityRecapCache[alternate] == null) {
-            loadActivityRecap(alternate)
+            loadActivityRecap(
+                window = alternate,
+                expectedUserId = userId,
+                expectedGeneration = generation,
+            )
         }
     }
 
-    private suspend fun loadActivityRecap(window: String) {
+    private suspend fun loadActivityRecap(
+        window: String,
+        expectedUserId: String,
+        expectedGeneration: Long,
+    ) {
         val normalized = if (window == "day") "day" else "week"
+        if (
+            expectedGeneration != activityRecapGeneration ||
+            AppDataManager.currentUser.value?.id != expectedUserId
+        ) {
+            return
+        }
+
         apiClient.getActivityRecap(normalized).fold(
             onSuccess = { recap ->
-                activityRecapCache[normalized] = recap
-                if (_recapWindow.value == normalized) {
-                    _activityRecap.value = recap
+                val requestStillOwned =
+                    expectedGeneration == activityRecapGeneration &&
+                        AppDataManager.currentUser.value?.id == expectedUserId
+                if (requestStillOwned) {
+                    activityRecapCache[normalized] = recap
+                    if (_recapWindow.value == normalized) {
+                        _activityRecap.value = recap
+                    }
                 }
             },
             onFailure = { e ->
-                println("HomeViewModel: recap load failed: ${e.redactedRestMessage()}")
+                val requestStillOwned =
+                    expectedGeneration == activityRecapGeneration &&
+                        AppDataManager.currentUser.value?.id == expectedUserId
+                if (requestStillOwned) {
+                    println("HomeViewModel: recap load failed: ${e.redactedRestMessage()}")
+                }
             },
         )
     }
@@ -893,6 +956,8 @@ class HomeViewModel(
         availabilityIntentRefreshJob = null
         homeOverlapJob?.cancel()
         homeOverlapJob = null
+        activityRecapJobs.values.forEach { it.cancel() }
+        activityRecapJobs.clear()
         icebreakerSendCooldownTickerJob?.cancel()
         icebreakerSendCooldownTickerJob = null
         super.onCleared()
