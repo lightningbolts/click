@@ -291,6 +291,7 @@ private fun UnifiedSearchSheetContent(
                         DraggableLazyListScrollbar(
                             state = listState,
                             modifier = Modifier.align(Alignment.CenterEnd),
+                            bottomInset = listBottomPad,
                         )
                     }
                 }
