@@ -357,6 +357,8 @@ internal fun ChatMessageTimeline(
             state = listState,
             reverseLayout = true,
             modifier = Modifier.align(Alignment.CenterEnd),
+            topInset = listBottomPadding.calculateTopPadding(),
+            bottomInset = listBottomPadding.calculateBottomPadding(),
         )
     }
 }
