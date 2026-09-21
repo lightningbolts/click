@@ -50,7 +50,7 @@ fun DraggableLazyListScrollbar(
     val layoutInfo = state.layoutInfo
     val totalItems = layoutInfo.totalItemsCount
     val visibleItems = layoutInfo.visibleItemsInfo
-    if (totalItems <= 1 || visibleItems.isEmpty()) return
+    if (totalItems <= 1 || visibleItems.isEmpty() || totalItems <= visibleItems.size) return
 
     val viewportSizePx =
         (layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset)
