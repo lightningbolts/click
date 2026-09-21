@@ -115,6 +115,7 @@ class HomeViewModel(
 
     private val _recapWindow = MutableStateFlow("week")
     val recapWindow: StateFlow<String> = _recapWindow.asStateFlow()
+    private val activityRecapCache = mutableMapOf<String, ActivityRecapDto>()
 
     private val _dismissedEventReminderKeys = MutableStateFlow<Set<String>>(emptySet())
 
@@ -509,7 +510,7 @@ class HomeViewModel(
             loadReconnectReminders(userId, connections, lastMessageByConnectionId)
             loadHomeEventReminders(userId)
             loadSavedEventBookmarks()
-            loadActivityRecap()
+            prefetchActivityRecaps()
             loadConnectionInsights(userId, connections, lastMessageByConnectionId)
         } catch (e: Exception) {
             println("Error preloading home derived data: ${e.redactedRestMessage()}")
@@ -829,20 +830,43 @@ class HomeViewModel(
         bookmarksFetchPending = true
         AppDataManager.refresh(force = true)
         retrySavedEventBookmarksIfNeeded()
-        viewModelScope.launch { loadActivityRecap() }
+        viewModelScope.launch { prefetchActivityRecaps() }
     }
 
     fun setRecapWindow(window: String) {
         val normalized = if (window == "day") "day" else "week"
         if (_recapWindow.value == normalized) return
+
         _recapWindow.value = normalized
-        _activityRecap.value = activityRecapPlaceholder(normalized)
-        viewModelScope.launch { loadActivityRecap() }
+        activityRecapCache[normalized]?.let { cached ->
+            _activityRecap.value = cached
+            return
+        }
+
+        // Keep the previous recap visible until the requested window arrives. Replacing it with
+        // a zero placeholder caused the "No activity yet" flash on every Day/Week toggle.
+        viewModelScope.launch {
+            loadActivityRecap(normalized)
+        }
     }
 
-    private suspend fun loadActivityRecap() {
-        apiClient.getActivityRecap(_recapWindow.value).fold(
-            onSuccess = { _activityRecap.value = it },
+    private suspend fun prefetchActivityRecaps() {
+        loadActivityRecap(_recapWindow.value)
+        val alternate = if (_recapWindow.value == "day") "week" else "day"
+        if (activityRecapCache[alternate] == null) {
+            loadActivityRecap(alternate)
+        }
+    }
+
+    private suspend fun loadActivityRecap(window: String) {
+        val normalized = if (window == "day") "day" else "week"
+        apiClient.getActivityRecap(normalized).fold(
+            onSuccess = { recap ->
+                activityRecapCache[normalized] = recap
+                if (_recapWindow.value == normalized) {
+                    _activityRecap.value = recap
+                }
+            },
             onFailure = { e ->
                 println("HomeViewModel: recap load failed: ${e.redactedRestMessage()}")
             },
