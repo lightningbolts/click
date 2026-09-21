@@ -2,9 +2,16 @@
 
 package compose.project.click.click.ui.components // pragma: allowlist secret
 
+import androidx.compose.animation.core.AnimationState
+import androidx.compose.animation.core.animateDecay
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.exponentialDecay
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ScrollState
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -16,31 +23,36 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import kotlin.math.abs
 
 private val FastScrollbarTouchWidth = 28.dp
 private val FastScrollbarVisualWidth = 3.dp
 private val FastScrollbarVisualWidthDragging = 5.dp
 private val FastScrollbarMinThumbHeight = 44.dp
-private const val FAST_SCROLLBAR_EDGE_COMPRESSION = 0.72f
-private const val FAST_SCROLLBAR_LAYOUT_READY_FRACTION = 0.75f
+private val FastScrollbarOverscrollCompressionDistance = 72.dp
+private const val FAST_SCROLLBAR_MIN_EDGE_COMPRESSION = 0.34f
+private const val FAST_SCROLLBAR_PASSIVE_EDGE_COMPRESSION = 0.58f
 
 /**
  * Draggable fast-scroll thumb for [LazyListState].
  *
- * The scrollbar intentionally behaves like a native mobile scroll indicator: stable thumb size,
- * direct continuous pixel scrolling while tracking, bounded indicator insets, and edge compression.
+ * Position comes from Compose's [androidx.compose.foundation.ScrollIndicatorState] rather than
+ * estimating an absolute offset from item indices. That state exists specifically for scrollbar
+ * drawing and stays continuous across variable-height lazy rows.
  */
 @Composable
 fun DraggableLazyListScrollbar(
@@ -50,42 +62,33 @@ fun DraggableLazyListScrollbar(
     topInset: Dp = 0.dp,
     bottomInset: Dp = 0.dp,
 ) {
-    val layoutInfo = state.layoutInfo
-    val totalItems = layoutInfo.totalItemsCount
-    val visibleItems = layoutInfo.visibleItemsInfo
-    if (totalItems <= 1 || visibleItems.isEmpty() || totalItems <= visibleItems.size) return
+    val indicator = state.scrollIndicatorState ?: return
+    val contentSize = indicator.contentSize
+    val viewportSize = indicator.viewportSize
+    val scrollOffset = indicator.scrollOffset
+    if (
+        contentSize == Int.MAX_VALUE ||
+        viewportSize == Int.MAX_VALUE ||
+        scrollOffset == Int.MAX_VALUE ||
+        viewportSize <= 0 ||
+        contentSize <= viewportSize
+    ) {
+        return
+    }
 
-    val viewportSizePx =
-        (layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset)
-            .coerceAtLeast(1)
-    val visibleExtentPx =
-        visibleItems
-            .sumOf { item -> item.size.coerceAtLeast(0) }
-            .coerceAtLeast(1)
-    val layoutReady =
-        visibleItems.all { it.size > 0 } &&
-            visibleExtentPx >= viewportSizePx * FAST_SCROLLBAR_LAYOUT_READY_FRACTION
-    if (!layoutReady) return
+    val totalItems = state.layoutInfo.totalItemsCount
+    if (totalItems <= 1) return
 
-    // Freeze the initial reliable row-size estimate for this content/viewport geometry. Re-sampling
-    // variable-height rows while scrolling is what made the thumb visibly grow and shrink.
-    val averageItemSizePx =
-        remember(totalItems, viewportSizePx) {
-            visibleExtentPx.toFloat() / visibleItems.size.toFloat()
-        }.coerceAtLeast(1f)
-    val estimatedContentSizePx = averageItemSizePx * totalItems
-    val estimatedScrollRangePx = (estimatedContentSizePx - viewportSizePx).coerceAtLeast(1f)
-    val visibleFraction = (viewportSizePx / estimatedContentSizePx).coerceIn(0f, 1f)
-
-    val estimatedLogicalOffsetPx =
-        state.firstVisibleItemIndex * averageItemSizePx + state.firstVisibleItemScrollOffset
-    val logicalPosition =
-        when {
-            !state.canScrollBackward -> 0f
-            !state.canScrollForward -> 1f
-            else -> (estimatedLogicalOffsetPx / estimatedScrollRangePx).coerceIn(0f, 1f)
+    // Content size estimates for lazy layouts may evolve as rows are measured. Freeze the first
+    // valid geometry for a given list/viewport so the thumb never "breathes" while scrolling.
+    val stableContentSize =
+        remember(totalItems, viewportSize) {
+            contentSize.coerceAtLeast(viewportSize + 1)
         }
+    val scrollRangePx = (stableContentSize - viewportSize).toFloat().coerceAtLeast(1f)
+    val logicalPosition = (scrollOffset.toFloat() / scrollRangePx).coerceIn(0f, 1f)
     val displayPosition = if (reverseLayout) 1f - logicalPosition else logicalPosition
+    val visibleFraction = viewportSize.toFloat() / stableContentSize.toFloat()
 
     DraggableScrollbarTrack(
         positionFraction = displayPosition,
@@ -93,14 +96,16 @@ fun DraggableLazyListScrollbar(
         modifier = modifier,
         topInset = topInset,
         bottomInset = bottomInset,
+        scrollInProgress = state.isScrollInProgress,
         onDragFraction = { physicalDeltaFraction ->
-            val logicalDeltaFraction =
-                if (reverseLayout) {
-                    -physicalDeltaFraction
-                } else {
-                    physicalDeltaFraction
-                }
-            state.dispatchRawDelta(logicalDeltaFraction * estimatedScrollRangePx)
+            val direction = if (reverseLayout) -1f else 1f
+            val requestedContentDelta = physicalDeltaFraction * scrollRangePx * direction
+            val consumedContentDelta = state.dispatchRawDelta(requestedContentDelta)
+            if (requestedContentDelta == 0f) {
+                0f
+            } else {
+                (consumedContentDelta / scrollRangePx) * direction
+            }
         },
     )
 }
@@ -115,20 +120,34 @@ fun DraggableScrollStateScrollbar(
     topInset: Dp = 0.dp,
     bottomInset: Dp = 0.dp,
 ) {
-    val maxValue = state.maxValue
-    if (maxValue <= 0) return
+    val indicator = state.scrollIndicatorState ?: return
+    val contentSize = indicator.contentSize
+    val viewportSize = indicator.viewportSize
+    val scrollOffset = indicator.scrollOffset
+    if (
+        contentSize == Int.MAX_VALUE ||
+        viewportSize == Int.MAX_VALUE ||
+        scrollOffset == Int.MAX_VALUE ||
+        viewportSize <= 0 ||
+        contentSize <= viewportSize
+    ) {
+        return
+    }
 
-    val positionFraction = state.value.toFloat() / maxValue.toFloat()
+    val scrollRangePx = (contentSize - viewportSize).toFloat().coerceAtLeast(1f)
+    val positionFraction = (scrollOffset.toFloat() / scrollRangePx).coerceIn(0f, 1f)
+    val visibleFraction = viewportSize.toFloat() / contentSize.toFloat()
 
     DraggableScrollbarTrack(
         positionFraction = positionFraction,
-        visibleFraction = null,
-        scrollRangePx = maxValue.toFloat(),
+        visibleFraction = visibleFraction,
         modifier = modifier,
         topInset = topInset,
         bottomInset = bottomInset,
+        scrollInProgress = state.isScrollInProgress,
         onDragFraction = { deltaFraction ->
-            state.dispatchRawDelta(deltaFraction * maxValue)
+            val requested = deltaFraction * scrollRangePx
+            state.dispatchRawDelta(requested) / scrollRangePx
         },
     )
 }
@@ -136,21 +155,26 @@ fun DraggableScrollStateScrollbar(
 @Composable
 private fun DraggableScrollbarTrack(
     positionFraction: Float,
-    visibleFraction: Float?,
+    visibleFraction: Float,
     modifier: Modifier,
     topInset: Dp,
     bottomInset: Dp,
-    scrollRangePx: Float? = null,
-    onDragFraction: (Float) -> Unit,
+    scrollInProgress: Boolean,
+    onDragFraction: (Float) -> Float,
 ) {
     val density = LocalDensity.current
+    val scope = rememberCoroutineScope()
     val currentPositionFraction by rememberUpdatedState(positionFraction)
     val dragFractionHandler by rememberUpdatedState(onDragFraction)
     var trackHeightPx by remember { mutableIntStateOf(0) }
     var dragging by remember { mutableStateOf(false) }
+    var flingJob by remember { mutableStateOf<Job?>(null) }
     var dragPositionFraction by remember { mutableFloatStateOf(positionFraction) }
+    var edgePullPx by remember { mutableFloatStateOf(0f) }
 
     val minThumbHeightPx = with(density) { FastScrollbarMinThumbHeight.toPx() }
+    val compressionDistancePx =
+        with(density) { FastScrollbarOverscrollCompressionDistance.toPx() }.coerceAtLeast(1f)
     val visualWidthPx =
         with(density) {
             (if (dragging) FastScrollbarVisualWidthDragging else FastScrollbarVisualWidth).toPx()
@@ -158,25 +182,63 @@ private fun DraggableScrollbarTrack(
     val thumbColor =
         MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (dragging) 0.72f else 0.42f)
 
-    val resolvedVisibleFraction =
-        when {
-            visibleFraction != null -> visibleFraction
-            trackHeightPx <= 0 || scrollRangePx == null -> 1f
-            else ->
-                trackHeightPx.toFloat() /
-                    (trackHeightPx.toFloat() + scrollRangePx).coerceAtLeast(1f)
-        }.coerceIn(0f, 1f)
-
     val baseThumbHeightPx =
         if (trackHeightPx <= 0) {
             0f
         } else {
-            (trackHeightPx * resolvedVisibleFraction)
+            (trackHeightPx * visibleFraction.coerceIn(0f, 1f))
                 .coerceAtLeast(minThumbHeightPx)
                 .coerceAtMost(trackHeightPx.toFloat())
         }
     val baseTravelPx = (trackHeightPx - baseThumbHeightPx).coerceAtLeast(1f)
-    val effectivePosition = if (dragging) dragPositionFraction else positionFraction.coerceIn(0f, 1f)
+    val effectivePosition =
+        if (dragging) {
+            dragPositionFraction
+        } else {
+            positionFraction.coerceIn(0f, 1f)
+        }
+    val atStart = effectivePosition <= 0.0001f
+    val atEnd = effectivePosition >= 0.9999f
+
+    val activeCompression =
+        if (abs(edgePullPx) > 0.5f) {
+            val pullFraction = (abs(edgePullPx) / compressionDistancePx).coerceIn(0f, 1f)
+            1f - pullFraction * (1f - FAST_SCROLLBAR_MIN_EDGE_COMPRESSION)
+        } else if (scrollInProgress && (atStart || atEnd)) {
+            FAST_SCROLLBAR_PASSIVE_EDGE_COMPRESSION
+        } else {
+            1f
+        }
+    val compression by
+        animateFloatAsState(
+            targetValue = activeCompression,
+            animationSpec = spring(dampingRatio = 0.82f, stiffness = 620f),
+        )
+
+    fun consumeThumbDelta(deltaPx: Float): Float {
+        if (baseTravelPx <= 0f) return 0f
+        val requestedFraction = deltaPx / baseTravelPx
+        val consumedFraction = dragFractionHandler(requestedFraction)
+        val consumedPx = consumedFraction * baseTravelPx
+
+        dragPositionFraction =
+            (dragPositionFraction + consumedFraction).coerceIn(0f, 1f)
+
+        val unconsumedPx = deltaPx - consumedPx
+        edgePullPx =
+            if (abs(unconsumedPx) > 0.05f) {
+                (edgePullPx + unconsumedPx)
+                    .coerceIn(-compressionDistancePx, compressionDistancePx)
+            } else {
+                edgePullPx * 0.55f
+            }
+        return consumedPx
+    }
+
+    val draggableState =
+        rememberDraggableState { deltaPx ->
+            consumeThumbDelta(deltaPx)
+        }
 
     Canvas(
         modifier =
@@ -185,40 +247,46 @@ private fun DraggableScrollbarTrack(
                 .width(FastScrollbarTouchWidth)
                 .padding(top = topInset, bottom = bottomInset)
                 .onSizeChanged { trackHeightPx = it.height }
-                .pointerInput(trackHeightPx, baseThumbHeightPx) {
-                    detectVerticalDragGestures(
-                        onDragStart = {
-                            dragging = true
-                            dragPositionFraction = currentPositionFraction.coerceIn(0f, 1f)
-                            PlatformHapticsPolicy.heavyImpact()
-                        },
-                        onVerticalDrag = { change, dragAmount ->
-                            change.consume()
-                            val deltaFraction = dragAmount / baseTravelPx
-                            dragPositionFraction =
-                                (dragPositionFraction + deltaFraction).coerceIn(0f, 1f)
-                            dragFractionHandler(deltaFraction)
-                        },
-                        onDragEnd = {
-                            dragging = false
-                        },
-                        onDragCancel = {
-                            dragging = false
-                        },
-                    )
-                },
+                .draggable(
+                    state = draggableState,
+                    orientation = Orientation.Vertical,
+                    onDragStarted = {
+                        flingJob?.cancel()
+                        edgePullPx = 0f
+                        dragPositionFraction = currentPositionFraction.coerceIn(0f, 1f)
+                        dragging = true
+                        PlatformHapticsPolicy.heavyImpact()
+                    },
+                    onDragStopped = { velocityPxPerSec ->
+                        dragging = false
+                        edgePullPx = 0f
+                        if (abs(velocityPxPerSec) < 80f || baseTravelPx <= 0f) return@draggable
+
+                        flingJob?.cancel()
+                        flingJob =
+                            scope.launch {
+                                var previousValue = 0f
+                                AnimationState(
+                                    initialValue = 0f,
+                                    initialVelocity = velocityPxPerSec,
+                                ).animateDecay(
+                                    animationSpec = exponentialDecay(frictionMultiplier = 1.75f),
+                                ) {
+                                    val delta = value - previousValue
+                                    previousValue = value
+                                    consumeThumbDelta(delta)
+                                }
+                                edgePullPx = 0f
+                            }
+                    },
+                ),
     ) {
         if (trackHeightPx <= 0 || baseThumbHeightPx <= 0f) return@Canvas
 
-        val atStart = effectivePosition <= 0.0001f
-        val atEnd = effectivePosition >= 0.9999f
         val thumbHeight =
-            if (atStart || atEnd) {
-                (baseThumbHeightPx * FAST_SCROLLBAR_EDGE_COMPRESSION)
-                    .coerceAtLeast(visualWidthPx * 2f)
-            } else {
-                baseThumbHeightPx
-            }
+            (baseThumbHeightPx * compression)
+                .coerceAtLeast(visualWidthPx * 2f)
+                .coerceAtMost(size.height)
         val travel = (size.height - thumbHeight).coerceAtLeast(0f)
         val thumbTop =
             when {
