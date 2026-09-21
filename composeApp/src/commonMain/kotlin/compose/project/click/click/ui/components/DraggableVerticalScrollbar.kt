@@ -16,6 +16,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
@@ -143,6 +144,8 @@ private fun DraggableScrollbarTrack(
     onDragFraction: (Float) -> Unit,
 ) {
     val density = LocalDensity.current
+    val currentPositionFraction by rememberUpdatedState(positionFraction)
+    val dragFractionHandler by rememberUpdatedState(onDragFraction)
     var trackHeightPx by remember { mutableIntStateOf(0) }
     var dragging by remember { mutableStateOf(false) }
     var dragPositionFraction by remember { mutableFloatStateOf(positionFraction) }
@@ -186,7 +189,7 @@ private fun DraggableScrollbarTrack(
                     detectVerticalDragGestures(
                         onDragStart = {
                             dragging = true
-                            dragPositionFraction = positionFraction.coerceIn(0f, 1f)
+                            dragPositionFraction = currentPositionFraction.coerceIn(0f, 1f)
                             PlatformHapticsPolicy.heavyImpact()
                         },
                         onVerticalDrag = { change, dragAmount ->
@@ -194,7 +197,7 @@ private fun DraggableScrollbarTrack(
                             val deltaFraction = dragAmount / baseTravelPx
                             dragPositionFraction =
                                 (dragPositionFraction + deltaFraction).coerceIn(0f, 1f)
-                            onDragFraction(deltaFraction)
+                            dragFractionHandler(deltaFraction)
                         },
                         onDragEnd = {
                             dragging = false
