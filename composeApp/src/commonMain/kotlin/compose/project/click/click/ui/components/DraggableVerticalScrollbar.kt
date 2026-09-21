@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -97,8 +98,10 @@ fun DraggableLazyListScrollbar(
         remember(totalItems, viewportSize) {
             mutableIntStateOf(effectiveContentSize)
         }
-    if (!state.isScrollInProgress && visualContentSize != effectiveContentSize) {
-        visualContentSize = effectiveContentSize
+    LaunchedEffect(effectiveContentSize, state.isScrollInProgress) {
+        if (!state.isScrollInProgress) {
+            visualContentSize = effectiveContentSize
+        }
     }
     val visibleFraction =
         viewportSize.toFloat() /
