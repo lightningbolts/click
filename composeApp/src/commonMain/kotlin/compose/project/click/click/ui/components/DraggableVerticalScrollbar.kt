@@ -94,18 +94,9 @@ fun DraggableLazyListScrollbar(
         }
     val displayPosition = if (reverseLayout) 1f - logicalPosition else logicalPosition
 
-    var visualContentSize by
-        remember(totalItems, viewportSize) {
-            mutableIntStateOf(effectiveContentSize)
-        }
-    LaunchedEffect(effectiveContentSize, state.isScrollInProgress) {
-        if (!state.isScrollInProgress) {
-            visualContentSize = effectiveContentSize
-        }
-    }
     val visibleFraction =
         viewportSize.toFloat() /
-            visualContentSize.coerceAtLeast(viewportSize + 1).toFloat()
+            effectiveContentSize.toFloat()
 
     DraggableScrollbarTrack(
         positionFraction = displayPosition,
@@ -199,11 +190,26 @@ private fun DraggableScrollbarTrack(
     val thumbColor =
         MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (dragging) 0.72f else 0.42f)
 
+    var settledVisibleFraction by
+        remember {
+            mutableFloatStateOf(visibleFraction.coerceIn(0f, 1f))
+        }
+    LaunchedEffect(visibleFraction, scrollInProgress, dragging) {
+        if (!scrollInProgress && !dragging) {
+            settledVisibleFraction = visibleFraction.coerceIn(0f, 1f)
+        }
+    }
+    val animatedVisibleFraction by
+        animateFloatAsState(
+            targetValue = settledVisibleFraction,
+            animationSpec = spring(dampingRatio = 1f, stiffness = 700f),
+        )
+
     val baseThumbHeightPx =
         if (trackHeightPx <= 0) {
             0f
         } else {
-            (trackHeightPx * visibleFraction.coerceIn(0f, 1f))
+            (trackHeightPx * animatedVisibleFraction)
                 .coerceAtLeast(minThumbHeightPx)
                 .coerceAtMost(trackHeightPx.toFloat())
         }
