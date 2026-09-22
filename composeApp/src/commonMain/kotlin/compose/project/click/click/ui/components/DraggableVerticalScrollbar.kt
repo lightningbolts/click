@@ -2,6 +2,7 @@
 
 package compose.project.click.click.ui.components // pragma: allowlist secret
 
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationState
 import androidx.compose.animation.core.animateDecay
 import androidx.compose.animation.core.animateFloatAsState
@@ -44,9 +45,9 @@ private val FastScrollbarTouchWidth = 28.dp
 private val FastScrollbarVisualWidth = 3.dp
 private val FastScrollbarVisualWidthDragging = 5.dp
 private val FastScrollbarMinThumbHeight = 44.dp
+private val FastScrollbarMinCompressedThumbHeight = 1.dp
 private val FastScrollbarOverscrollCompressionDistance = 72.dp
-private const val FAST_SCROLLBAR_MIN_EDGE_COMPRESSION = 0.34f
-private const val FAST_SCROLLBAR_PASSIVE_EDGE_COMPRESSION = 0.58f
+private const val FAST_SCROLLBAR_MIN_EDGE_COMPRESSION = 0.02f
 
 /**
  * Draggable fast-scroll thumb for [LazyListState].
@@ -181,6 +182,8 @@ private fun DraggableScrollbarTrack(
     var edgePullPx by remember { mutableFloatStateOf(0f) }
 
     val minThumbHeightPx = with(density) { FastScrollbarMinThumbHeight.toPx() }
+    val minCompressedThumbHeightPx =
+        with(density) { FastScrollbarMinCompressedThumbHeight.toPx() }
     val compressionDistancePx =
         with(density) { FastScrollbarOverscrollCompressionDistance.toPx() }.coerceAtLeast(1f)
     val visualWidthPx =
@@ -214,16 +217,14 @@ private fun DraggableScrollbarTrack(
                 .coerceAtMost(trackHeightPx.toFloat())
         }
     val baseTravelPx = (trackHeightPx - baseThumbHeightPx).coerceAtLeast(1f)
-    val animatedPosition by
-        animateFloatAsState(
-            targetValue = positionFraction.coerceIn(0f, 1f),
-            animationSpec = spring(dampingRatio = 1f, stiffness = 1_400f),
-        )
+    // Scroll position is already continuous. Do not add a second spring on top of the real
+    // scroll signal: that creates visible catch-up/jump artifacts when the indicator estimator
+    // corrects itself or the list changes velocity.
     val effectivePosition =
         if (dragging) {
             dragPositionFraction
         } else {
-            animatedPosition
+            positionFraction.coerceIn(0f, 1f)
         }
     val atStart =
         if (dragging) {
@@ -238,20 +239,26 @@ private fun DraggableScrollbarTrack(
             positionFraction >= 0.9999f
         }
 
-    val activeCompression =
+    val compression = remember { Animatable(1f) }
+    val compressionTarget =
         if (abs(edgePullPx) > 0.5f) {
             val pullFraction = (abs(edgePullPx) / compressionDistancePx).coerceIn(0f, 1f)
             1f - pullFraction * (1f - FAST_SCROLLBAR_MIN_EDGE_COMPRESSION)
-        } else if (scrollInProgress && (atStart || atEnd)) {
-            FAST_SCROLLBAR_PASSIVE_EDGE_COMPRESSION
         } else {
             1f
         }
-    val compression by
-        animateFloatAsState(
-            targetValue = activeCompression,
-            animationSpec = spring(dampingRatio = 0.82f, stiffness = 620f),
-        )
+    LaunchedEffect(compressionTarget) {
+        if (compressionTarget < 1f) {
+            // During active edge pull, length should track force directly instead of lagging behind
+            // another animation. At maximum pull this collapses to essentially a dot.
+            compression.snapTo(compressionTarget)
+        } else {
+            compression.animateTo(
+                targetValue = 1f,
+                animationSpec = spring(dampingRatio = 0.82f, stiffness = 620f),
+            )
+        }
+    }
 
     fun consumeThumbDelta(deltaPx: Float): Float {
         if (baseTravelPx <= 0f) return 0f
@@ -328,8 +335,8 @@ private fun DraggableScrollbarTrack(
         if (trackHeightPx <= 0 || baseThumbHeightPx <= 0f) return@Canvas
 
         val thumbHeight =
-            (baseThumbHeightPx * compression)
-                .coerceAtLeast(visualWidthPx * 2f)
+            (baseThumbHeightPx * compression.value)
+                .coerceAtLeast(minCompressedThumbHeightPx)
                 .coerceAtMost(size.height)
         val travel = (size.height - thumbHeight).coerceAtLeast(0f)
         val thumbTop =
