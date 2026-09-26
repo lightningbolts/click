@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.MutableFloatState
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -22,13 +21,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import compose.project.click.click.ui.theme.LocalPlatformStyle // pragma: allowlist secret
 
 private val AndroidStatusBarFallback = 24.dp
 
@@ -42,14 +39,13 @@ object AppScreenDefaults {
     val FloatingHeaderLargeHeight = 112.dp
     val FloatingHeaderCompactHeight = 52.dp
     val ExtraScrollBottomPadding = 16.dp
-    val IosTabBarContentHeight = 49.dp
     val AndroidNavBarContentHeight = 80.dp // Material nav bar content; system inset added separately
     val FabGapAboveTabBar = 6.dp
 }
 
 /**
  * Distance from the bottom of the root content to the top of the floating tab bar.
- * Updated from [PlatformBottomBar] (iOS measures UITabBar frame; Android uses nav + bar height).
+ * Updated from [PlatformBottomBar] (Android uses nav + bar height).
  */
 @Stable
 object AppScreenChromeState {
@@ -59,42 +55,10 @@ object AppScreenChromeState {
     fun updateBottomChromeHeight(height: Dp) {
         if (height > 0.dp) bottomChromeHeight = height
     }
-
-    /**
-     * Count of full-screen overlays that must send the native UITabBar behind Compose.
-     * iOS cannot paint a Popup over a sibling `UITabBar`; send-to-back is the same path chat
-     * already uses and does not remount Liquid Glass.
-     */
-    var nativeTabBarCoverCount by mutableStateOf(0)
-        private set
-
-    val nativeTabBarCovered: Boolean
-        get() = nativeTabBarCoverCount > 0
-
-    fun acquireNativeTabBarCover() {
-        nativeTabBarCoverCount++
-    }
-
-    fun releaseNativeTabBarCover() {
-        nativeTabBarCoverCount = (nativeTabBarCoverCount - 1).coerceAtLeast(0)
-    }
-}
-
-/** Home-indicator / gesture inset + tab bar content — never less than this on iOS. */
-@Composable
-fun rememberIosTabBarStackHeight(): Dp {
-    val navigationBar = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    return navigationBar + AppScreenDefaults.IosTabBarContentHeight
 }
 
 @Composable
 fun rememberTabBarOverlayHeight(): Dp {
-    val style = LocalPlatformStyle.current
-    if (style.isIOS) {
-        val minimum = rememberIosTabBarStackHeight()
-        val measured = AppScreenChromeState.bottomChromeHeight
-        return if (measured >= minimum) measured else minimum
-    }
     val measured = AppScreenChromeState.bottomChromeHeight
     if (measured > 0.dp) return measured
     val navigationBar = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
@@ -106,15 +70,11 @@ fun rememberBottomChromePadding(extra: Dp = AppScreenDefaults.ExtraScrollBottomP
 
 /**
  * Reliable top safe-area inset for floating headers.
- * iOS: statusBars only (avoids safeDrawing/IME coupling).
  * Android: max(statusBars, safeDrawing top) with fallback for first-frame zero insets.
  */
 @Composable
 fun rememberStatusBarTopPadding(): Dp {
-    val style = LocalPlatformStyle.current
     val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    if (style.isIOS) return statusBarTop
-
     val safeTop =
         WindowInsets.safeDrawing
             .only(WindowInsetsSides.Top)
@@ -127,14 +87,9 @@ fun rememberStatusBarTopPadding(): Dp {
 /** Declarative status-bar padding for overlay headers (Android cutout-safe). */
 fun Modifier.floatingHeaderStatusBarPadding(): Modifier =
     composed {
-        val style = LocalPlatformStyle.current
-        if (style.isIOS) {
-            Modifier.windowInsetsPadding(WindowInsets.statusBars)
-        } else {
-            Modifier.windowInsetsPadding(
-                WindowInsets.safeDrawing.only(WindowInsetsSides.Top),
-            )
-        }
+        Modifier.windowInsetsPadding(
+            WindowInsets.safeDrawing.only(WindowInsetsSides.Top),
+        )
     }
 
 /**
@@ -205,52 +160,20 @@ fun rememberComposerBottomPadding(extra: Dp = 0.dp): Dp = rememberTabBarOverlayH
 /**
  * Smooth keyboard dock.
  *
- * The bottom chrome padding is static. Android keeps Compose's optimized IME inset placement,
- * while iOS can pass a native keyboard lift and move the already-measured block on a graphics
- * layer, avoiding per-frame chat relayout.
+ * The bottom chrome padding is static. Android keeps Compose's optimized IME inset placement.
  *
  * This is the single lift authority for chat thread roots. Do not combine it with `imePadding`,
  * `WindowInsets.ime` padding, or a second offset at a call site. Forms and sheets intentionally
  * use `imePadding` instead. Keeping that boundary explicit prevents rapid keyboard toggles from
  * leaving the composer and timeline at different residual insets.
- *
- * @param clearNativeTabBar When true on iOS (connections chat), pad above the always-visible
- * native tab bar. Hub chat hides the bar and should leave this false.
  */
-private fun Modifier.chatBottomInsetUnion(
-    extraBottom: Dp = 0.dp,
-    nativeKeyboardLiftPx: Float? = null,
-    nativeKeyboardLiftPxState: MutableFloatState? = null,
-    clearNativeTabBar: Boolean = false,
-): Modifier =
+private fun Modifier.chatBottomInsetUnion(extraBottom: Dp = 0.dp): Modifier =
     composed {
         val density = LocalDensity.current
-        val style = LocalPlatformStyle.current
         val imeInsets = WindowInsets.ime
         val navInsets = WindowInsets.navigationBars
         val navBottomPx = navInsets.getBottom(density)
         val navBottomDp = with(density) { navBottomPx.toDp() }
-
-        if (style.isIOS) {
-            val bottomPad =
-                if (clearNativeTabBar) {
-                    rememberTabBarOverlayHeight()
-                } else {
-                    navBottomDp
-                }
-            return@composed Modifier
-                .padding(bottom = bottomPad + extraBottom)
-                .clipToBounds()
-                .graphicsLayer {
-                    val liftPx =
-                        when {
-                            nativeKeyboardLiftPxState != null ->
-                                nativeKeyboardLiftPxState.floatValue.coerceAtLeast(0f)
-                            else -> nativeKeyboardLiftPx?.coerceAtLeast(0f) ?: 0f
-                        }
-                    translationY = -liftPx
-                }
-        }
 
         // Android remains directly driven by WindowInsets.ime. Reading inside offset's placement
         // lambda lets inset animation reposition the dock without rebuilding the chat composition.
@@ -281,24 +204,9 @@ fun Modifier.chatComposerDock(extraBottom: Dp = 0.dp): Modifier =
  * Thread + composer column below the fixed chat header. Slides the **entire** block (messages and
  * input row) above the keyboard without [imePadding] layout resize.
  */
-fun Modifier.chatThreadKeyboardDock(
-    extraBottom: Dp = 0.dp,
-    nativeKeyboardLiftPx: Float? = null,
-    nativeKeyboardLiftPxState: MutableFloatState? = null,
-    clearNativeTabBar: Boolean = false,
-): Modifier =
-    chatBottomInsetUnion(
-        extraBottom,
-        nativeKeyboardLiftPx,
-        nativeKeyboardLiftPxState,
-        clearNativeTabBar,
-    )
+fun Modifier.chatThreadKeyboardDock(extraBottom: Dp = 0.dp): Modifier = chatBottomInsetUnion(extraBottom)
 
-/**
- * Edge-to-edge chat dock. On iOS callers that need keyboard movement must use
- * [chatThreadKeyboardDock] and supply the native lift; this overload intentionally resolves to
- * zero native lift so it can never fall back to Compose IME handling.
- */
+/** Edge-to-edge chat dock. */
 fun Modifier.chatComposerDockEdgeToEdge(extraBottom: Dp = 0.dp): Modifier = chatBottomInsetUnion(extraBottom)
 
 @Composable

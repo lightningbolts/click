@@ -4,7 +4,6 @@ package compose.project.click.click.crypto
  * Platform-specific cryptographic primitives used by [MessageCrypto].
  *
  * Android  → javax.crypto + java.security
- * iOS      → CommonCrypto (CCCrypt / CC_SHA256 / CCHmac)
  */
 expect object PlatformCrypto {
     fun sha256(data: ByteArray): ByteArray

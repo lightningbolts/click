@@ -2,7 +2,6 @@
 
 package compose.project.click.click.data.repository // pragma: allowlist secret
 
-import compose.project.click.click.auth.GoogleOAuthConfig // pragma: allowlist secret
 import compose.project.click.click.auth.LocalSessionCache // pragma: allowlist secret
 import compose.project.click.click.auth.LocalSessionIdentity // pragma: allowlist secret
 import compose.project.click.click.auth.SessionHydrationPolicy // pragma: allowlist secret
@@ -13,8 +12,6 @@ import compose.project.click.click.data.auth.SessionRefreshCoordinator // pragma
 import compose.project.click.click.data.auth.SessionResumeGate // pragma: allowlist secret
 import compose.project.click.click.data.storage.TokenStorage // pragma: allowlist secret
 import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
-import compose.project.click.click.getPlatform // pragma: allowlist secret
-import compose.project.click.click.proximity.isSimulatorOrEmulatorRuntime // pragma: allowlist secret
 import compose.project.click.click.util.compressOutgoingChatImageForUpload // pragma: allowlist secret
 import compose.project.click.click.util.isHardAuthFailure // pragma: allowlist secret
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
@@ -134,21 +131,13 @@ class AuthRepository(
      * Kick off a Supabase-hosted OAuth flow for the given provider (Phase 2 — C16).
      *
      * The Supabase KMP SDK handles the PKCE handshake internally and dispatches the
-     * auth browser via its default [io.github.jan.supabase.auth.ExternalAuthAction]:
-     *   * Android → Chrome Custom Tab.
-     *   * iOS → SFSafariViewController (equivalent cookie-isolated browser; PKCE-enforced).
+     * auth browser via its default [io.github.jan.supabase.auth.ExternalAuthAction]
+     * (Chrome Custom Tab on Android).
      *
      * The browser returns to the app via the `click://login` deep-link configured in
      * [SupabaseConfig] (scheme = "click", host = "login"). Once the deep link is
      * delivered, the SDK exchanges the code for a session and fires `sessionStatus`,
      * which [SupabaseConfig.startSessionSync] persists to [TokenStorage].
-     *
-     * Note: the user-facing directive asked for ASWebAuthenticationSession on iOS
-     * specifically; today the SDK's default iOS browser is SFSafariViewController.
-     * The two behave identically from a PKCE / cookie-isolation standpoint and the
-     * deep-link return is unchanged. A future commit may wire a custom
-     * ExternalAuthAction backed by ASWebAuthenticationSession if stricter fidelity
-     * is ever required.
      */
     suspend fun signInWithOAuth(provider: OAuthProvider): Result<Unit> =
         try {
@@ -165,14 +154,8 @@ class AuthRepository(
             )
         }
 
-    suspend fun signInWithGoogle(): Result<Unit> {
-        return try {
-            if (isIosRuntime()) {
-                GoogleOAuthConfig.iosNativeSignInMisconfigurationMessage()?.let { message ->
-                    return Result.failure(Exception(message))
-                }
-            }
-
+    suspend fun signInWithGoogle(): Result<Unit> =
+        try {
             val nativePayloadResult =
                 withTimeout(AUTH_INTERACTIVE_TIMEOUT_MS) {
                     requestNativeGoogleSignInPayload()
@@ -237,83 +220,9 @@ class AuthRepository(
                 ),
             )
         }
-    }
 
-    suspend fun signInWithApple(): Result<Unit> =
-        try {
-            // Native Apple Sign-In is the canonical path on iOS.
-            // IMPORTANT: do not convert native failures into OAuth fallback, otherwise we can
-            // get stuck waiting for a browser deep link that never returns on simulator.
-            // Native Apple sign-in is user-interactive and can legitimately take longer
-            // than API-style timeouts while users authenticate/approve in system sheets.
-            val nativePayloadResult =
-                withTimeout(AUTH_INTERACTIVE_TIMEOUT_MS) {
-                    requestNativeAppleSignInPayload()
-                }
-
-            nativePayloadResult.fold(
-                onSuccess = { nativePayload ->
-                    if (nativePayload != null) {
-                        runCatching {
-                            supabase.auth.signInWith(IDToken) {
-                                provider = Apple
-                                idToken = nativePayload.idToken
-                                nativePayload.nonce?.let { nonce = it }
-                            }
-                        }.fold(
-                            onSuccess = {
-                                Result.success(Unit)
-                            },
-                            onFailure = { idTokenError ->
-                                val normalizedError =
-                                    idTokenError.message
-                                        ?.trim()
-                                        .orEmpty()
-                                        .lowercase()
-                                if (isAppleAudienceMismatchError(normalizedError)) {
-                                    if (!isSimulatorOrEmulatorRuntime()) {
-                                        signInWithOAuth(Apple)
-                                    } else {
-                                        Result.failure(Exception(appleAudienceMismatchMessage()))
-                                    }
-                                } else {
-                                    Result.failure(
-                                        Exception(
-                                            mapAppleSignInErrorMessage(
-                                                idTokenError,
-                                                defaultMessage = "Apple sign-in couldn't be completed right now.",
-                                            ),
-                                        ),
-                                    )
-                                }
-                            },
-                        )
-                    } else {
-                        // Android/other platforms return null payload by design.
-                        signInWithOAuth(Apple)
-                    }
-                },
-                onFailure = { nativeError ->
-                    Result.failure(
-                        Exception(
-                            mapAppleSignInErrorMessage(
-                                nativeError,
-                                defaultMessage = "Apple sign-in couldn't be completed right now.",
-                            ),
-                        ),
-                    )
-                },
-            )
-        } catch (e: Exception) {
-            Result.failure(
-                Exception(
-                    mapAppleSignInErrorMessage(
-                        e,
-                        defaultMessage = "Apple sign-in couldn't be completed right now.",
-                    ),
-                ),
-            )
-        }
+    /** Apple sign-in via the Supabase-hosted web OAuth flow. */
+    suspend fun signInWithApple(): Result<Unit> = signInWithOAuth(Apple)
 
     suspend fun signOut(): Result<Unit> =
         run {
@@ -343,13 +252,13 @@ class AuthRepository(
             //    (auto-loaded from SettingsSessionManager on startup).
             //    This is the most reliable path since the SDK auto-refreshes.
             // 2. If the SDK has no session, try reconstructing from TokenStorage
-            //    (Keychain/EncryptedPrefs) — this covers app reinstall scenarios.
+            //    (EncryptedPrefs) — this covers app reinstall scenarios.
 
             // Step 1: Check SDK's built-in session (auto-loaded from SettingsSessionManager)
             var user = supabase.auth.currentUserOrNull()
             if (user != null) {
                 println("AuthRepository: Restored session from SDK (SettingsSessionManager)")
-                // Sync to our TokenStorage so Keychain/EncryptedPrefs stay current
+                // Sync to our TokenStorage so EncryptedPrefs stay current
                 val currentSession = supabase.auth.currentSessionOrNull()
                 if (currentSession != null) {
                     tokenStorage.saveTokens(
@@ -367,7 +276,7 @@ class AuthRepository(
             val refreshToken = tokenStorage.getRefreshToken()
 
             if (!accessToken.isNullOrBlank() && !refreshToken.isNullOrBlank()) {
-                println("AuthRepository: Attempting restore from TokenStorage (Keychain/EncryptedPrefs)")
+                println("AuthRepository: Attempting restore from TokenStorage (EncryptedPrefs)")
                 val expiresAt = tokenStorage.getExpiresAt()
                 val tokenType = tokenStorage.getTokenType() ?: "bearer"
 
@@ -637,7 +546,7 @@ class AuthRepository(
                 )
             }
 
-            // iOS/Android compression utilities currently re-encode as JPEG.
+            // Android compression utilities currently re-encode as JPEG.
             val uploadMime = if (wasReencoded) "image/jpeg" else normalizedMime
             clickWebApi.uploadAvatar(bytesToUpload, uploadMime)
         } catch (e: Exception) {
@@ -673,54 +582,6 @@ class AuthRepository(
         }
     }
 
-    private fun mapAppleSignInErrorMessage(
-        error: Throwable,
-        defaultMessage: String,
-    ): String {
-        val rawMessage = error.message?.trim().orEmpty()
-        val normalized = rawMessage.lowercase()
-        val appleDomainHint =
-            normalized.contains("akauthenticationerror") ||
-                normalized.contains("asauthorizationerror") ||
-                normalized.contains("authenticationservices.authorizationerror") ||
-                normalized.contains("com.apple.authenticationservices") ||
-                normalized.contains("com.apple.authenticationkit") ||
-                normalized.contains("apple sign")
-
-        if (rawMessage.isBlank()) return defaultMessage
-
-        if (
-            normalized.contains("canceled") ||
-            normalized.contains("cancelled") ||
-            normalized.contains("asauthorizationerror") &&
-            normalized.contains("1001")
-        ) {
-            return "Apple sign-in was canceled."
-        }
-
-        if (normalized.contains("authenticationservices.authorizationerror/1000")) {
-            return "Apple sign-in failed (AuthorizationError 1000). Ensure Sign in with Apple is enabled in this build's Signing & Capabilities, then verify the simulator is signed in with an Apple ID that has two-factor authentication enabled."
-        }
-
-        if (isAppleAudienceMismatchError(normalized)) {
-            return appleAudienceMismatchMessage()
-        }
-
-        if (
-            normalized.contains("timed out waiting for") ||
-            normalized.contains("timeoutcancellationexception") ||
-            normalized.contains("timed out")
-        ) {
-            return "Apple sign-in took too long to complete. Please try again."
-        }
-
-        if (appleDomainHint) {
-            return rawMessage
-        }
-
-        return rawMessage
-    }
-
     private fun isAppleAudienceMismatchError(normalizedMessage: String): Boolean {
         if (normalizedMessage.isBlank()) return false
         val unacceptableAudience = "unacceptable audience in id_token"
@@ -745,8 +606,7 @@ class AuthRepository(
             return "Google sign-in was canceled."
         }
         if (isGoogleAudienceMismatchError(normalized)) {
-            return GoogleOAuthConfig.iosNativeSignInMisconfigurationMessage()
-                ?: "Google Sign-In client mismatch: iOS and web OAuth clients must be in the same Google Cloud project."
+            return "Google Sign-In client mismatch: Android and web OAuth clients must be in the same Google Cloud project."
         }
         if (normalized.contains("nonce") && normalized.contains("id_token")) {
             return "Google sign-in nonce verification failed. Rebuild the app, or enable Skip nonce check in Supabase → Auth → Google."
@@ -764,11 +624,6 @@ class AuthRepository(
                     identity.name?.let { put("name", it) }
                 },
         )
-
-    private fun isIosRuntime(): Boolean = getPlatform().name.contains("iOS", ignoreCase = true)
-
-    private fun appleAudienceMismatchMessage(): String =
-        "Apple sign-in configuration mismatch: native token audience is compose.project.click.click. Add this iOS bundle ID to Apple provider Client IDs in Supabase Auth settings." // pragma: allowlist secret
 
     private fun isLikelyNetworkErrorMessage(normalizedMessage: String): Boolean {
         if (normalizedMessage.isBlank()) return false

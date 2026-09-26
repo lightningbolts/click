@@ -27,7 +27,6 @@ import compose.project.click.click.data.models.ChatWithDetails
 import compose.project.click.click.data.models.User
 import compose.project.click.click.ui.components.ClickCircularIconButton
 import compose.project.click.click.ui.components.platformPressScale
-import compose.project.click.click.ui.theme.LocalPlatformStyle
 import compose.project.click.click.ui.theme.MotionTokens
 import kotlinx.coroutines.delay
 import kotlinx.datetime.Clock
@@ -145,11 +144,11 @@ internal fun ChatHeaderIconButton(
         size = size,
         iconSize = iconSize,
         showBorder = showBorder,
-        glassStrength = if (LocalPlatformStyle.current.isIOS) 0.64f else 0.4f,
+        glassStrength = 0.4f,
     )
 }
 
-/** Opaque content plate; native iOS navigation chrome owns actual Liquid Glass. */
+/** Opaque content plate. */
 @Composable
 internal fun ChatLiquidGlassPlate(
     modifier: Modifier = Modifier,
@@ -199,11 +198,11 @@ internal fun Modifier.chatSpringPressScale(interactionSource: MutableInteraction
  */
 @Composable
 internal fun rememberChatComposerFieldColors(): TextFieldColors {
-    val fieldFill = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (LocalPlatformStyle.current.isIOS) 0.78f else 1f)
+    val fieldFill = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 1f)
     val outline = MaterialTheme.colorScheme.outline
     return OutlinedTextFieldDefaults.colors(
-        focusedBorderColor = outline.copy(alpha = if (LocalPlatformStyle.current.isIOS) 0.28f else 0.5f),
-        unfocusedBorderColor = outline.copy(alpha = if (LocalPlatformStyle.current.isIOS) 0.16f else 0.34f),
+        focusedBorderColor = outline.copy(alpha = 0.5f),
+        unfocusedBorderColor = outline.copy(alpha = 0.34f),
         focusedContainerColor = fieldFill,
         unfocusedContainerColor = fieldFill,
     )

@@ -59,7 +59,6 @@ import compose.project.click.click.data.models.MapBeacon // pragma: allowlist se
 import compose.project.click.click.data.repository.AuthRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
 import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
-import compose.project.click.click.getPlatform // pragma: allowlist secret
 import compose.project.click.click.platformForegroundTickFlow // pragma: allowlist secret
 import compose.project.click.click.sensors.rememberAmbientNoiseMonitor // pragma: allowlist secret
 import compose.project.click.click.ui.chat.rememberChatMediaPickers // pragma: allowlist secret
@@ -75,7 +74,6 @@ import compose.project.click.click.ui.components.GlassSheetTokens // pragma: all
 import compose.project.click.click.ui.components.HeaderBackIconButton // pragma: allowlist secret
 import compose.project.click.click.ui.components.InteractiveSwipeBackContainer // pragma: allowlist secret
 import compose.project.click.click.ui.components.PlatformBackHandler // pragma: allowlist secret
-import compose.project.click.click.ui.components.PlatformNativeNavigationBarSwipeReveal // pragma: allowlist secret
 import compose.project.click.click.ui.components.SavedEventsSection // pragma: allowlist secret
 import compose.project.click.click.ui.components.UnifiedToastHost // pragma: allowlist secret
 import compose.project.click.click.ui.components.interactiveSwipeBackUnderlay // pragma: allowlist secret
@@ -229,11 +227,9 @@ fun SettingsScreen(
     val mapBeacons by mapViewModel.mapBeacons.collectAsState()
     val prefetchedBeacons by AppDataManager.prefetchedMapBeacons.collectAsState()
     var selectedSavedEventBeacon by remember { mutableStateOf<MapBeacon?>(null) }
-    val isIOS = remember { getPlatform().name.contains("iOS", ignoreCase = true) }
     // One host state means tap-back and swipe-back share a single animation and the hub behind gets
     // the same parallax either way, instead of tap-back using a separate slide-out with no underlay.
     val backHost = rememberInteractiveBackHostState()
-    PlatformNativeNavigationBarSwipeReveal(backHost.dragOffsetPx)
     val backScope = rememberCoroutineScope()
     var subpageClosing by remember { mutableStateOf(false) }
 
@@ -264,7 +260,7 @@ fun SettingsScreen(
         }
     }
 
-    PlatformBackHandler(enabled = settingsPage != SettingsPage.Hub && !isIOS) {
+    PlatformBackHandler(enabled = settingsPage != SettingsPage.Hub) {
         // pragma: allowlist secret
         closeSettingsSubpage()
     }
@@ -334,7 +330,6 @@ fun SettingsScreen(
                             AppScreenScaffold(
                                 title = settingsPage.title(),
                                 onOpenSearch = null,
-                                onNavigateBack = { closeSettingsSubpage() },
                                 navigationIcon = {
                                     HeaderBackIconButton(
                                         onClick = { closeSettingsSubpage() },

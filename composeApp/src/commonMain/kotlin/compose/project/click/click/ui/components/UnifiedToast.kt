@@ -1,3 +1,5 @@
+@file:Suppress("ktlint:standard:property-naming", "ktlint:standard:function-naming")
+
 package compose.project.click.click.ui.components
 
 import androidx.compose.animation.AnimatedVisibility
@@ -37,7 +39,6 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import compose.project.click.click.ui.theme.LocalPlatformStyle
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -78,17 +79,19 @@ class UnifiedToastState {
     ) {
         hideJob?.cancel()
         pendingAction = onAction
-        content = UnifiedToastContent(
-            message = text,
-            actionLabel = actionLabel?.trim()?.takeIf { it.isNotEmpty() },
-        )
-        hideJob = scope.launch {
-            delay(durationMs)
-            if (content?.message == text) {
-                content = null
-                pendingAction = null
+        content =
+            UnifiedToastContent(
+                message = text,
+                actionLabel = actionLabel?.trim()?.takeIf { it.isNotEmpty() },
+            )
+        hideJob =
+            scope.launch {
+                delay(durationMs)
+                if (content?.message == text) {
+                    content = null
+                    pendingAction = null
+                }
             }
-        }
     }
 
     fun performAction() {
@@ -118,8 +121,7 @@ fun UnifiedToastHost(
     modifier: Modifier = Modifier,
     opaque: Boolean = false,
 ) {
-    val platformStyle = LocalPlatformStyle.current
-    val enterMs = if (platformStyle.isIOS) UnifiedToastTokens.EnterMillis + 40 else UnifiedToastTokens.EnterMillis
+    val enterMs = UnifiedToastTokens.EnterMillis
     val exitMs = UnifiedToastTokens.ExitMillis
     val toast = state.content
     val toastShape = RoundedCornerShape(UnifiedToastTokens.CompactCornerDp.dp)
@@ -130,33 +132,37 @@ fun UnifiedToastHost(
     ) {
         AnimatedVisibility(
             visible = toast != null,
-            enter = slideInVertically(
-                animationSpec = tween(enterMs, easing = FastOutSlowInEasing),
-                initialOffsetY = { it / 3 },
-            ) + fadeIn(tween(enterMs)),
-            exit = slideOutVertically(
-                animationSpec = tween(exitMs, easing = FastOutSlowInEasing),
-                targetOffsetY = { it / 3 },
-            ) + fadeOut(tween(exitMs)),
+            enter =
+                slideInVertically(
+                    animationSpec = tween(enterMs, easing = FastOutSlowInEasing),
+                    initialOffsetY = { it / 3 },
+                ) + fadeIn(tween(enterMs)),
+            exit =
+                slideOutVertically(
+                    animationSpec = tween(exitMs, easing = FastOutSlowInEasing),
+                    targetOffsetY = { it / 3 },
+                ) + fadeOut(tween(exitMs)),
             label = "unified_toast_compact",
         ) {
             if (toast != null) {
-                val backgroundModifier = if (opaque) {
-                    Modifier
-                        .background(GlassSheetTokens.OledBlack(), toastShape)
-                        .border(1.dp, GlassSheetTokens.GlassBorder(), toastShape)
-                } else {
-                    Modifier
-                        .clip(toastShape)
-                        .background(GlassSheetTokens.GlassSurface(), toastShape)
-                        .border(1.dp, GlassSheetTokens.GlassBorder(), toastShape)
-                }
+                val backgroundModifier =
+                    if (opaque) {
+                        Modifier
+                            .background(GlassSheetTokens.OledBlack(), toastShape)
+                            .border(1.dp, GlassSheetTokens.GlassBorder(), toastShape)
+                    } else {
+                        Modifier
+                            .clip(toastShape)
+                            .background(GlassSheetTokens.GlassSurface(), toastShape)
+                            .border(1.dp, GlassSheetTokens.GlassBorder(), toastShape)
+                    }
                 val onSurface = if (opaque) GlassSheetTokens.OnOled() else MaterialTheme.colorScheme.onSurface
                 Row(
-                    modifier = Modifier
-                        .widthIn(max = UnifiedToastTokens.MaxWidthDp.dp)
-                        .then(backgroundModifier)
-                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    modifier =
+                        Modifier
+                            .widthIn(max = UnifiedToastTokens.MaxWidthDp.dp)
+                            .then(backgroundModifier)
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
@@ -169,7 +175,9 @@ fun UnifiedToastHost(
                     toast.actionLabel?.let { label ->
                         TextButton(
                             onClick = { state.performAction() },
-                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp, vertical = 0.dp),
+                            contentPadding =
+                                androidx.compose.foundation.layout
+                                    .PaddingValues(horizontal = 4.dp, vertical = 0.dp),
                         ) {
                             Text(
                                 text = label,
@@ -195,24 +203,30 @@ fun UnifiedToastOverlay(
     modifier: Modifier = Modifier,
     dismissLabel: String = "Got it",
 ) {
-    val enterTransition = fadeIn(
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioLowBouncy,
-            stiffness = Spring.StiffnessMediumLow,
-        ),
-    ) + scaleIn(
-        initialScale = 0.92f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioLowBouncy,
-            stiffness = Spring.StiffnessMediumLow,
-        ),
-    )
-    val exitTransition = fadeOut(
-        animationSpec = spring(stiffness = Spring.StiffnessMedium),
-    ) + scaleOut(
-        targetScale = 0.96f,
-        animationSpec = spring(stiffness = Spring.StiffnessMedium),
-    )
+    val enterTransition =
+        fadeIn(
+            animationSpec =
+                spring(
+                    dampingRatio = Spring.DampingRatioLowBouncy,
+                    stiffness = Spring.StiffnessMediumLow,
+                ),
+        ) +
+            scaleIn(
+                initialScale = 0.92f,
+                animationSpec =
+                    spring(
+                        dampingRatio = Spring.DampingRatioLowBouncy,
+                        stiffness = Spring.StiffnessMediumLow,
+                    ),
+            )
+    val exitTransition =
+        fadeOut(
+            animationSpec = spring(stiffness = Spring.StiffnessMedium),
+        ) +
+            scaleOut(
+                targetScale = 0.96f,
+                animationSpec = spring(stiffness = Spring.StiffnessMedium),
+            )
 
     Box(
         modifier = modifier.fillMaxSize(),
@@ -225,9 +239,10 @@ fun UnifiedToastOverlay(
             label = "unified_toast_overlay",
         ) {
             LiquidGlassPill(
-                modifier = Modifier
-                    .padding(horizontal = 24.dp)
-                    .graphicsLayer { alpha = 1f },
+                modifier =
+                    Modifier
+                        .padding(horizontal = 24.dp)
+                        .graphicsLayer { alpha = 1f },
                 cornerRadiusDp = UnifiedToastTokens.OverlayCornerDp,
                 backgroundStrength = 0.85f,
             ) {

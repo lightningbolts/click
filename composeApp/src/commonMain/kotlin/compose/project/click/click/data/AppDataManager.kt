@@ -558,7 +558,7 @@ object AppDataManager {
     /**
      * OS resumed the UI (foreground). Cancels any in-flight [loadAllData] work, drops stale Ktor /
      * Realtime sockets, refreshes the GoTrue session, and starts a fresh load without waiting for
-     * [STARTUP_TIMEOUT_MS] on half-open connections (common after iOS backgrounding).
+     * [STARTUP_TIMEOUT_MS] on half-open connections (common after backgrounding).
      */
     fun handleApplicationForegrounded() {
         recoverSessionAndRealtime(reason = "foreground", forceDataRefresh = false)

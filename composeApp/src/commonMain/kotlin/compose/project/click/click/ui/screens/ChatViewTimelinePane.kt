@@ -47,7 +47,6 @@ import compose.project.click.click.ui.chat.ChatChromeMotion // pragma: allowlist
 import compose.project.click.click.ui.chat.ChatComposerStripReserve // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatMediaPickerHandles // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatMessageTimeline // pragma: allowlist secret
-import compose.project.click.click.ui.chat.ChatNativeKeyboardInsets // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatTypingDots // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ConnectionChatMessageComposer // pragma: allowlist secret
 import compose.project.click.click.ui.chat.IcebreakerPanel // pragma: allowlist secret
@@ -92,7 +91,6 @@ internal fun ColumnScope.ChatViewTimelinePane(
     activeApiChatId: String?,
     listState: LazyListState,
     coroutineScope: CoroutineScope,
-    nativeKeyboardInsets: ChatNativeKeyboardInsets,
     dismissKeyboardOnUserMessageScroll: NestedScrollConnection,
     suppressKeyboardDismissWhileProgrammaticTimelineScroll: MutableState<Boolean>,
     initialTimelineScrollDoneState: MutableState<Boolean>,
@@ -139,7 +137,6 @@ internal fun ColumnScope.ChatViewTimelinePane(
     var openBeaconDetailContent by openBeaconDetailContentState
     val timelineFollowsKeyboardState =
         rememberChatTimelineKeyboardFollow(
-            nativeKeyboardLiftPxState = nativeKeyboardInsets.liftPxState,
             shouldFollowOnKeyboardOpen = {
                 chatTimelineShouldFollowKeyboard(
                     firstVisibleItemIndex = listState.firstVisibleItemIndex,
@@ -193,7 +190,6 @@ internal fun ColumnScope.ChatViewTimelinePane(
                                 .padding(top = icebreakerTimelineTopReserve)
                                 .clipToBounds()
                                 .chatTimelineKeyboardViewport(
-                                    nativeKeyboardLiftPxState = nativeKeyboardInsets.liftPxState,
                                     followKeyboard = { timelineFollowsKeyboardState.value },
                                 ).zIndex(1f),
                     ) {
@@ -458,10 +454,7 @@ internal fun ColumnScope.ChatViewTimelinePane(
                 modifier =
                     Modifier
                         .fillMaxWidth()
-                        .chatComposerKeyboardMotion(
-                            nativeKeyboardLiftPxState = nativeKeyboardInsets.liftPxState,
-                            clearNativeTabBar = true,
-                        ),
+                        .chatComposerKeyboardMotion(),
             ) {
                 ChatTypingIndicator(viewModel = viewModel, typingPeerLabel = typingPeerLabel)
 

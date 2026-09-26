@@ -59,42 +59,6 @@ kotlin {
         }
     }
 
-    listOf(
-        iosArm64(),
-        iosSimulatorArm64(),
-    ).forEach { iosTarget ->
-        iosTarget.binaries.framework {
-            baseName = "ComposeApp"
-            isStatic = true
-            freeCompilerArgs += listOf("-Xbinary=bundleId=compose.project.click.click")
-            export("com.mohamedrejeb.calf:calf-ui:0.12.0")
-        }
-
-        // Explicit CoreLocation link for Gradle-built ios*Test binaries.
-        // Kotlin 2.3.x also autolinks `_LocationEssentials` (Xcode 26+ SDK only);
-        // CI must use that toolchain — linkerOpts alone cannot invent the framework.
-        iosTarget.binaries.all {
-            linkerOpts("-framework", "CoreLocation")
-        }
-
-        val nativeHeaderDir = rootProject.file("iosApp/SharedNative")
-
-        iosTarget.compilations.getByName("main") {
-            cinterops {
-                val clickDisposableRollFilter by creating {
-                    defFile(project.file("src/nativeInterop/cinterop/click_disposable_roll_filter.def"))
-                    includeDirs(nativeHeaderDir)
-                    compilerOpts("-I${nativeHeaderDir.absolutePath}")
-                }
-                val clickIosPickerLayout by creating {
-                    defFile(project.file("src/nativeInterop/cinterop/click_ios_picker_layout.def"))
-                    includeDirs(nativeHeaderDir)
-                    compilerOpts("-I${nativeHeaderDir.absolutePath}")
-                }
-            }
-        }
-    }
-
     sourceSets {
         androidMain.dependencies {
             implementation(compose.preview)
@@ -141,7 +105,7 @@ kotlin {
             implementation(libs.androidx.lifecycle.viewmodelCompose)
             implementation(libs.androidx.lifecycle.runtimeCompose)
 
-            api("com.mohamedrejeb.calf:calf-ui:0.12.0")
+            implementation("com.mohamedrejeb.calf:calf-ui:0.12.0")
 
             // Supabase dependencies
             implementation(project.dependencies.platform("io.github.jan-tennert.supabase:bom:3.0.2"))
@@ -169,20 +133,13 @@ kotlin {
 
             implementation("io.github.g0dkar:qrcode-kotlin:4.1.1")
 
-            // Multiplatform Settings for persistent session storage (explicit core artifact for SharedPreferencesSettings / NSUserDefaultsSettings)
+            // Multiplatform Settings for persistent session storage (explicit core artifact for SharedPreferencesSettings)
             implementation("com.russhwolf:multiplatform-settings:1.2.0")
             implementation("com.russhwolf:multiplatform-settings-no-arg:1.2.0")
-        }
-        iosMain.dependencies {
-            // Ktor iOS engine
-            implementation("io.ktor:ktor-client-darwin:3.0.1")
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
             implementation(libs.kotlinx.coroutines.test)
-        }
-        iosSimulatorArm64Test.dependencies {
-            implementation(compose.uiTest)
         }
         androidUnitTest.dependencies {
             implementation(compose.uiTest)
@@ -198,7 +155,7 @@ kotlin {
 
 secrets {
     propertiesFileName = "local.properties"
-    // Lets Gradle configure (and iOS embedAndSignAppleFrameworkForXcode) when local.properties is absent.
+    // Lets Gradle configure when local.properties is absent.
     defaultPropertiesFileName = "local.defaults.properties"
 }
 
@@ -254,24 +211,3 @@ dependencies {
 compose.resources {
     publicResClass = true
 }
-
-tasks
-    .matching {
-        (it.name.startsWith("link") && it.name.contains("Framework")) ||
-            it.name == "embedAndSignAppleFrameworkForXcode"
-    }.configureEach {
-        val buildDirectory = layout.buildDirectory
-        doLast {
-            val buildDir = buildDirectory.get().asFile
-            if (!buildDir.isDirectory) return@doLast
-            buildDir
-                .walkTopDown()
-                .filter { it.isFile && it.name == "Info.plist" && it.parentFile.name == "ComposeApp.framework" }
-                .forEach { plist ->
-                    fun runPlutil(vararg args: String): Int = ProcessBuilder(*args).redirectErrorStream(true).start().waitFor()
-                    if (runPlutil("plutil", "-replace", "UIRequiresFullScreen", "-bool", "true", plist.absolutePath) != 0) {
-                        runPlutil("plutil", "-insert", "UIRequiresFullScreen", "-bool", "true", plist.absolutePath)
-                    }
-                }
-        }
-    }

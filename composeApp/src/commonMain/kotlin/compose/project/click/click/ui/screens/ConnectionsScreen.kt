@@ -32,7 +32,6 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.unit.IntOffset
 import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.data.AppDataManager
-import compose.project.click.click.getPlatform
 import compose.project.click.click.notifications.ChatNotificationDismisser
 import compose.project.click.click.ui.chat.ConnectionMemberPickerSheet
 import compose.project.click.click.ui.chat.ConnectionSheetDialog
@@ -41,7 +40,6 @@ import compose.project.click.click.ui.chat.GroupMembersPickerContext
 import compose.project.click.click.ui.components.InteractiveSwipeBackContainer
 import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeftPeek
 import compose.project.click.click.ui.components.PlatformBackHandler
-import compose.project.click.click.ui.components.PlatformNativeNavigationBarSwipeReveal
 import compose.project.click.click.ui.components.TabbedGroupProfileSheet
 import compose.project.click.click.ui.components.TabbedUserProfileSheet
 import compose.project.click.click.ui.components.interactiveSwipeBackUnderlay
@@ -61,9 +59,8 @@ fun ConnectionsScreen(
     onChatDismissed: (() -> Unit)? = null,
     onChatOpenStateChanged: (Boolean) -> Unit = {},
     /**
-     * When true, the main tab bar is fully alpha-hidden so chat owns the bottom edge (required on
-     * iOS where UITabBar sits above Compose). Stays true until dismiss settles — do not peel the
-     * native Liquid Glass bar mid-gesture (masking it every frame causes shimmer + drag jank).
+     * When true, the main tab bar is fully alpha-hidden so chat owns the bottom edge. Stays true
+     * until dismiss settles.
      */
     onChatSuppressesTabBarChanged: (Boolean) -> Unit = {},
     onNavigateToLocationSettings: (() -> Unit)? = null,
@@ -85,13 +82,11 @@ fun ConnectionsScreen(
     onVerifiedCliqueProximityAutofillConsumed: () -> Unit = {},
 ) {
     var selectedChatId by remember { mutableStateOf(initialChatId) }
-    val isIOS = remember { getPlatform().name.contains("iOS", ignoreCase = true) }
 
     /** Shared with [InteractiveSwipeBackContainer] so the persistent list mirrors layer-1 parallax. */
     val chatBackHost = rememberInteractiveBackHostState()
-    val iosChatSwipeDragPx = chatBackHost.dragOffsetPx
-    PlatformNativeNavigationBarSwipeReveal(iosChatSwipeDragPx)
-    var iosChatRightToLeftPeek by remember { mutableStateOf<InteractiveSwipeBackRightToLeftPeek?>(null) }
+    val chatSwipeDragPx = chatBackHost.dragOffsetPx
+    var chatRightToLeftPeek by remember { mutableStateOf<InteractiveSwipeBackRightToLeftPeek?>(null) }
     var chatTransitionMode by remember { mutableStateOf(ChatTransitionMode.Tap) }
     var isTapCloseInFlight by remember { mutableStateOf(false) }
     val screenScope = rememberCoroutineScope()
@@ -105,13 +100,12 @@ fun ConnectionsScreen(
     var addMemberEligibilityMask by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
     var addMemberEligibilityReady by remember { mutableStateOf(false) }
 
-    /** Last opened thread id so iOS overlay exit animation still composes [ChatView] after [selectedChatId] clears. */
-    var lastOpenChatIdForIosOverlay by remember { mutableStateOf<String?>(initialChatId) }
-    val focusManager = LocalFocusManager.current
+    /** Last opened thread id so overlay exit animation still composes [ChatView] after [selectedChatId] clears. */
+    var lastOpenChatIdForOverlay by remember { mutableStateOf<String?>(initialChatId) }
 
     LaunchedEffect(selectedChatId) {
         if (selectedChatId != null) {
-            lastOpenChatIdForIosOverlay = selectedChatId
+            lastOpenChatIdForOverlay = selectedChatId
         }
     }
 
@@ -120,10 +114,9 @@ fun ConnectionsScreen(
         // Do not loadChats here — refreshing the inbox on the same frame as chrome restore
         // makes the list look like it remounted with the tab bar.
         chatBackHost.reset()
-        iosChatRightToLeftPeek = null
+        chatRightToLeftPeek = null
         onChatDismissed?.invoke()
         onChatOpenStateChanged(false)
-        // Bring the already-warm UITabBar to front (alpha stayed 1 while it was behind Compose).
         onChatSuppressesTabBarChanged(false)
     }
 
@@ -132,13 +125,8 @@ fun ConnectionsScreen(
             closeCleanupJob?.cancel()
             chatTransitionMode = mode
             isTapCloseInFlight = mode == ChatTransitionMode.Tap
-            if (isIOS) {
-                focusManager.clearFocus()
-            }
             selectedChatId = null
-            // Keep the bar behind Compose until settle. It stays at alpha 1 the whole time
-            // (sendSubviewToBack while suppressed), so bring-to-front on finalize does not
-            // rematerialize Liquid Glass. Do not un-suppress mid-slide — that covers the chat.
+            // Keep the tab bar suppressed until settle. Do not un-suppress mid-slide — that covers the chat.
             closeCleanupJob =
                 screenScope.launch {
                     val settleMs =
@@ -167,7 +155,7 @@ fun ConnectionsScreen(
     // (that restarts global realtime and flickers the inbox).
     LaunchedEffect(initialChatId) {
         val id = initialChatId ?: return@LaunchedEffect
-        lastOpenChatIdForIosOverlay = id
+        lastOpenChatIdForOverlay = id
         viewModel.loadChatMessages(id)
         selectedChatId = id
         viewModel.loadChats(isForced = false)
@@ -184,7 +172,7 @@ fun ConnectionsScreen(
     }
 
     LaunchedEffect(selectedChatId) {
-        // Session + full tab-bar suppress while a thread is active. Native bar restores on settle.
+        // Session + full tab-bar suppress while a thread is active. Tab bar restores on settle.
         if (selectedChatId != null) {
             onChatOpenStateChanged(true)
             onChatSuppressesTabBarChanged(true)
@@ -192,7 +180,7 @@ fun ConnectionsScreen(
     }
 
     PlatformBackHandler(
-        enabled = selectedChatId != null && !isIOS,
+        enabled = selectedChatId != null,
         onBack = { closeActiveChat(ChatTransitionMode.Tap) },
     )
 
@@ -205,13 +193,13 @@ fun ConnectionsScreen(
         onChatOpenStateChanged(true)
         onChatSuppressesTabBarChanged(true)
         ChatNotificationDismisser.dismissForThread(chatId, chatId)
-        lastOpenChatIdForIosOverlay = chatId
+        lastOpenChatIdForOverlay = chatId
         selectedChatId = chatId
         viewModel.loadChatMessages(chatId)
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        // Persistent base layer + chat overlay (iOS + Android).
+        // Persistent base layer + chat overlay.
         // ConnectionsListView stays in this tree (not duplicated in swipe previousContent).
         // [InteractiveSwipeBackContainer] uses an empty previousContent; drag offset + behind-layer
         // visibility are mirrored onto this Box so the list receives the same parallax as layer 1.
@@ -277,7 +265,7 @@ fun ConnectionsScreen(
                     },
                 label = "chat_overlay",
             ) {
-                val activeChatId = lastOpenChatIdForIosOverlay
+                val activeChatId = lastOpenChatIdForOverlay
                 if (activeChatId != null) {
                     val keyboardController = LocalSoftwareKeyboardController.current
                     val focusManager = LocalFocusManager.current
@@ -285,17 +273,15 @@ fun ConnectionsScreen(
                         enabled = true,
                         onBack = {
                             focusManager.clearFocus()
-                            if (!isIOS) {
-                                keyboardController?.hide()
-                            }
+                            keyboardController?.hide()
                             closeActiveChat(ChatTransitionMode.Gesture)
                         },
                         opaquePreviousBackground = false,
-                        externalDragOffsetPx = iosChatSwipeDragPx,
+                        externalDragOffsetPx = chatSwipeDragPx,
                         onBehindLayersVisibleChanged = { revealing ->
                             chatBackHost.behindLayersVisible = revealing
                         },
-                        rightToLeftPeek = iosChatRightToLeftPeek,
+                        rightToLeftPeek = chatRightToLeftPeek,
                         previousContent = {},
                         currentContent = {
                             ChatView(
@@ -309,8 +295,8 @@ fun ConnectionsScreen(
                                     showGroupMembersSheet = true
                                 },
                                 integrateTimestampPeekWithSwipeBackContainer = true,
-                                onRegisterSwipeBackRightToLeftPeek = { iosChatRightToLeftPeek = it },
-                                parentInteractiveBackSwipePx = iosChatSwipeDragPx,
+                                onRegisterSwipeBackRightToLeftPeek = { chatRightToLeftPeek = it },
+                                parentInteractiveBackSwipePx = chatSwipeDragPx,
                                 onOpenDisposableRoll = onOpenDisposableRoll,
                                 onOpenDisposableRollForChat = onOpenDisposableRollForChat,
                                 shareableBeacons = shareableBeacons,

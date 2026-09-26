@@ -112,7 +112,6 @@ fun UserProfileBottomSheet(
     val profileScrollAtTop = rememberSheetScrollAtTop(profileScroll)
     ClickFormBottomSheet(
         onDismissRequest = onDismiss,
-        useUiKitScrollHost = true,
     ) {
         ProvideSheetSwipeDismiss(
             onDismissRequest = onDismiss,

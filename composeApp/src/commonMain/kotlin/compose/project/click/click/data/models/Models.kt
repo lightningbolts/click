@@ -26,7 +26,7 @@ data class GeoLocationInsert(
 /**
  * Insert DTO for the `connections` table.
  * Using a typed data class instead of Map<String, Any> so that
- * kotlinx.serialization can handle it on Kotlin/Native (iOS).
+ * kotlinx.serialization can handle it.
  */
 @Serializable
 data class ConnectionInsert(

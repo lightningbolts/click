@@ -151,7 +151,7 @@ internal fun ChatAttachmentMenuPopup(
 
 /**
  * Hosts the attachment (+) anchor and menu popup. The anchor stays in the compose tree
- * (not a popup) so it follows the composer [graphicsLayer] keyboard lift on iOS. Menu
+ * (not a popup) so it follows the composer keyboard motion. Menu
  * outside-tap dismiss uses a scrim popup; [ChatAttachmentMenuPopup] keeps
  * [PopupProperties.dismissOnClickOutside] off so + toggles do not dismiss-then-reopen.
  */

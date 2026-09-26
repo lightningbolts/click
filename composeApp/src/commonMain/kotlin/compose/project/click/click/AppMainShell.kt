@@ -73,7 +73,6 @@ import kotlinx.coroutines.launch
 @Composable
 internal fun AppMainShell(
     reduceMotion: Boolean,
-    isIOS: Boolean,
     client: HttpClient,
     tokenStorage: TokenStorage,
     appScope: CoroutineScope,
@@ -203,25 +202,6 @@ internal fun AppMainShell(
         return true
     }
 
-    fun navigatePrimaryRouteBackHome(mode: NavigationTransitionMode = NavigationTransitionMode.Tap): Boolean {
-        if (!isPrimaryNavRoute(currentRoute) || currentRoute == NavigationItem.Home.route) {
-            return false
-        }
-
-        transitionMode = mode
-        previousRoute = currentRoute
-        currentRoute = NavigationItem.Home.route
-        routeHistory.resetTo(NavigationItem.Home.route)
-        isConnectionsChatOpen = false
-        connectionsChatSuppressesTabBar = false
-        pendingChatId = null
-        pendingTargetMessageId = null
-        pendingHubTargetMessageId = null
-        pendingBeaconId = null
-        pendingMapLayerFilter = null
-        return true
-    }
-
     val focusManager = LocalFocusManager.current
     val homeViewModel: HomeViewModel = viewModel { HomeViewModel() }
     val mapViewModel: MapViewModel = viewModel { MapViewModel() }
@@ -309,23 +289,6 @@ internal fun AppMainShell(
     // Keep AnimatedContent on the primary tab so Add Click is not destroyed while
     // My Code / Scan / Tap overlays are open (avoids per-card remount flicker on swipe-back).
     val activeScreenKey = currentRoute
-    val canSwipeBackMainRoute =
-        isIOS &&
-            isPrimaryNavRoute(currentRoute) &&
-            currentRoute != NavigationItem.Home.route &&
-            addClickOverlayKey == null &&
-            !isConnectionsChatOpen &&
-            !(currentRoute == NavigationItem.Settings.route && isSettingsSubpageOpen) &&
-            hubChatArgs == null
-    val iOSSwipeOwnsBack =
-        isIOS &&
-            (
-                addClickOverlayKey != null ||
-                    (currentRoute == NavigationItem.Connections.route && isConnectionsChatOpen) ||
-                    (currentRoute == NavigationItem.Settings.route && isSettingsSubpageOpen) ||
-                    hubChatArgs != null ||
-                    canSwipeBackMainRoute
-            )
 
     LaunchedEffect(currentUser.id) {
         if (currentUser.id.isNotEmpty()) {
@@ -703,19 +666,16 @@ internal fun AppMainShell(
     // Platform back handler — intercepts Android back gesture/button
     compose.project.click.click.ui.components.PlatformBackHandler( // pragma: allowlist secret
         enabled =
-            (
-                eventHubSheetVisible ||
-                    eventsSheetExpanded ||
-                    showUnifiedSearchSheet ||
-                    hubChatArgs != null ||
-                    showMyQRCode ||
-                    showQRScanner ||
-                    showNfcScreen ||
-                    (connectionState is ConnectionState.TaggingContext && !showNfcScreen) ||
-                    (connectionState is ConnectionState.QrAwaitingContext && !showNfcScreen) ||
-                    currentRoute != "home"
-            ) &&
-                !iOSSwipeOwnsBack,
+            eventHubSheetVisible ||
+                eventsSheetExpanded ||
+                showUnifiedSearchSheet ||
+                hubChatArgs != null ||
+                showMyQRCode ||
+                showQRScanner ||
+                showNfcScreen ||
+                (connectionState is ConnectionState.TaggingContext && !showNfcScreen) ||
+                (connectionState is ConnectionState.QrAwaitingContext && !showNfcScreen) ||
+                currentRoute != "home",
     ) {
         when {
             eventHubSheetVisible -> dismissEventHubSheet()
@@ -746,14 +706,11 @@ internal fun AppMainShell(
         }
     }
 
-    // On iOS the native UITabBar cannot be covered by Compose. Hiding/showing it remounts
-    // Liquid Glass after chat back-swipe. Keep it visible for connections chat; chat pads
-    // above it. Disposable-roll camera is a full-screen overlay — never toggle the iOS
-    // tab bar for it (that resize was flashing the whole chat on send/dismiss).
     val hideMainBottomBar =
-        (!isIOS && connectionsChatSuppressesTabBar) ||
-            (!isIOS && hubChatArgs != null) ||
-            (!isIOS && (showConnectionDisposableRoll || disposableRollOpening))
+        connectionsChatSuppressesTabBar ||
+            hubChatArgs != null ||
+            showConnectionDisposableRoll ||
+            disposableRollOpening
 
     // Wrap Scaffold in a Box to allow search overlay to be positioned at true screen bottom
     Box(modifier = Modifier.fillMaxSize()) {
@@ -774,9 +731,8 @@ internal fun AppMainShell(
             modifier =
                 Modifier
                     .fillMaxSize()
-                    // Android: zIndex puts chat above the Compose tab bar while a thread is open.
-                    // iOS: native bar stays visible for connections chat (never toggled).
-                    .zIndex(if (hideMainBottomBar || (!isIOS && isConnectionsChatOpen)) 6f else 0f),
+                    // zIndex puts chat above the Compose tab bar while a thread is open.
+                    .zIndex(if (hideMainBottomBar || isConnectionsChatOpen) 6f else 0f),
             contentWindowInsets = WindowInsets(0, 0, 0, 0),
         ) { paddingValues ->
             Box(
@@ -794,7 +750,6 @@ internal fun AppMainShell(
                         activeScreenKey = activeScreenKey,
                         currentRoute = currentRoute,
                         addClickOverlayKey = addClickOverlayKey,
-                        isIOS = isIOS,
                         reduceMotion = reduceMotion,
                         currentUser = currentUser,
                         client = client,
@@ -810,7 +765,6 @@ internal fun AppMainShell(
                         toastState = toastState,
                         shareableMapBeacons = shareableMapBeacons,
                         navigateTo = ::navigateTo,
-                        navigatePrimaryRouteBackHome = ::navigatePrimaryRouteBackHome,
                         launchCommunityHubJoin = { hubId, creatorId -> launchCommunityHubJoin(hubId, creatorId) },
                         openConnectionDisposableRoll = openConnectionDisposableRoll,
                         openChatDisposableRoll = openChatDisposableRoll,
@@ -834,7 +788,6 @@ internal fun AppMainShell(
                     )
 
                     AppHubChatHost(
-                        isIOS = isIOS,
                         reduceMotion = reduceMotion,
                         authViewModel = authViewModel,
                         hubChatTransitionMode = hubChatTransitionMode,
@@ -866,7 +819,6 @@ internal fun AppMainShell(
                         showNfcScreen = showNfcScreen,
                         suppressConnectionContextSheet = suppressConnectionContextSheet,
                         currentUser = currentUser,
-                        isIOS = isIOS,
                         connectionViewModel = connectionViewModel,
                         chatViewModel = chatViewModel,
                         connectionScope = connectionScope,

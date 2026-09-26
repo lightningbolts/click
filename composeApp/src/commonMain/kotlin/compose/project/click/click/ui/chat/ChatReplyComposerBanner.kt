@@ -9,7 +9,6 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -38,7 +37,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.data.models.MessageWithUser
 import compose.project.click.click.data.models.replySnippetForMetadata
-import compose.project.click.click.ui.theme.LocalPlatformStyle
 
 @Composable
 internal fun ChatReplyComposerBanner(
@@ -46,13 +44,12 @@ internal fun ChatReplyComposerBanner(
     editingMessageId: String?,
     onCancel: () -> Unit,
 ) {
-    val composerStyle = LocalPlatformStyle.current
     val visible = replyingTo != null && editingMessageId == null
     var content by remember { mutableStateOf(replyingTo) }
     if (replyingTo != null && editingMessageId == null) {
         content = replyingTo
     }
-    val shape = RoundedCornerShape(if (composerStyle.isIOS) 12.dp else 14.dp)
+    val shape = RoundedCornerShape(14.dp)
 
     AnimatedVisibility(
         visible = visible,
@@ -76,17 +73,8 @@ internal fun ChatReplyComposerBanner(
                     shape = shape,
                     color =
                         MaterialTheme.colorScheme.surfaceVariant.copy(
-                            alpha = if (composerStyle.isIOS) 0.45f else 0.55f,
+                            alpha = 0.55f,
                         ),
-                    border =
-                        if (composerStyle.isIOS) {
-                            BorderStroke(
-                                0.5.dp,
-                                MaterialTheme.colorScheme.outline.copy(alpha = 0.22f),
-                            )
-                        } else {
-                            null
-                        },
                     tonalElevation = 0.dp,
                     shadowElevation = 0.dp,
                 ) {

@@ -27,8 +27,6 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -39,19 +37,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
-import compose.project.click.click.ui.theme.LocalPlatformStyle // pragma: allowlist secret
 
 /**
  * Full-screen media lightbox.
  *
  * Drawn in the caller’s Compose tree (not a window [androidx.compose.ui.window.Popup] or
- * [androidx.compose.ui.window.Dialog]). A Popup on iOS sits above the host `UINavigationBar`,
- * which hid the liquid-glass close control and left a header-height sliver of the chat
- * underneath. Click Drops uses the same in-tree cover + exclusive overlay bind.
- *
- * iOS chat/hub media retargets the existing native chrome through [ApplyStableOverlayMediaChrome].
- * Portaled profile media can provide [chrome] so its detached UIKit host uses the same dismissal
- * transaction as the media content instead of tearing down native controls independently.
+ * [androidx.compose.ui.window.Dialog]).
  */
 @Composable
 fun GlassFullscreenMediaOverlay(
@@ -60,10 +51,6 @@ fun GlassFullscreenMediaOverlay(
     modifier: Modifier = Modifier,
     scrimAlpha: Float = GlassSheetTokens.ScrimBaseAlpha,
     motion: UnifiedPopupMotion = UnifiedPopupMotion.Media,
-    nativeTrailingActions: List<NativeChromeAction> = emptyList(),
-    useNativeChrome: Boolean = true,
-    onDismissTransitionStarted: (() -> Unit)? = null,
-    chrome: @Composable (onClose: () -> Unit) -> Unit = {},
     content: @Composable () -> Unit,
 ) {
     val transitionState = remember { MutableTransitionState(false) }
@@ -82,7 +69,6 @@ fun GlassFullscreenMediaOverlay(
         if (userDismissPending) return
         if (!transitionState.currentState && !transitionState.targetState) return
         userDismissPending = true
-        onDismissTransitionStarted?.invoke()
         transitionState.targetState = false
     }
 
@@ -106,26 +92,6 @@ fun GlassFullscreenMediaOverlay(
         return
     }
 
-    val coverNativeTabBar =
-        OverlayExclusiveBindPolicy.shouldCoverNativeTabBarForMedia(
-            isIOS = LocalPlatformStyle.current.isIOS,
-        )
-    chrome(::requestDismiss)
-    if (useNativeChrome) {
-        CompositionLocalProvider(LocalNativeChromeActive provides true) {
-            ApplyStableOverlayMediaChrome(
-                active = transitionState.targetState,
-                onClose = ::requestDismiss,
-                trailing = nativeTrailingActions,
-            )
-        }
-    }
-    DisposableEffect(coverNativeTabBar) {
-        if (coverNativeTabBar) AppScreenChromeState.acquireNativeTabBarCover()
-        onDispose {
-            if (coverNativeTabBar) AppScreenChromeState.releaseNativeTabBarCover()
-        }
-    }
     PlatformBackHandler(enabled = transitionState.targetState, onBack = ::requestDismiss)
 
     val fadeInSpec = tween<Float>(durationMillis = motion.fadeInMillis, easing = FastOutSlowInEasing)
@@ -178,15 +144,12 @@ fun MediaLightboxTopChrome(
     showClose: Boolean = true,
     trailing: @Composable RowScope.() -> Unit = {},
 ) {
-    val isIOS = LocalPlatformStyle.current.isIOS
     val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val safeTop = WindowInsets.safeDrawing.asPaddingValues().calculateTopPadding()
     val insetTop = maxOf(statusTop, safeTop)
     val resolvedTop =
         if (insetTop > 0.dp) {
             insetTop
-        } else if (isIOS) {
-            59.dp
         } else {
             0.dp
         }
@@ -218,23 +181,6 @@ fun MediaLightboxTopChrome(
         trailing()
     }
 }
-
-internal fun mediaLightboxShareActions(
-    onSave: () -> Unit,
-    onShare: () -> Unit,
-): List<NativeChromeAction> =
-    listOf(
-        NativeChromeAction(
-            sfSymbol = "square.and.arrow.down",
-            contentDescription = "Save",
-            onClick = onSave,
-        ),
-        NativeChromeAction(
-            sfSymbol = "square.and.arrow.up",
-            contentDescription = "Share",
-            onClick = onShare,
-        ),
-    )
 
 @Composable
 internal fun MediaLightboxSaveShareTrailing(

@@ -28,7 +28,6 @@ import compose.project.click.click.data.models.resolveOnboardingAfterRemoteResol
 import compose.project.click.click.data.models.resolveOnboardingInitialState // pragma: allowlist secret
 import compose.project.click.click.data.repository.AuthRepository // pragma: allowlist secret
 import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
-import compose.project.click.click.navigation.NavigationItem // pragma: allowlist secret
 import compose.project.click.click.platform.rememberReduceMotionEnabled // pragma: allowlist secret
 import compose.project.click.click.sensors.AmbientNoiseMonitorProvider // pragma: allowlist secret
 import compose.project.click.click.sensors.BarometricHeightMonitorProvider // pragma: allowlist secret
@@ -449,11 +448,6 @@ fun App() {
         }
     }
 
-    val isIOS =
-        remember {
-            getPlatform().name.contains("iOS", ignoreCase = true)
-        }
-
     val showSignUpState = remember { mutableStateOf(false) }
 
     var showSignUp by showSignUpState
@@ -739,7 +733,6 @@ fun App() {
                     } else {
                         AppMainShell(
                             reduceMotion = reduceMotion,
-                            isIOS = isIOS,
                             client = client,
                             tokenStorage = tokenStorage,
                             appScope = appScope,
@@ -788,10 +781,3 @@ internal enum class NavigationTransitionMode {
     Tap,
     GestureBack,
 }
-
-internal fun isPrimaryNavRoute(route: String): Boolean =
-    route == NavigationItem.Home.route ||
-        route == NavigationItem.AddClick.route ||
-        route == NavigationItem.Connections.route ||
-        route == NavigationItem.Map.route ||
-        route == NavigationItem.Settings.route
