@@ -37,6 +37,7 @@ import compose.project.click.click.data.models.Message
 import compose.project.click.click.data.models.MessageReaction
 import compose.project.click.click.data.models.MessageWithUser
 import compose.project.click.click.data.models.isBeaconChatMessage
+import compose.project.click.click.data.models.replyRef
 import compose.project.click.click.ui.components.DraggableLazyListScrollbar
 import compose.project.click.click.viewmodel.SecureChatMediaHost
 import kotlinx.coroutines.delay
@@ -171,7 +172,6 @@ internal fun ChatMessageTimeline(
     secureMediaHost: SecureChatMediaHost,
     activeChatId: String?,
     onToggleReaction: (messageId: String, reaction: String) -> Unit,
-    onForward: (messageId: String) -> Unit,
     onLongPress: (MessageWithUser) -> Unit,
     onSwipeReply: (MessageWithUser) -> Unit,
     onPeerAvatarClick: (String) -> Unit = {},
@@ -188,13 +188,18 @@ internal fun ChatMessageTimeline(
     modifier: Modifier = Modifier,
 ) {
     val onToggleReactionState = rememberUpdatedState(onToggleReaction)
-    val onForwardState = rememberUpdatedState(onForward)
     val onLongPressState = rememberUpdatedState(onLongPress)
     val onSwipeReplyState = rememberUpdatedState(onSwipeReply)
     val onPeerAvatarClickState = rememberUpdatedState(onPeerAvatarClick)
     val onDownloadAttachmentState = rememberUpdatedState(onDownloadAttachment)
     val onExpandPhotoState = rememberUpdatedState(onExpandPhoto)
     val onOpenBeaconState = rememberUpdatedState(onOpenBeacon)
+    val messagesById =
+        remember(timelineEntries) {
+            timelineEntries
+                .filterIsInstance<ChatTimelineEntry.MessageEntry>()
+                .associate { it.messageWithUser.message.id to it.messageWithUser.message }
+        }
 
     Box(
         modifier = modifier.fillMaxSize(),
@@ -298,7 +303,6 @@ internal fun ChatMessageTimeline(
                                                     reaction,
                                                 )
                                             },
-                                            onForward = { msgId -> onForwardState.value(msgId) },
                                             onLongPress = { onLongPressState.value(it) },
                                             onSwipeReply = { onSwipeReplyState.value(it) },
                                             showPeerAvatarInGroup = isGroupChat,
@@ -311,6 +315,10 @@ internal fun ChatMessageTimeline(
                                             },
                                             onExpandPhoto = { onExpandPhotoState.value(it) },
                                             onOpenBeacon = { onOpenBeaconState.value(it) },
+                                            replyTarget =
+                                                messageWithUser.message.replyRef()?.let {
+                                                    messagesById[it.replyToId]
+                                                },
                                         )
                                     }
                                 }

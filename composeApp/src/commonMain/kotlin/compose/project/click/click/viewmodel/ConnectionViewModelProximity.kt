@@ -22,6 +22,7 @@ import compose.project.click.click.proximity.ProximityHandshakeListenResult
 import compose.project.click.click.proximity.ProximityHardwarePermissionException // pragma: allowlist secret
 import compose.project.click.click.proximity.ProximityManager // pragma: allowlist secret
 import compose.project.click.click.proximity.isSimulatorOrEmulatorRuntime // pragma: allowlist secret
+import compose.project.click.click.proximity.randomHandshakeToken // pragma: allowlist secret
 import compose.project.click.click.proximity.scheduleProximityHandshakeSync // pragma: allowlist secret
 import compose.project.click.click.sensors.AmbientNoiseMonitor // pragma: allowlist secret
 import compose.project.click.click.sensors.BarometricHeightMonitor // pragma: allowlist secret
@@ -318,7 +319,7 @@ internal fun ConnectionViewModel.startTapProximityHandshakeImpl(
                     if (simulatorMock) {
                         ConnectionViewModel.SIMULATOR_MOCK_MY_TOKEN
                     } else {
-                        (0..9999).random().toString().padStart(4, '0')
+                        randomHandshakeToken()
                     }
 
                 val tokenStorage = createTokenStorage()

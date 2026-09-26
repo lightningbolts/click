@@ -599,12 +599,6 @@ class SupabaseChatRepository(
         }
     }
 
-    override suspend fun forwardMessage(
-        messageId: String,
-        targetChatId: String,
-        userId: String,
-    ): Message? = forwardMessageImpl(messageId = messageId, targetChatId = targetChatId, userId = userId)
-
     override suspend fun searchMessages(
         chatId: String,
         query: String,

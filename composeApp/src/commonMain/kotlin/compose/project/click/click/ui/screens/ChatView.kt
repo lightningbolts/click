@@ -39,7 +39,6 @@ import compose.project.click.click.ui.chat.ChatChannelLoadingView // pragma: all
 import compose.project.click.click.ui.chat.ChatHeaderIconButton // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatThreadAutoFollowEffects // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatWarmLoadingView // pragma: allowlist secret
-import compose.project.click.click.ui.chat.ForwardDialog // pragma: allowlist secret
 import compose.project.click.click.ui.chat.GroupMembersPickerContext // pragma: allowlist secret
 import compose.project.click.click.ui.chat.rememberChatMediaPickers // pragma: allowlist secret
 import compose.project.click.click.ui.chat.rememberChatThreadRuntime // pragma: allowlist secret
@@ -137,8 +136,6 @@ fun ChatView(
     // Message context sheet (reactions, edit, delete, copy)
     val contextMenuMessageState = remember { mutableStateOf<MessageWithUser?>(null) }
     var contextMenuMessage by contextMenuMessageState
-    val forwardMessageIdState = remember { mutableStateOf<String?>(null) }
-    var forwardMessageId by forwardMessageIdState
     val expandedPhotoTargetState = remember { mutableStateOf<MessageWithUser?>(null) }
     var expandedPhotoTarget by expandedPhotoTargetState
     val openBeaconDetailIdState = remember { mutableStateOf<String?>(null) }
@@ -555,7 +552,6 @@ fun ChatView(
                                 onOpenDisposableRollForChat = onOpenDisposableRollForChat,
                                 shareableBeacons = shareableBeacons,
                                 mapViewModel = mapViewModel,
-                                forwardMessageIdState = forwardMessageIdState,
                                 contextMenuMessageState = contextMenuMessageState,
                                 expandedPhotoTargetState = expandedPhotoTargetState,
                                 openBeaconDetailIdState = openBeaconDetailIdState,
@@ -563,23 +559,6 @@ fun ChatView(
                                 openBeaconDetailMetadataState = openBeaconDetailMetadataState,
                                 openBeaconDetailContentState = openBeaconDetailContentState,
                             )
-
-                            if (forwardMessageId != null) {
-                                ForwardDialog(
-                                    chatListState = chatListState,
-                                    currentChatId = chatId,
-                                    archivedConnectionIds = archivedConnectionIds,
-                                    hiddenConnectionIds = hiddenConnectionIds,
-                                    onSelect = { targetChatId ->
-                                        val msgId = forwardMessageId
-                                        if (msgId != null) {
-                                            viewModel.forwardMessage(msgId, targetChatId)
-                                        }
-                                        forwardMessageId = null
-                                    },
-                                    onDismiss = { forwardMessageId = null },
-                                )
-                            }
                         }
                     }
                 }
