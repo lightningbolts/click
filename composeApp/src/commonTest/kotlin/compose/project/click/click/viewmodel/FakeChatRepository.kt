@@ -5,6 +5,7 @@ import compose.project.click.click.data.models.ChatWithDetails // pragma: allowl
 import compose.project.click.click.data.models.Connection // pragma: allowlist secret
 import compose.project.click.click.data.models.Message // pragma: allowlist secret
 import compose.project.click.click.data.models.MessageReaction // pragma: allowlist secret
+import compose.project.click.click.data.models.ScheduledMessage // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.repository.ChatMessageSubscription // pragma: allowlist secret
 import compose.project.click.click.data.repository.ChatRealtimeEvent // pragma: allowlist secret
@@ -66,7 +67,27 @@ class FakeChatRepository(
     var onSearchMessagesByConnectionId: suspend (connectionId: String, query: String) -> Pair<String?, List<Message>> =
         { _, _ -> null to emptyList() },
     var onSearchConversationHits: suspend (String) -> List<ConversationSearchHit> = { emptyList() }, // pragma: allowlist secret
+    var onScheduleMessage: suspend (chatId: String, content: String, replyToId: String?, sendAtEpochMs: Long) -> Result<ScheduledMessage> =
+        { _, _, _, _ -> Result.failure(UnsupportedOperationException()) },
+    var onFetchScheduledMessages: suspend (chatId: String) -> Result<List<ScheduledMessage>> = { Result.success(emptyList()) },
+    var onCancelScheduledMessage: suspend (id: String) -> Result<Unit> = { Result.success(Unit) },
 ) : ChatRepository {
+    override suspend fun scheduleMessage(
+        chatId: String,
+        userId: String,
+        content: String,
+        replyToId: String?,
+        sendAtEpochMs: Long,
+        connectionId: String?,
+    ): Result<ScheduledMessage> = onScheduleMessage(chatId, content, replyToId, sendAtEpochMs)
+
+    override suspend fun fetchScheduledMessages(
+        chatId: String,
+        userId: String,
+    ): Result<List<ScheduledMessage>> = onFetchScheduledMessages(chatId)
+
+    override suspend fun cancelScheduledMessage(id: String): Result<Unit> = onCancelScheduledMessage(id)
+
     private val _onlineUsers = MutableStateFlow<Set<String>>(emptySet())
     override val onlineUsers: StateFlow<Set<String>> = _onlineUsers.asStateFlow()
     private val _presenceHealth = MutableStateFlow(PresenceHealth.Idle)
@@ -221,17 +242,26 @@ class FakeChatRepository(
         userId: String,
     ): Boolean = false
 
+    /** "+emoji@messageId" / "-emoji@messageId" in call order, for reaction assertions. */
+    val reactionCalls = mutableListOf<String>()
+
     override suspend fun addReaction(
         messageId: String,
         userId: String,
         reactionType: String,
-    ): Boolean = false
+    ): Boolean {
+        reactionCalls += "+$reactionType@$messageId"
+        return true
+    }
 
     override suspend fun removeReaction(
         messageId: String,
         userId: String,
         reactionType: String,
-    ): Boolean = false
+    ): Boolean {
+        reactionCalls += "-$reactionType@$messageId"
+        return true
+    }
 
     override suspend fun sendTypingStatus(
         chatId: String,

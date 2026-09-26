@@ -208,6 +208,9 @@ internal suspend fun ApiClient.getConnectionTabsImpl(connectionId: String): Resu
     }
 }
 
+/** `users.bio` limit enforced by click-web (migration 20260924120000). */
+const val PROFILE_BIO_MAX_LENGTH: Int = 160
+
 internal suspend fun ApiClient.patchUserProfileImpl(
     userId: String,
     firstName: String? = null,
@@ -216,6 +219,8 @@ internal suspend fun ApiClient.patchUserProfileImpl(
     tags: List<String>? = null,
     birthday: String? = null,
     personalityTags: List<String>? = null,
+    /** Empty string clears the bio (server stores null). */
+    bio: String? = null,
 ): Result<User> {
     if (
         firstName == null &&
@@ -223,7 +228,8 @@ internal suspend fun ApiClient.patchUserProfileImpl(
         image == null &&
         tags == null &&
         birthday == null &&
-        personalityTags == null
+        personalityTags == null &&
+        bio == null
     ) {
         return Result.failure(IllegalArgumentException("No profile fields to update"))
     }
@@ -239,6 +245,7 @@ internal suspend fun ApiClient.patchUserProfileImpl(
             personalityTags?.let { list ->
                 put("personality_tags", JsonArray(list.map { JsonPrimitive(it) }))
             }
+            bio?.let { put("bio", it.trim().take(PROFILE_BIO_MAX_LENGTH)) }
         }
     if (body.isEmpty()) {
         return Result.failure(IllegalArgumentException("No profile fields to update"))

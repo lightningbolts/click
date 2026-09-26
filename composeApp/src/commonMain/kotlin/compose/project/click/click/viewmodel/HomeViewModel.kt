@@ -6,7 +6,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.ClickWebAuthCoordinator // pragma: allowlist secret
-import compose.project.click.click.data.api.ActivityRecapDto // pragma: allowlist secret
 import compose.project.click.click.data.api.ApiClient // pragma: allowlist secret
 import compose.project.click.click.data.api.EventBookmarkItemDto // pragma: allowlist secret
 import compose.project.click.click.data.models.AvailabilityIntentRow // pragma: allowlist secret
@@ -14,12 +13,16 @@ import compose.project.click.click.data.models.Connection // pragma: allowlist s
 import compose.project.click.click.data.models.ConnectionArchiveNotice // pragma: allowlist secret
 import compose.project.click.click.data.models.ConnectionInsights // pragma: allowlist secret
 import compose.project.click.click.data.models.IcebreakerRepository // pragma: allowlist secret
+import compose.project.click.click.data.models.InboxNudge
+import compose.project.click.click.data.models.NudgeAction
 import compose.project.click.click.data.models.PollPairSuggestion // pragma: allowlist secret
 import compose.project.click.click.data.models.ReconnectHelper // pragma: allowlist secret
 import compose.project.click.click.data.models.ReconnectReminder // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.models.collapseOneToOneConnectionsByPeer // pragma: allowlist secret
+import compose.project.click.click.data.models.homePriority
 import compose.project.click.click.data.models.isActiveForUser // pragma: allowlist secret
+import compose.project.click.click.data.models.typed
 import compose.project.click.click.data.repository.ChatRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.ConnectionRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.MapBeaconRepository // pragma: allowlist secret
@@ -68,12 +71,6 @@ sealed class HomeState {
     ) : HomeState()
 }
 
-private fun activityRecapPlaceholder(window: String): ActivityRecapDto =
-    ActivityRecapDto(
-        window = if (window == "day") "day" else "week",
-        since = "",
-    )
-
 /**
  * Home is a relationship surface, not the Clicks Active inbox. Server lifecycle archival only
  * removes an idle edge from the Active tab; it must not erase that relationship from reconnect,
@@ -108,16 +105,98 @@ class HomeViewModel(
         MutableStateFlow(AppDataManager.cachedEventBookmarks.value)
     val savedEventBookmarks: StateFlow<List<EventBookmarkItemDto>> = _savedEventBookmarks.asStateFlow()
 
-    // Keep the recap slot present from the first Home frame. `since == ""` is an explicit
-    // presentation placeholder; the UI renders stable recap geometry until the network value arrives.
-    private val _activityRecap = MutableStateFlow<ActivityRecapDto?>(activityRecapPlaceholder("week"))
-    val activityRecap: StateFlow<ActivityRecapDto?> = _activityRecap.asStateFlow()
+    // Recap: explicit Loading / Loaded / Failed so a slow or failed request never renders zeros.
+    private val recapController =
+        ActivityRecapController(
+            scope = viewModelScope,
+            fetch = { window -> apiClient.getActivityRecap(window) },
+            cache = TokenStorageRecapCache(createTokenStorage()),
+        )
+    val recapState: StateFlow<RecapState> = recapController.state
+    val recapWindow: StateFlow<String> = recapController.window
 
-    private val _recapWindow = MutableStateFlow("week")
-    val recapWindow: StateFlow<String> = _recapWindow.asStateFlow()
-    private val activityRecapCache = mutableMapOf<String, ActivityRecapDto>()
-    private val activityRecapJobs = mutableMapOf<String, Job>()
-    private var activityRecapGeneration = 0L
+    // Opportunity card: the single most urgent relationship moment (iOS HomeFeedModel priority).
+    private val _homeNudge = MutableStateFlow<InboxNudge?>(null)
+    val homeNudge: StateFlow<InboxNudge?> = _homeNudge.asStateFlow()
+    private var homeNudges: List<InboxNudge> = emptyList()
+    private val resolvedNudgeIds = mutableSetOf<String>()
+
+    private fun publishHomeNudge() {
+        _homeNudge.value =
+            homeNudges
+                .filterNot { it.id in resolvedNudgeIds || it.primaryAction() == null }
+                .minByOrNull { it.kind.homePriority() }
+    }
+
+    fun loadHomeNudges() {
+        viewModelScope.launch {
+            apiClient.getInboxNudges().onSuccess { response ->
+                homeNudges = response.nudges.mapNotNull { it.typed() }
+                publishHomeNudge()
+            }
+        }
+    }
+
+    /**
+     * Runs the server side of the card's primary action and returns the navigation the screen should
+     * do (null when the action completes in place: confirm, wave back).
+     */
+    fun actOnHomeNudge(nudge: InboxNudge): NudgeAction? {
+        val action = nudge.primaryAction() ?: return null
+        resolvedNudgeIds += nudge.id
+        publishHomeNudge()
+        viewModelScope.launch {
+            when (action) {
+                is NudgeAction.ConfirmHangout ->
+                    apiClient.confirmHangout(action.confirmationId).fold(
+                        onSuccess = {
+                            _nudgeResult.value =
+                                when {
+                                    it.alreadyLogged -> "Already logged. You two are on the map."
+                                    it.status == "confirmed" -> "Hangout confirmed"
+                                    else -> "Confirmed. Waiting on them."
+                                }
+                        },
+                        onFailure = {
+                            resolvedNudgeIds -= nudge.id
+                            publishHomeNudge()
+                            _nudgeResult.value = "Couldn't confirm that hangout"
+                        },
+                    )
+                is NudgeAction.WaveBack ->
+                    apiClient.wave(action.connectionId).fold(
+                        onSuccess = {
+                            apiClient.markInboxNudgeActed(nudge.id)
+                            _nudgeResult.value = if (it.alreadyWavedToday) "You already waved today" else "Waved back 👋"
+                        },
+                        onFailure = {
+                            resolvedNudgeIds -= nudge.id
+                            publishHomeNudge()
+                            _nudgeResult.value = "Couldn't wave right now"
+                        },
+                    )
+                else -> apiClient.markInboxNudgeActed(nudge.id)
+            }
+        }
+        return when (action) {
+            is NudgeAction.ConfirmHangout, is NudgeAction.WaveBack -> null
+            else -> action
+        }
+    }
+
+    /** Dismiss, or "Not us" for a hangout confirmation (declining resolves it server-side). */
+    fun dismissHomeNudge(nudge: InboxNudge) {
+        resolvedNudgeIds += nudge.id
+        publishHomeNudge()
+        viewModelScope.launch {
+            val hangoutId = nudge.confirmationId
+            if (nudge.resolvedByHangoutEndpoints && hangoutId != null) {
+                apiClient.declineHangout(hangoutId)
+            } else {
+                apiClient.dismissInboxNudge(nudge.id)
+            }
+        }
+    }
 
     private val _dismissedEventReminderKeys = MutableStateFlow<Set<String>>(emptySet())
 
@@ -319,8 +398,10 @@ class HomeViewModel(
                     _connectedUsers.value = emptyMap()
                     _homeAvailabilityIntents.value = emptyList()
                     _homeAvailabilityOverlapMessages.value = emptyList()
-                    invalidateActivityRecaps()
-                    _activityRecap.value = activityRecapPlaceholder(_recapWindow.value)
+                    recapController.reset()
+                    homeNudges = emptyList()
+                    resolvedNudgeIds.clear()
+                    _homeNudge.value = null
                     AvailabilityOverlapCache.clear()
                     ViewerAvailabilityBubblesCache.clear()
                     availabilityIntentRefreshJob?.cancel()
@@ -513,7 +594,8 @@ class HomeViewModel(
             loadReconnectReminders(userId, connections, lastMessageByConnectionId)
             loadHomeEventReminders(userId)
             loadSavedEventBookmarks()
-            prefetchActivityRecaps(userId)
+            recapController.start(userId)
+            loadHomeNudges()
             loadConnectionInsights(userId, connections, lastMessageByConnectionId)
         } catch (e: Exception) {
             println("Error preloading home derived data: ${e.redactedRestMessage()}")
@@ -832,111 +914,18 @@ class HomeViewModel(
         dataLoaded = false
         lastDerivedConnectionSignature = null
         bookmarksFetchPending = true
-        invalidateActivityRecaps()
         AppDataManager.refresh(force = true)
         retrySavedEventBookmarksIfNeeded()
         if (userId != null) {
-            viewModelScope.launch { prefetchActivityRecaps(userId) }
+            recapController.start(userId)
+            loadHomeNudges()
+            recapController.refresh()
         }
     }
 
-    fun setRecapWindow(window: String) {
-        val normalized = if (window == "day") "day" else "week"
-        if (_recapWindow.value == normalized) return
+    fun retryRecap() = recapController.retry()
 
-        _recapWindow.value = normalized
-        activityRecapCache[normalized]?.let { cached ->
-            _activityRecap.value = cached
-            return
-        }
-
-        // Keep the previous recap visible until the requested window arrives. Replacing it with
-        // a zero placeholder caused the "No activity yet" flash on every Day/Week toggle.
-        requestActivityRecap(normalized)
-    }
-
-    private fun invalidateActivityRecaps() {
-        activityRecapGeneration += 1
-        activityRecapJobs.values.forEach { it.cancel() }
-        activityRecapJobs.clear()
-        activityRecapCache.clear()
-    }
-
-    private fun requestActivityRecap(window: String) {
-        val normalized = if (window == "day") "day" else "week"
-        if (activityRecapJobs[normalized]?.isActive == true) return
-
-        val userId = AppDataManager.currentUser.value?.id ?: return
-        val generation = activityRecapGeneration
-        activityRecapJobs[normalized] =
-            viewModelScope.launch {
-                loadActivityRecap(
-                    window = normalized,
-                    expectedUserId = userId,
-                    expectedGeneration = generation,
-                )
-            }
-    }
-
-    private suspend fun prefetchActivityRecaps(userId: String) {
-        val generation = activityRecapGeneration
-        loadActivityRecap(
-            window = _recapWindow.value,
-            expectedUserId = userId,
-            expectedGeneration = generation,
-        )
-        if (
-            generation != activityRecapGeneration ||
-            AppDataManager.currentUser.value?.id != userId
-        ) {
-            return
-        }
-
-        val alternate = if (_recapWindow.value == "day") "week" else "day"
-        if (activityRecapCache[alternate] == null) {
-            loadActivityRecap(
-                window = alternate,
-                expectedUserId = userId,
-                expectedGeneration = generation,
-            )
-        }
-    }
-
-    private suspend fun loadActivityRecap(
-        window: String,
-        expectedUserId: String,
-        expectedGeneration: Long,
-    ) {
-        val normalized = if (window == "day") "day" else "week"
-        if (
-            expectedGeneration != activityRecapGeneration ||
-            AppDataManager.currentUser.value?.id != expectedUserId
-        ) {
-            return
-        }
-
-        apiClient.getActivityRecap(normalized).fold(
-            onSuccess = { recap ->
-                val requestStillOwned =
-                    expectedGeneration == activityRecapGeneration &&
-                        AppDataManager.currentUser.value?.id == expectedUserId
-                if (requestStillOwned) {
-                    activityRecapCache[normalized] = recap
-                    if (_recapWindow.value == normalized) {
-                        _activityRecap.value = recap
-                    }
-                }
-            },
-            onFailure = { e ->
-                val requestStillOwned =
-                    expectedGeneration == activityRecapGeneration &&
-                        AppDataManager.currentUser.value?.id == expectedUserId
-                if (requestStillOwned) {
-                    println("HomeViewModel: recap load failed: ${e.redactedRestMessage()}")
-                }
-            },
-        )
-    }
+    fun setRecapWindow(window: String) = recapController.select(window)
 
     /**
      * Connection junction updates are handled by [RealtimeCoordinator] → [AppDataManager].
@@ -956,8 +945,7 @@ class HomeViewModel(
         availabilityIntentRefreshJob = null
         homeOverlapJob?.cancel()
         homeOverlapJob = null
-        activityRecapJobs.values.forEach { it.cancel() }
-        activityRecapJobs.clear()
+        recapController.reset()
         icebreakerSendCooldownTickerJob?.cancel()
         icebreakerSendCooldownTickerJob = null
         super.onCleared()

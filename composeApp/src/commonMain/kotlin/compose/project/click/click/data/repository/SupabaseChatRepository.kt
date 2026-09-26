@@ -361,6 +361,35 @@ class SupabaseChatRepository(
             connectionId = connectionId,
         )
 
+    override suspend fun scheduleMessage(
+        chatId: String,
+        userId: String,
+        content: String,
+        replyToId: String?,
+        sendAtEpochMs: Long,
+        connectionId: String?,
+    ): Result<ScheduledMessage> =
+        scheduleMessageImpl(
+            chatId = chatId,
+            userId = userId,
+            content = content,
+            replyToId = replyToId,
+            sendAtEpochMs = sendAtEpochMs,
+            connectionId = connectionId,
+        )
+
+    override suspend fun fetchScheduledMessages(
+        chatId: String,
+        userId: String,
+    ): Result<List<ScheduledMessage>> = fetchScheduledMessagesImpl(chatId = chatId, userId = userId)
+
+    override suspend fun cancelScheduledMessage(id: String): Result<Unit> = cancelScheduledMessageImpl(id)
+
+    override suspend fun fetchUpcomingPlans(
+        chatId: String,
+        nowEpochMs: Long,
+    ): List<UpcomingPlan> = fetchUpcomingPlansImpl(chatId, nowEpochMs)
+
     override suspend fun ensureChatForConnection(connectionId: String): Chat? = ensureChatForConnectionImpl(connectionId = connectionId)
 
     override suspend fun ensureChatForGroup(groupId: String): Chat? = ensureChatForGroupImpl(groupId = groupId)

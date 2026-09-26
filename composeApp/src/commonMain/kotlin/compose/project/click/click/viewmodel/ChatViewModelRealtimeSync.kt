@@ -98,6 +98,7 @@ internal fun ChatViewModel.subscribeToNewMessages(
                                             // Never block message visibility on a profile lookup. The row is
                                             // committed immediately, then an unknown sender is hydrated in place.
                                             applyInsertedMessage(vaulted, user, userId)
+                                            if (vaulted.user_id == userId) pruneDeliveredScheduledMessages()
                                             if (cachedUser == null) {
                                                 hydrateInsertedMessageUser(
                                                     messageId = vaulted.id,
@@ -275,6 +276,7 @@ internal suspend fun ChatViewModel.syncActiveChatReactions(chatId: String) {
     val merged = mergeReactionMapsPreserveOptimistic(_messageReactions.value, server)
     if (merged != _messageReactions.value) {
         _messageReactions.value = merged
+        syncAllPlanRemindersImpl()
     }
 }
 

@@ -43,7 +43,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import compose.project.click.click.data.api.ActivityRecapDto // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
 import compose.project.click.click.data.models.PollPairSuggestion // pragma: allowlist secret
 import compose.project.click.click.data.models.heroImageUrl // pragma: allowlist secret
@@ -52,6 +51,8 @@ import compose.project.click.click.events.HomeEventReminder // pragma: allowlist
 import compose.project.click.click.ui.theme.* // pragma: allowlist secret
 import compose.project.click.click.ui.utils.userFacingLabel // pragma: allowlist secret
 import compose.project.click.click.viewmodel.MapLayerFilter // pragma: allowlist secret
+import compose.project.click.click.viewmodel.RecapState
+import compose.project.click.click.viewmodel.visibleRows
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
@@ -481,15 +482,18 @@ fun ExploreNearbyBeaconsSection(
  */
 @Composable
 fun ActivityRecapSection(
-    recap: ActivityRecapDto,
+    state: RecapState,
     window: String,
     onWindowChange: (String) -> Unit,
+    onRetry: () -> Unit,
     modifier: Modifier = Modifier,
     onMakeFirstClick: () -> Unit = {},
 ) {
     val shape = RoundedCornerShape(16.dp)
-    val empty = recap.isAllZero()
-    val peak = recap.peakValue()
+    val loaded = state as? RecapState.Loaded
+    val rows = loaded?.recap?.visibleRows().orEmpty()
+    val empty = loaded != null && rows.isEmpty()
+    val peak = rows.maxOfOrNull { it.second } ?: 0
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -507,7 +511,38 @@ fun ActivityRecapSection(
                 onClick = { onWindowChange("week") },
             )
         }
-        if (empty) {
+        if (state is RecapState.Loading) {
+            Text(
+                "Loading your recap…",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(shape)
+                        .background(MaterialTheme.colorScheme.surfaceContainerLow)
+                        .border(clickBorderWidth(), clickBorderColor(), shape)
+                        .padding(16.dp),
+            )
+        } else if (state is RecapState.Failed) {
+            Row(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(shape)
+                        .background(MaterialTheme.colorScheme.surfaceContainerLow)
+                        .border(clickBorderWidth(), clickBorderColor(), shape)
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "Couldn't load your recap.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.weight(1f),
+                )
+                androidx.compose.material3.TextButton(onClick = onRetry) { Text("Retry") }
+            }
+        } else if (empty) {
             Column(
                 modifier =
                     Modifier
@@ -520,7 +555,7 @@ fun ActivityRecapSection(
             ) {
                 AppEmptyState(
                     icon = Icons.Filled.Groups,
-                    title = "No activity yet",
+                    title = "No activity this ${if (window == "day") "day" else "week"} yet.",
                     body = "Your first Click starts the recap.",
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -548,13 +583,14 @@ fun ActivityRecapSection(
                         .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                RecapStatRow("Connections formed", recap.connectionsFormed, peak)
-                RecapStatRow("Messages sent", recap.messagesSent, peak)
-                RecapStatRow("Messages received", recap.messagesReceived, peak)
-                RecapStatRow("Beacons created", recap.beaconsCreated, peak)
-                RecapStatRow("Events RSVP’d", recap.eventsRsvped, peak)
-                RecapStatRow("Check-ins", recap.eventsCheckedIn, peak)
-                RecapStatRow("Events saved", recap.eventsSaved, peak)
+                rows.forEach { (label, value) -> RecapStatRow(label, value, peak) }
+            }
+            if (loaded?.stale == true) {
+                Text(
+                    "Showing your last saved recap.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
     }

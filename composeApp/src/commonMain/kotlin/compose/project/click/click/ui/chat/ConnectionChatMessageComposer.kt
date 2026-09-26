@@ -22,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Place
@@ -37,6 +38,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -53,7 +55,9 @@ import compose.project.click.click.data.models.MessageWithUser
 import compose.project.click.click.ui.components.ClickButton // pragma: allowlist secret
 import compose.project.click.click.utils.toImageBitmap // pragma: allowlist secret
 import compose.project.click.click.viewmodel.CHAT_STAGED_MEDIA_MAX // pragma: allowlist secret
+import compose.project.click.click.viewmodel.ChatMessagesState
 import compose.project.click.click.viewmodel.ChatViewModel // pragma: allowlist secret
+import kotlinx.coroutines.launch
 
 /**
  * Message composer strip for the chat screen: reply banner, text
@@ -83,7 +87,32 @@ internal fun ConnectionChatMessageComposer(
     val isSending by viewModel.isSending.collectAsState()
     val stagedChatImages by viewModel.stagedChatImages.collectAsState()
     val stagedBeacon by viewModel.stagedBeacon.collectAsState()
+    val scheduledMessages by viewModel.scheduledMessages.collectAsState()
+    val chatMessagesState by viewModel.chatMessagesState.collectAsState()
+    var revivalDismissed by remember(chatDetails.chat.id) { mutableStateOf(false) }
+    val showRevival =
+        !revivalDismissed &&
+            (chatMessagesState as? ChatMessagesState.Success)?.messages.let { messages ->
+                shouldShowGroupRevival(
+                    isGroupChat = isGroupChat,
+                    messageCount = messages?.size ?: 0,
+                    lastMessageEpochMs = messages?.maxOfOrNull { it.message.timeCreated },
+                    nowEpochMs =
+                        kotlinx.datetime.Clock.System
+                            .now()
+                            .toEpochMilliseconds(),
+                )
+            }
     var attachmentMenuExpanded by remember { mutableStateOf(false) }
+    var scheduleSendText by remember { mutableStateOf<String?>(null) }
+    var showScheduledList by remember { mutableStateOf(false) }
+    val composerScope = rememberCoroutineScope()
+    // Send Later is text-only: no edit in progress and nothing staged (iOS ChatView gating).
+    val canScheduleSend =
+        editingMessageId == null &&
+            stagedChatImages.isEmpty() &&
+            stagedBeacon == null &&
+            messageInput.isNotBlank()
     var showBeaconPicker by remember { mutableStateOf(false) }
 
     val focusManager = LocalFocusManager.current
@@ -108,6 +137,21 @@ internal fun ConnectionChatMessageComposer(
                     .fillMaxWidth()
                     .padding(horizontal = composerRowHPad, vertical = composerRowVPad),
         ) {
+            if (showRevival) {
+                GroupRevivalBanner(
+                    groupName = chatDetails.groupClique?.name?.ifBlank { null } ?: "the group",
+                    onPlan = {
+                        revivalDismissed = true
+                        viewModel.openPlanner()
+                    },
+                    onDismiss = { revivalDismissed = true },
+                    modifier = Modifier.padding(bottom = 6.dp),
+                )
+            }
+            ScheduledMessagesBar(
+                messages = scheduledMessages,
+                onClick = { showScheduledList = true },
+            )
             ChatReplyComposerBanner(
                 replyingTo = replyingTo,
                 editingMessageId = editingMessageId,
@@ -262,6 +306,12 @@ internal fun ConnectionChatMessageComposer(
                 sendIcon = if (editingMessageId != null) Icons.Filled.Check else Icons.AutoMirrored.Filled.Send,
                 sendContentDescription = if (editingMessageId != null) "Confirm edit" else "Send",
                 onSend = viewModel::sendMessage,
+                onScheduleSend =
+                    if (canScheduleSend) {
+                        { scheduleSendText = messageInput.trim() }
+                    } else {
+                        null
+                    },
                 attachmentMenuExpanded = attachmentMenuExpanded,
                 onAttachmentMenuExpandedChange = { expanded ->
                     attachmentMenuExpanded = expanded
@@ -279,6 +329,17 @@ internal fun ConnectionChatMessageComposer(
                                 keyboardController?.hide()
                                 focusManager.clearFocus()
                                 onOpenDisposableRoll()
+                            },
+                        )
+                        ChatAttachmentMenuRow(
+                            label = "Plan a hangout",
+                            icon = Icons.Filled.Event,
+                            onClick = {
+                                PlatformHapticsPolicy.lightImpact()
+                                attachmentMenuExpanded = false
+                                keyboardController?.hide()
+                                focusManager.clearFocus()
+                                viewModel.openPlanner()
                             },
                         )
                         ChatAttachmentMenuRow(
@@ -363,6 +424,23 @@ internal fun ConnectionChatMessageComposer(
                     showBeaconPicker = false
                     viewModel.stageBeaconForShare(beacon)
                 },
+            )
+        }
+        scheduleSendText?.let { text ->
+            ScheduleSendSheet(
+                text = text,
+                onDismiss = { scheduleSendText = null },
+                onSchedule = { sendAt ->
+                    scheduleSendText = null
+                    composerScope.launch { viewModel.scheduleMessage(text, sendAt) }
+                },
+            )
+        }
+        if (showScheduledList) {
+            ScheduledMessagesSheet(
+                messages = scheduledMessages,
+                onCancelMessage = viewModel::cancelScheduledMessage,
+                onDismiss = { showScheduledList = false },
             )
         }
     }

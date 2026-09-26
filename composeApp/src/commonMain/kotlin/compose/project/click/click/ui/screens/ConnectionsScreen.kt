@@ -323,6 +323,11 @@ fun ConnectionsScreen(
             userId = profileUserId,
             viewerUserId = userId,
             onDismiss = { profileUserId = null },
+            onPlan = { connectionId ->
+                viewModel.requestPlannerOnOpen(connectionId)
+                profileUserId = null
+                openChat(connectionId)
+            },
             onMessage = {
                 val pid = profileUserId
                 if (pid != null) {
@@ -367,6 +372,15 @@ fun ConnectionsScreen(
                 onMessage =
                     groupPickerContext.chatId?.let { chatId ->
                         {
+                            showGroupMembersSheet = false
+                            groupMembersPickerContext = null
+                            openChat(chatId)
+                        }
+                    },
+                onPlan =
+                    groupPickerContext.chatId?.let { chatId ->
+                        {
+                            viewModel.requestPlannerOnOpen(chatId)
                             showGroupMembersSheet = false
                             groupMembersPickerContext = null
                             openChat(chatId)

@@ -365,6 +365,7 @@ internal fun ChatViewModel.loadChatMessagesImpl(chatId: String) {
         _stagedBeacon.value = null
         _replyingTo.value = null
         _editingMessageId.value = null
+        _scheduledMessages.value = emptyList()
     }
     currentConnectionId = connectionId
     _hasMoreOlderMessages.value = false
@@ -479,6 +480,7 @@ internal fun ChatViewModel.loadChatMessagesImpl(chatId: String) {
                         return@launch
                     }
                 currentApiChatId = persistedApiChatId
+                loadScheduledMessagesImpl(persistedApiChatId)
 
                 if (previousApiChatId != null && previousApiChatId != persistedApiChatId) {
                     chatRepository.leaveChatEphemeralChannel(previousApiChatId)
