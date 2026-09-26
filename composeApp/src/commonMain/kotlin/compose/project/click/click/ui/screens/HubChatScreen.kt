@@ -92,6 +92,8 @@ import compose.project.click.click.ui.chat.MessageActionHandlers // pragma: allo
 import compose.project.click.click.ui.chat.MessageActionSheet // pragma: allowlist secret
 import compose.project.click.click.ui.chat.applyTimestampPeekDragStep // pragma: allowlist secret
 import compose.project.click.click.ui.chat.buildChatTimelineEntriesNewestFirst // pragma: allowlist secret
+import compose.project.click.click.ui.chat.canEditMessage // pragma: allowlist secret
+import compose.project.click.click.ui.chat.canExportMessageMedia // pragma: allowlist secret
 import compose.project.click.click.ui.chat.chatComposerKeyboardMotion // pragma: allowlist secret
 import compose.project.click.click.ui.chat.chatTimelineKeyboardViewport // pragma: allowlist secret
 import compose.project.click.click.ui.chat.chatTimelineShouldFollowKeyboard // pragma: allowlist secret
@@ -516,7 +518,6 @@ fun HubChatScreen(
                                     secureMediaHost = viewModel,
                                     activeChatId = hubIdForSecureMedia,
                                     onToggleReaction = viewModel::toggleReaction,
-                                    onForward = {},
                                     onLongPress = { contextMenuMessage = it },
                                     onSwipeReply = viewModel::startReplyTo,
                                     onPeerAvatarClick = { userId ->
@@ -609,12 +610,13 @@ fun HubChatScreen(
                             selected.message.messageType.lowercase() != "call_log",
                     canReact = canWriteHub,
                     canCopy = true,
-                    canSaveMedia = selected.message.messageType.lowercase() == ChatMessageType.IMAGE,
-                    canShareMedia = selected.message.messageType.lowercase() == ChatMessageType.IMAGE,
-                    canEdit =
-                        canWriteHub &&
-                            selected.isSent &&
-                            selected.message.messageType.lowercase() == ChatMessageType.TEXT,
+                    canSaveMedia =
+                        selected.message.messageType.lowercase() == ChatMessageType.IMAGE &&
+                            canExportMessageMedia(selected.message),
+                    canShareMedia =
+                        selected.message.messageType.lowercase() == ChatMessageType.IMAGE &&
+                            canExportMessageMedia(selected.message),
+                    canEdit = canWriteHub && canEditMessage(selected),
                     canDelete = canWriteHub && selected.isSent,
                 ),
             handlers =

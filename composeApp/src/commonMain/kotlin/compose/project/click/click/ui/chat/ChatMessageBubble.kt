@@ -62,6 +62,7 @@ import compose.project.click.click.data.models.isBeaconChatMessage
 import compose.project.click.click.data.models.isEncryptedMedia
 import compose.project.click.click.data.models.mediaUrlOrNull
 import compose.project.click.click.data.models.parsedMediaMetadata
+import compose.project.click.click.data.models.replyQuoteText
 import compose.project.click.click.data.models.replyRef
 import compose.project.click.click.ui.components.ConnectionListUserAvatarFace
 import compose.project.click.click.ui.theme.PrimaryBlue
@@ -101,7 +102,6 @@ fun ChatMessageBubble(
     currentUserId: String?,
     reactions: List<MessageReaction> = emptyList(),
     onToggleReaction: (String) -> Unit = {},
-    onForward: (String) -> Unit,
     onLongPress: (MessageWithUser) -> Unit = {},
     /** Horizontal swipe toward the center of the screen starts a reply (same idea as drag L→R on incoming). */
     onSwipeReply: (MessageWithUser) -> Unit = {},
@@ -130,6 +130,8 @@ fun ChatMessageBubble(
     onExpandPhoto: (MessageWithUser) -> Unit = {},
     /** Opens the full map beacon detail sheet for a shared beacon card. */
     onOpenBeacon: (Message) -> Unit = {},
+    /** Locally loaded message this row replies to; the quote is rebuilt from it on-device. */
+    replyTarget: Message? = null,
 ) {
     val message = messageWithUser.message
     if (message.messageType == "call_log") {
@@ -469,7 +471,7 @@ fun ChatMessageBubble(
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
                                             )
                                             Text(
-                                                text = r.replyToContent.ifBlank { "Message" },
+                                                text = replyQuoteText(r, replyTarget),
                                                 style = chatBubbleReplySnippetStyle(),
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                                 maxLines = 3,
@@ -547,7 +549,7 @@ fun ChatMessageBubble(
                                                     color = Color.White.copy(alpha = 0.55f),
                                                 )
                                                 Text(
-                                                    text = r.replyToContent.ifBlank { "Message" },
+                                                    text = replyQuoteText(r, replyTarget),
                                                     style = chatBubbleReplySnippetStyle(),
                                                     color = Color.White.copy(alpha = 0.78f),
                                                     maxLines = 3,
@@ -655,7 +657,7 @@ fun ChatMessageBubble(
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                                             )
                                             Text(
-                                                text = r.replyToContent.ifBlank { "Message" },
+                                                text = replyQuoteText(r, replyTarget),
                                                 style = chatBubbleReplySnippetStyle(),
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                                 maxLines = 3,
@@ -736,7 +738,7 @@ fun ChatMessageBubble(
                                                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                                                 )
                                                 Text(
-                                                    text = r.replyToContent.ifBlank { "Message" },
+                                                    text = replyQuoteText(r, replyTarget),
                                                     style = chatBubbleReplySnippetStyle(),
                                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                                     maxLines = 3,

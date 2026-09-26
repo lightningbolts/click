@@ -327,12 +327,6 @@ interface ChatRepository {
         status: String,
     ): Boolean
 
-    suspend fun forwardMessage(
-        messageId: String,
-        targetChatId: String,
-        userId: String,
-    ): Message?
-
     suspend fun searchMessages(
         chatId: String,
         query: String,

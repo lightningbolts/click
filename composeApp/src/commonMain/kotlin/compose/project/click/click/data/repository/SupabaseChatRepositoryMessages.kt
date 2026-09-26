@@ -315,25 +315,6 @@ internal suspend fun SupabaseChatRepository.fetchReactionsForChatImpl(
     }
 }
 
-internal suspend fun SupabaseChatRepository.forwardMessageImpl(
-    messageId: String,
-    targetChatId: String,
-    userId: String,
-): Message? {
-    return try {
-        val authToken = ensureFreshJwtForChat() ?: return null
-        apiClient
-            .forwardMessage(messageId, targetChatId, userId, authToken)
-            .recoverCatching {
-                val retried = refreshedJwtAfterAuthFailure() ?: throw it
-                apiClient.forwardMessage(messageId, targetChatId, userId, retried).getOrThrow()
-            }.getOrElse { null }
-    } catch (e: Exception) {
-        println("Error forwarding message: ${e.redactedRestMessage()}")
-        null
-    }
-}
-
 internal suspend fun SupabaseChatRepository.searchMessagesImpl(
     chatId: String,
     query: String,

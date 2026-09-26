@@ -41,16 +41,18 @@ class ClickFirebaseMessagingService : FirebaseMessagingService() {
         if (type == "incoming_call") {
             return
         }
+        val momentType = type?.takeIf(RelationshipMomentPush::isMoment)
         val allowed =
-            when (type) {
-                "event_reminder" -> prefs.eventReminderNotificationsEnabled
-                "event_teaser" -> prefs.eventTeaserNotificationsEnabled
-                "reconnect_nudge", "shared_upcoming_event" -> prefs.reconnectNudgeNotificationsEnabled
-                "availability_match" -> prefs.availabilityMatchNotificationsEnabled
-                "hub_message" -> prefs.hubMessageNotificationsEnabled
+            when {
+                momentType == null -> allowedForLegacyType(type, prefs)
+                RelationshipMomentPush.usesRelationshipMomentsPreference(momentType) -> prefs.reconnectNudgeNotificationsEnabled
                 else -> prefs.messageNotificationsEnabled
             }
         if (!allowed) {
+            return
+        }
+        if (momentType != null) {
+            showRelationshipMomentPush(momentType, message)
             return
         }
         if (type == "disposable_reveal") {
@@ -162,17 +164,18 @@ class ClickFirebaseMessagingService : FirebaseMessagingService() {
         val chatId = message.data["chat_id"] ?: ""
         val senderName = message.data["sender_name"] ?: "Someone"
         val connectionId = message.data["connection_id"] ?: ""
-        val previewFromServer = message.data["preview_text"]?.trim()?.takeIf { it.isNotEmpty() }
-        val decrypted =
-            decryptMessagePreview(
-                encryptedContent = message.data["encrypted_content"] ?: "",
-                connectionId = connectionId,
-                senderUserId = message.data["sender_user_id"] ?: "",
-                recipientUserId = message.data["recipient_user_id"] ?: "",
-                fallback = "Open Click to view it",
+        // Never fall back to server `preview_text`: see chatPushBody.
+        val body =
+            chatPushBody(
+                decryptedPreview =
+                    decryptMessagePreview(
+                        encryptedContent = message.data["encrypted_content"] ?: "",
+                        connectionId = connectionId,
+                        senderUserId = message.data["sender_user_id"] ?: "",
+                        recipientUserId = message.data["recipient_user_id"] ?: "",
+                    ),
+                messageType = message.data["message_type"],
             )
-        val fallbackPreview = "Open Click to view it"
-        val body = if (decrypted != fallbackPreview) decrypted else previewFromServer ?: decrypted
 
         if (connectionId.isNotBlank() || chatId.isNotBlank()) {
             ChatPushInboxBridge.applyChatMessagePush(
@@ -238,29 +241,62 @@ class ClickFirebaseMessagingService : FirebaseMessagingService() {
         }
     }
 
+    private fun allowedForLegacyType(
+        type: String?,
+        prefs: LocalNotificationPreferences,
+    ): Boolean =
+        when (type) {
+            "event_reminder" -> prefs.eventReminderNotificationsEnabled
+            "event_teaser" -> prefs.eventTeaserNotificationsEnabled
+            "reconnect_nudge", "shared_upcoming_event" -> prefs.reconnectNudgeNotificationsEnabled
+            "availability_match" -> prefs.availabilityMatchNotificationsEnabled
+            "hub_message" -> prefs.hubMessageNotificationsEnabled
+            else -> prefs.messageNotificationsEnabled
+        }
+
+    /** Server-written title/body; tap opens the peer profile, the chat, or the group chat. */
+    private fun showRelationshipMomentPush(
+        type: String,
+        message: RemoteMessage,
+    ) {
+        val title = message.data["title"] ?: message.notification?.title ?: "Click"
+        val body = message.data["body"] ?: message.notification?.body ?: "Open Click"
+        val route = RelationshipMomentPush.route(type, message.data)
+        val launchIntent =
+            when (route) {
+                is RelationshipMomentPush.Route.Profile -> MainActivity.createProfileDeepLinkIntent(this, route.userId)
+                is RelationshipMomentPush.Route.Chat ->
+                    MainActivity.createChatDeepLinkIntent(
+                        context = this,
+                        chatId = route.chatId,
+                        connectionId = route.connectionId,
+                    )
+                RelationshipMomentPush.Route.Home ->
+                    packageManager.getLaunchIntentForPackage(packageName)?.apply {
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                    } ?: return
+            }
+        val tag = message.data["nudge_id"]?.takeIf { it.isNotBlank() } ?: "$type:${message.data["connection_id"].orEmpty()}"
+        showSimplePush(tag = tag, title = title, body = body, launchIntent = launchIntent)
+    }
+
+    /** Local v1 decrypt only; returns null when the preview can't be produced on-device. */
     private fun decryptMessagePreview(
         encryptedContent: String,
         connectionId: String,
         senderUserId: String,
         recipientUserId: String,
-        fallback: String,
-    ): String {
-        if (encryptedContent.isBlank()) return fallback
-
-        if (!MessageCrypto.isEncrypted(encryptedContent)) {
-            return encryptedContent.take(120)
-        }
-
-        if (connectionId.isBlank() || senderUserId.isBlank() || recipientUserId.isBlank()) {
-            return fallback
-        }
+    ): String? {
+        if (encryptedContent.isBlank()) return null
+        if (!MessageCrypto.isAnyE2eeWireContent(encryptedContent)) return encryptedContent
+        if (!MessageCrypto.isEncrypted(encryptedContent)) return null
+        if (connectionId.isBlank() || senderUserId.isBlank() || recipientUserId.isBlank()) return null
 
         return try {
             val keys = MessageCrypto.deriveKeysForConnection(connectionId, listOf(senderUserId, recipientUserId))
-            val decrypted = MessageCrypto.decryptContent(encryptedContent, keys)
-            if (MessageCrypto.isEncrypted(decrypted)) fallback else decrypted.take(120)
+            MessageCrypto.decryptContent(encryptedContent, keys)
         } catch (_: Exception) {
-            fallback
+            null
         }
     }
 

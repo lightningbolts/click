@@ -303,15 +303,27 @@ function resolveUserDisplayName(profile: UserProfileRow | null | undefined): str
   return "Someone";
 }
 
+/** Wire prefixes for E2EE message content (v1 direct, v1 group, v2) and encrypted attachments. */
+const ENCRYPTED_CONTENT_PREFIXES = ["e2e:", "e2e_grp:", "e2e2:", "ccx:"];
+
 function buildMessagePreview(content: string | null): string {
   const normalized = content?.trim();
   if (!normalized) {
     return "Open Click to view the latest message";
   }
-  if (normalized.startsWith("e2e:")) {
+  if (ENCRYPTED_CONTENT_PREFIXES.some((prefix) => normalized.startsWith(prefix))) {
     return "Tap to view message";
   }
   return normalized.slice(0, 120);
+}
+
+/**
+ * Older Android builds sent the decrypted message text as `message_preview`. Never relay it: the
+ * push body must come from ciphertext the recipient decrypts on-device, or a generic label.
+ */
+function withoutClientPreview(data: Record<string, unknown>): Record<string, unknown> {
+  const { message_preview: _ignored, ...rest } = data;
+  return rest;
 }
 
 /** FCM data payload limits — oversized ciphertext breaks client-side decrypt; omit and rely on preview_text. */
@@ -384,16 +396,15 @@ async function resolveChatMessageRequest(
       connectionId = chat?.connection_id ?? null;
     }
 
-    const clientPreview = asNonEmptyString(data.message_preview);
-    const previewText = clientPreview ?? buildMessagePreview(encryptedContent);
+    const previewText = buildMessagePreview(encryptedContent);
     const encryptedForFcm = encryptedContentForFcmPayload(encryptedContent);
 
     return {
       recipient_user_id: providedRecipientUserId,
       title: providedTitle,
-      body: clientPreview ?? providedBody,
+      body: providedBody,
       data: {
-        ...data,
+        ...withoutClientPreview(data),
         sender_name: senderName,
         encrypted_content: encryptedForFcm,
         preview_text: previewText,
@@ -417,7 +428,6 @@ async function resolveChatMessageRequest(
   const chatId = asNonEmptyString(data.chat_id);
   const senderUserId = asNonEmptyString(data.sender_user_id);
   const messageId = asNonEmptyString(data.message_id);
-  const clientMessagePreview = asNonEmptyString(data.message_preview);
 
   if (!chatId || !senderUserId) {
     throw new Error("chat_message pushes require chat_id and sender_user_id");
@@ -498,7 +508,7 @@ async function resolveChatMessageRequest(
   }
 
   const rawContent = messageContent ?? "";
-  const previewText = clientMessagePreview ?? buildMessagePreview(rawContent);
+  const previewText = buildMessagePreview(rawContent);
   const encryptedForFcm = encryptedContentForFcmPayload(rawContent);
 
   return {
@@ -506,7 +516,7 @@ async function resolveChatMessageRequest(
     title: resolvedTitle,
     body: previewText,
     data: {
-      ...(requestBody.data ?? {}),
+      ...withoutClientPreview(requestBody.data ?? {}),
       chat_id: chatId,
       connection_id: chat.connection_id,
       sender_name: senderDisplayName,

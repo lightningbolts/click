@@ -20,10 +20,16 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Cake
 import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.Event
+import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.WavingHand
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -34,31 +40,56 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import compose.project.click.click.data.api.InboxNudgeDto // pragma: allowlist secret
+import compose.project.click.click.data.models.InboxNudge // pragma: allowlist secret
+import compose.project.click.click.data.models.NudgeKind // pragma: allowlist secret
 import compose.project.click.click.ui.theme.clickBorderColor // pragma: allowlist secret
 import compose.project.click.click.ui.theme.clickBorderStroke // pragma: allowlist secret
 import compose.project.click.click.ui.theme.clickBorderWidth // pragma: allowlist secret
 import compose.project.click.click.ui.theme.clickCardSurface // pragma: allowlist secret
 
+private fun NudgeKind.icon(): ImageVector =
+    when (this) {
+        NudgeKind.SHARED_UPCOMING_EVENT -> Icons.Filled.Event
+        NudgeKind.RECONNECT_LULL -> Icons.Filled.Schedule
+        NudgeKind.ANNIVERSARY -> Icons.Filled.Cake
+        NudgeKind.MEMORY_PROMPT -> Icons.Filled.EditNote
+        NudgeKind.GROUP_REVIVAL -> Icons.Filled.Groups
+        NudgeKind.WAVE -> Icons.Filled.WavingHand
+        NudgeKind.HANGOUT_CONFIRM -> Icons.Filled.People
+    }
+
+private fun NudgeKind.primaryIcon(): ImageVector =
+    when (this) {
+        NudgeKind.SHARED_UPCOMING_EVENT -> Icons.Filled.Event
+        NudgeKind.WAVE -> Icons.Filled.WavingHand
+        NudgeKind.HANGOUT_CONFIRM -> Icons.Filled.Check
+        NudgeKind.MEMORY_PROMPT -> Icons.Filled.EditNote
+        NudgeKind.GROUP_REVIVAL -> Icons.Filled.Groups
+        NudgeKind.RECONNECT_LULL, NudgeKind.ANNIVERSARY -> Icons.Filled.Chat
+    }
+
 /**
- * Dismissible reconnect / shared-event row. Same chrome as [ConnectionArchiveWarningBanner].
+ * Dismissible relationship-moment row (reconnect, shared event, anniversary, memory, group revival,
+ * wave, hangout confirmation). Same chrome as [ConnectionArchiveWarningBanner].
+ * For hangout confirmations the secondary button is "Not us" (decline) rather than Dismiss.
  */
 @Composable
 fun InboxNudgeBanner(
-    nudge: InboxNudgeDto,
+    nudge: InboxNudge,
     onOpen: () -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val summary = "${nudge.headline}. ${nudge.body}. Open. Dismiss."
+    val openLabel = nudge.primaryActionTitle
+    val dismissLabel = nudge.secondaryActionTitle
+    val summary = "${nudge.headline}. ${nudge.body}. $openLabel. $dismissLabel."
     val outerShape = RoundedCornerShape(16.dp)
-    val isEvent = nudge.nudgeType == "shared_upcoming_event"
-    val icon = if (isEvent) Icons.Filled.Event else Icons.Filled.Schedule
-    val openLabel = if (isEvent) "Open event" else "Open chat"
+    val icon = nudge.kind.icon()
 
     Column(
         modifier =
@@ -126,7 +157,7 @@ fun InboxNudgeBanner(
                 contentPadding = PaddingValues(vertical = 12.dp),
             ) {
                 Icon(
-                    if (isEvent) Icons.Filled.Event else Icons.Filled.Chat,
+                    nudge.kind.primaryIcon(),
                     contentDescription = null,
                     modifier = Modifier.size(18.dp),
                 )
@@ -150,7 +181,7 @@ fun InboxNudgeBanner(
                     modifier = Modifier.size(18.dp),
                 )
                 Spacer(modifier = Modifier.width(6.dp))
-                Text("Dismiss", fontWeight = FontWeight.SemiBold)
+                Text(dismissLabel, fontWeight = FontWeight.SemiBold)
             }
         }
     }
