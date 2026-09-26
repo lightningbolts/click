@@ -79,6 +79,7 @@ import compose.project.click.click.ui.chat.scrollChatTimelineToMessage // pragma
 import compose.project.click.click.ui.chat.withUnreadDivider
 import compose.project.click.click.ui.components.GlassCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeftPeek // pragma: allowlist secret
+import compose.project.click.click.ui.components.rememberIdentityNames // pragma: allowlist secret
 import compose.project.click.click.ui.theme.* // pragma: allowlist secret
 import compose.project.click.click.viewmodel.ChatMessagesState // pragma: allowlist secret
 import compose.project.click.click.viewmodel.ChatViewModel // pragma: allowlist secret
@@ -658,10 +659,11 @@ internal fun ColumnScope.ChatViewTimelinePane(
                     successMessages.forEach { mwu -> mwu.user.name?.let { put(mwu.user.id, it) } }
                 }
             }
+        val reactorIdentities = rememberIdentityNames(forMessage.map { it.userId }.filterNot { it in names })
         ReactorsSheet(
             reactions = forMessage,
             viewerUserId = currentUserId,
-            nameFor = { id -> names[id] ?: "Someone" },
+            nameFor = { id -> names[id] ?: reactorIdentities[id]?.name ?: "Someone" },
             onRemoveMine = { emoji -> viewModel.toggleReaction(messageId, emoji) },
             onAddReaction = {
                 reactionsForMessageId = null

@@ -659,12 +659,13 @@ fun SavedEventsSection(
     onBookmarkClick: (compose.project.click.click.data.api.EventBookmarkItemDto) -> Unit, // pragma: allowlist secret
     modifier: Modifier = Modifier,
     onExploreMap: () -> Unit = {},
+    title: String = "Saved events",
 ) {
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        SectionHeader(text = "Saved events")
+        SectionHeader(text = title)
         if (bookmarks.isEmpty()) {
             AppEmptyState(
                 icon = Icons.Filled.Event,

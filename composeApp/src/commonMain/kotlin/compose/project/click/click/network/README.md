@@ -83,7 +83,7 @@ Representative endpoints consumed by the app:
 | Profiles | `GET /api/users/{id}/profile`, patch profile |
 | Connections | Proximity bind, timeline, block/report |
 | Map | Beacon CRUD, RSVP, community hub nearby |
-| Business | Waitlist, venue hub setup |
+| Business | Venue hub setup |
 | Telemetry | Friction anomaly POST (also used by `TelemetryBatcher`) |
 
 ### `ChatApiClient` (Ktor)
@@ -117,10 +117,9 @@ All routes use `CLICK_WEB_BASE_URL` (the legacy Flask `BASE_URL` was removed).
 
 1. **Never log raw JWTs or apikey headers** — use `util/redactedRestMessage()`.
 2. **Offline-first** — HTTP failures classified by `isOfflineNetworkFailure()` must not wipe `AppDataManager` caches.
-3. **Ghost mode** — `AppDataManager` blocks background refresh; monitors may still report online but sync is gated upstream.
-4. **No Flask / LAN API bases** — never reintroduce `localhost:5000` or hardcoded developer LAN IPs; companion traffic uses `CLICK_WEB_BASE_URL` only.
-5. **Multipart compatibility** — `ChatApiClient` disposition headers must stay Ktor/Node-compatible (documented in source).
-6. **CLICK_WEB_BASE_URL single source** — change only in `QRModels.kt`; `ApiConfig` re-exports.
+3. **No Flask / LAN API bases** — never reintroduce `localhost:5000` or hardcoded developer LAN IPs; companion traffic uses `CLICK_WEB_BASE_URL` only.
+4. **Multipart compatibility** — `ChatApiClient` disposition headers must stay Ktor/Node-compatible (documented in source).
+5. **CLICK_WEB_BASE_URL single source** — change only in `QRModels.kt`; `ApiConfig` re-exports.
 
 ---
 
@@ -134,7 +133,6 @@ All routes use `CLICK_WEB_BASE_URL` (the legacy Flask `BASE_URL` was removed).
 | `data/api/ApiClient.kt` | Main REST client (~1600 lines) |
 | `data/api/ChatApiClient.kt` | Chat media + message tunnel |
 | `data/api/ApiConfig.kt` | URL configuration |
-| `data/api/WaitlistApiClient.kt` | Waitlist-specific client |
 | `qr/QRModels.kt` | `CLICK_WEB_BASE_URL`, QR payload models |
 | `data/SupabaseConfig.kt` | Supabase Realtime (parallel to HTTP) |
 | `util/NetworkFailureUtil.kt` | Throwable → offline classification |
@@ -196,9 +194,6 @@ Local first; `SupabaseRepository.unifiedSearch` supplement when online.
 
 ### Collaboration sessions & disposable rolls
 Bind-proximity response activates session — network required for bump detection.
-
-### Ghost mode
-Connectivity monitor runs; `AppDataManager` suppresses sync anyway.
 
 ### Block & report
 `user_blocks` insert via API.

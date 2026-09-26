@@ -18,16 +18,19 @@ import compose.project.click.click.data.models.MapBeaconInsert // pragma: allowl
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
 import compose.project.click.click.data.models.parseMapBeaconMetadata // pragma: allowlist secret
 import compose.project.click.click.events.EVENT_CATEGORIES_METADATA_KEY // pragma: allowlist secret
-import compose.project.click.click.events.EVENT_CATEGORY_OPTIONS // pragma: allowlist secret
 import compose.project.click.click.events.EVENT_CHECK_IN_RADIUS_METADATA_KEY // pragma: allowlist secret
 import compose.project.click.click.events.EVENT_VENUE_SCALE_METADATA_KEY // pragma: allowlist secret
+import compose.project.click.click.events.EventEditDraft // pragma: allowlist secret
 import compose.project.click.click.events.EventListingOptions // pragma: allowlist secret
 import compose.project.click.click.events.EventReminderCoordinator // pragma: allowlist secret
+import compose.project.click.click.events.EventReminders // pragma: allowlist secret
 import compose.project.click.click.events.EventSchedule // pragma: allowlist secret
 import compose.project.click.click.events.EventVenueScale // pragma: allowlist secret
+import compose.project.click.click.events.buildEventEditPatch // pragma: allowlist secret
 import compose.project.click.click.events.eventSchedule // pragma: allowlist secret
 import compose.project.click.click.events.eventScheduleMetadata // pragma: allowlist secret
 import compose.project.click.click.events.mergeEventScheduleIntoRaw // pragma: allowlist secret
+import compose.project.click.click.events.sanitizeEventCategories // pragma: allowlist secret
 import compose.project.click.click.events.toMetadataPatch // pragma: allowlist secret
 import compose.project.click.click.events.validateEventSchedule // pragma: allowlist secret
 import compose.project.click.click.ui.components.mapBeaconKindToLayerFilter // pragma: allowlist secret
@@ -36,7 +39,7 @@ import compose.project.click.click.ui.utils.haversineDistance // pragma: allowli
 import compose.project.click.click.ui.utils.mergeMapBeaconLists // pragma: allowlist secret
 import compose.project.click.click.ui.utils.resolveBeaconQuickDistanceMeters // pragma: allowlist secret
 import compose.project.click.click.util.compressOutgoingChatImageForUpload // pragma: allowlist secret
-import compose.project.click.click.util.isValidStreamingUrl // pragma: allowlist secret
+import compose.project.click.click.util.isAllowedMusicShareUrl // pragma: allowlist secret
 import compose.project.click.click.utils.EVENT_FORMATTED_ADDRESS_METADATA_KEY // pragma: allowlist secret
 import compose.project.click.click.utils.EVENT_LOCATION_NAME_METADATA_KEY // pragma: allowlist secret
 import compose.project.click.click.utils.GeocodedPlace // pragma: allowlist secret
@@ -344,6 +347,7 @@ internal fun MapViewModel.deleteOwnedBeaconImpl(
         mapBeaconRepository.deleteBeacon(beaconId).fold(
             onSuccess = {
                 _mapBeacons.update { list -> list.filterNot { it.id == beaconId } }
+                EventReminders.cancel(beaconId)
                 updateBeaconRsvpCache { it - beaconId }
                 updateBeaconEngagementCache { it - beaconId }
                 if (_selection.value is MapSelection.BeaconSelected &&
@@ -387,6 +391,49 @@ internal fun MapViewModel.updateOwnedBeaconDescriptionImpl(
                 _beaconDropFailureToast.value = it.message ?: "Could not update beacon"
                 onFinished(false)
             },
+        )
+    }
+}
+
+/** Full creator edit of an event (F83): optional photo upload, then one PATCH. */
+internal fun MapViewModel.updateOwnedEventImpl(
+    beaconId: String,
+    draft: EventEditDraft,
+    imageBytes: ByteArray?,
+    imageMime: String?,
+    onFinished: (String?) -> Unit,
+) {
+    viewModelScope.launch {
+        val imageUrl =
+            if (imageBytes != null) {
+                val mime = imageMime?.trim().orEmpty().ifEmpty { "image/jpeg" }
+                val compressed = compressOutgoingChatImageForUpload(imageBytes, mime)
+                if (compressed.size > 2_000_000) {
+                    onFinished("Image must be under 2 MB after compression.")
+                    return@launch
+                }
+                apiClient.uploadBeaconImage(compressed, if (compressed !== imageBytes) "image/jpeg" else mime).getOrElse {
+                    onFinished(it.message?.take(180) ?: "Could not upload the photo.")
+                    return@launch
+                }
+            } else {
+                null
+            }
+        mapBeaconRepository.updateBeacon(beaconId, buildEventEditPatch(draft, imageUrl)).fold(
+            onSuccess = { updated ->
+                _mapBeacons.update { list -> mergeMapBeaconLists(list, listOf(updated)) }
+                val merged = _mapBeacons.value.firstOrNull { it.id == beaconId } ?: updated
+                EventReminderCoordinator.rememberBeacon(merged)
+                val sel = _selection.value
+                if (sel is MapSelection.BeaconSelected && sel.beacon.id == beaconId) {
+                    _selection.value = sel.copy(beacon = merged)
+                }
+                ensureEventBeaconDetail(beaconId, seed = merged)
+                AppDataManager.notifyEventEngagementChanged()
+                PlatformHapticsPolicy.successNotification()
+                onFinished(null)
+            },
+            onFailure = { onFinished(it.message?.take(180) ?: "Could not save the event.") },
         )
     }
 }
@@ -440,8 +487,8 @@ internal fun MapViewModel.submitBeaconDropImpl(
                 when (kind) {
                     MapBeaconKind.SOUNDTRACK -> {
                         val url = soundtrackUrl?.trim().orEmpty()
-                        if (!isValidStreamingUrl(url)) {
-                            _beaconInsertError.value = "Enter a valid Spotify, Apple Music, or YouTube link."
+                        if (!isAllowedMusicShareUrl(url)) {
+                            _beaconInsertError.value = "Enter an https Spotify, Apple Music, or YouTube link."
                             onRejectedEarly()
                             onRemoteFinished(false)
                             return@launch
@@ -503,11 +550,7 @@ internal fun MapViewModel.submitBeaconDropImpl(
                             trimmedDescription?.let { put("description", it) }
                             eventScheduleMetadata(schedule).forEach { (k, v) -> put(k, v) }
                             listingOptions.toMetadataPatch().forEach { (k, v) -> put(k, v) }
-                            val categories =
-                                eventCategories
-                                    .map { it.trim() }
-                                    .filter { it.isNotEmpty() && it in EVENT_CATEGORY_OPTIONS }
-                                    .distinct()
+                            val categories = sanitizeEventCategories(eventCategories)
                             if (categories.isNotEmpty()) {
                                 putJsonArray(EVENT_CATEGORIES_METADATA_KEY) {
                                     categories.forEach { add(it) }

@@ -65,7 +65,6 @@ import coil3.compose.AsyncImage
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.models.BeaconVisibilityAudience // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
-import compose.project.click.click.events.EVENT_CATEGORY_OPTIONS // pragma: allowlist secret
 import compose.project.click.click.events.EventListingOptions // pragma: allowlist secret
 import compose.project.click.click.events.EventVenueScale // pragma: allowlist secret
 import compose.project.click.click.events.EventVisibility // pragma: allowlist secret
@@ -378,33 +377,10 @@ fun BeaconDropSheetContent(
                             uiState = schedulePickerUi,
                             includeDialogs = false,
                         )
-                        Text(
-                            text = "Categories",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface,
+                        EventCategoryPicker(
+                            selected = form.eventCategories.toList(),
+                            onChange = { viewModel.setEventCategories(it.toCollection(LinkedHashSet())) },
                         )
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            EVENT_CATEGORY_OPTIONS.forEach { option ->
-                                ClickChip(
-                                    label = option,
-                                    selected = option in form.eventCategories,
-                                    onClick = {
-                                        val next =
-                                            if (option in form.eventCategories) {
-                                                form.eventCategories - option
-                                            } else {
-                                                form.eventCategories + option
-                                            }
-                                        viewModel.setEventCategories(next)
-                                    },
-                                    compact = true,
-                                )
-                            }
-                        }
                         Text(
                             text = "Check-in area",
                             style = MaterialTheme.typography.titleSmall,

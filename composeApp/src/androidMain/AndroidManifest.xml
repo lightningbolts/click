@@ -130,6 +130,35 @@
                     android:host="e"/>
             </intent-filter>
 
+            <!-- In-app routes: click://chat/{id}, profile/{id} (u), myqr, scan, tap, search?q= -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="click" android:host="chat"/>
+                <data android:scheme="click" android:host="profile"/>
+                <data android:scheme="click" android:host="u"/>
+                <data android:scheme="click" android:host="myqr"/>
+                <data android:scheme="click" android:host="scan"/>
+                <data android:scheme="click" android:host="tap"/>
+                <data android:scheme="click" android:host="search"/>
+            </intent-filter>
+
+            <!-- Search Universal Link: https://joinclick.co/search?q= -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data
+                    android:scheme="https"
+                    android:host="joinclick.co"
+                    android:path="/search"/>
+                <data
+                    android:scheme="https"
+                    android:host="www.joinclick.co"
+                    android:path="/search"/>
+            </intent-filter>
+
             <!-- Legacy connect deep link -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW"/>

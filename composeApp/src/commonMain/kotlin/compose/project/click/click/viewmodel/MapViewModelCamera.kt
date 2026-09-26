@@ -106,7 +106,6 @@ internal fun MapViewModel.updateMapDeviceLocationImpl(
     if (!latitude.isFinite() || !longitude.isFinite()) return
     if (latitude == 0.0 && longitude == 0.0) return
     AppDataManager.noteDeviceLocation(latitude, longitude)
-    if (AppDataManager.ghostModeEnabled.value) return
     if (!locationService.hasLocationPermission()) return
 
     val target =

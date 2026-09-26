@@ -22,7 +22,6 @@ The `data` package is Click's **client-side single source of truth (SSOT)**. `Ap
 | Chat/hub thread cache | `_cachedChatThreads`, `_cachedHubThreads` |
 | Map discovery prefetch | `_prefetchedMapBeacons`, `_prefetchedCommunityHubs` |
 | Presence | Delegates to `SupabaseChatRepository.onlineUsers` |
-| Ghost mode | `_ghostModeEnabled` — halts sync, beacon prefetch, presence heartbeat |
 | Push registration | `createPushNotificationService()` after prefs load |
 | Foreground recovery | `handleApplicationForegrounded()` — debounced reload + Realtime reconnect |
 
@@ -113,17 +112,6 @@ Wire serializers handle Supabase JSON quirks (`SemanticLocationWireSerializer`, 
 
 `ContextTagTaxonomy` (`data/ContextTagTaxonomy.kt`) is the canonical list of subjective proximity tags (lecture, cafe, party, gym, etc.). `suggest(locationName, hourOfDay)` ranks tags from reverse-geocoded place names and time of day. Tags flow from `ConnectionState.TaggingContext` into `connections.context_tags` after creation — they are **not** staged in `CachedAppSnapshot`.
 
-### Ghost mode
-
-`toggleGhostMode()` flips `_ghostModeEnabled`. When enabled:
-
-- Background data refresh, beacon prefetch, presence heartbeat, and foreground recovery are **skipped**
-- Map renders grayscale and hides user location dot
-- Cached data remains visible but goes stale
-- Ghost mode **resets on app restart** for safer privacy defaults
-
-Core connections remain map-visible when ghosted off-map (server-side `connection_core` rows). **Memory Map** (`LocationPreferences.showOnMapEnabled`) does **not** hide non-core pins — it is list-sort / Remember Me only. Hidden IDs still apply.
-
 ### Sync epochs
 
 Invalidation uses explicit epoch counters rather than polling:
@@ -181,7 +169,6 @@ Pending connection / proximity handshake queues sync on a `PENDING_SYNC_RETRY_MS
 ## Constraints
 
 - **Singleton lifecycle** — one `AppDataManager`; ViewModels must not duplicate connection state.
-- **Ghost mode is session-scoped** — not persisted; resets on cold start.
 - **30s refresh cooldown** — `REFRESH_COOLDOWN_MS` prevents refresh storms.
 - **15s startup timeout** — `loadAllData()` wrapped in `withTimeout(STARTUP_TIMEOUT_MS)`.
 - **Offline merge policy** — server-empty + local-nonempty preserves local connections.
@@ -233,14 +220,13 @@ Click is a proximity-first social app for real-world connection. Every feature b
 - **Map beacons** — Discover people and events pinned on the social map.
 - **Match alerts** — Get notified when availability and interests align with someone nearby.
 - **Availability intents** — Signal when you're free this week; others can lock overlapping gaps.
-- **Core connections** — Pin your most important people; they stay visible even in ghost mode on the map.
+- **Core connections** — Pin your most important people; they stay at the top of your list.
 
 ### Messaging & Calls
 - **Private encrypted chat** — End-to-end encrypted direct and group threads.
 - **Send photos/files/voice notes** — Rich media in chat with encrypted upload.
 - **Emoji reactions** — React to individual messages.
 - **Typing & read receipts** — Live presence indicators in conversations.
-- **Voice & video calls** — In-app WebRTC calls with push-wake on incoming rings.
 
 ### Memory & Context
 - **Memory Capsules** — Rich encounter records: place, weather, noise, elevation, motion, lux.
@@ -252,7 +238,6 @@ Click is a proximity-first social app for real-world connection. Every feature b
 - **Collaboration sessions & disposable rolls** — Re-bump existing friends to open a time-locked Disposable Roll camera window and squad map drops.
 
 ### Privacy & Safety
-- **Ghost mode** — Pause location sharing and background sync for a private session.
 - **Block & report** — Block users and report abusive behavior.
 
 ### Profile & Account

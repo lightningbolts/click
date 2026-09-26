@@ -31,21 +31,24 @@ interface TokenStorage {
 
     suspend fun getTagsInitialized(): Boolean?
 
-    suspend fun saveDarkModeEnabled(isDarkMode: Boolean)
+    /** Null clears the pref, which means "follow the system theme". */
+    suspend fun saveDarkModeEnabled(isDarkMode: Boolean?)
 
     suspend fun getDarkModeEnabled(): Boolean?
-
-    suspend fun saveHomeLayoutMode(mode: String)
-
-    suspend fun getHomeLayoutMode(): String?
 
     suspend fun saveMessageNotificationsEnabled(enabled: Boolean)
 
     suspend fun getMessageNotificationsEnabled(): Boolean?
 
-    suspend fun saveCallNotificationsEnabled(enabled: Boolean)
+    /** Me → Calendar → Disconnect: Click stops reading the calendar even with permission granted. */
+    suspend fun saveCalendarDisconnected(disconnected: Boolean)
 
-    suspend fun getCallNotificationsEnabled(): Boolean?
+    suspend fun getCalendarDisconnected(): Boolean
+
+    /** Pending connection-flow telemetry (JSON array, bounded); survives restarts until sent. */
+    suspend fun saveTelemetryQueue(json: String?)
+
+    suspend fun getTelemetryQueue(): String?
 
     suspend fun saveAmbientNoiseOptIn(enabled: Boolean)
 

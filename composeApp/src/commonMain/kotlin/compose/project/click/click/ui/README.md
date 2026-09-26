@@ -26,9 +26,9 @@ App.kt (navigation shell)
     │
     ├── screens/ConnectionsScreen ──► ChatView (inline push)
     ├── screens/MapScreen ──────────► MapView + beacon sheets
-    ├── screens/HomeScreen ─────────► photo pile (default) or linear list, availability, reminders
-    ├── screens/SettingsScreen ─────► profile, privacy, ghost mode, interests
-    ├── screens/GlobalSearchScreen ─► unified search chips + results
+    ├── screens/HomeScreen ─────────► linear feed, availability, reminders
+    ├── screens/SettingsScreen ─────► Me: profile, Core, availability, settings pages
+    ├── screens/UnifiedSearchSheet ─► unified search chips + results
     ├── screens/HubChatScreen ──────► community hub ephemeral chat
     └── onboarding/* ───────────────► Welcome → Login → Permissions → Profile
             │
@@ -49,7 +49,6 @@ App.kt (navigation shell)
 | *(convention)* | Screens stay under ~1000 lines: large screens split panels/sections into same-package sibling files (e.g. `MapScreen` + `MapChromeControls`/`EventBeaconDetail`, `ProfileBottomSheet` + `ProfileSheet*`, `SettingsScreen` + `SettingsScreenComponents`) | |
 | `theme/` | Design tokens | `Color.kt`, `Typography.kt`, `PlatformTheme.kt`, `ClickAccent.kt`, `CardVisual.kt`, `Contrast.kt` |
 | `utils/` | Composable-side platform hooks | `LocationPermissionRequester`, `MapUtils` |
-| Home pile | One unified Polaroid stack with interleaved category markers | `homePhotoPileItems`, `PhotoPileStack`, `PhotoCard`, `PilePhysics.kt` (Compose-free 2D dismiss/recall math) |
 
 ### Shared surfaces worth knowing before you write a new one
 
@@ -110,19 +109,19 @@ Hosts the connection list (`ConnectionsListView`), inline chat push (`ChatView` 
 End-to-end encrypted thread UI: text composer, photo/file/voice pickers, emoji reactions, typing indicators, read receipts, vibe check banner, icebreaker prompts, archive warning banner, and collaboration-session disposable-roll entry.
 
 **Map (`MapScreen` + `MapView`)**  
-Discovery map with beacon pins, community hub overlays, ghost-mode grayscale styling, tether compass toast, beacon drop sheets, and `MapDiscoveryLayout` for feed/map split.
+Discovery map with beacon pins, community hub overlays, tether compass toast, beacon drop sheets, and `MapDiscoveryLayout` for feed/map split.
 
-**Settings (`SettingsScreen`)**  
-Profile editing, interests card, availability intents sheet, notification toggles, memory-capsule sensor opt-ins, ghost mode, calendar permissions, web dashboard link, and sign-out.
+**Me (`SettingsScreen` + `MeSections` + `SettingsSubpages`)**  
+The Me tab: identity header (availability pill, photo, bio, Clicks count), Core strip, Free currently / availability / saved events / calendar rows, then Alerts, Privacy & data, Permissions (8 capabilities via `AppPermissions`), Interests and Personality pages, the System/Light/Dark appearance control (`AppAppearance`), web dashboard, sign-out and delete account (both confirmed), and a version footer. Privacy holds the location toggles, encounter context, hangout detection, Permissions and Blocked people.
 
-**Global search (`GlobalSearchScreen` + `UnifiedSearchSheet`)**  
+**Global search (`UnifiedSearchSheet` + `SearchResultViews`)**  
 Filter chips (Active, Archived, Cliques, Nearby, Beacons, Intents), lazy result list, and navigation into chat/map/beacon targets. Message hits include a highlighted snippet and `targetMessageId`; hub hits open `HubChatScreen`.
 
 **Hub chat (`HubChatScreen`)**  
 Venue-scoped ephemeral chat for Community Hubs. Native header clearance grows for the compact subtitle so the tap-to-connect banner is unclipped. Composer / tab-bar docking matches 1:1 chat (`chatThreadKeyboardDock`). Search deep-links scroll + pulse the target message.
 
 **Onboarding**  
-`WelcomeScreen` → `LoginScreen` / `SignUpScreen` → `PermissionsOnboardingScreen` → `LocationOnboardingScreen` → `ProfileBasicsGateScreen` → `InterestTaggingScreen`.
+`WelcomeScreen` → `LoginScreen` / `SignUpScreen` → `ProfileBasicsGateScreen` → `InterestTaggingScreen`. Permissions are requested in context; Me → Privacy → Permissions reviews them.
 
 **Proximity & QR**  
 `NfcScreen`, `QRScannerScreen`, `MyQRCodeScreen`, `QrCodeView`, `AppClipHandshakeScreen` (stripped App Clip surface).
@@ -136,11 +135,10 @@ Venue-scoped ephemeral chat for Community Hubs. Native header clearance grows fo
 
 1. **No business logic in composables** — mutations go through ViewModels or `AppDataManager`; UI only renders state and fires callbacks.
 2. **Offline-first rendering** — screens must render cached `AppDataManager` snapshots when network is down; use `OfflineStatusBanner` where appropriate.
-3. **Ghost mode awareness** — map and discovery UIs must respect `AppDataManager.ghostModeEnabled` (grayscale map, no location dot).
-4. **Platform splits** — map rendering, date/time pickers, back handling, and permission requesters use `expect`/`actual` in `androidMain`/`iosMain`; keep `commonMain` composables platform-agnostic.
-5. **E2EE media never logs raw bytes** — chat media flows through vault helpers in `util/ChatMediaVault.kt`; UI reads `file://` URIs only after decryption.
-6. **Accessibility & keyboard** — chat uses `ScreenChrome` keyboard lift; prefer `collectAsStateLifecycleAware()` (from `util/`) for tab destinations that can be off-screen while composed.
-7. **Minimal scope** — new UI should extend existing glass primitives; do not introduce parallel design systems.
+3. **Platform splits** — map rendering, date/time pickers, back handling, and permission requesters use `expect`/`actual` in `androidMain`/`iosMain`; keep `commonMain` composables platform-agnostic.
+4. **E2EE media never logs raw bytes** — chat media flows through vault helpers in `util/ChatMediaVault.kt`; UI reads `file://` URIs only after decryption.
+5. **Accessibility & keyboard** — chat uses `ScreenChrome` keyboard lift; prefer `collectAsStateLifecycleAware()` (from `util/`) for tab destinations that can be off-screen while composed.
+6. **Minimal scope** — new UI should extend existing glass primitives; do not introduce parallel design systems.
 
 ---
 
@@ -155,7 +153,7 @@ Venue-scoped ephemeral chat for Community Hubs. Native header clearance grows fo
 | `screens/MapScreen.kt` | Map discovery + beacon interactions |
 | `screens/HomeScreen.kt` | Dashboard, event reminders, quick entry |
 | `screens/SettingsScreen.kt` | Profile, privacy, preferences |
-| `screens/GlobalSearchScreen.kt` | Unified search destination |
+| `screens/SearchResultViews.kt` | Search result rows shared by `UnifiedSearchSheet` |
 | `screens/HubChatScreen.kt` | Community Hub chat |
 | `screens/QRScannerScreen.kt` / `MyQRCodeScreen.kt` | QR scan + identity card |
 | `screens/AppClipHandshakeScreen.kt` | iOS App Clip handshake |
@@ -234,16 +232,13 @@ Home and connections surfaces show pending match / proximity-sync states; push n
 `BeaconDropSheet`, `MapBeaconSheetRoot`, `MapScreen` — users drop and discover **event, vibe, and social beacons** on the map.
 
 ### Global search
-`GlobalSearchScreen` + `UnifiedSearchSheet` — search connections, messages (1:1, cliques, hubs), beacons, intents, and archived threads with category chips. Message rows deep-link to `targetMessageId` with timeline scroll + transient highlight.
+`UnifiedSearchSheet` — search connections, messages (1:1, cliques, hubs), beacons, intents, and archived threads with category chips. Message rows deep-link to `targetMessageId` with timeline scroll + transient highlight.
 
 ### Core connections
-`ConnectionsTabControls` — pin core connections to the top of the list. Memory Map off does **not** hide non-core pins; hidden IDs still apply. Cores stay map-visible when ghosted off-map.
+`ConnectionsTabControls` — pin core connections to the top of the list. Memory Map off does **not** hide non-core pins; hidden IDs still apply.
 
 ### Collaboration sessions & disposable rolls
 `DisposableCameraView` + camera filters — after re-encounter bumps, a time-boxed **Disposable Roll** window opens for collaborative photo capture.
-
-### Ghost mode
-`SettingsScreen` toggle → `AppDataManager.toggleGhostMode()` — map goes grayscale, location sharing stops, background sync halts for the session.
 
 ### Block & report
 `ConnectionActionSheet` — Report and Block actions route to repository APIs; blocked users disappear from discovery.
@@ -252,7 +247,7 @@ Home and connections surfaces show pending match / proximity-sync states; push n
 `ProfileBottomSheet`, `TabbedUserProfileSheet` (map pins and the Clicks list both open this wrapper so Timeline / Beacons / Media / Links cannot drift), `InterestEditor`, `SettingsInterestsCard`, `InterestTaggingScreen`. Saved-event taps on Home and Settings share `SavedEventDetailSheet`.
 
 ### Onboarding
-`WelcomeScreen` → auth → `PermissionsOnboardingScreen` → `LocationOnboardingScreen` → `ProfileBasicsGateScreen` → interests.
+`WelcomeScreen` → auth → `ProfileBasicsGateScreen` → interests.
 
 ### Google / email auth
 `LoginScreen`, `SignUpScreen` — Supabase Auth with Google OAuth and email/password.
@@ -267,10 +262,10 @@ UI dismiss hooks (`ChatNotificationDismisser`) and Settings notification toggles
 Settings "Open dashboard" link to `CLICK_WEB_BASE_URL` for business/account management on web.
 
 ### Business insights
-Business-tier surfaces (waitlist dialog, venue QR with `venue_id`) in `WaitlistDialog`, hub creation flows.
+Business-tier surfaces (venue QR with `venue_id`) and hub creation flows.
 
 ### Event reminders
 `HomeScreen` surfaces day-of and one-hour-before reminders from `EventReminderCoordinator` (see `events/`).
 
 ### Achievements & stats
-`ClicktivitiesScreen` + `ClicktivityCard` — gamified activity suggestions and connection stats presentation.
+Home "Your Stats" and the profile friendship section (`FriendshipViews`).

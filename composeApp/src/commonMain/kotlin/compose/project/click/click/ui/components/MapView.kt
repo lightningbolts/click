@@ -301,7 +301,6 @@ expect fun PlatformMap(
     zoom: Double,
     centerLat: Double? = null,
     centerLon: Double? = null,
-    ghostMode: Boolean = false,
     mapGesturesEnabled: Boolean = true,
     /** When false, hides the platform compass so map chrome dropdowns are not obscured. */
     showCompass: Boolean = true,

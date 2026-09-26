@@ -12,11 +12,13 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusManager
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import compose.project.click.click.deeplink.AppDeepLinkRouter // pragma: allowlist secret
 import compose.project.click.click.events.isEventLinkedHubCategory // pragma: allowlist secret
 import compose.project.click.click.navigation.NavigationItem // pragma: allowlist secret
 import compose.project.click.click.navigation.bottomNavItems // pragma: allowlist secret
@@ -154,9 +156,11 @@ internal fun BoxScope.AppBottomChrome(
                 else -> ""
             }
         if (searchUserId.isNotEmpty()) {
+            val initialSearchQuery = remember { AppDeepLinkRouter.takeSearchQuery() }
             UnifiedSearchSheet(
                 onDismissRequest = { showUnifiedSearchSheet = false },
                 userId = searchUserId,
+                initialQuery = initialSearchQuery,
                 onNavigateToChat = { target ->
                     showUnifiedSearchSheet = false
                     if (target.isHub && !target.hubId.isNullOrBlank()) {

@@ -14,8 +14,7 @@ import kotlinx.coroutines.flow.update
  * Design decisions:
  *   * Permissions are **no longer** part of the onboarding graph — they are requested contextually
  *     from the feature that needs them (map, proximity, chat composer, …). See B2 plan.
- *   * The `PermissionsOnboardingScreen` is not deleted; it is relocated to a Settings
- *     "Permissions Hub" in a later commit (C9) so users who denied a permission can review it.
+ *   * Permission review lives in Settings → Permissions.
  *   * The state holder is deliberately **not** a `ViewModel` subclass and has **no Compose or
  *     coroutine imports** beyond `StateFlow`. This keeps it trivially testable in `commonTest`
  *     with no dependency on `viewModelScope`, `Dispatchers`, or Android lifecycle.

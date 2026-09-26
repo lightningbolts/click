@@ -51,23 +51,18 @@ class NotificationRoutingTest {
 
     @Test
     fun momentsRouteToProfileChatOrGroup() {
+        fun route(
+            type: String,
+            data: Map<String, String>,
+        ) = PushRoutes.route(data + ("type" to type))
         val peer = mapOf("peer_user_id" to "u1", "connection_id" to "c1")
-        assertEquals(RelationshipMomentPush.Route.Profile("u1"), RelationshipMomentPush.route("anniversary", peer))
-        assertEquals(RelationshipMomentPush.Route.Profile("u1"), RelationshipMomentPush.route("hangout_confirm", peer))
-        assertEquals(
-            RelationshipMomentPush.Route.Chat(chatId = "", connectionId = "c1"),
-            RelationshipMomentPush.route("wave", peer),
-        )
-        assertEquals(
-            RelationshipMomentPush.Route.Chat(chatId = "g1", connectionId = ""),
-            RelationshipMomentPush.route("group_revival", mapOf("chat_id" to "g1", "group_id" to "grp")),
-        )
-        // Missing peer: fall back to the chat, then Home.
-        assertEquals(
-            RelationshipMomentPush.Route.Chat(chatId = "", connectionId = "c1"),
-            RelationshipMomentPush.route("memory_prompt", mapOf("connection_id" to "c1")),
-        )
-        assertEquals(RelationshipMomentPush.Route.Home, RelationshipMomentPush.route("group_revival", emptyMap()))
+        assertEquals(PushRoute.Profile("u1"), route("anniversary", peer))
+        assertEquals(PushRoute.Profile("u1"), route("hangout_confirm", peer))
+        assertEquals(PushRoute.DirectChat(chatId = "", connectionId = "c1"), route("wave", peer))
+        assertEquals(PushRoute.GroupChat("g1"), route("group_revival", mapOf("chat_id" to "g1", "group_id" to "grp")))
+        // Missing peer or chat: the Clicks list, as on iOS.
+        assertEquals(PushRoute.Connections, route("memory_prompt", mapOf("connection_id" to "c1")))
+        assertEquals(PushRoute.Connections, route("group_revival", emptyMap()))
     }
 
     // endregion
