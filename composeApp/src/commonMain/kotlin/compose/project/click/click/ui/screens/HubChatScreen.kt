@@ -122,6 +122,7 @@ import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeft
 import compose.project.click.click.ui.components.LocalGlassAlertAnimatedDismiss // pragma: allowlist secret
 import compose.project.click.click.ui.components.TabbedUserProfileSheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.UnifiedPopupFormDialog // pragma: allowlist secret
+import compose.project.click.click.ui.components.rememberIdentityNames // pragma: allowlist secret
 import compose.project.click.click.ui.components.sheetPageBackground // pragma: allowlist secret
 import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
 import compose.project.click.click.utils.LocationResult // pragma: allowlist secret
@@ -646,6 +647,7 @@ fun HubChatScreen(
         val occupants by viewModel.occupantCount.collectAsState()
         val members by viewModel.participantIds.collectAsState()
         val eventHub by viewModel.isEventHubFlow.collectAsState()
+        val memberIdentities = rememberIdentityNames(members.filter { viewModel.participantName(it) == null })
         HubInfoSheet(
             name = hubDetails.name,
             category = hubDetails.category,
@@ -654,7 +656,7 @@ fun HubChatScreen(
             occupantCount = occupants,
             memberIds = members,
             viewerUserId = currentUserId,
-            memberName = { id -> viewModel.participantName(id) ?: "Click user" },
+            memberName = { id -> viewModel.participantName(id) ?: memberIdentities[id]?.name ?: "Click user" },
             onCategoryChange = { next -> viewModel.editHubDetails(hubDetails.name, next) },
             onDismiss = { showHubInfo = false },
         )

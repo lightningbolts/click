@@ -8,7 +8,6 @@ import compose.project.click.click.data.models.CachedChatThread // pragma: allow
 import compose.project.click.click.data.models.CachedHubThread // pragma: allowlist secret
 import compose.project.click.click.data.models.ChatWithDetails // pragma: allowlist secret
 import compose.project.click.click.data.models.Connection // pragma: allowlist secret
-import compose.project.click.click.data.models.HomeLayoutMode // pragma: allowlist secret
 import compose.project.click.click.data.models.LocationPreferences // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
 import compose.project.click.click.data.models.Message // pragma: allowlist secret
@@ -516,44 +515,16 @@ object AppDataManager {
         persistActiveHubs()
     }
 
-    // Ghost Mode state - privacy toggle to stop sharing location and halt network requests
-    internal val _ghostModeEnabled = MutableStateFlow(false)
-    val ghostModeEnabled: StateFlow<Boolean> = _ghostModeEnabled.asStateFlow()
-
-    internal val _homeLayoutMode = MutableStateFlow(HomeLayoutMode.LINEAR)
-    val homeLayoutMode: StateFlow<HomeLayoutMode> = _homeLayoutMode.asStateFlow()
-
-    fun setHomeLayoutMode(mode: HomeLayoutMode) {
-        if (_homeLayoutMode.value == mode) return
-        _homeLayoutMode.value = mode
-        scope.launch {
-            tokenStorage.saveHomeLayoutMode(mode.name)
-        }
-    }
-
     internal val _notificationPreferences = MutableStateFlow(NotificationPreferences())
+
+    /** True while an Alerts change is being saved; toggles show it pending and can't be changed again. */
+    internal val _notificationPreferencesSaving = MutableStateFlow(false)
+    val notificationPreferencesSaving: StateFlow<Boolean> = _notificationPreferencesSaving.asStateFlow()
     val notificationPreferences: StateFlow<NotificationPreferences> = _notificationPreferences.asStateFlow()
 
     // Location privacy preferences (persisted to Supabase profile)
     internal val _locationPreferences = MutableStateFlow(LocationPreferences())
     val locationPreferences: StateFlow<LocationPreferences> = _locationPreferences.asStateFlow()
-
-    /**
-     * Toggle Ghost Mode on/off.
-     * When Ghost Mode is enabled:
-     * - Background data refresh is halted
-     * - No new location data is sent to the server
-     * - Existing cached data remains visible but stale
-     *
-     * Ghost mode intentionally resets on app restart for safer privacy defaults.
-     */
-    fun toggleGhostMode() {
-        val newValue = !_ghostModeEnabled.value
-        _ghostModeEnabled.value = newValue
-        println(
-            "AppDataManager: Ghost Mode ${if (newValue) "ENABLED - halting background sync" else "DISABLED - resuming background sync"}",
-        )
-    }
 
     /**
      * OS resumed the UI (foreground). Cancels any in-flight [loadAllData] work, drops stale Ktor /
@@ -648,7 +619,6 @@ object AppDataManager {
 
     /** Map tab or Home — prefetch nearby beacons/hubs (retries once if caches stay empty). */
     fun requestMapDiscoveryPrefetch() {
-        if (_ghostModeEnabled.value) return
         if (beaconPrefetchJob?.isActive == true) return
         val hasDiscoveryCache =
             _prefetchedMapBeacons.value.isNotEmpty() ||
@@ -682,7 +652,6 @@ object AppDataManager {
      * pending sync, network reconnect observers, or the first network-backed [loadAllData].
      */
     fun initializeData() {
-        restoreHomeLayoutMode()
         scope.launch {
             refreshPendingConnectionCount()
         }
@@ -738,12 +707,6 @@ object AppDataManager {
      * Refresh data - respects cooldown to prevent excessive API calls
      */
     fun refresh(force: Boolean = false) {
-        // Block all background refresh when Ghost Mode is active
-        if (_ghostModeEnabled.value) {
-            println("AppDataManager: Skipping refresh - Ghost Mode is active")
-            return
-        }
-
         val now = Clock.System.now().toEpochMilliseconds()
         if (!force && now - lastRefreshTime < REFRESH_COOLDOWN_MS) {
             println("Skipping refresh - cooldown not elapsed")
@@ -934,12 +897,6 @@ object AppDataManager {
         )
     }
 
-    fun setEventTeaserNotificationsEnabled(enabled: Boolean) {
-        updateNotificationPreferences(
-            _notificationPreferences.value.copy(eventTeaserPushEnabled = enabled),
-        )
-    }
-
     fun setReconnectNudgeNotificationsEnabled(enabled: Boolean) {
         updateNotificationPreferences(
             _notificationPreferences.value.copy(reconnectNudgePushEnabled = enabled),
@@ -949,12 +906,6 @@ object AppDataManager {
     fun setMessageNotificationsEnabled(enabled: Boolean) {
         updateNotificationPreferences(
             _notificationPreferences.value.copy(messagePushEnabled = enabled),
-        )
-    }
-
-    fun setCallNotificationsEnabled(enabled: Boolean) {
-        updateNotificationPreferences(
-            _notificationPreferences.value.copy(callPushEnabled = enabled),
         )
     }
 
@@ -979,22 +930,24 @@ object AppDataManager {
 
     /**
      * Whether we should capture GPS at tap/connection time.
-     * False when Ghost Mode is on or when connection snap preference is off.
+     * False when the connection snap preference is off.
      */
-    fun shouldCaptureLocationAtTap(): Boolean {
-        if (_ghostModeEnabled.value) return false
-        return _locationPreferences.value.connectionSnapEnabled
-    }
+    fun shouldCaptureLocationAtTap(): Boolean = _locationPreferences.value.connectionSnapEnabled
 
     /**
      * Update location preferences and persist to Supabase.
      */
     fun updateLocationPreferences(prefs: LocationPreferences) {
         val userId = _currentUser.value?.id ?: return
+        val previous = _locationPreferences.value
         _locationPreferences.value = prefs
         scope.launch {
-            runCatching { supabaseRepository.updateLocationPreferences(userId, prefs) }
-                .onFailure { println("AppDataManager: Failed to save location preferences: ${it.message}") }
+            val saved = runCatching { supabaseRepository.updateLocationPreferences(userId, prefs) }.getOrDefault(false)
+            if (!saved && _locationPreferences.value == prefs) {
+                // Zero rows updated (or a network failure): show server truth, not the optimistic flip.
+                _locationPreferences.value = previous
+                _transientUserMessages.emit("Couldn't save that setting. Please try again.")
+            }
             schedulePersistSnapshot()
         }
     }
@@ -1024,6 +977,13 @@ object AppDataManager {
         firstName: String,
         lastName: String,
     ) = updateProfileNameImpl(firstName = firstName, lastName = lastName)
+
+    /** After `DELETE /api/user/avatar`: initials show everywhere the avatar did. */
+    fun clearProfilePicture() {
+        val latest = _currentUser.value ?: return
+        _currentUser.value = latest.copy(image = null)
+        schedulePersistSnapshot()
+    }
 
     /**
      * Updates the in-memory current user avatar URL after a successful storage upload + DB update.

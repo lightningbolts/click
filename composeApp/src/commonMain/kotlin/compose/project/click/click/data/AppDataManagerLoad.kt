@@ -9,7 +9,6 @@ import compose.project.click.click.data.models.UserAvailability // pragma: allow
 import compose.project.click.click.data.models.resolveDisplayName // pragma: allowlist secret
 import compose.project.click.click.data.realtime.RealtimeCoordinator // pragma: allowlist secret
 import compose.project.click.click.data.repository.NotificationPreferences // pragma: allowlist secret
-import compose.project.click.click.notifications.NotificationRuntimeState // pragma: allowlist secret
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
@@ -26,7 +25,6 @@ internal fun AppDataManager.recoverSessionAndRealtime(
     reason: String,
     forceDataRefresh: Boolean,
 ) {
-    if (_ghostModeEnabled.value) return
     val now = Clock.System.now().toEpochMilliseconds()
     if (now - lastForegroundRecoveryMs < FOREGROUND_RECOVERY_DEBOUNCE_MS) return
     lastForegroundRecoveryMs = now
@@ -235,18 +233,9 @@ internal suspend fun AppDataManager.loadAllData() {
             val localNotificationPreferences =
                 NotificationPreferences(
                     messagePushEnabled = tokenStorage.getMessageNotificationsEnabled() ?: true,
-                    callPushEnabled = tokenStorage.getCallNotificationsEnabled() ?: true,
                 )
             _notificationPreferences.value = localNotificationPreferences
-            NotificationRuntimeState.setNotificationPreferences(
-                messageEnabled = localNotificationPreferences.messagePushEnabled,
-                callEnabled = localNotificationPreferences.callPushEnabled,
-                eventReminderEnabled = localNotificationPreferences.eventReminderPushEnabled,
-                availabilityMatchEnabled = localNotificationPreferences.availabilityMatchPushEnabled,
-                hubMessageEnabled = localNotificationPreferences.hubMessagePushEnabled,
-                eventTeaserEnabled = localNotificationPreferences.eventTeaserPushEnabled,
-                reconnectNudgeEnabled = localNotificationPreferences.reconnectNudgePushEnabled,
-            )
+            syncRuntimeNotificationPreferences(localNotificationPreferences)
 
             // Never trigger an OS permission prompt or device-token registration at login. The
             // Settings toggle is the intentional, contextual entry point for notification setup.
@@ -254,17 +243,8 @@ internal suspend fun AppDataManager.loadAllData() {
             scope.launch {
                 val remotePreferences = notificationPreferencesRepository.fetchPreferences(loadedUser.id)
                 _notificationPreferences.value = remotePreferences
-                NotificationRuntimeState.setNotificationPreferences(
-                    messageEnabled = remotePreferences.messagePushEnabled,
-                    callEnabled = remotePreferences.callPushEnabled,
-                    eventReminderEnabled = remotePreferences.eventReminderPushEnabled,
-                    availabilityMatchEnabled = remotePreferences.availabilityMatchPushEnabled,
-                    hubMessageEnabled = remotePreferences.hubMessagePushEnabled,
-                    eventTeaserEnabled = remotePreferences.eventTeaserPushEnabled,
-                    reconnectNudgeEnabled = remotePreferences.reconnectNudgePushEnabled,
-                )
+                syncRuntimeNotificationPreferences(remotePreferences)
                 tokenStorage.saveMessageNotificationsEnabled(remotePreferences.messagePushEnabled)
-                tokenStorage.saveCallNotificationsEnabled(remotePreferences.callPushEnabled)
 
                 // Remote preference hydration is not user intent. Do not turn it into an OS
                 // notification prompt or an implicit token-registration side effect.

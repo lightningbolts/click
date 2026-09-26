@@ -63,7 +63,7 @@ Session tokens are persisted in two places:
 
 `SupabaseConfig.startSessionSync()` keeps the SDK session and app-owned Keychain record aligned on every `SessionStatus.Authenticated` / refresh event. Legacy plaintext credentials migrate only after a verified Keychain write, then are purged.
 
-`TokenStorage` also persists onboarding state, `CachedAppSnapshot`, pending encounter/connection queues, notification prefs, sensor opt-ins, and ghost-mode-adjacent prefs.
+`TokenStorage` also persists onboarding state, `CachedAppSnapshot`, pending encounter/connection queues, notification prefs, and sensor opt-ins.
 
 ### SupabaseConfig session sync
 
@@ -150,14 +150,13 @@ Click is a proximity-first social app for real-world connection. Every feature b
 - **Map beacons** — Discover people and events pinned on the social map.
 - **Match alerts** — Get notified when availability and interests align with someone nearby.
 - **Availability intents** — Signal when you're free this week; others can lock overlapping gaps.
-- **Core connections** — Pin your most important people; they stay visible even in ghost mode on the map.
+- **Core connections** — Pin your most important people; they stay at the top of your list.
 
 ### Messaging & Calls
 - **Private encrypted chat** — End-to-end encrypted direct and group threads.
 - **Send photos/files/voice notes** — Rich media in chat with encrypted upload.
 - **Emoji reactions** — React to individual messages.
 - **Typing & read receipts** — Live presence indicators in conversations.
-- **Voice & video calls** — In-app WebRTC calls with push-wake on incoming rings.
 
 ### Memory & Context
 - **Memory Capsules** — Rich encounter records: place, weather, noise, elevation, motion, lux.
@@ -169,7 +168,6 @@ Click is a proximity-first social app for real-world connection. Every feature b
 - **Collaboration sessions & disposable rolls** — Re-bump existing friends to open a time-locked Disposable Roll camera window and squad map drops.
 
 ### Privacy & Safety
-- **Ghost mode** — Pause location sharing and background sync for a private session.
 - **Block & report** — Block users and report abusive behavior.
 
 ### Profile & Account

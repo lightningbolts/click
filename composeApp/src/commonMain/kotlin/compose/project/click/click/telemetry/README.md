@@ -180,8 +180,7 @@ Tapping beacon/connect on map → `recordActionTaken()` — clears grass nudge.
 ### Global search
 Leaving map for search may end map session → background flush.
 
-### Core connections / Collaboration / Ghost mode
-Ghost mode stops location updates → hexbin may stay `hx_unknown`.
+### Core connections / Collaboration
 
 ### Block & report / Profile / Onboarding / Auth
 Unrelated.

@@ -1,10 +1,12 @@
+@file:Suppress("ktlint:standard:function-naming")
+
 package compose.project.click.click.ui.components
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudOff
@@ -23,8 +25,12 @@ import compose.project.click.click.ui.theme.clickBorderColor
 fun OfflineStatusBanner(
     modifier: Modifier = Modifier,
     message: String = "Offline",
+    /** Set for "Couldn't refresh · Retry": tapping retries. */
+    onClick: (() -> Unit)? = null,
 ) {
     Surface(
+        onClick = onClick ?: {},
+        enabled = onClick != null,
         modifier = modifier,
         shape = RoundedCornerShape(999.dp),
         color = MaterialTheme.colorScheme.surface,
@@ -43,7 +49,8 @@ fun OfflineStatusBanner(
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(14.dp),
             )
-            androidx.compose.foundation.layout.Spacer(Modifier.size(6.dp))
+            androidx.compose.foundation.layout
+                .Spacer(Modifier.size(6.dp))
             Text(
                 text = message,
                 style = MaterialTheme.typography.labelSmall,

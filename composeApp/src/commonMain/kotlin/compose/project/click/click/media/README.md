@@ -170,9 +170,6 @@ Foundation for all media features — messages are E2EE; media ciphertext stored
 ### Emoji reactions / Typing & read receipts
 Not media playback.
 
-### Voice & video calls
-**Live calls** use LiveKit (`calls/`) — separate from async voice **messages** in this module.
-
 ### Memory Capsules
 May include photos attached to capsule metadata — uses same crypto pipeline when in chat context.
 
@@ -187,9 +184,6 @@ Hub chat may support lighter media — primarily 1:1 E2EE in `ChatViewModel`.
 
 ### Core connections / Collaboration / disposable rolls
 **Disposable camera** captures photos in `ui/camera/` — processed by `DisposableRollFilterProcessor`, uploaded via collaboration flow (related pipeline, separate entry).
-
-### Ghost mode
-Media send/download requires network; ghost mode blocks background sync not already-cached playback.
 
 ### Block & report
 Blocked users' media URLs should not be fetched.

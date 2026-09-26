@@ -7,83 +7,50 @@ package compose.project.click.click.ui.screens
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.EventAvailable
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Place
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.SearchOff
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.data.models.ChatWithDetails
 import compose.project.click.click.data.models.MapBeacon
 import compose.project.click.click.ui.components.AppEmptyState
 import compose.project.click.click.ui.components.ClickListRow
-import compose.project.click.click.ui.components.ClickLogoPulse
-import compose.project.click.click.ui.components.ClickTextFieldMinHeight
 import compose.project.click.click.ui.components.ConnectionListUserAvatarFace
 import compose.project.click.click.ui.components.GlassSheetTokens
 import compose.project.click.click.ui.components.cardVisualBackground
-import compose.project.click.click.ui.components.rememberBottomChromePadding
 import compose.project.click.click.ui.components.rememberCardVisual
 import compose.project.click.click.ui.theme.PrimaryBlue
 import compose.project.click.click.ui.theme.SoftBlue
 import compose.project.click.click.ui.theme.clickBorderColor
 import compose.project.click.click.ui.theme.clickCardSurface
-import compose.project.click.click.ui.theme.clickTextFieldTextStyle
-import compose.project.click.click.viewmodel.GlobalSearchViewModel
 import compose.project.click.click.viewmodel.SearchChatOpenTarget // pragma: allowlist secret
 import compose.project.click.click.viewmodel.SearchResult
 import compose.project.click.click.viewmodel.SearchResultCategory
@@ -93,179 +60,6 @@ import compose.project.click.click.viewmodel.toChatOpenTarget // pragma: allowli
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
-
-/**
- * @deprecated Use [UnifiedSearchSheet] from the current screen context instead of routing here.
- */
-@Deprecated("Replaced by UnifiedSearchSheet")
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun GlobalSearchScreen(
-    userId: String,
-    onNavigateToChat: (SearchChatOpenTarget) -> Unit,
-    onNavigateToMap: () -> Unit,
-    viewModel: GlobalSearchViewModel = viewModel { GlobalSearchViewModel() },
-) {
-    val query by viewModel.searchQuery.collectAsState()
-    val results by viewModel.results.collectAsState()
-    val isSearching by viewModel.isSearching.collectAsState()
-    val visibleCategories by viewModel.visibleCategories.collectAsState()
-
-    val visibleResults =
-        remember(results, visibleCategories) {
-            results.visible(visibleCategories)
-        }
-
-    val focusRequester = remember { FocusRequester() }
-    val focusManager = LocalFocusManager.current
-    val bottomChrome = rememberBottomChromePadding()
-
-    LaunchedEffect(Unit) {
-        focusRequester.requestFocus()
-    }
-
-    DisposableEffect(Unit) {
-        onDispose { viewModel.clear() }
-    }
-
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            Surface(
-                color = clickCardSurface(),
-                tonalElevation = 0.dp,
-                shape = RoundedCornerShape(bottomStart = 20.dp, bottomEnd = 20.dp),
-            ) {
-                Column(
-                    Modifier
-                        .fillMaxWidth()
-                        .windowInsetsPadding(WindowInsets.statusBars),
-                ) {
-                    Row(
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Surface(
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(16.dp),
-                            color = clickCardSurface(),
-                            border = BorderStroke(1.dp, clickBorderColor()),
-                        ) {
-                            TextField(
-                                modifier =
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .heightIn(min = ClickTextFieldMinHeight)
-                                        .focusRequester(focusRequester),
-                                value = query,
-                                onValueChange = { viewModel.search(it, userId) },
-                                singleLine = true,
-                                textStyle = clickTextFieldTextStyle(),
-                                placeholder = {
-                                    Text(
-                                        "Search people, places, interests, intents…",
-                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
-                                    )
-                                },
-                                colors =
-                                    TextFieldDefaults.colors(
-                                        focusedContainerColor = Color.Transparent,
-                                        unfocusedContainerColor = Color.Transparent,
-                                        focusedTextColor = MaterialTheme.colorScheme.onSurface,
-                                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
-                                        cursorColor = PrimaryBlue,
-                                        focusedIndicatorColor = Color.Transparent,
-                                        unfocusedIndicatorColor = Color.Transparent,
-                                    ),
-                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                                keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
-                            )
-                        }
-                    }
-                    Row(
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .horizontalScroll(rememberScrollState())
-                                .padding(horizontal = 10.dp, vertical = 4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        for (cat in SearchResultCategory.entries) {
-                            val selected = cat in visibleCategories
-                            FilterChip(
-                                selected = selected,
-                                onClick = { viewModel.toggleCategory(cat) },
-                                label = { Text(categoryLabel(cat)) },
-                                colors =
-                                    FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = PrimaryBlue,
-                                        selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
-                                        containerColor = clickCardSurface(),
-                                        labelColor = GlassSheetTokens.OnOled(),
-                                    ),
-                            )
-                        }
-                    }
-                }
-            }
-        },
-    ) { paddingValues ->
-        Box(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues)
-                    .imePadding(),
-        ) {
-            when {
-                isSearching -> {
-                    ClickLogoPulse(
-                        modifier = Modifier.align(Alignment.Center),
-                        logoSize = 72.dp,
-                    )
-                }
-
-                query.isBlank() -> {
-                    EmptySearchHint(
-                        modifier = Modifier.align(Alignment.Center),
-                        icon = Icons.Default.Search,
-                        body = "Search for people, cliques, interests,\nintents, messages, or places you've visited",
-                    )
-                }
-
-                results.isEmpty -> {
-                    EmptySearchHint(
-                        modifier = Modifier.align(Alignment.Center),
-                        icon = Icons.Default.SearchOff,
-                        body = "No results for \"$query\"",
-                        dimmed = false,
-                    )
-                }
-
-                visibleResults.isEmpty() -> {
-                    EmptySearchHint(
-                        modifier = Modifier.align(Alignment.Center),
-                        icon = Icons.Default.SearchOff,
-                        body = "No results match the selected filters.\nTry enabling another tab above.",
-                        dimmed = false,
-                    )
-                }
-
-                else -> {
-                    UnifiedSearchResultsList(
-                        results = visibleResults,
-                        bottomPadding = bottomChrome,
-                        onNavigateToChat = onNavigateToChat,
-                        onNavigateToMap = onNavigateToMap,
-                    )
-                }
-            }
-        }
-    }
-}
 
 @Composable
 internal fun categoryLabel(cat: SearchResultCategory): String =

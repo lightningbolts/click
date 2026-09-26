@@ -78,6 +78,7 @@ internal fun AppConnectionOverlays(
     pendingRollSessionState: MutableState<CollaborationSession?>,
     showConnectionDisposableRollState: MutableState<Boolean>,
     disposableRollExitWithScaleState: MutableState<Boolean>,
+    openConnectionDisposableRoll: (String?) -> Unit = {},
 ) {
     var ambientNoiseOptIn by ambientNoiseOptInState
     var connectionRevealState by connectionRevealStateState
@@ -197,6 +198,13 @@ internal fun AppConnectionOverlays(
             connectionId = reconnectConnectionId,
             peerUserId = reconnectPeerId,
             currentUserId = currentUser.id,
+            onSendClickDrop =
+                reconnectConnectionId?.let { connId ->
+                    {
+                        finishWithoutTags()
+                        openConnectionDisposableRoll(connId)
+                    }
+                },
             lockIntentInProgress = calendarLockInProgress,
             onLockIntent = { gap: AvailabilityOverlapGap ->
                 connectionScope.launch {

@@ -814,16 +814,19 @@ class SupabaseRepository {
         prefs: LocationPreferences,
     ): Boolean =
         try {
-            supabase
-                .from("users")
-                .update({
-                    set("location_connection_snap_enabled", prefs.connectionSnapEnabled)
-                    set("location_show_on_map_enabled", prefs.showOnMapEnabled)
-                    set("location_include_in_insights_enabled", prefs.includeInInsightsEnabled)
-                }) {
-                    filter { eq("id", userId) }
-                }
-            true
+            // RLS can turn an update into a silent no-op; only a returned row counts as saved.
+            val updated =
+                supabase
+                    .from("users")
+                    .update({
+                        set("location_connection_snap_enabled", prefs.connectionSnapEnabled)
+                        set("location_show_on_map_enabled", prefs.showOnMapEnabled)
+                        set("location_include_in_insights_enabled", prefs.includeInInsightsEnabled)
+                    }) {
+                        select(Columns.list("id"))
+                        filter { eq("id", userId) }
+                    }.decodeList<kotlinx.serialization.json.JsonObject>()
+            updated.isNotEmpty()
         } catch (e: Exception) {
             println("Error updating location preferences (redacted): ${e.redactedRestMessage()}")
             false

@@ -55,7 +55,6 @@ import kotlin.math.abs
  * - Connection data loading from AppDataManager
  * - Clustering logic based on zoom level
  * - Time-based visual decay (Live/Recent/Archive)
- * - Ghost Mode privacy toggle
  * - Selected connection/cluster state for bottom sheet
  */
 class MapViewModel : ViewModel() {
@@ -82,9 +81,6 @@ class MapViewModel : ViewModel() {
     // Currently selected item (for bottom sheet)
     internal val _selection = MutableStateFlow<MapSelection>(MapSelection.None)
     val selection: StateFlow<MapSelection> = _selection.asStateFlow()
-
-    // Ghost Mode - when enabled, user location is not shared
-    val ghostModeEnabled: StateFlow<Boolean> = AppDataManager.ghostModeEnabled
 
     // Camera target for animations
     internal val _cameraTarget = MutableStateFlow<CameraTarget?>(null)
@@ -446,6 +442,14 @@ class MapViewModel : ViewModel() {
         onFinished: (Boolean) -> Unit = {},
     ) = deleteOwnedBeaconImpl(beaconId = beaconId, onFinished = onFinished)
 
+    fun updateOwnedEvent(
+        beaconId: String,
+        draft: compose.project.click.click.events.EventEditDraft, // pragma: allowlist secret
+        imageBytes: ByteArray?,
+        imageMime: String?,
+        onFinished: (String?) -> Unit,
+    ) = updateOwnedEventImpl(beaconId, draft, imageBytes, imageMime, onFinished)
+
     fun updateOwnedBeaconDescription(
         beaconId: String,
         description: String,
@@ -525,13 +529,6 @@ class MapViewModel : ViewModel() {
      */
     fun clearSelection() {
         _selection.value = MapSelection.None
-    }
-
-    /**
-     * Toggle Ghost Mode on/off
-     */
-    fun toggleGhostMode() {
-        AppDataManager.toggleGhostMode()
     }
 
     fun onCameraAnimationComplete() = onCameraAnimationCompleteImpl()

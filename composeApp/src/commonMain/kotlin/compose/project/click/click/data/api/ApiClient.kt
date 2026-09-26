@@ -714,8 +714,6 @@ class ApiClient {
         cursor: String? = null,
     ): Result<EventBookmarksResponseDto> = getMyEventBookmarksImpl(limit = limit, cursor = cursor)
 
-    suspend fun getEventTeaser(beaconId: String): Result<EventTeaserResponseDto> = getEventTeaserImpl(beaconId)
-
     suspend fun getBeaconGuestList(beaconId: String): Result<GuestListStatusDto> = getBeaconGuestListImpl(beaconId)
 
     suspend fun postBeaconGuestList(
@@ -755,6 +753,18 @@ class ApiClient {
 
     suspend fun clearPresence(): Result<Unit> = clearPresenceImpl()
 
+    suspend fun clearLegacyGhostMode(): Result<Unit> = clearLegacyGhostModeImpl()
+
+    suspend fun getBlockedUsers(): Result<List<BlockedUserDto>> = getBlockedUsersImpl()
+
+    suspend fun unblockUser(userId: String): Result<Unit> = unblockUserImpl(userId)
+
+    suspend fun deleteAvatar(): Result<Unit> = deleteAvatarImpl()
+
+    suspend fun getDisplayNames(userIds: List<String>): Result<DisplayNamesResponseDto> = getDisplayNamesImpl(userIds)
+
+    suspend fun isClickWebReachable(): Boolean = isClickWebReachableImpl()
+
     fun close() {
         if (clickWebClientLazy.isInitialized()) clickWebClientLazy.value.close()
         if (clickWebPlainClientLazy.isInitialized()) clickWebPlainClientLazy.value.close()
@@ -766,6 +776,9 @@ data class MapBeaconPatchBody(
     val metadata: JsonObject? = null,
     @SerialName("show_creator_name") val showCreatorName: Boolean? = null,
     @SerialName("ttl_ms") val ttlMs: Long? = null,
+    /** Event pin move (both or neither); omitted when null because defaults aren't encoded. */
+    val lat: Double? = null,
+    val lon: Double? = null,
 )
 
 @Serializable

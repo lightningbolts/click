@@ -42,7 +42,8 @@ class ClickFirebaseMessagingService : FirebaseMessagingService() {
 
         val type = message.data["type"]
         val prefs = NotificationRuntimeState.getNotificationPreferences()
-        if (type == "incoming_call") {
+        // Calls and Seed-a-Room teasers (spec §56.2.2) are retired; an older server may still send them.
+        if (type == "incoming_call" || type == "event_teaser") {
             return
         }
         val momentType = type?.takeIf(RelationshipMomentPush::isMoment)
@@ -67,18 +68,7 @@ class ClickFirebaseMessagingService : FirebaseMessagingService() {
             val body =
                 message.notification?.body
                     ?: "📸 Your Click Drop has been revealed!"
-            val launchIntent =
-                if (deepLinkId.isNotBlank()) {
-                    MainActivity.createChatDeepLinkIntent(
-                        context = this,
-                        chatId = chatId,
-                        connectionId = connectionId,
-                    )
-                } else {
-                    packageManager.getLaunchIntentForPackage(packageName)?.apply {
-                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                    } ?: return
-                }
+            val launchIntent = launchIntentFor(PushRoutes.route(message.data)) ?: return
             val pendingIntent =
                 PendingIntent.getActivity(
                     this,
@@ -111,52 +101,16 @@ class ClickFirebaseMessagingService : FirebaseMessagingService() {
             return
         }
 
-        if (type == "event_teaser" || type == "event_reminder") {
-            val beaconId = message.data["beacon_id"].orEmpty()
-            val title = message.data["title"] ?: message.notification?.title ?: "Click event"
-            val body = message.data["body"] ?: message.notification?.body ?: "Open Click to view this event"
-            val launchIntent =
-                if (beaconId.isNotBlank()) {
-                    MainActivity.createEventDeepLinkIntent(this, beaconId)
-                } else {
-                    packageManager.getLaunchIntentForPackage(packageName)?.apply {
-                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                    } ?: return
-                }
-            showSimplePush(
-                tag = beaconId.ifBlank { type ?: "event" },
-                title = title,
-                body = body,
-                launchIntent = launchIntent,
-            )
-            return
-        }
-
-        if (type == "reconnect_nudge" || type == "shared_upcoming_event") {
-            val connectionId = message.data["connection_id"].orEmpty()
-            val beaconId = message.data["beacon_id"].orEmpty()
+        // Event reminders, nudges, archive warnings and availability matches carry server text.
+        if (type != null && type in PushRoutes.serverTextTypes) {
             val title = message.data["title"] ?: message.notification?.title ?: "Click"
             val body = message.data["body"] ?: message.notification?.body ?: "Open Click"
-            val launchIntent =
-                if (type == "shared_upcoming_event" && beaconId.isNotBlank()) {
-                    MainActivity.createEventDeepLinkIntent(this, beaconId)
-                } else if (connectionId.isNotBlank()) {
-                    MainActivity.createChatDeepLinkIntent(
-                        context = this,
-                        chatId = "",
-                        connectionId = connectionId,
-                    )
-                } else {
-                    packageManager.getLaunchIntentForPackage(packageName)?.apply {
-                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                    } ?: return
-                }
-            showSimplePush(
-                tag = connectionId.ifBlank { beaconId.ifBlank { type ?: "nudge" } },
-                title = title,
-                body = body,
-                launchIntent = launchIntent,
-            )
+            val launchIntent = launchIntentFor(PushRoutes.route(message.data)) ?: return
+            val tag =
+                listOf("beacon_id", "connection_id", "peer_user_id")
+                    .firstNotNullOfOrNull { key -> message.data[key]?.takeIf { it.isNotBlank() } }
+                    ?: type
+            showSimplePush(tag = "$type:$tag", title = title, body = body, launchIntent = launchIntent)
             return
         }
 
@@ -198,18 +152,7 @@ class ClickFirebaseMessagingService : FirebaseMessagingService() {
         }
 
         val deepLinkId = chatId.ifBlank { connectionId }
-        val launchIntent =
-            if (deepLinkId.isNotBlank()) {
-                MainActivity.createChatDeepLinkIntent(
-                    context = this,
-                    chatId = chatId,
-                    connectionId = connectionId,
-                )
-            } else {
-                packageManager.getLaunchIntentForPackage(packageName)?.apply {
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                } ?: return
-            }
+        val launchIntent = launchIntentFor(PushRoutes.route(message.data)) ?: return
 
         val pendingIntent =
             PendingIntent.getActivity(
@@ -289,7 +232,6 @@ class ClickFirebaseMessagingService : FirebaseMessagingService() {
     ): Boolean =
         when (type) {
             "event_reminder" -> prefs.eventReminderNotificationsEnabled
-            "event_teaser" -> prefs.eventTeaserNotificationsEnabled
             "reconnect_nudge", "shared_upcoming_event" -> prefs.reconnectNudgeNotificationsEnabled
             "availability_match" -> prefs.availabilityMatchNotificationsEnabled
             "hub_message" -> prefs.hubMessageNotificationsEnabled
@@ -303,24 +245,26 @@ class ClickFirebaseMessagingService : FirebaseMessagingService() {
     ) {
         val title = message.data["title"] ?: message.notification?.title ?: "Click"
         val body = message.data["body"] ?: message.notification?.body ?: "Open Click"
-        val route = RelationshipMomentPush.route(type, message.data)
-        val launchIntent =
-            when (route) {
-                is RelationshipMomentPush.Route.Profile -> MainActivity.createProfileDeepLinkIntent(this, route.userId)
-                is RelationshipMomentPush.Route.Chat ->
-                    MainActivity.createChatDeepLinkIntent(
-                        context = this,
-                        chatId = route.chatId,
-                        connectionId = route.connectionId,
-                    )
-                RelationshipMomentPush.Route.Home ->
-                    packageManager.getLaunchIntentForPackage(packageName)?.apply {
-                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                    } ?: return
-            }
+        val launchIntent = launchIntentFor(PushRoutes.route(message.data + ("type" to type))) ?: return
         val tag = message.data["nudge_id"]?.takeIf { it.isNotBlank() } ?: "$type:${message.data["connection_id"].orEmpty()}"
         showSimplePush(tag = tag, title = title, body = body, launchIntent = launchIntent)
     }
+
+    /** The activity intent for a [PushRoute]; null only when the app can't be launched at all. */
+    private fun launchIntentFor(route: PushRoute): Intent? =
+        when (route) {
+            is PushRoute.DirectChat ->
+                MainActivity.createChatDeepLinkIntent(this, chatId = route.chatId, connectionId = route.connectionId)
+            is PushRoute.GroupChat -> MainActivity.createChatDeepLinkIntent(this, chatId = route.chatId)
+            is PushRoute.Event -> MainActivity.createEventDeepLinkIntent(this, route.beaconId)
+            is PushRoute.Hub -> MainActivity.createHubDeepLinkIntent(this, route.hubId)
+            is PushRoute.Profile -> MainActivity.createProfileDeepLinkIntent(this, route.userId)
+            PushRoute.Connections -> MainActivity.createConnectionsIntent(this)
+            PushRoute.OpenApp ->
+                packageManager.getLaunchIntentForPackage(packageName)?.apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                }
+        }
 
     /** Local v1 decrypt only; returns null when the preview can't be produced on-device. */
     private fun decryptMessagePreview(

@@ -23,6 +23,7 @@ import java.util.concurrent.TimeUnit
 private const val REMINDERS_CHANNEL_ID = "click_plans_events"
 private const val REMINDERS_CHANNEL_NAME = "Plans & events"
 private const val WORK_PREFIX = "click_reminder."
+private const val GROUP_TAG_PREFIX = "click_reminder_group."
 
 private const val KEY_ID = "id"
 private const val KEY_TITLE = "title"
@@ -71,6 +72,7 @@ actual object LocalReminderScheduler {
         val request =
             OneTimeWorkRequestBuilder<LocalReminderWorker>()
                 .setInitialDelay(delayMs, TimeUnit.MILLISECONDS)
+                .addTag(GROUP_TAG_PREFIX + reminder.id.substringBefore('.'))
                 .setInputData(
                     workDataOf(
                         KEY_ID to reminder.id,
@@ -90,6 +92,11 @@ actual object LocalReminderScheduler {
     actual fun cancel(id: String) {
         val context = contextOrNull() ?: return
         runCatching { WorkManager.getInstance(context).cancelUniqueWork(WORK_PREFIX + id) }
+    }
+
+    actual fun cancelGroup(group: String) {
+        val context = contextOrNull() ?: return
+        runCatching { WorkManager.getInstance(context).cancelAllWorkByTag(GROUP_TAG_PREFIX + group) }
     }
 }
 

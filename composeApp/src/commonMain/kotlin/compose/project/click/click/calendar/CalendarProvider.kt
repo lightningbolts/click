@@ -19,4 +19,7 @@ expect class CalendarProvider() {
         windowStartEpochMs: Long,
         daysAhead: Int = 7,
     ): CalendarFreeBusy?
+
+    /** Visible calendars on this device (names only); empty without permission. */
+    suspend fun listCalendars(): List<DeviceCalendar>
 }

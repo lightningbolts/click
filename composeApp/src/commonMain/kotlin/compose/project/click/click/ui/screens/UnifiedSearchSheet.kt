@@ -64,7 +64,7 @@ import compose.project.click.click.viewmodel.SearchResultCategory // pragma: all
 import kotlinx.coroutines.delay
 
 /**
- * In-context global search presented as a platform bottom sheet (replaces [GlobalSearchScreen] routing).
+ * In-context global search presented as a platform bottom sheet.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -75,8 +75,13 @@ fun UnifiedSearchSheet(
     onNavigateToMap: () -> Unit,
     onNavigateToBeacon: (beaconId: String) -> Unit = {},
     onNavigateToSettings: () -> Unit = {},
+    /** Prefilled from `click://search?q=` / `joinclick.co/search?q=`. */
+    initialQuery: String? = null,
     viewModel: GlobalSearchViewModel = viewModel { GlobalSearchViewModel() },
 ) {
+    LaunchedEffect(initialQuery, userId) {
+        if (!initialQuery.isNullOrBlank()) viewModel.search(initialQuery, userId)
+    }
     val sheetColor = GlassSheetTokens.OledBlack()
     val onSheet = GlassSheetTokens.OnOled()
     MapBeaconSheetRoot(

@@ -211,9 +211,6 @@ Same offline queue semantics.
 ### Emoji reactions / Typing & read receipts
 Realtime state collected via `collectAsStateLifecycleAware` on connection tab.
 
-### Voice & video calls
-Token read from `TokenStorage` for LiveKit JWT requests.
-
 ### Memory Capsules
 Sensor opt-in prefs in `TokenStorage` (`saveAmbientNoiseOptIn`, `saveBarometricContextOptIn`).
 
@@ -246,9 +243,6 @@ Cached in app snapshot.
 
 ### Collaboration sessions & disposable rolls
 Session data ephemeral in memory; prefs unaffected.
-
-### Ghost mode
-Session toggle in `AppDataManager` (not persisted in TokenStorage — resets on restart for privacy).
 
 ### Block & report
 Redacted API errors in snackbars.

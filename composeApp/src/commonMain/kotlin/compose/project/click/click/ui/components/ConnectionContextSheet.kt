@@ -58,7 +58,10 @@ import compose.project.click.click.calendar.CalendarFreeBusy // pragma: allowlis
 import compose.project.click.click.calendar.CalendarProvider // pragma: allowlist secret
 import compose.project.click.click.calendar.CalendarSyncSession // pragma: allowlist secret
 import compose.project.click.click.calendar.calculateAvailabilityOverlaps // pragma: allowlist secret
+import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.ContextTagTaxonomy // pragma: allowlist secret
+import compose.project.click.click.data.api.ApiClient // pragma: allowlist secret
+import compose.project.click.click.data.api.ConnectionEventRecommendationDto // pragma: allowlist secret
 import compose.project.click.click.data.models.ContextTag // pragma: allowlist secret
 import compose.project.click.click.data.models.FriendshipEncounter
 import compose.project.click.click.data.models.HangoutHighlights
@@ -66,6 +69,7 @@ import compose.project.click.click.data.models.UserProfile // pragma: allowlist 
 import compose.project.click.click.data.models.toFriendshipEncounter
 import compose.project.click.click.data.repository.PROXIMITY_HOST_SELECTION_MAX_PEERS // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseRepository
+import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
 import compose.project.click.click.ui.components.sheetBodyScroll // pragma: allowlist secret
 import compose.project.click.click.ui.theme.MotionTokens // pragma: allowlist secret
 import compose.project.click.click.ui.theme.clickBorderWidth // pragma: allowlist secret
@@ -79,6 +83,31 @@ import kotlinx.datetime.toLocalDateTime
 
 /** Matches DB limits for profile-style short labels (align with interests max length). */
 private const val CUSTOM_CONTEXT_MAX_LENGTH = 25
+
+/** "1st", "2nd", "3rd", "11th", "22nd"… */
+internal fun ordinalLabel(n: Int): String {
+    val suffix =
+        if (n % 100 in 11..13) {
+            "th"
+        } else {
+            when (n % 10) {
+                1 -> "st"
+                2 -> "nd"
+                3 -> "rd"
+                else -> "th"
+            }
+        }
+    return "$n$suffix"
+}
+
+/**
+ * Reconnect subtitle (iOS `PostConnectModel.subtitle`): "3rd time with Sam". [priorEncounters] is the
+ * history before this crossing, which is saved when the sheet is confirmed.
+ */
+internal fun reconnectSubtitle(
+    firstName: String,
+    priorEncounters: Int,
+): String = if (priorEncounters >= 1) "${ordinalLabel(priorEncounters + 1)} time with $firstName" else "Another crossing with $firstName"
 
 enum class ConnectionContextPresentation {
     /** Proximity new edge — “Sparking…” + tag chips + Connect. */
@@ -280,6 +309,8 @@ fun ConnectionContextSheet(
     onLockIntent: ((AvailabilityOverlapGap) -> Unit)? = null,
     selectableUsers: List<UserProfile> = emptyList(),
     initialSelectedUserIds: Set<String> = emptySet(),
+    /** One-to-one only: closes the sheet and opens the Click Drop camera for the new chat (F98). */
+    onSendClickDrop: (() -> Unit)? = null,
 ) {
     val hourOfDay =
         remember {
@@ -293,6 +324,17 @@ fun ConnectionContextSheet(
             ContextTagTaxonomy.suggest(locationName = locationName, hourOfDay = hourOfDay)
         }
     val allTags = remember { ContextTagTaxonomy.all }
+
+    // "Go together?" (F73): an upcoming event both people might like, for one-to-one taps.
+    var eventRecommendation by remember(connectionId) { mutableStateOf<ConnectionEventRecommendationDto?>(null) }
+    var eventRecommendationState by remember(connectionId) { mutableStateOf(0) } // 0 open, 1 sending, 2 done
+    val recommendationScope = rememberCoroutineScope()
+    LaunchedEffect(connectionId, connectedUsers.size) {
+        val connId = connectionId?.takeIf { it.isNotBlank() } ?: return@LaunchedEffect
+        if (connectedUsers.size != 1) return@LaunchedEffect
+        eventRecommendation =
+            runCatching { ApiClient().getConnectionEventRecommendation(connId).getOrNull()?.recommendation }.getOrNull()
+    }
 
     // Souvenir for one-to-one taps (iOS PostConnectView): what this hangout added to the friendship.
     var souvenirEncounters by remember(connectionId, peerUserId) { mutableStateOf<List<FriendshipEncounter>>(emptyList()) }
@@ -349,6 +391,7 @@ fun ConnectionContextSheet(
 
     LaunchedEffect(showCalendarSync) {
         if (!showCalendarSync) return@LaunchedEffect
+        if (createTokenStorage().getCalendarDisconnected()) return@LaunchedEffect
         when (calendarProvider.getAccessStatus()) {
             CalendarAccessStatus.Granted -> calendarAccessGranted = true
             CalendarAccessStatus.Denied,
@@ -427,8 +470,13 @@ fun ConnectionContextSheet(
                         ?.displayName
                         ?.trim()
                         ?.takeIf { it.isNotEmpty() } ?: "them"
-                titleText = "Logging encounter with $name…"
-                subtitleText = "Save this crossing to your shared encounter history."
+                titleText = "Reconnected"
+                subtitleText =
+                    if (souvenirEncounters.isNotEmpty()) {
+                        reconnectSubtitle(name.substringBefore(' '), souvenirEncounters.size)
+                    } else {
+                        "Save this crossing to your shared history with $name."
+                    }
             }
         }
         ConnectionContextPresentation.QrFlow ->
@@ -552,6 +600,32 @@ fun ConnectionContextSheet(
                     highlights = souvenirHighlights,
                     weatherCondition = souvenirCondition,
                 )
+            }
+
+            eventRecommendation?.takeIf { eventRecommendationState != 2 }?.let { rec ->
+                ConnectionEventRecommendationCard(
+                    recommendation = rec,
+                    rsvpInProgress = eventRecommendationState == 1,
+                    onRsvp = {
+                        eventRecommendationState = 1
+                        recommendationScope.launch {
+                            val ok = runCatching { ApiClient().postBeaconRsvp(rec.beaconId).isSuccess }.getOrDefault(false)
+                            eventRecommendationState = if (ok) 2 else 0
+                            if (ok) AppDataManager.notifyEventEngagementChanged()
+                        }
+                    },
+                    onDismiss = { eventRecommendationState = 2 },
+                )
+            }
+
+            if (onSendClickDrop != null && connectedUsers.size == 1 && !connectionId.isNullOrBlank()) {
+                ClickButton(
+                    onClick = onSendClickDrop,
+                    modifier = Modifier.fillMaxWidth(),
+                    variant = ClickButtonVariant.Secondary,
+                ) {
+                    Text("Send a Click Drop", fontWeight = FontWeight.SemiBold)
+                }
             }
 
             if (showPeerMultiSelect) {
