@@ -60,8 +60,12 @@ import compose.project.click.click.calendar.CalendarSyncSession // pragma: allow
 import compose.project.click.click.calendar.calculateAvailabilityOverlaps // pragma: allowlist secret
 import compose.project.click.click.data.ContextTagTaxonomy // pragma: allowlist secret
 import compose.project.click.click.data.models.ContextTag // pragma: allowlist secret
+import compose.project.click.click.data.models.FriendshipEncounter
+import compose.project.click.click.data.models.HangoutHighlights
 import compose.project.click.click.data.models.UserProfile // pragma: allowlist secret
+import compose.project.click.click.data.models.toFriendshipEncounter
 import compose.project.click.click.data.repository.PROXIMITY_HOST_SELECTION_MAX_PEERS // pragma: allowlist secret
+import compose.project.click.click.data.repository.SupabaseRepository
 import compose.project.click.click.ui.components.sheetBodyScroll // pragma: allowlist secret
 import compose.project.click.click.ui.theme.MotionTokens // pragma: allowlist secret
 import compose.project.click.click.ui.theme.clickBorderWidth // pragma: allowlist secret
@@ -289,6 +293,21 @@ fun ConnectionContextSheet(
             ContextTagTaxonomy.suggest(locationName = locationName, hourOfDay = hourOfDay)
         }
     val allTags = remember { ContextTagTaxonomy.all }
+
+    // Souvenir for one-to-one taps (iOS PostConnectView): what this hangout added to the friendship.
+    var souvenirEncounters by remember(connectionId, peerUserId) { mutableStateOf<List<FriendshipEncounter>>(emptyList()) }
+    var souvenirCondition by remember(connectionId, peerUserId) { mutableStateOf<String?>(null) }
+    LaunchedEffect(peerUserId, currentUserId, connectedUsers.size) {
+        val peer = peerUserId?.takeIf { it.isNotBlank() } ?: return@LaunchedEffect
+        val viewer = currentUserId?.takeIf { it.isNotBlank() } ?: return@LaunchedEffect
+        if (connectedUsers.size != 1) return@LaunchedEffect
+        val connection =
+            runCatching { SupabaseRepository().fetchSharedConnectionBetween(viewer, peer, forceNetwork = true) }.getOrNull()
+                ?: return@LaunchedEffect
+        val latestWire = connection.connectionEncounters.maxByOrNull { it.encounteredAt }
+        souvenirCondition = latestWire?.weatherSnapshot?.condition?.takeIf { it.isNotBlank() }
+        souvenirEncounters = connection.connectionEncounters.mapNotNull { it.toFriendshipEncounter() }
+    }
     var selectedTagId by remember { mutableStateOf<String?>(suggestions.firstOrNull()?.id) }
     var customTagText by remember { mutableStateOf("") }
     var ambientNoiseOptIn by remember(initialNoiseOptIn) { mutableStateOf(initialNoiseOptIn) }
@@ -520,6 +539,20 @@ fun ConnectionContextSheet(
                     scaleMax = 1.025f,
                     alphaMin = 0.9f,
                 )
+
+            val souvenirPeer = connectedUsers.singleOrNull()
+            val souvenirLatest = souvenirEncounters.maxByOrNull { it.at }
+            val souvenirHighlights =
+                remember(souvenirEncounters) { HangoutHighlights.of(souvenirEncounters, Clock.System.now()) }
+            if (souvenirPeer != null && souvenirLatest != null && souvenirHighlights != null) {
+                ShareableSouvenir(
+                    peerName = souvenirPeer.displayName.substringBefore(' ').ifBlank { souvenirPeer.displayName },
+                    peerSeed = souvenirPeer.id,
+                    latest = souvenirLatest,
+                    highlights = souvenirHighlights,
+                    weatherCondition = souvenirCondition,
+                )
+            }
 
             if (showPeerMultiSelect) {
                 Text(

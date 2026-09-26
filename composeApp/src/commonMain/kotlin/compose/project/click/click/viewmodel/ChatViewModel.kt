@@ -160,6 +160,46 @@ class ChatViewModel(
     internal val _editingMessageId = MutableStateFlow<String?>(null)
     val editingMessageId: StateFlow<String?> = _editingMessageId.asStateFlow()
 
+    /** One-shot confirmations for the open chat (scheduled, RSVP'd, …); the chat screen toasts them. */
+    internal val _chatNotice = MutableStateFlow<String?>(null)
+    val chatNotice: StateFlow<String?> = _chatNotice.asStateFlow()
+
+    fun clearChatNotice() {
+        _chatNotice.value = null
+    }
+
+    internal val _plannerOpen = MutableStateFlow(false)
+
+    /** The Plan-a-hangout sheet is showing for the open chat. */
+    val plannerOpen: StateFlow<Boolean> = _plannerOpen.asStateFlow()
+
+    fun openPlanner() {
+        _plannerOpen.value = true
+    }
+
+    fun closePlanner() {
+        _plannerOpen.value = false
+    }
+
+    internal val _pendingPlannerChatKey = MutableStateFlow<String?>(null)
+    val pendingPlannerChatKey: StateFlow<String?> = _pendingPlannerChatKey.asStateFlow()
+
+    // ── Send Later ────────────────────────────────────────────────────────────
+    internal val _scheduledMessages =
+        MutableStateFlow<List<compose.project.click.click.data.models.ScheduledMessage>>(emptyList())
+
+    /** The viewer's pending scheduled messages for the open chat, soonest first. */
+    val scheduledMessages: StateFlow<List<compose.project.click.click.data.models.ScheduledMessage>> =
+        _scheduledMessages.asStateFlow()
+
+    /** Returns true when scheduled; on failure [messageSendError] explains why. */
+    suspend fun scheduleMessage(
+        text: String,
+        sendAtEpochMs: Long,
+    ): Boolean = scheduleMessageImpl(text = text, sendAtEpochMs = sendAtEpochMs)
+
+    fun cancelScheduledMessage(id: String) = cancelScheduledMessageImpl(id)
+
     /** Relational archive/hide junction state (shared with Home / Map / ConnectionViewModel). */
     val archivedConnectionIds: StateFlow<Set<String>> = AppDataManager.archivedConnectionIds
     val hiddenConnectionIds: StateFlow<Set<String>> = AppDataManager.hiddenConnectionIds
@@ -614,6 +654,28 @@ class ChatViewModel(
 
     fun sendBeaconMessage(beacon: compose.project.click.click.data.models.MapBeacon) = sendBeaconMessageImpl(beacon = beacon)
 
+    // ── Plans ─────────────────────────────────────────────────────────────────
+
+    /** Sends a hangout plan into the open chat; the sender is RSVP'd going. */
+    fun sendPlan(plan: compose.project.click.click.data.models.HangoutPlan) = sendPlanImpl(plan)
+
+    /** Going / Can't (mutually exclusive); null clears the viewer's RSVP. */
+    fun setPlanRsvp(
+        messageId: String,
+        rsvp: compose.project.click.click.data.models.PlanRsvp?,
+    ) = setPlanRsvpImpl(messageId, rsvp)
+
+    /** Chat to open with the planner showing (profile "Plan" pills, group revival). Consumed by the chat screen. */
+    fun requestPlannerOnOpen(connectionOrChatId: String) {
+        _pendingPlannerChatKey.value = connectionOrChatId
+    }
+
+    fun consumePlannerRequest(connectionOrChatId: String): Boolean {
+        if (_pendingPlannerChatKey.value != connectionOrChatId) return false
+        _pendingPlannerChatKey.value = null
+        return true
+    }
+
     fun sendBeaconMessageToChat(
         chatId: String,
         beacon: compose.project.click.click.data.models.MapBeacon,
@@ -635,6 +697,28 @@ class ChatViewModel(
     // ==================== Nudge ====================
 
     fun sendNudge() = sendNudgeImpl()
+
+    /**
+     * Wave (a server relationship moment, one per pair per day) — replaces the old chat-message
+     * nudge in connection menus, as on iOS. Feedback arrives via [nudgeResult].
+     */
+    fun waveAt(
+        connectionId: String,
+        otherUserName: String,
+    ) {
+        val firstName = otherUserName.trim().substringBefore(' ').ifBlank { "them" }
+        viewModelScope.launch {
+            compose.project.click.click.data.api
+                .ApiClient()
+                .wave(connectionId)
+                .fold(
+                    onSuccess = {
+                        _nudgeResult.value = if (it.alreadyWavedToday) "You already waved today" else "You waved at $firstName 👋"
+                    },
+                    onFailure = { _nudgeResult.value = "Couldn't wave right now" },
+                )
+        }
+    }
 
     fun sendNudgeToChat(
         chatId: String,

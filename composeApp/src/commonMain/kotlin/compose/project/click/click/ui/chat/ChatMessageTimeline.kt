@@ -33,9 +33,11 @@ import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.data.models.ChatMessageType
 import compose.project.click.click.data.models.Connection
+import compose.project.click.click.data.models.HangoutPlan
 import compose.project.click.click.data.models.Message
 import compose.project.click.click.data.models.MessageReaction
 import compose.project.click.click.data.models.MessageWithUser
+import compose.project.click.click.data.models.PlanRsvp
 import compose.project.click.click.data.models.isBeaconChatMessage
 import compose.project.click.click.data.models.replyRef
 import compose.project.click.click.ui.components.DraggableLazyListScrollbar
@@ -185,6 +187,8 @@ internal fun ChatMessageTimeline(
     highlightedMessageId: String? = null,
     interMessageBaseCompact: Dp = ChatInterMessageListBaseCompact,
     enableMessageContextMenu: Boolean = true,
+    onPlanRsvp: (messageId: String, rsvp: PlanRsvp?) -> Unit = { _, _ -> },
+    onShowPlanResponses: (MessageWithUser, HangoutPlan) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
 ) {
     val onToggleReactionState = rememberUpdatedState(onToggleReaction)
@@ -194,6 +198,8 @@ internal fun ChatMessageTimeline(
     val onDownloadAttachmentState = rememberUpdatedState(onDownloadAttachment)
     val onExpandPhotoState = rememberUpdatedState(onExpandPhoto)
     val onOpenBeaconState = rememberUpdatedState(onOpenBeacon)
+    val onPlanRsvpState = rememberUpdatedState(onPlanRsvp)
+    val onShowPlanResponsesState = rememberUpdatedState(onShowPlanResponses)
     val messagesById =
         remember(timelineEntries) {
             timelineEntries
@@ -319,6 +325,8 @@ internal fun ChatMessageTimeline(
                                                 messageWithUser.message.replyRef()?.let {
                                                     messagesById[it.replyToId]
                                                 },
+                                            onPlanRsvp = { id, rsvp -> onPlanRsvpState.value(id, rsvp) },
+                                            onShowPlanResponses = { mwu, plan -> onShowPlanResponsesState.value(mwu, plan) },
                                         )
                                     }
                                 }

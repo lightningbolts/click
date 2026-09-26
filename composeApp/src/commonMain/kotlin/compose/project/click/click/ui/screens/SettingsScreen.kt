@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Height
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -55,9 +56,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
+import compose.project.click.click.data.api.ApiClient
+import compose.project.click.click.data.api.PROFILE_BIO_MAX_LENGTH
 import compose.project.click.click.data.models.AvailabilityIntentRow // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
 import compose.project.click.click.data.repository.AuthRepository // pragma: allowlist secret
+import compose.project.click.click.data.repository.HangoutPresence
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
 import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
 import compose.project.click.click.platformForegroundTickFlow // pragma: allowlist secret
@@ -185,6 +189,8 @@ fun SettingsScreen(
 
     var ambientNoiseOptIn by remember { mutableStateOf(false) }
     var barometricContextOptIn by remember { mutableStateOf(false) }
+    var hangoutDetectionOptIn by remember { mutableStateOf(false) }
+    val relationshipApi = remember { ApiClient() }
     var micPermissionBump by remember { mutableIntStateOf(0) }
     var locationPermissionBump by remember { mutableIntStateOf(0) }
     var microphoneGranted by remember { mutableStateOf(ambientNoiseMonitor.hasPermission) }
@@ -212,6 +218,7 @@ fun SettingsScreen(
     LaunchedEffect(Unit) {
         ambientNoiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: false
         barometricContextOptIn = tokenStorage.getBarometricContextOptIn() ?: false
+        hangoutDetectionOptIn = tokenStorage.getHangoutDetectionOptIn() ?: false
     }
 
     LaunchedEffect(currentUser?.id) {
@@ -221,6 +228,21 @@ fun SettingsScreen(
     }
 
     var showNameDialog by remember { mutableStateOf(false) }
+    var newBio by remember { mutableStateOf("") }
+    var loadedBio by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(showNameDialog, currentUser?.id) {
+        val uid = currentUser?.id ?: return@LaunchedEffect
+        if (!showNameDialog) return@LaunchedEffect
+        val bio =
+            relationshipApi
+            .getUserProfile(uid)
+            .getOrNull()
+            ?.user
+            ?.bio
+            .orEmpty()
+        loadedBio = bio
+        newBio = bio
+    }
     var newFirstName by remember { mutableStateOf("") }
     var newLastName by remember { mutableStateOf("") }
     var showAvailabilityIntentSheet by remember { mutableStateOf(false) }
@@ -594,6 +616,40 @@ fun SettingsScreen(
                             }
                         }
                         item {
+                            // Opt-in "Hanging out?" prompts (iOS Privacy -> Hangout detection).
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                SettingsSectionHeader("Hangouts")
+                                Column(modifier = Modifier.fillMaxWidth()) {
+                                    SettingsToggleRow(
+                                        icon = Icons.Default.People,
+                                        title = "Hangout detection",
+                                        subtitle =
+                                            "When you open Click near a Click who also turned this on, you both get a " +
+                                                "“Hanging out?” prompt to log it. Your approximate location is shared only " +
+                                                "with Click, never shown to anyone, and deleted within 2 hours.",
+                                        checked = hangoutDetectionOptIn,
+                                        onCheckedChange = { enabled ->
+                                            hangoutDetectionOptIn = enabled
+                                            settingsScope.launch {
+                                                HangoutPresence.setEnabled(tokenStorage, relationshipApi, enabled)
+                                                if (enabled && !locationService.hasLocationPermission()) {
+                                                    requestLocationPermissionThen { locationPermissionBump++ }
+                                                }
+                                            }
+                                        },
+                                    )
+                                    if (hangoutDetectionOptIn && locationPermissionState != LocationPermissionDisplayState.Granted) {
+                                        Text(
+                                            text = "Location access is off, so Click can't detect hangouts.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.error,
+                                            modifier = Modifier.padding(start = 36.dp, top = 4.dp, end = 4.dp),
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        item {
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 SettingsSectionHeader("Privacy & data")
                                 Column(modifier = Modifier.fillMaxWidth()) {
@@ -808,7 +864,7 @@ fun SettingsScreen(
                 )
             GlassAlertDialog(
                 onDismissRequest = { showNameDialog = false },
-                title = { Text("Edit name") },
+                title = { Text("Edit profile") },
                 text = {
                     Column(
                         modifier = Modifier.fillMaxWidth(),
@@ -830,6 +886,21 @@ fun SettingsScreen(
                             modifier = Modifier.fillMaxWidth(),
                             colors = nameDialogFieldColors,
                         )
+                        ClickOutlinedTextField(
+                            value = newBio,
+                            onValueChange = { newBio = it.take(PROFILE_BIO_MAX_LENGTH) },
+                            label = { Text("Bio", color = GlassSheetTokens.OnOledMuted()) },
+                            supportingText = {
+                                Text(
+                                    "${newBio.length}/$PROFILE_BIO_MAX_LENGTH",
+                                    color = GlassSheetTokens.OnOledMuted(),
+                                )
+                            },
+                            minLines = 2,
+                            maxLines = 4,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = nameDialogFieldColors,
+                        )
                     }
                 },
                 confirmButton = {
@@ -837,6 +908,15 @@ fun SettingsScreen(
                         onClick = {
                             if (newFirstName.isNotBlank()) {
                                 AppDataManager.updateProfileName(newFirstName, newLastName)
+                                val uid = currentUser?.id
+                                val bio = newBio.trim()
+                                if (uid != null && loadedBio != null && bio != loadedBio?.trim()) {
+                                    settingsScope.launch {
+                                        relationshipApi
+                                            .patchUserProfile(uid, bio = bio)
+                                            .onFailure { toastState.show(settingsScope, "Couldn't save your bio") }
+                                    }
+                                }
                                 showNameDialog = false
                             }
                         },

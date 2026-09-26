@@ -39,8 +39,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.data.models.ChatWithDetails // pragma: allowlist secret
+import compose.project.click.click.data.models.HangoutPlan
 import compose.project.click.click.data.models.IcebreakerPrompt // pragma: allowlist secret
 import compose.project.click.click.data.models.MessageWithUser // pragma: allowlist secret
+import compose.project.click.click.data.models.PlanResponses
 import compose.project.click.click.encounter.EncounterTetherManager // pragma: allowlist secret
 import compose.project.click.click.ui.chat.CHAT_SEARCH_FOCUS_HOLD_MS // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatChromeMotion // pragma: allowlist secret
@@ -50,6 +52,7 @@ import compose.project.click.click.ui.chat.ChatMessageTimeline // pragma: allowl
 import compose.project.click.click.ui.chat.ChatTypingDots // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ConnectionChatMessageComposer // pragma: allowlist secret
 import compose.project.click.click.ui.chat.IcebreakerPanel // pragma: allowlist secret
+import compose.project.click.click.ui.chat.PlanResponsesSheet
 import compose.project.click.click.ui.chat.applyTimestampPeekDragStep // pragma: allowlist secret
 import compose.project.click.click.ui.chat.buildChatTimelineEntriesNewestFirst // pragma: allowlist secret
 import compose.project.click.click.ui.chat.chatBubbleReplySnippetStyle // pragma: allowlist secret
@@ -133,6 +136,8 @@ internal fun ColumnScope.ChatViewTimelinePane(
     var openBeaconDetailFallback by openBeaconDetailFallbackState
     var openBeaconDetailMetadata by openBeaconDetailMetadataState
     var openBeaconDetailContent by openBeaconDetailContentState
+    var planResponsesTarget by remember { mutableStateOf<HangoutPlan?>(null) }
+    var planResponsesMessageId by remember { mutableStateOf<String?>(null) }
     val timelineFollowsKeyboardState =
         rememberChatTimelineKeyboardFollow(
             shouldFollowOnKeyboardOpen = {
@@ -423,6 +428,11 @@ internal fun ColumnScope.ChatViewTimelinePane(
                                 },
                                 isLoadingOlderMessages = isLoadingOlderMessages,
                                 highlightedMessageId = focusedSearchMessageId,
+                                onPlanRsvp = { id, rsvp -> viewModel.setPlanRsvp(id, rsvp) },
+                                onShowPlanResponses = { mwu, plan ->
+                                    planResponsesMessageId = mwu.message.id
+                                    planResponsesTarget = plan
+                                },
                                 modifier =
                                     messageContentModifier
                                         .padding(horizontal = 4.dp)
@@ -533,6 +543,30 @@ internal fun ColumnScope.ChatViewTimelinePane(
                 }
             }
         }
+    }
+    val responsesPlan = planResponsesTarget
+    val responsesMessageId = planResponsesMessageId
+    if (responsesPlan != null && responsesMessageId != null) {
+        val reactions by viewModel.messageReactions.collectAsState()
+        val chatMessagesState by viewModel.chatMessagesState.collectAsState()
+        val names =
+            remember(chatMessagesState, chatDetails) {
+                buildMap {
+                    put(chatDetails.otherUser.id, chatDetails.otherUser.name ?: "Someone")
+                    (chatMessagesState as? ChatMessagesState.Success)?.messages?.forEach { mwu ->
+                        mwu.user.name?.let { put(mwu.user.id, it) }
+                    }
+                }
+            }
+        PlanResponsesSheet(
+            plan = responsesPlan,
+            responses = PlanResponses.from(reactions[responsesMessageId].orEmpty()),
+            nameFor = { id -> if (id == currentUserId) "You" else names[id] ?: "Someone" },
+            onDismiss = {
+                planResponsesTarget = null
+                planResponsesMessageId = null
+            },
+        )
     }
 }
 

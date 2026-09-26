@@ -43,11 +43,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.chat.attachments.AttachmentCrypto // pragma: allowlist secret
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
+import compose.project.click.click.data.models.HangoutHighlights
 import compose.project.click.click.data.models.ProfileTimelineJournalEntry // pragma: allowlist secret
 import compose.project.click.click.data.models.ProfileTimelinePayload // pragma: allowlist secret
 import compose.project.click.click.data.models.UserPublicProfile // pragma: allowlist secret
+import compose.project.click.click.data.models.toFriendshipEncounter
 import compose.project.click.click.data.repository.ConnectionRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
 import compose.project.click.click.deeplink.EventDeepLinkRouter // pragma: allowlist secret
@@ -62,10 +65,13 @@ import compose.project.click.click.util.profileMediaVaultLocalPath // pragma: al
 import compose.project.click.click.util.readProfileMediaVaultBytes // pragma: allowlist secret
 import compose.project.click.click.util.writeProfileMediaVaultBytes // pragma: allowlist secret
 import compose.project.click.click.utils.toImageBitmap // pragma: allowlist secret
+import compose.project.click.click.viewmodel.GroupTogetherViewModel
+import compose.project.click.click.viewmodel.PeerFriendshipViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.datetime.Clock
 
 /**
  * Phase 2 — C13: shared profile bottom sheet displayed when a map pin is tapped.
@@ -91,6 +97,8 @@ fun ProfileBottomSheet(
     onAvatarClick: (() -> Unit)? = null,
     avatarUploading: Boolean = false,
     onOpenBeacon: ((beaconId: String) -> Unit)? = null,
+    /** Opens the chat with the planner showing (the "Plan" pill / "Plan next"). */
+    onPlan: (() -> Unit)? = null,
 ) {
     val visibleTabs =
         remember(state.isGroup) {
@@ -332,6 +340,54 @@ fun ProfileBottomSheet(
         }
         legacyLoading = false
     }
+
+    // Together: friendship stats, pending hangouts, plans.
+    val friendshipConnectionId = state.connectionId?.trim()?.takeIf { it.isNotEmpty() && !state.isGroup }
+    val peerFirstName =
+        state.displayName
+            .trim()
+            .substringBefore(' ')
+            .ifBlank { "them" }
+    val friendshipVm: PeerFriendshipViewModel? =
+        friendshipConnectionId?.let { cid ->
+            viewModel(key = "friendship-$cid") { PeerFriendshipViewModel(cid, peerFirstName) }
+        }
+    val friendshipEncounters =
+        remember(legacyProfile) {
+            legacyProfile
+                ?.sharedConnection
+                ?.connectionEncounters
+                .orEmpty()
+                .mapNotNull { it.toFriendshipEncounter() }
+        }
+    val friendshipChatId =
+        remember(legacyProfile, friendshipConnectionId) {
+            legacyProfile?.sharedConnection?.chat?.id
+                ?: AppDataManager.connections.value
+                    .firstOrNull { it.id == friendshipConnectionId }
+                    ?.chat
+                    ?.id
+        }
+    LaunchedEffect(friendshipVm, friendshipChatId) { friendshipVm?.refresh(friendshipChatId) }
+    val friendshipEncountersChanged = friendshipVm?.encountersChanged?.collectAsState()?.value ?: 0
+    LaunchedEffect(friendshipEncountersChanged) {
+        if (friendshipEncountersChanged == 0) return@LaunchedEffect
+        val uid = state.userId?.trim() ?: return@LaunchedEffect
+        runCatching { withContext(Dispatchers.Default) { repository.refreshUserPublicProfile(effectiveViewerUserId, uid) } }
+            .getOrNull()
+            ?.let { legacyProfile = it }
+    }
+    val groupTogetherVm: GroupTogetherViewModel? =
+        state.connectionId?.trim()?.takeIf { it.isNotEmpty() && state.isGroup }?.let { chatId ->
+            viewModel(key = "group-together-$chatId") { GroupTogetherViewModel(chatId) }
+        }
+    LaunchedEffect(groupTogetherVm, state.groupMembers, effectiveViewerUserId) {
+        val viewer = effectiveViewerUserId ?: return@LaunchedEffect
+        groupTogetherVm?.load(viewer, state.groupMembers.map { it.id })
+    }
+    var showLogHangout by remember(friendshipConnectionId) { mutableStateOf(false) }
+    var showStory by remember(friendshipConnectionId) { mutableStateOf(false) }
+    var showEncounterMap by remember(friendshipConnectionId) { mutableStateOf(false) }
 
     val proximityEncounterEpoch by AppDataManager.proximityEncounterEpoch.collectAsState()
     LaunchedEffect(proximityEncounterEpoch, state.userId, effectiveViewerUserId) {
@@ -763,15 +819,123 @@ fun ProfileBottomSheet(
                     avatarUploading = avatarUploading,
                 )
 
+                legacyProfile?.user?.bio?.takeIf { it.isNotBlank() && !state.isGroup }?.let { bio ->
+                    Text(
+                        text = bio,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = GlassSheetTokens.OnOled(),
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    )
+                }
+                relationshipLine(friendshipEncounters)?.let { line ->
+                    Text(
+                        text = line,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = GlassSheetTokens.OnOledMuted(),
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    )
+                }
+
                 Spacer(Modifier.height(12.dp))
 
                 ProfileActionGrid(
                     showNudge = state.canNudge,
                     showDisposableRoll = onOpenDisposableRoll != null && !state.connectionId.isNullOrBlank(),
                     onMessage = onMessage,
-                    onNudge = onNudge,
+                    // Wave (a one-per-day relationship moment) replaces the old chat-message nudge.
+                    onNudge = friendshipVm?.let { vm -> { vm.wave() } } ?: onNudge,
+                    nudgeLabel = if (friendshipVm != null) "Wave" else "Nudge",
                     onOpenDisposableRoll = onOpenDisposableRoll,
                 )
+
+                if (groupTogetherVm != null) {
+                    val groupHangouts by groupTogetherVm.hangouts.collectAsState()
+                    val groupPlans by groupTogetherVm.upcomingPlans.collectAsState()
+                    Spacer(Modifier.height(12.dp))
+                    GroupTogetherSection(
+                        groupName = state.displayName,
+                        hangouts = groupHangouts,
+                        memberName = { id ->
+                            state.groupMembers
+                                .firstOrNull { it.id == id }
+                                ?.name
+                                ?.substringBefore(' ')
+                                ?.ifBlank { null } ?: "Someone"
+                        },
+                        upcomingPlans = groupPlans,
+                        onPlan = onPlan,
+                        onOpenPlan = { onMessage() },
+                    )
+                }
+
+                if (friendshipVm != null) {
+                    val pendingHangouts by friendshipVm.pendingHangouts.collectAsState()
+                    val upcomingPlans by friendshipVm.upcomingPlans.collectAsState()
+                    val notice by friendshipVm.notice.collectAsState()
+                    Spacer(Modifier.height(12.dp))
+                    FriendshipSection(
+                        peerFirstName = peerFirstName,
+                        peerSeed = state.userId.orEmpty(),
+                        encounters = friendshipEncounters,
+                        pending = pendingHangouts,
+                        upcomingPlans = upcomingPlans,
+                        onConfirm = friendshipVm::confirm,
+                        onDecline = friendshipVm::decline,
+                        onLogHangout = { showLogHangout = true },
+                        onPlan = onPlan,
+                        onOpenStory = { showStory = true },
+                        onOpenMap = { showEncounterMap = true },
+                        onOpenPlan = { onMessage() },
+                    )
+                    notice?.let { text ->
+                        LaunchedEffect(text) {
+                            delay(3_000)
+                            friendshipVm.clearNotice()
+                        }
+                        Text(
+                            text,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = GlassSheetTokens.OnOled(),
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                            textAlign = TextAlign.Center,
+                        )
+                    }
+                    if (showLogHangout) {
+                        val busy by friendshipVm.busy.collectAsState()
+                        LogHangoutSheet(
+                            peerFirstName = peerFirstName,
+                            busy = busy,
+                            onDismiss = { showLogHangout = false },
+                            onLog = { at, place, lat, lon ->
+                                friendshipVm.logHangout(at, place, lat, lon) { ok -> if (ok) showLogHangout = false }
+                            },
+                        )
+                    }
+                    if (showStory) {
+                        FriendshipStorySheet(
+                            peerFirstName = peerFirstName,
+                            peerSeed = state.userId.orEmpty(),
+                            encounters = friendshipEncounters,
+                            onPlanNext =
+                                onPlan?.let { plan ->
+                                    {
+                                        showStory = false
+                                        plan()
+                                    }
+                                },
+                            onDismiss = { showStory = false },
+                        )
+                    }
+                    if (showEncounterMap) {
+                        EncounterMapDialog(
+                            encounters = friendshipEncounters,
+                            newestIsNewSpot = HangoutHighlights.of(friendshipEncounters, Clock.System.now())?.isNewSpot == true,
+                            onDismiss = { showEncounterMap = false },
+                        )
+                    }
+                }
 
                 Spacer(Modifier.height(12.dp))
 

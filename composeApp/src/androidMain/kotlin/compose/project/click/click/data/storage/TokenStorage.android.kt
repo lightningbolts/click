@@ -66,6 +66,9 @@ class AndroidTokenStorage(
         private const val KEY_CALL_NOTIFICATIONS_ENABLED = "call_notifications_enabled"
         private const val KEY_AMBIENT_NOISE_OPT_IN = "ambient_noise_opt_in"
         private const val KEY_BAROMETRIC_CONTEXT_OPT_IN = "barometric_context_opt_in"
+        private const val KEY_PLAN_CUSTOM_IDEAS = "plan_custom_ideas"
+        private const val KEY_HANGOUT_DETECTION_OPT_IN = "hangout_detection_opt_in"
+        private const val KEY_HOME_RECAP_CACHE = "home_recap_cache"
         private const val KEY_LOCATION_EXPLAINER_SEEN = "location_explainer_seen"
         private const val KEY_ONBOARDING_STATE = "onboarding_state"
         private const val KEY_HAS_COMPLETED_ONBOARDING = "has_completed_onboarding"
@@ -184,6 +187,38 @@ class AndroidTokenStorage(
             null
         }
 
+    override suspend fun savePlanCustomIdeas(json: String?) {
+        sharedPreferences.edit().apply {
+            if (json == null) remove(KEY_PLAN_CUSTOM_IDEAS) else putString(KEY_PLAN_CUSTOM_IDEAS, json)
+            apply()
+        }
+    }
+
+    override suspend fun getPlanCustomIdeas(): String? = sharedPreferences.getString(KEY_PLAN_CUSTOM_IDEAS, null)
+
+    override suspend fun saveHangoutDetectionOptIn(enabled: Boolean) {
+        sharedPreferences.edit().apply {
+            putBoolean(KEY_HANGOUT_DETECTION_OPT_IN, enabled)
+            apply()
+        }
+    }
+
+    override suspend fun getHangoutDetectionOptIn(): Boolean? =
+        if (sharedPreferences.contains(KEY_HANGOUT_DETECTION_OPT_IN)) {
+            sharedPreferences.getBoolean(KEY_HANGOUT_DETECTION_OPT_IN, false)
+        } else {
+            null
+        }
+
+    override suspend fun saveHomeRecapCache(json: String?) {
+        sharedPreferences.edit().apply {
+            if (json == null) remove(KEY_HOME_RECAP_CACHE) else putString(KEY_HOME_RECAP_CACHE, json)
+            apply()
+        }
+    }
+
+    override suspend fun getHomeRecapCache(): String? = sharedPreferences.getString(KEY_HOME_RECAP_CACHE, null)
+
     override suspend fun saveLocationExplainerSeen(seen: Boolean) {
         sharedPreferences.edit().apply {
             putBoolean(KEY_LOCATION_EXPLAINER_SEEN, seen)
@@ -299,6 +334,9 @@ class AndroidTokenStorage(
                     KEY_CALL_NOTIFICATIONS_ENABLED,
                     KEY_AMBIENT_NOISE_OPT_IN,
                     KEY_BAROMETRIC_CONTEXT_OPT_IN,
+                    // Presence pings must never follow the device to another account.
+                    KEY_HANGOUT_DETECTION_OPT_IN,
+                    KEY_HOME_RECAP_CACHE,
                     KEY_LOCATION_EXPLAINER_SEEN,
                     KEY_ONBOARDING_STATE,
                     KEY_HAS_COMPLETED_ONBOARDING,

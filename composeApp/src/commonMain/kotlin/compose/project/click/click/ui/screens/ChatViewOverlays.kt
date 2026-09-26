@@ -15,7 +15,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import compose.project.click.click.data.models.FriendshipStats
 import compose.project.click.click.data.models.MessageWithUser // pragma: allowlist secret
+import compose.project.click.click.data.models.toFriendshipEncounter
 import compose.project.click.click.ui.chat.ChatBeaconDetailSheet // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatExpandedPhotoPreview // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ConnectionActionSheet // pragma: allowlist secret
@@ -25,6 +27,7 @@ import compose.project.click.click.ui.chat.ConnectionSheetDialogs // pragma: all
 import compose.project.click.click.ui.chat.MessageActionCapabilities // pragma: allowlist secret
 import compose.project.click.click.ui.chat.MessageActionHandlers // pragma: allowlist secret
 import compose.project.click.click.ui.chat.MessageActionSheet // pragma: allowlist secret
+import compose.project.click.click.ui.chat.PlanHangoutSheet
 import compose.project.click.click.ui.chat.canEditMessage // pragma: allowlist secret
 import compose.project.click.click.ui.chat.canExportMessageMedia // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickOutlinedTextField // pragma: allowlist secret
@@ -36,6 +39,7 @@ import compose.project.click.click.ui.components.UnifiedPopupFormDialog // pragm
 import compose.project.click.click.ui.theme.* // pragma: allowlist secret
 import compose.project.click.click.viewmodel.ChatMessagesState // pragma: allowlist secret
 import compose.project.click.click.viewmodel.ChatViewModel // pragma: allowlist secret
+import kotlinx.datetime.Clock
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -181,6 +185,41 @@ internal fun BoxScope.ChatViewOverlays(
         )
     }
 
+    val plannerOpen by viewModel.plannerOpen.collectAsState()
+    val plannerDetails = (chatMessagesState as? ChatMessagesState.Success)?.chatDetails
+    if (plannerOpen && plannerDetails != null) {
+        val isGroupPlan = plannerDetails.groupClique != null
+        val metSpots =
+            remember(plannerDetails.connection.connectionEncounters, isGroupPlan) {
+                if (isGroupPlan) {
+                    emptyList()
+                } else {
+                    val encounters = plannerDetails.connection.connectionEncounters.mapNotNull { it.toFriendshipEncounter() }
+                    FriendshipStats
+                        .compute(encounters, now = Clock.System.now())
+                        .spots
+                        .filter { !it.name.isNullOrBlank() }
+                        .sortedByDescending { it.visits }
+                }
+            }
+        val lastSpot = plannerDetails.connection.connectionEncounters.maxByOrNull { it.encounteredAt }
+        PlanHangoutSheet(
+            chatName =
+                if (isGroupPlan) {
+                    plannerDetails.groupClique?.name?.ifBlank { null } ?: "the group"
+                } else {
+                    plannerDetails.otherUser.name
+                        ?.substringBefore(' ')
+                        ?.ifBlank { null } ?: "your Click"
+                },
+            metSpots = metSpots,
+            nearLatitude = lastSpot?.gpsLat,
+            nearLongitude = lastSpot?.gpsLon,
+            onDismiss = viewModel::closePlanner,
+            onSend = viewModel::sendPlan,
+        )
+    }
+
     var pendingConnectionDialog by remember { mutableStateOf<ConnectionSheetDialog?>(null) }
     var dialogGroupId by remember { mutableStateOf<String?>(null) }
 
@@ -194,12 +233,16 @@ internal fun BoxScope.ChatViewOverlays(
             isArchived = sheetConn != null && sheetConn.id in archivedConnectionIds,
             isServerLifecycleArchived = sheetConn?.isServerLifecycleArchived() == true,
             isCore = sheetConn != null && sheetConn.id in coreConnectionIds,
+            showPlanAction = true,
             onDismiss = { showConnectionSheet = false },
             onMenuAction = { action ->
                 val details = successState?.chatDetails
                 val connId = sheetConn?.id
                 when (action) {
-                    ConnectionMenuAction.Nudge -> viewModel.sendNudge()
+                    ConnectionMenuAction.Nudge -> {
+                        val details = successState?.chatDetails
+                        if (connId != null && details != null) viewModel.waveAt(connId, details.otherUser.name ?: "them")
+                    }
                     ConnectionMenuAction.Archive -> {
                         viewModel.archiveConnection { success ->
                             if (success) onBackPressed()
@@ -217,6 +260,7 @@ internal fun BoxScope.ChatViewOverlays(
                     ConnectionMenuAction.MarkUnread -> {
                         if (connId != null) viewModel.markConversationUnread(connId)
                     }
+                    ConnectionMenuAction.PlanHangout -> viewModel.openPlanner()
                     ConnectionMenuAction.RequestRemove -> {
                         pendingConnectionDialog = ConnectionSheetDialog.Remove
                     }
