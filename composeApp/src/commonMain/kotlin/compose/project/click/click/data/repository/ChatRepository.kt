@@ -150,6 +150,24 @@ interface ChatRepository {
         connectionId: String? = null,
     ): Result<ScheduledMessage> = Result.failure(UnsupportedOperationException("Scheduling unavailable"))
 
+    /** Where recently deleted messages in [chatId]'s latest window were ("Message deleted"). */
+    suspend fun fetchTombstones(
+        chatId: String,
+        windowSize: Int,
+    ): List<compose.project.click.click.data.models.MessageTombstone> = emptyList()
+
+    /**
+     * Rotates the group's E2EE v2 epoch to the current membership right away (iOS
+     * `reconcileMembershipEpoch`) instead of on the next send. Fails when the rotation couldn't run.
+     */
+    suspend fun secureGroupAfterMembershipChange(
+        chatId: String,
+        userId: String,
+    ): Result<Unit> = Result.success(Unit)
+
+    /** Every member's read cursor for [chatId] (group "seen by"). */
+    suspend fun fetchReadCursors(chatId: String): List<compose.project.click.click.data.models.ReadCursor> = emptyList()
+
     /** Plans in [chatId] that haven't ended, soonest first, with going counts. */
     suspend fun fetchUpcomingPlans(
         chatId: String,

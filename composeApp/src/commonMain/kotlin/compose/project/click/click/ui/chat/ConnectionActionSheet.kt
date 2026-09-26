@@ -12,6 +12,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.PersonRemove
@@ -21,6 +23,9 @@ import androidx.compose.material.icons.filled.Unarchive
 import androidx.compose.material.icons.filled.WavingHand
 import androidx.compose.material.icons.outlined.Event
 import androidx.compose.material.icons.outlined.MarkEmailUnread
+import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.NotificationsOff
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -66,6 +71,15 @@ internal sealed class ConnectionMenuAction {
     data object MarkUnread : ConnectionMenuAction()
 
     data object PlanHangout : ConnectionMenuAction()
+
+    /** Mute when unmuted (the parent shows the duration picker), unmute when muted. */
+    data object ToggleMute : ConnectionMenuAction()
+
+    data object SearchInChat : ConnectionMenuAction()
+
+    data object AcceptPrior : ConnectionMenuAction()
+
+    data object DeclinePrior : ConnectionMenuAction()
 }
 
 /**
@@ -82,6 +96,8 @@ internal fun ConnectionActionSheet(
     isCore: Boolean = false,
     /** Inside an open chat: offer "Plan a hangout" (not in the inbox or hubs). */
     showPlanAction: Boolean = false,
+    /** Null hides the mute row (e.g. no chat row yet). */
+    isMuted: Boolean? = null,
     onDismiss: () -> Unit,
     onMenuAction: (ConnectionMenuAction) -> Unit,
 ) {
@@ -131,6 +147,22 @@ internal fun ConnectionActionSheet(
                 HorizontalDivider(color = GlassSheetTokens.GlassBorder().copy(alpha = 0.5f))
             }
 
+            if (chatDetails?.connection?.awaitsPriorResponseFrom(currentUserId) == true) {
+                BentoGlassOptionRow(
+                    showBorder = false,
+                    title = "Accept",
+                    subtitle = "${chatDetails.otherUser.name ?: "They"} says you already know each other",
+                    onClick = { pick(ConnectionMenuAction.AcceptPrior) },
+                    leading = { Icon(Icons.Default.Check, contentDescription = null, tint = PrimaryBlue) },
+                )
+                BentoGlassOptionRow(
+                    title = "Decline",
+                    destructive = true,
+                    onClick = { pick(ConnectionMenuAction.DeclinePrior) },
+                    leading = { Icon(Icons.Default.Close, contentDescription = null, tint = Color(0xFFFF6B6B)) },
+                )
+            }
+
             if (showPlanAction) {
                 BentoGlassOptionRow(
                     showBorder = false,
@@ -148,9 +180,45 @@ internal fun ConnectionActionSheet(
                 )
             }
 
+            if (showPlanAction) {
+                BentoGlassOptionRow(
+                    title = "Search in conversation",
+                    subtitle = "Find a message in this chat",
+                    onClick = { pick(ConnectionMenuAction.SearchInChat) },
+                    leading = {
+                        Icon(
+                            Icons.Outlined.Search,
+                            contentDescription = null,
+                            tint = GlassSheetTokens.OnOledMuted(),
+                        )
+                    },
+                )
+            }
+
+            if (isMuted != null) {
+                BentoGlassOptionRow(
+                    showBorder = showPlanAction,
+                    title = if (isMuted) "Unmute notifications" else "Mute notifications",
+                    subtitle =
+                        if (isMuted) {
+                            "Turn this conversation's notifications back on"
+                        } else {
+                            "Silence notifications from this conversation"
+                        },
+                    onClick = { pick(ConnectionMenuAction.ToggleMute) },
+                    leading = {
+                        Icon(
+                            if (isMuted) Icons.Outlined.Notifications else Icons.Outlined.NotificationsOff,
+                            contentDescription = null,
+                            tint = GlassSheetTokens.OnOledMuted(),
+                        )
+                    },
+                )
+            }
+
             if (!isGroup) {
                 BentoGlassOptionRow(
-                    showBorder = !showPlanAction,
+                    showBorder = !showPlanAction && isMuted == null,
                     title = "Wave",
                     subtitle = "Let them know you're thinking of them",
                     cornerRadius = GlassSheetTokens.BentoExteriorCorner,

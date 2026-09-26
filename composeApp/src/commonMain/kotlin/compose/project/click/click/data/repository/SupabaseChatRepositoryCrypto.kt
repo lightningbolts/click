@@ -355,7 +355,12 @@ internal suspend fun SupabaseChatRepository.resolveE2eeV2ChatCrypto(
         senderDeviceId = logicalDeviceId,
         identity = identity,
         membershipFingerprint = state.membershipFingerprint ?: membershipFingerprint,
-    ).also { E2eeV2SessionCache.put(chatId, it) }
+    ).also { session ->
+        // Encode before the cache can zeroize these keys on a later replacement.
+        compose.project.click.click.crypto.PushPreviewKeyStore
+            .remember(tokenStorage, chatId, session.epochKeys)
+        E2eeV2SessionCache.put(chatId, session)
+    }
 }
 
 private suspend fun SupabaseChatRepository.participantUserIdsForE2eeUpgrade(chatId: String): Set<String>? =

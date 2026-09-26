@@ -35,6 +35,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
 import compose.project.click.click.data.ActiveHubEntry // pragma: allowlist secret
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
+import compose.project.click.click.data.ChatMuteStore
 import compose.project.click.click.data.api.ApiClient // pragma: allowlist secret
 import compose.project.click.click.data.models.ChatWithDetails // pragma: allowlist secret
 import compose.project.click.click.data.models.InboxNudge // pragma: allowlist secret
@@ -55,8 +56,10 @@ import compose.project.click.click.ui.chat.ConnectionMenuAction // pragma: allow
 import compose.project.click.click.ui.chat.ConnectionSheetDialog // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ConnectionSheetDialogs // pragma: allowlist secret
 import compose.project.click.click.ui.chat.GroupMembersPickerContext // pragma: allowlist secret
+import compose.project.click.click.ui.chat.MuteDurationDialog
 import compose.project.click.click.ui.chat.RememberMeStrip // pragma: allowlist secret
 import compose.project.click.click.ui.chat.connectionListActivityTs // pragma: allowlist secret
+import compose.project.click.click.ui.chat.muteResultMessage
 import compose.project.click.click.ui.components.AdaptiveBackground // pragma: allowlist secret
 import compose.project.click.click.ui.components.AppEmptyState // pragma: allowlist secret
 import compose.project.click.click.ui.components.AppScreenScaffold // pragma: allowlist secret
@@ -82,6 +85,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext // pragma: allowlist secret
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.datetime.Clock
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -151,6 +155,18 @@ fun ConnectionsListView(
     val listScope = rememberCoroutineScope()
     val inboxNudgeApi = remember { ApiClient() }
     var inboxNudges by remember { mutableStateOf<List<InboxNudge>>(emptyList()) }
+    val chatMutes by ChatMuteStore.mutes.collectAsState()
+    val muteNowMs = remember(chatMutes) { Clock.System.now().toEpochMilliseconds() }
+    var muteDialogChatId by remember { mutableStateOf<String?>(null) }
+    muteDialogChatId?.let { chat ->
+        MuteDurationDialog(
+            onPick = { duration ->
+                muteDialogChatId = null
+                listScope.launch { toastState.show(listScope, muteResultMessage(duration, ChatMuteStore.setMuted(chat, duration))) }
+            },
+            onDismiss = { muteDialogChatId = null },
+        )
+    }
     var proximityCliqueHintUsers by remember { mutableStateOf<List<User>>(emptyList()) }
     var cliqueProximityAutofillLoading by remember { mutableStateOf(false) }
 
@@ -753,6 +769,7 @@ fun ConnectionsListView(
                                     chatDetails.groupClique == null &&
                                         chatDetails.otherUser.id in onlineUsers,
                                 decryptedPreview = decryptedPreviews[connectionId] ?: cachedPreviewLabel,
+                                isMuted = ChatMuteStore.isMuted(chatMutes, chatDetails.chat.id, muteNowMs),
                                 hasCachedThreadPreview = !cachedThread?.messages.isNullOrEmpty(),
                                 onAvatarClick = {
                                     if (chatDetails.groupClique == null) {
@@ -942,6 +959,7 @@ fun ConnectionsListView(
                 isArchived = isUserArchived,
                 isServerLifecycleArchived = isServerArchived,
                 isCore = selected.connection.id in coreConnectionIds,
+                isMuted = selected.chat.id?.let { ChatMuteStore.isMuted(chatMutes, it, muteNowMs) },
                 onDismiss = { pendingMenuChat = null },
                 onMenuAction = { action ->
                     val connId = selected.connection.id
@@ -962,7 +980,33 @@ fun ConnectionsListView(
                         ConnectionMenuAction.MarkUnread -> {
                             viewModel.markConversationUnread(connId)
                         }
-                        ConnectionMenuAction.PlanHangout -> Unit
+                        ConnectionMenuAction.PlanHangout, ConnectionMenuAction.SearchInChat -> Unit
+                        ConnectionMenuAction.AcceptPrior, ConnectionMenuAction.DeclinePrior -> {
+                            val accept = action == ConnectionMenuAction.AcceptPrior
+                            listScope.launch {
+                                ApiClient()
+                                    .respondPriorConnection(selected.connection.id, if (accept) "accept" else "decline")
+                                    .fold(
+                                        onSuccess = { AppDataManager.refresh(force = true) },
+                                        onFailure = { toastState.show(listScope, "Couldn't respond. Try again.") },
+                                    )
+                            }
+                        }
+                        ConnectionMenuAction.ToggleMute -> {
+                            val chat = selected.chat.id
+                            if (chat != null) {
+                                if (ChatMuteStore.isMuted(chatMutes, chat, muteNowMs)) {
+                                    listScope.launch {
+                                        toastState.show(
+                                            listScope,
+                                            muteResultMessage(null, ChatMuteStore.setMuted(chat, null)),
+                                        )
+                                    }
+                                } else {
+                                    muteDialogChatId = chat
+                                }
+                            }
+                        }
                         ConnectionMenuAction.RequestRemove -> {
                             dialogConnectionId = connId
                             pendingConnectionDialog = ConnectionSheetDialog.Remove

@@ -10,6 +10,7 @@ import compose.project.click.click.data.CHAT_MEDIA_BUCKET
 import compose.project.click.click.data.SupabaseConfig
 import compose.project.click.click.data.api.ChatApiClient
 import compose.project.click.click.data.models.*
+import compose.project.click.click.data.models.ReadCursor
 import compose.project.click.click.data.storage.TokenStorage
 import compose.project.click.click.notifications.ChatPushNotifier
 import compose.project.click.click.util.chatMediaDispatcher
@@ -384,6 +385,29 @@ class SupabaseChatRepository(
     ): Result<List<ScheduledMessage>> = fetchScheduledMessagesImpl(chatId = chatId, userId = userId)
 
     override suspend fun cancelScheduledMessage(id: String): Result<Unit> = cancelScheduledMessageImpl(id)
+
+    override suspend fun fetchTombstones(
+        chatId: String,
+        windowSize: Int,
+    ): List<MessageTombstone> {
+        val token = ensureFreshJwtForChat() ?: return emptyList()
+        return apiClient.getTombstones(chatId, windowSize, token).getOrDefault(emptyList())
+    }
+
+    override suspend fun secureGroupAfterMembershipChange(
+        chatId: String,
+        userId: String,
+    ): Result<Unit> =
+        runCatching {
+            resolveE2eeV2ChatCrypto(chatId, userId, forceRefresh = true, allowLifecycle = true)
+                ?: error("Group encryption could not be updated")
+            Unit
+        }
+
+    override suspend fun fetchReadCursors(chatId: String): List<ReadCursor> {
+        val token = ensureFreshJwtForChat() ?: return emptyList()
+        return apiClient.getReadCursors(chatId, token).getOrDefault(emptyList())
+    }
 
     override suspend fun fetchUpcomingPlans(
         chatId: String,

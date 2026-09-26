@@ -251,6 +251,7 @@ internal fun ChatViewModel.addMembersToVerifiedCliqueImpl(
             }
         }
         if (added > 0) {
+            groupChatIdFor(groupId)?.let { secureGroupChatImpl(it) }
             PlatformHapticsPolicy.successNotification()
             chatRepository.clearChatListLocalCaches()
             loadChats(isForced = true)
@@ -290,6 +291,8 @@ internal fun ChatViewModel.removeMemberFromVerifiedCliqueImpl(
         }
         val ok = chatRepository.removeCliqueMember(groupId, memberUserId).isSuccess
         if (ok) {
+            // The removed member must not read what comes next: rotate the epoch now.
+            groupChatIdFor(groupId)?.let { secureGroupChatImpl(it) }
             chatRepository.clearChatListLocalCaches()
             loadChats(isForced = true)
             val state = _chatMessagesState.value as? ChatMessagesState.Success
@@ -449,4 +452,27 @@ internal fun ChatViewModel.deleteActiveHubImpl(
         }
         onComplete(result.isSuccess)
     }
+}
+
+/** Rotates [chatId]'s group epoch now; on failure remembers it so the profile can offer a retry. */
+internal fun ChatViewModel.secureGroupChatImpl(chatId: String) {
+    val userId = _currentUserId.value ?: return
+    if (chatId.isBlank()) return
+    viewModelScope.launch {
+        val ok = chatRepository.secureGroupAfterMembershipChange(chatId, userId).isSuccess
+        _groupsNeedingSecuring.value =
+            if (ok) _groupsNeedingSecuring.value - chatId else _groupsNeedingSecuring.value + chatId
+        if (!ok) _nudgeResult.value = "Couldn't finish securing the group. Try again from the group profile."
+    }
+}
+
+/** The group chat id for [groupId] when it's the open chat or in the inbox. */
+internal fun ChatViewModel.groupChatIdFor(groupId: String): String? {
+    val open = (_chatMessagesState.value as? ChatMessagesState.Success)?.chatDetails
+    if (open?.groupClique?.groupId == groupId) open.chat.id?.let { return it }
+    return (_chatListState.value as? ChatListState.Success)
+        ?.chats
+        ?.firstOrNull { it.groupClique?.groupId == groupId }
+        ?.chat
+        ?.id
 }

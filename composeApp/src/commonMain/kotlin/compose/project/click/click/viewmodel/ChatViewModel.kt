@@ -168,6 +168,37 @@ class ChatViewModel(
         _chatNotice.value = null
     }
 
+    /** "Message deleted" placeholders for the open chat: message id → tombstone. */
+    internal val _tombstones = MutableStateFlow<Map<String, compose.project.click.click.data.models.MessageTombstone>>(emptyMap())
+    val tombstones: StateFlow<Map<String, compose.project.click.click.data.models.MessageTombstone>> = _tombstones.asStateFlow()
+
+    /** Group read cursors: member id → read-through epoch ms. */
+    internal val _readCursors = MutableStateFlow<Map<String, Long>>(emptyMap())
+    val readCursors: StateFlow<Map<String, Long>> = _readCursors.asStateFlow()
+
+    /** Group chat ids whose encryption still needs updating after a membership change. */
+    internal val _groupsNeedingSecuring = MutableStateFlow<Set<String>>(emptySet())
+    val groupsNeedingSecuring: StateFlow<Set<String>> = _groupsNeedingSecuring.asStateFlow()
+
+    /** Retries the epoch rotation for [chatId] ("Finish securing group"). */
+    fun finishSecuringGroup(chatId: String) = secureGroupChatImpl(chatId)
+
+    internal val _chatSearchOpen = MutableStateFlow(false)
+    val chatSearchOpen: StateFlow<Boolean> = _chatSearchOpen.asStateFlow()
+
+    fun openChatSearch() {
+        _chatSearchOpen.value = true
+    }
+
+    fun closeChatSearch() {
+        _chatSearchOpen.value = false
+    }
+
+    /** Who is typing right now (group typing names); each id expires 3 s after its last signal. */
+    internal val _typingUserIds = MutableStateFlow<Set<String>>(emptySet())
+    val typingUserIds: StateFlow<Set<String>> = _typingUserIds.asStateFlow()
+    internal val typingExpiryJobs = mutableMapOf<String, Job>()
+
     internal val _plannerOpen = MutableStateFlow(false)
 
     /** The Plan-a-hangout sheet is showing for the open chat. */
@@ -653,6 +684,16 @@ class ChatViewModel(
     ) = removeReactionImpl(messageId = messageId, reactionType = reactionType)
 
     fun sendBeaconMessage(beacon: compose.project.click.click.data.models.MapBeacon) = sendBeaconMessageImpl(beacon = beacon)
+
+    fun retryFailedMessage(tempId: String) = retryFailedMessageImpl(tempId)
+
+    fun discardFailedMessage(tempId: String) = discardFailedMessageImpl(tempId)
+
+    /** Re-sends [message] (text or photo) into each target chat, marked "Forwarded". */
+    fun forwardMessage(
+        message: compose.project.click.click.data.models.Message,
+        targets: List<compose.project.click.click.data.models.ChatWithDetails>,
+    ) = forwardMessageImpl(message, targets)
 
     // ── Plans ─────────────────────────────────────────────────────────────────
 

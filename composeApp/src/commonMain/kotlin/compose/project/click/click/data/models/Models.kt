@@ -592,6 +592,13 @@ data class Connection(
 
     fun isPriorConnection(): Boolean = source.equals("prior", ignoreCase = true)
 
+    /** A pending "we already know each other" request that [viewerId] still has to answer. */
+    fun awaitsPriorResponseFrom(viewerId: String?): Boolean =
+        isPriorConnection() &&
+            isPending() &&
+            !viewerId.isNullOrBlank() &&
+            (responderId == viewerId || (initiatorId != viewerId && viewerId in user_ids))
+
     fun isPriorConfirmedByBoth(): Boolean = confirmedByA && confirmedByB
 
     fun isArchivedOrRemoved(): Boolean {

@@ -366,6 +366,8 @@ internal fun ChatViewModel.loadChatMessagesImpl(chatId: String) {
         _replyingTo.value = null
         _editingMessageId.value = null
         _scheduledMessages.value = emptyList()
+        _readCursors.value = emptyMap()
+        _tombstones.value = emptyMap()
     }
     currentConnectionId = connectionId
     _hasMoreOlderMessages.value = false
@@ -481,6 +483,15 @@ internal fun ChatViewModel.loadChatMessagesImpl(chatId: String) {
                     }
                 currentApiChatId = persistedApiChatId
                 loadScheduledMessagesImpl(persistedApiChatId)
+                launch { refreshTombstonesImpl(persistedApiChatId, windowSize = 100) }
+                if (chatDetails.groupClique != null) {
+                    launch {
+                        val cursors = chatRepository.fetchReadCursors(persistedApiChatId)
+                        if (currentApiChatId == persistedApiChatId) {
+                            _readCursors.value = cursors.associate { it.userId to it.readThrough }
+                        }
+                    }
+                }
 
                 if (previousApiChatId != null && previousApiChatId != persistedApiChatId) {
                     chatRepository.leaveChatEphemeralChannel(previousApiChatId)
