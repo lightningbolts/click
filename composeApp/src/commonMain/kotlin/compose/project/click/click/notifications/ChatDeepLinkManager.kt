@@ -6,7 +6,7 @@ import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * Bridges notification tap intents and OS URLs to Compose navigation.
- * [MainActivity] / iOS write pending IDs; [App] observes and navigates.
+ * [MainActivity] writes pending IDs; [App] observes and navigates.
  */
 object ChatDeepLinkManager {
     private val _pendingConnectionId = MutableStateFlow<String?>(null)

@@ -6,6 +6,6 @@ import androidx.compose.runtime.Composable
 @Composable
 expect fun rememberReduceMotionEnabled(): Boolean
 
-/** iOS Reduce Transparency; false on platforms without an equivalent setting. */
+/** Platform reduce-transparency preference; false on platforms without an equivalent setting. */
 @Composable
 expect fun rememberReduceTransparencyEnabled(): Boolean

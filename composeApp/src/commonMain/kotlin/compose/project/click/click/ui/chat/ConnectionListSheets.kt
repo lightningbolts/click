@@ -299,12 +299,11 @@ internal fun ConnectionMemberPickerSheet(
 
     val listState = rememberLazyListState()
     val scrollAtTop = rememberSheetScrollAtTop(listState)
-    // UIKit dismiss + fill viewport so the candidate list occupies the sheet (no empty band).
+    // Fill viewport so the candidate list occupies the sheet (no empty band).
     ClickFormBottomSheet(
         onDismissRequest = onDismissRequest,
         expandable = true,
-        useUiKitScrollHost = true,
-        uiKitFillViewport = true,
+        fillBody = true,
     ) {
         ProvideSheetSwipeDismiss(onDismissRequest = onDismissRequest, scrollAtTop = scrollAtTop) {
             Column(

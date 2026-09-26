@@ -34,7 +34,6 @@ import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
 import compose.project.click.click.data.api.ApiConfig
 import compose.project.click.click.ui.components.ClickOutlinedTextField
 import compose.project.click.click.ui.theme.*
-import compose.project.click.click.ui.theme.LocalPlatformStyle
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -225,7 +224,6 @@ fun LoginScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            val loginStyle = LocalPlatformStyle.current
             Button(
                 onClick = {
                     focusManager.clearFocus()
@@ -238,21 +236,12 @@ fun LoginScreen(
                         .fillMaxWidth()
                         .height(56.dp)
                         .testTag("login-submit"),
-                shape = RoundedCornerShape(if (loginStyle.isIOS) 14.dp else 12.dp),
+                shape = RoundedCornerShape(12.dp),
                 colors =
                     ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.primary,
                     ),
-                elevation =
-                    if (loginStyle.isIOS) {
-                        ButtonDefaults.buttonElevation(
-                            0.dp,
-                            0.dp,
-                            0.dp,
-                        )
-                    } else {
-                        ButtonDefaults.buttonElevation()
-                    },
+                elevation = ButtonDefaults.buttonElevation(),
                 enabled = !isLoading && email.isNotBlank() && password.isNotBlank(),
             ) {
                 if (isLoading) {
@@ -280,7 +269,6 @@ fun LoginScreen(
                         icon = null,
                         onClick = onGoogleSignIn,
                         enabled = !isLoading,
-                        isIOS = LocalPlatformStyle.current.isIOS,
                     )
                     Spacer(modifier = Modifier.height(10.dp))
                 }
@@ -290,7 +278,6 @@ fun LoginScreen(
                         icon = null,
                         onClick = onAppleSignIn,
                         enabled = !isLoading,
-                        isIOS = LocalPlatformStyle.current.isIOS,
                     )
                 }
             }
@@ -349,9 +336,8 @@ private fun OAuthDivider() {
 /**
  * OAuth provider button used for Google / Apple sign-in (Phase 2 — C16).
  *
- * Visual language follows the platform — a soft-elevated outlined button on iOS and
- * the default Material filled-tonal button on Android — so the action still reads as
- * authenticated / trusted without hijacking the primary email sign-in button.
+ * Rendered as an outlined button so the action still reads as authenticated / trusted
+ * without hijacking the primary email sign-in button.
  */
 @Composable
 private fun OAuthProviderButton(
@@ -359,13 +345,12 @@ private fun OAuthProviderButton(
     icon: ImageVector?,
     onClick: () -> Unit,
     enabled: Boolean,
-    isIOS: Boolean,
 ) {
     OutlinedButton(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth().height(52.dp),
         enabled = enabled,
-        shape = RoundedCornerShape(if (isIOS) 14.dp else 12.dp),
+        shape = RoundedCornerShape(12.dp),
         colors =
             ButtonDefaults.outlinedButtonColors(
                 containerColor = MaterialTheme.colorScheme.surface,

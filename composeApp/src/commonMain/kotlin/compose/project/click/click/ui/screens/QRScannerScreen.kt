@@ -23,7 +23,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
@@ -41,7 +40,6 @@ import compose.project.click.click.ui.components.QrScannerDetection // pragma: a
 import compose.project.click.click.ui.components.bottomChromePadding // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberBottomChromePadding // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberConnectionHandshakePulse // pragma: allowlist secret
-import compose.project.click.click.ui.theme.LocalPlatformStyle // pragma: allowlist secret
 import compose.project.click.click.ui.theme.MotionTokens // pragma: allowlist secret
 import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
 import compose.project.click.click.ui.theme.clickBorderColor // pragma: allowlist secret
@@ -101,13 +99,11 @@ fun QRScannerScreen(
 ) {
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val bottomChrome = rememberBottomChromePadding()
-    val isIOS = LocalPlatformStyle.current.isIOS
     var headerHeightPx by remember { mutableIntStateOf(0) }
     val density = LocalDensity.current
     val headerHeight =
         with(density) {
-            val measured = if (headerHeightPx > 0) headerHeightPx.toDp() else 56.dp
-            if (isIOS) topInset + measured else measured
+            if (headerHeightPx > 0) headerHeightPx.toDp() else 56.dp
         }
     val scope = rememberCoroutineScope()
     val locationService = remember { LocationService() }
@@ -244,21 +240,14 @@ fun QRScannerScreen(
                     modifier =
                         Modifier
                             .fillMaxWidth()
-                            // On iOS PageHeader already binds the real native glass navigation bar.
-                            // Do not paint a second opaque slab behind its spacer or double-apply the
-                            // safe-area inset; that produced the oversized gray header/divider over camera.
                             .background(
-                                if (isIOS) {
-                                    Color.Transparent
-                                } else {
-                                    MaterialTheme.colorScheme.surface.copy(alpha = 0.88f)
-                                },
+                                MaterialTheme.colorScheme.surface.copy(alpha = 0.88f),
                             ).onGloballyPositioned { headerHeightPx = it.size.height }
                             .padding(
                                 start = ClickScreenSpacing.Horizontal,
-                                top = if (isIOS) 0.dp else topInset,
+                                top = topInset,
                                 end = ClickScreenSpacing.Horizontal,
-                                bottom = if (isIOS) 0.dp else ClickScreenSpacing.Compact,
+                                bottom = ClickScreenSpacing.Compact,
                             ),
                 ) {
                     PageHeader(
@@ -270,7 +259,6 @@ fun QRScannerScreen(
                                 QrScannerPresentationState.Connecting -> "Opening connection"
                                 QrScannerPresentationState.Error -> "Try another code"
                             },
-                        onNavigateBack = onNavigateBack,
                         navigationIcon = {
                             HeaderBackIconButton(onClick = onNavigateBack)
                         },

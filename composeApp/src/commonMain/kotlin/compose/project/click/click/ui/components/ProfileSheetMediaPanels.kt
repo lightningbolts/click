@@ -160,8 +160,8 @@ internal fun MediaPanel(
             Modifier
                 .fillMaxWidth()
                 .fillMaxSize()
-                // Always Compose-scroll inside the pager page (UIKit host sheetBodyScroll is a
-                // no-op; fillMaxSize + verticalScroll keeps tabs scrollable and Metal-safe).
+                // Always Compose-scroll inside the pager page (fillMaxSize + verticalScroll keeps
+                // tabs scrollable).
                 .verticalScroll(scrollState)
                 .padding(top = 12.dp, bottom = 48.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -323,7 +323,6 @@ internal fun MediaPanel(
                                 secureLoading = false,
                                 secureError = null,
                                 onRequestDecrypt = {},
-                                mimeTypeHint = media.mimeType,
                                 modifier = Modifier.fillMaxWidth(),
                                 chromeKind = ChatAudioChromeKind.ProfileSurface,
                             )
@@ -465,8 +464,8 @@ internal fun BeaconsPanel(
             Modifier
                 .fillMaxWidth()
                 .fillMaxSize()
-                // Always Compose-scroll inside the pager page (UIKit host sheetBodyScroll is a
-                // no-op; fillMaxSize + verticalScroll keeps tabs scrollable and Metal-safe).
+                // Always Compose-scroll inside the pager page (fillMaxSize + verticalScroll keeps
+                // tabs scrollable).
                 .verticalScroll(scrollState)
                 .padding(top = 12.dp, bottom = 48.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -532,8 +531,8 @@ internal fun LinksPanel(
             Modifier
                 .fillMaxWidth()
                 .fillMaxSize()
-                // Always Compose-scroll inside the pager page (UIKit host sheetBodyScroll is a
-                // no-op; fillMaxSize + verticalScroll keeps tabs scrollable and Metal-safe).
+                // Always Compose-scroll inside the pager page (fillMaxSize + verticalScroll keeps
+                // tabs scrollable).
                 .verticalScroll(scrollState)
                 .padding(top = 12.dp, bottom = 48.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -598,8 +597,8 @@ internal fun MembersPanel(
             Modifier
                 .fillMaxWidth()
                 .fillMaxSize()
-                // Always Compose-scroll inside the pager page (UIKit host sheetBodyScroll is a
-                // no-op; fillMaxSize + verticalScroll keeps tabs scrollable and Metal-safe).
+                // Always Compose-scroll inside the pager page (fillMaxSize + verticalScroll keeps
+                // tabs scrollable).
                 .verticalScroll(scrollState)
                 .padding(top = 12.dp, bottom = 48.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -693,8 +692,8 @@ internal fun FilesPanel(
             Modifier
                 .fillMaxWidth()
                 .fillMaxSize()
-                // Always Compose-scroll inside the pager page (UIKit host sheetBodyScroll is a
-                // no-op; fillMaxSize + verticalScroll keeps tabs scrollable and Metal-safe).
+                // Always Compose-scroll inside the pager page (fillMaxSize + verticalScroll keeps
+                // tabs scrollable).
                 .verticalScroll(scrollState)
                 .padding(top = 12.dp, bottom = 48.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),

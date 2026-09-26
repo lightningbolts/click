@@ -51,7 +51,6 @@ import compose.project.click.click.PlatformHapticsPolicy
 import compose.project.click.click.data.models.ChatWithDetails
 import compose.project.click.click.data.models.MessageWithUser
 import compose.project.click.click.ui.components.ClickButton // pragma: allowlist secret
-import compose.project.click.click.ui.theme.LocalPlatformStyle
 import compose.project.click.click.utils.toImageBitmap // pragma: allowlist secret
 import compose.project.click.click.viewmodel.CHAT_STAGED_MEDIA_MAX // pragma: allowlist secret
 import compose.project.click.click.viewmodel.ChatViewModel // pragma: allowlist secret
@@ -87,10 +86,9 @@ internal fun ConnectionChatMessageComposer(
     var attachmentMenuExpanded by remember { mutableStateOf(false) }
     var showBeaconPicker by remember { mutableStateOf(false) }
 
-    val composerStyle = LocalPlatformStyle.current
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
-    val composerRowVPad = if (composerStyle.isIOS) 6.dp else 8.dp
+    val composerRowVPad = 8.dp
     val composerRowHPad = ChatChromeHorizontalPadding
     val composerStripInteraction = remember { MutableInteractionSource() }
     Box(modifier = Modifier.fillMaxWidth()) {

@@ -32,7 +32,6 @@ fun MyQRCodeScreen(
     AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
         AppScreenWithFloatingHeader(
             title = "My QR Code",
-            onNavigateBack = onNavigateBack,
             navigationIcon = {
                 HeaderBackIconButton(onClick = onNavigateBack)
             },

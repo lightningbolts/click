@@ -569,8 +569,7 @@ fun MapScreen(
                                     },
                             )
 
-                            // Keep host map controls mounted under the sheet. Toggling UIKit host
-                            // controls on sheet presentation rematerializes glass and looks like a flash.
+                            // Keep host map controls mounted under the sheet.
                             MapAlwaysOnChrome(
                                 dockBottomPadding = fabBottomPadding,
                                 layerFilters = layerFilters,
@@ -581,7 +580,6 @@ fun MapScreen(
                                 },
                                 onZoomIn = { viewModel.zoomIn() },
                                 onZoomOut = { viewModel.zoomOut() },
-                                chromeVisible = true,
                                 modifier =
                                     Modifier
                                         .fillMaxSize()
@@ -676,8 +674,7 @@ fun MapScreen(
             },
             contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
             expandable = true,
-            useUiKitScrollHost = true,
-            uiKitFillViewport = true,
+            fillBody = true,
         ) {
             BeaconDropSheetContent(
                 modifier =

@@ -1,3 +1,5 @@
+@file:Suppress("ktlint:standard:function-naming")
+
 package compose.project.click.click.ui.sheet // pragma: allowlist secret
 
 import androidx.compose.foundation.layout.ColumnScope
@@ -32,19 +34,14 @@ actual fun MapBeaconSheetRoot(
     appTypography: Typography,
     modifier: Modifier,
     expandable: Boolean,
-    useUiKitScrollHost: Boolean,
-    uiKitFillViewport: Boolean,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     if (!visible) return
 
-    // Android ignores useUiKitScrollHost / uiKitFillViewport — Material/Calf owns nested scroll.
-    @Suppress("UNUSED_VARIABLE")
-    val ignoredScrollHost = useUiKitScrollHost
-
-    val sheetState = rememberGlassAdaptiveSheetState(
-        skipPartiallyExpanded = !expandable,
-    )
+    val sheetState =
+        rememberGlassAdaptiveSheetState(
+            skipPartiallyExpanded = !expandable,
+        )
 
     LaunchedEffect(Unit) {
         try {

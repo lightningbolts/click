@@ -38,7 +38,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -54,13 +53,10 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import compose.project.click.click.PlatformHapticsPolicy
-import compose.project.click.click.data.models.mediaUrlLooksLikePlaintextWebChatMediaUpload
-import compose.project.click.click.getPlatform
 import compose.project.click.click.media.rememberChatAudioPlayer
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.theme.PrimaryBlue
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
 /**
  * Visual chrome aligned with the web chat audio player: frosted pill on sent bubbles,
@@ -195,8 +191,6 @@ fun ChatAudioBubble(
     secureLoading: Boolean,
     secureError: String?,
     onRequestDecrypt: () -> Unit,
-    /** From message metadata (`original_mime_type`) — used for iOS WebM/Opus web voices. */
-    mimeTypeHint: String? = null,
     modifier: Modifier = Modifier,
     /** @deprecated Use [chromeKind] instead; when true, maps to [ChatAudioChromeKind.ProfileSurface]. */
     compact: Boolean = false,
@@ -310,28 +304,9 @@ fun ChatAudioBubble(
         return
     }
 
-    if (
-        shouldUseNativeFileFallbackForWebVoice(
-            isEncrypted = isEncrypted,
-            localFilePathForPlayback = localFilePathForPlayback,
-            mediaUrl = mediaUrl,
-            mimeTypeHint = mimeTypeHint,
-        )
-    ) {
-        NativeBackedWebVoiceRow(
-            palette = palette,
-            widthModifier = widthModifier,
-            mediaUrl = mediaUrl,
-            mimeTypeHint = mimeTypeHint,
-            totalLabel = totalLabel,
-        )
-        return
-    }
-
     val player =
         rememberChatAudioPlayer(
             mediaUrl = playbackUrl,
-            durationHintMs = hintMs,
             localFilePathForPlayback = localFilePathForPlayback,
         )
     LaunchedEffect(secureLoading, localFilePathForPlayback, needsDecryptBeforePlay, pendingAutoPlayAfterDecrypt) {
@@ -434,158 +409,6 @@ fun ChatAudioBubble(
             }
         }
     }
-}
-
-/**
- * AVPlayer on iOS does not decode some remote WebM/Opus voice uploads. Locally saved files can
- * be handed to the native file opener, so we classify these remote plaintext media objects for
- * the native-open fallback when AVPlayer is unlikely to handle them.
- */
-private fun shouldUseNativeFileFallbackForWebVoice(
-    isEncrypted: Boolean,
-    localFilePathForPlayback: String?,
-    mediaUrl: String,
-    mimeTypeHint: String?,
-): Boolean {
-    if (isEncrypted) return false
-    if (!localFilePathForPlayback.isNullOrBlank()) return false
-    val m = mediaUrl.trim()
-    if (m.isBlank()) return false
-    if (!getPlatform().name.contains("ios", ignoreCase = true)) return false
-    val pathOnly = m.substringBefore('?').lowercase()
-    val mime = mimeTypeHint?.lowercase().orEmpty()
-    if (avPlayerLikelySupportsRemoteAudio(pathOnly, mime)) return false
-    val webmish =
-        pathOnly.endsWith(".webm") ||
-            "webm" in mime ||
-            mime.contains("codecs=opus") ||
-            ("opus" in mime && "audio" in mime)
-    if (webmish) return true
-    return mediaUrlLooksLikePlaintextWebChatMediaUpload(m)
-}
-
-/** Conservative: when true, keep in-app AVPlayer instead of using the native file opener fallback. */
-private fun avPlayerLikelySupportsRemoteAudio(
-    pathOnly: String,
-    mime: String,
-): Boolean {
-    if (pathOnly.endsWith(".mp3") ||
-        pathOnly.endsWith(".m4a") ||
-        pathOnly.endsWith(".aac") ||
-        pathOnly.endsWith(".wav") ||
-        pathOnly.endsWith(".caf")
-    ) {
-        return true
-    }
-    if (mime.contains("mpeg") && !mime.contains("opus")) return true
-    if (mime.contains("aac")) return true
-    if (mime.contains("wav")) return true
-    if (mime.contains("x-m4a") || mime.contains("m4a")) return true
-    if (mime.contains("mp4") && "audio" in mime) return true
-    return false
-}
-
-@Composable
-private fun NativeBackedWebVoiceRow(
-    palette: VoiceChromePalette,
-    widthModifier: Modifier,
-    mediaUrl: String,
-    mimeTypeHint: String?,
-    totalLabel: String,
-) {
-    val scope = rememberCoroutineScope()
-    val safeUrl = remember(mediaUrl) { mediaUrl.trim() }
-    val safeMime =
-        remember(mimeTypeHint) {
-            mimeTypeHint?.trim()?.takeIf { it.isNotEmpty() } ?: "audio/webm"
-        }
-    var opening by remember(safeUrl, safeMime) { mutableStateOf(false) }
-    VoiceNoteChromeShell(palette, widthModifier) {
-        Box(
-            modifier =
-                Modifier
-                    .size(chatBubbleScaledDp(60f))
-                    .clip(CircleShape)
-                    .border(1.dp, palette.playBorder, CircleShape)
-                    .background(palette.playFill, CircleShape)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        enabled = !opening && safeUrl.isNotBlank(),
-                        onClick = {
-                            opening = true
-                            scope.launch {
-                                val bytes = fetchImageBytesFromUrl(safeUrl)
-                                if (bytes != null && bytes.isNotEmpty()) {
-                                    saveDecryptedAttachmentToDownloads(
-                                        bytes = bytes,
-                                        fileName = webVoiceFallbackFileName(safeMime),
-                                        mimeType = safeMime,
-                                    )
-                                }
-                                opening = false
-                            }
-                        },
-                    ),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = Icons.Filled.PlayArrow,
-                contentDescription = "Open voice message",
-                tint = palette.playIcon,
-                modifier = Modifier.size(chatBubbleScaledDp(30f)),
-            )
-        }
-        Column(Modifier.weight(1f)) {
-            Box(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .height(chatBubbleScaledDp(12f))
-                        .clip(TrackShape)
-                        .background(palette.trackBg),
-            )
-            Spacer(Modifier.height(chatBubbleScaledDp(6f)))
-            Text(
-                text = if (opening) "Opening voice message..." else "Tap play to open voice message",
-                style = chatBubbleReplyLabelStyle(),
-                color = palette.timeColor.copy(alpha = 0.88f),
-                maxLines = 2,
-            )
-            Spacer(Modifier.height(chatBubbleScaledDp(3f)))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = "0:00",
-                    style = timeStyle(),
-                    color = palette.timeColor,
-                )
-                Text(
-                    text = totalLabel,
-                    style = timeStyle(),
-                    color = palette.timeColor,
-                )
-            }
-        }
-    }
-}
-
-private fun webVoiceFallbackFileName(mimeType: String): String {
-    val mime = mimeType.lowercase()
-    val ext =
-        when {
-            "webm" in mime -> "webm"
-            "opus" in mime -> "opus"
-            "mpeg" in mime || "mp3" in mime -> "mp3"
-            "aac" in mime -> "aac"
-            "wav" in mime -> "wav"
-            "m4a" in mime || "mp4" in mime -> "m4a"
-            else -> "audio"
-        }
-    return "click_voice_message.$ext"
 }
 
 @Composable

@@ -53,7 +53,7 @@ private const val PRESS_WASH_ALPHA = 0.075f
 /**
  * Conversation-specific list row.
  *
- * Android keeps the Material bounded ripple. iOS uses a lightweight radial wash that starts at the
+ * Android keeps the Material bounded ripple. Without ripple, a lightweight radial wash starts at the
  * actual finger position and expands to the row bounds, instead of flashing the whole touch surface
  * at once. Navigation still yields one frame so very quick taps visibly acknowledge their source.
  */

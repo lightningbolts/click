@@ -1,4 +1,4 @@
-# Maestro workspace for the Click KMP app (Android + iOS).
+# Maestro workspace for the Click KMP app (Android).
 # Auth journeys live in auth/ and are run explicitly (they need TEST_EMAIL / TEST_PASSWORD).
 appId: compose.project.click.click
 flows:

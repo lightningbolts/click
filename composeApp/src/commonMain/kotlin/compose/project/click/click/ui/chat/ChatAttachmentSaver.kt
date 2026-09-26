@@ -8,8 +8,6 @@ package compose.project.click.click.ui.chat
  *
  * * Android: saves into the app's `Downloads/Click` folder using `MediaStore.Downloads`
  *   on API 29+, or a scoped `getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)` fallback.
- * * iOS: writes to the app sandbox Documents directory and returns a `file://` URL suitable
- *   for a follow-up `UIActivityViewController` share sheet (caller decides whether to open).
  */
 expect fun saveDecryptedAttachmentToDownloads(
     bytes: ByteArray,

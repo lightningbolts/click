@@ -22,18 +22,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import compose.project.click.click.getPlatform // pragma: allowlist secret
 
 /**
- * Platform deltas for Click's shared visual language.
- *
- * iOS intentionally uses a quieter half-point structural hairline, rounder content surfaces, and
- * no pressed-position jump. UIKit-owned navigation/tab chrome provides the material treatment;
- * Compose content should not compete with it using heavy outlines or neo-brutalist offsets.
+ * Shape, border, and interaction tokens for Click's shared visual language.
  */
 @Immutable
 data class PlatformStyle(
-    val isIOS: Boolean,
     val cardCornerRadius: Dp,
     val compactCardCornerRadius: Dp,
     val buttonCornerRadius: Dp,
@@ -51,7 +45,6 @@ data class PlatformStyle(
 val LocalPlatformStyle =
     staticCompositionLocalOf {
         PlatformStyle(
-            isIOS = false,
             cardCornerRadius = 16.dp,
             compactCardCornerRadius = 8.dp,
             buttonCornerRadius = 8.dp,
@@ -106,24 +99,8 @@ fun clickSheetOnSurface(): Color = MaterialTheme.colorScheme.onSurface
 @ReadOnlyComposable
 fun clickSheetOnSurfaceMuted(): Color = MaterialTheme.colorScheme.onSurfaceVariant
 
-private val iOSPlatformStyle =
-    PlatformStyle(
-        isIOS = true,
-        cardCornerRadius = 20.dp,
-        compactCardCornerRadius = 14.dp,
-        buttonCornerRadius = 14.dp,
-        cardBorderWidth = 0.5.dp,
-        glassBackgroundAlpha = 1f,
-        glassBorderAlpha = 1f,
-        glassBorderPrimaryAlpha = 1f,
-        useShadowElevation = false,
-        useRipple = false,
-        pressOffset = 0.dp,
-    )
-
 private val androidPlatformStyle =
     PlatformStyle(
-        isIOS = false,
         cardCornerRadius = 16.dp,
         compactCardCornerRadius = 8.dp,
         buttonCornerRadius = 8.dp,
@@ -138,9 +115,7 @@ private val androidPlatformStyle =
 
 @Composable
 fun PlatformStyleProvider(content: @Composable () -> Unit) {
-    val isIOS = getPlatform().name.contains("iOS", ignoreCase = true)
-    val style = if (isIOS) iOSPlatformStyle else androidPlatformStyle
-    CompositionLocalProvider(LocalPlatformStyle provides style) {
+    CompositionLocalProvider(LocalPlatformStyle provides androidPlatformStyle) {
         content()
     }
 }

@@ -263,8 +263,8 @@ internal fun TimelinePanel(
             Modifier
                 .fillMaxWidth()
                 .fillMaxSize()
-                // Always Compose-scroll inside the pager page (UIKit host sheetBodyScroll is a
-                // no-op; fillMaxSize + verticalScroll keeps tabs scrollable and Metal-safe).
+                // Always Compose-scroll inside the pager page (fillMaxSize + verticalScroll keeps
+                // tabs scrollable).
                 .verticalScroll(scrollState)
                 .padding(top = 12.dp, bottom = 48.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),

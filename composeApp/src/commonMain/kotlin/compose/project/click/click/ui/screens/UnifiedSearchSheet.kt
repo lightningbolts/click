@@ -89,9 +89,6 @@ fun UnifiedSearchSheet(
         appColorScheme = MaterialTheme.colorScheme,
         appTypography = MaterialTheme.typography,
         expandable = true,
-        // UIKit dismiss + fill viewport so results occupy the sheet (no fixed empty band).
-        useUiKitScrollHost = true,
-        uiKitFillViewport = true,
     ) {
         UnifiedSearchSheetContent(
             userId = userId,

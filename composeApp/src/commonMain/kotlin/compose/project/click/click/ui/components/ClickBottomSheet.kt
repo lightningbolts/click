@@ -35,32 +35,28 @@ object ClickSheetDefaults {
     val ContentHorizontalPadding = ClickScreenSpacing.Horizontal
     val ContentBottomPadding = ClickScreenSpacing.Section
 
-    /** Clearance under the iOS system grabber / sheet handle before primary chrome. */
+    /** Clearance under the sheet handle before primary chrome. */
     val ContentTopPaddingUnderGrabber = 20.dp
     val TitleBottomSpacing = 12.dp
     val ScrimAlpha = 0.55f
 }
 
 /**
- * Platform sheet shell matching map beacon dialogs:
- * iOS UIKit page sheet (Liquid Glass + system grabber); Android Calf adaptive sheet.
+ * Platform sheet shell matching map beacon dialogs: Android Calf adaptive sheet.
  */
 @Composable
 fun ClickPlatformSheet(
     onDismissRequest: () -> Unit,
     modifier: Modifier = Modifier,
-    /** When true, sheet can expand to full height (medium+large / Android partial). */
+    /** When true, sheet can expand to full height (Android partial). */
     expandable: Boolean = true,
-    /** iOS: host in UIScrollView for dismiss-at-top. Prefer false for sticky-IME short forms. */
-    useUiKitScrollHost: Boolean = true,
-    /** iOS: fill sheet viewport (LazyColumn / pager). Requires [useUiKitScrollHost]. */
-    uiKitFillViewport: Boolean = false,
+    /** Fill the sheet body height (LazyColumn / pager / sticky-IME forms) instead of wrapping content. */
+    fillBody: Boolean = false,
     contentWindowInsets: @Composable () -> WindowInsets = { WindowInsets(0, 0, 0, 0) },
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val sheetColor = MaterialTheme.colorScheme.surface
     val onSheet = MaterialTheme.colorScheme.onSurface
-    val fillBody = !useUiKitScrollHost || uiKitFillViewport
     MapBeaconSheetRoot(
         visible = true,
         onDismissRequest = onDismissRequest,
@@ -72,11 +68,9 @@ fun ClickPlatformSheet(
         appTypography = MaterialTheme.typography,
         modifier = modifier,
         expandable = expandable,
-        useUiKitScrollHost = useUiKitScrollHost,
-        uiKitFillViewport = uiKitFillViewport,
     ) {
         // Nested ProvideSheetSwipeDismiss reports scroll-at-top into SheetFingerDismissHost's
-        // holder (iOS fill sheets / Android adaptive). Do not nest a second holder here.
+        // holder (Android adaptive). Do not nest a second holder here.
         CompositionLocalProvider(
             LocalSheetOnDismissRequest provides onDismissRequest,
         ) {
@@ -154,9 +148,9 @@ fun ClickActionBottomSheet(
 /**
  * Forms and tall text-entry content.
  *
- * Defaults to UIKit scroll-host for Column wrap-content (which-pin / view-event).
- * Pass [useUiKitScrollHost]=false for LazyColumn / pager / sticky-IME sheets.
- * Text fields use [sheetImePadding] — Compose `imePadding()` is unreliable in UIKit sheets.
+ * Defaults to Column wrap-content (which-pin / view-event).
+ * Pass [fillBody]=true for LazyColumn / pager / sticky-IME sheets.
+ * Text fields use [sheetImePadding].
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -171,13 +165,10 @@ fun ClickFormBottomSheet(
     contentWindowInsets: @Composable () -> WindowInsets = { WindowInsets.ime },
     @Suppress("UNUSED_PARAMETER") dragHandle: @Composable () -> Unit = {},
     /**
-     * iOS: true (default) for Column/`sheetBodyScroll` wrap-content sheets (which-pin /
-     * view-event). Set **false** for sticky-IME short forms (availability / drop).
-     * Pair with [uiKitFillViewport] for LazyColumn / HorizontalPager sheets.
+     * False (default) for Column/`sheetBodyScroll` wrap-content sheets (which-pin /
+     * view-event). Set **true** for sticky-IME short forms and LazyColumn / HorizontalPager sheets.
      */
-    useUiKitScrollHost: Boolean = true,
-    /** iOS: fill sheet viewport for lists/pagers. Requires [useUiKitScrollHost]=true. */
-    uiKitFillViewport: Boolean = false,
+    fillBody: Boolean = false,
     expandable: Boolean = true,
     content: @Composable ColumnScope.() -> Unit,
 ) {
@@ -185,8 +176,7 @@ fun ClickFormBottomSheet(
         onDismissRequest = onDismissRequest,
         modifier = modifier,
         expandable = expandable,
-        useUiKitScrollHost = useUiKitScrollHost,
-        uiKitFillViewport = uiKitFillViewport,
+        fillBody = fillBody,
         contentWindowInsets = contentWindowInsets,
         content = content,
     )
