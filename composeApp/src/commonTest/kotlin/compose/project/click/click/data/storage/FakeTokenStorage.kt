@@ -51,6 +51,10 @@ class FakeTokenStorage(
 
     override suspend fun getCalendarDisconnected(): Boolean = false
 
+    override suspend fun savePendingSends(json: String?) {}
+
+    override suspend fun getPendingSends(): String? = null
+
     override suspend fun saveTelemetryQueue(json: String?) {}
 
     override suspend fun getTelemetryQueue(): String? = null

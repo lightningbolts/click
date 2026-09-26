@@ -39,6 +39,8 @@ import compose.project.click.click.ui.theme.* // pragma: allowlist secret
 import compose.project.click.click.ui.utils.* // pragma: allowlist secret
 import compose.project.click.click.ui.utils.CommunityHubPin // pragma: allowlist secret
 import compose.project.click.click.ui.utils.displayDynamicTitle // pragma: allowlist secret
+import compose.project.click.click.util.SoundtrackMatch // pragma: allowlist secret
+import compose.project.click.click.util.SoundtrackResolver // pragma: allowlist secret
 import compose.project.click.click.viewmodel.MapViewModel // pragma: allowlist secret
 import kotlinx.coroutines.delay
 import kotlinx.datetime.Instant
@@ -269,18 +271,26 @@ internal fun SoundtrackBeaconDetail(
         remember(beacon, mapBeacons) {
             mapBeacons.firstOrNull { it.id == beacon.id } ?: beacon
         }
+    val original =
+        (displayBeacon.metadata.originalUrl ?: displayBeacon.metadata.musicUrl)
+            ?.takeIf { it.isNotBlank() }
+    val serverPreview = displayBeacon.metadata.previewUrl?.takeIf { it.isNotBlank() }
+    // No server preview (its lookup can be throttled): resolve on the device, as iOS does (05 §C6).
+    var resolved by remember(original) { mutableStateOf<SoundtrackMatch?>(null) }
+    LaunchedEffect(original, serverPreview) {
+        if (serverPreview == null && original != null) resolved = SoundtrackResolver.resolve(original)
+    }
     val trackTitle =
         displayBeacon.metadata.trackName?.takeIf { it.isNotBlank() }
+            ?: resolved?.trackName
             ?: displayBeacon.metadata.title?.takeIf { it.isNotBlank() }
             ?: displayBeacon.displayDynamicTitle()
     val artistLine =
         displayBeacon.metadata.artistName?.takeIf { it.isNotBlank() }
             ?: displayBeacon.metadata.artist?.takeIf { it.isNotBlank() }
-    val art = displayBeacon.metadata.albumArtUrl?.takeIf { it.isNotBlank() }
-    val preview = displayBeacon.metadata.previewUrl?.takeIf { it.isNotBlank() }
-    val original =
-        (displayBeacon.metadata.originalUrl ?: displayBeacon.metadata.musicUrl)
-            ?.takeIf { it.isNotBlank() }
+            ?: resolved?.artistName
+    val art = displayBeacon.metadata.albumArtUrl?.takeIf { it.isNotBlank() } ?: resolved?.artworkUrl
+    val preview = serverPreview ?: resolved?.previewUrl
     val distanceLabel = distanceMeters?.let { formatBeaconDistance(it) }
     val border = clickBorderColor()
     val cardSurface = clickCardSurface()

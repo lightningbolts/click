@@ -189,15 +189,24 @@ internal suspend fun ApiClient.getActivityRecapImpl(window: String = "week"): Re
  * GET `/api/connections/{connectionId}/tabs` on click-web — fetches Media + Files
  * listings for the profile sheet. Links remain client-side because message
  * [content] is E2EE on the wire; callers filter locally-decrypted state.
+ * Groups pass [chatId]; the shared-media grid pages with [limit] and [beforeEpochMs]
+ * (attachments older than that `time_created`) and reads `hasMore`.
  */
-internal suspend fun ApiClient.getConnectionTabsImpl(connectionId: String): Result<ConnectionTabsGetResponse> {
+internal suspend fun ApiClient.getConnectionTabsImpl(
+    connectionId: String,
+    chatId: String? = null,
+    limit: Int? = null,
+    beforeEpochMs: Long? = null,
+): Result<ConnectionTabsGetResponse> {
     val id = connectionId.trim()
     if (id.isEmpty()) return Result.failure(IllegalArgumentException("connectionId required"))
     return try {
         val response: HttpResponse =
-            clickWebClient.get(
-                "${ApiClient.clickWebAuthOrigin}/api/connections/$id/tabs",
-            )
+            clickWebClient.get("${ApiClient.clickWebAuthOrigin}/api/connections/$id/tabs") {
+                chatId?.trim()?.takeIf { it.isNotEmpty() }?.let { parameter("chatId", it) }
+                limit?.let { parameter("limit", it) }
+                beforeEpochMs?.let { parameter("before", it) }
+            }
         if (response.status.value in 200..299) {
             Result.success(response.body<ConnectionTabsGetResponse>())
         } else {

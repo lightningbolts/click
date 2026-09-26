@@ -304,8 +304,13 @@ class ChatViewModel(
      */
     internal val _readClearedConnectionIds = MutableStateFlow<Set<String>>(emptySet())
 
+    /** Outbox rows a send in this process is already handling (the flush skips them). */
+    internal val inFlightOutboxIds: MutableSet<String> = mutableSetOf()
+
     init {
         connectivityMonitor.start()
+        startOutbox()
+        startLocalStoreSync()
         viewModelScope.launch {
             AppDataManager.cachedChatThreads.collect { threads ->
                 if (threads.isEmpty()) return@collect
@@ -790,6 +795,16 @@ class ChatViewModel(
             candidateUserIds = candidateUserIds,
             selectedCandidateIds = selectedCandidateIds,
         )
+
+    /** Ineligible candidate → readable reason ("Hasn't Clicked with Lena"). */
+    suspend fun cliqueIneligibleReasons(
+        viewerUserId: String,
+        memberUserIds: Collection<String>,
+        mask: Map<String, Boolean>,
+    ): Map<String, String> =
+        cliqueMissingMembersImpl(viewerUserId, memberUserIds, mask)
+            .mapNotNull { (candidate, missing) -> cliqueIneligibleReason(missing.map(::cliqueMemberFirstName))?.let { candidate to it } }
+            .toMap()
 
     fun createVerifiedClique(
         selectedFriendUserIds: List<String>,

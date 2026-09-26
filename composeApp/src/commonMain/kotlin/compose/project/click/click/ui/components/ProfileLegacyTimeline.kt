@@ -334,101 +334,53 @@ fun ProfileLegacyTimelineContent(
             Spacer(modifier = Modifier.height(12.dp))
         }
 
-        Text(
-            text = "Interests",
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        if (p.interestTags.isEmpty()) {
-            Text(
-                text = "No interests shared yet",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        } else {
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                p.interestTags.forEach { tag ->
-                    ClickChip(
-                        label = tag,
-                        selected = false,
-                        onClick = {},
-                        compact = true,
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
-        Spacer(modifier = Modifier.height(12.dp))
-
-        Text(
-            text = "Personality",
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
-        Spacer(modifier = Modifier.height(8.dp))
+        // Common ground (iOS profile): shared interests first and highlighted, then their other
+        // interests outlined, then personality, in one section.
+        val (sharedTags, otherTags) = commonGroundInterests(p.viewerInterestTags, p.interestTags)
         val personality = p.personalityTags.ifEmpty { p.user.personalityTags }
-        if (personality.isEmpty()) {
-            Text(
-                text = "No personality traits shared yet",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        } else {
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                personality.forEach { tag ->
-                    ClickChip(
-                        label = tag,
-                        selected = false,
-                        onClick = {},
-                        compact = true,
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
-        Spacer(modifier = Modifier.height(12.dp))
-
-        val sharedTags = sharedInterestTags(p.viewerInterestTags, p.interestTags)
-
         Text(
-            text = "Shared interests",
+            text = "Common ground",
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onSurface,
         )
         Spacer(modifier = Modifier.height(8.dp))
-        if (sharedTags.isEmpty()) {
+        if (sharedTags.isEmpty() && otherTags.isEmpty() && personality.isEmpty()) {
             Text(
-                text = "No overlap with your interests yet",
+                text = "No interests or personality shared yet",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-        } else {
+        }
+        if (sharedTags.isNotEmpty() || otherTags.isNotEmpty()) {
+            if (sharedTags.isNotEmpty()) {
+                Text(
+                    text = if (sharedTags.size == 1) "1 interest in common" else "${sharedTags.size} interests in common",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(bottom = 6.dp),
+                )
+            }
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                sharedTags.forEach { tag ->
-                    ClickChip(
-                        label = tag,
-                        selected = true,
-                        onClick = {},
-                        compact = true,
-                    )
-                }
+                sharedTags.forEach { tag -> ClickChip(label = tag, selected = true, onClick = {}, compact = true) }
+                otherTags.forEach { tag -> ClickChip(label = tag, selected = false, onClick = {}, compact = true) }
+            }
+        }
+        if (personality.isNotEmpty()) {
+            Text(
+                text = "Personality",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 12.dp, bottom = 6.dp),
+            )
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                personality.forEach { tag -> ClickChip(label = tag, selected = false, onClick = {}, compact = true) }
             }
         }
 
@@ -546,4 +498,15 @@ internal fun LegacyMomentCard(
             )
         }
     }
+}
+
+/** Shared interests (in the peer's order) and the peer's remaining interests. */
+internal fun commonGroundInterests(
+    viewerTags: List<String>,
+    peerTags: List<String>,
+): Pair<List<String>, List<String>> {
+    val shared = sharedInterestTags(viewerTags, peerTags).distinctBy { it.lowercase() }
+    val sharedKeys = shared.map { it.trim().lowercase() }.toSet()
+    val others = peerTags.filter { it.isNotBlank() && it.trim().lowercase() !in sharedKeys }.distinctBy { it.trim().lowercase() }
+    return shared to others
 }

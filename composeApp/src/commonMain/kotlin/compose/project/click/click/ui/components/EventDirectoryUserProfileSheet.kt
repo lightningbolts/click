@@ -6,8 +6,10 @@
 package compose.project.click.click.ui.components // pragma: allowlist secret
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -21,6 +23,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -31,13 +34,19 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
+import compose.project.click.click.data.api.ApiClient // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.models.UserPublicProfile // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
+import compose.project.click.click.deeplink.AppDeepLink // pragma: allowlist secret
+import compose.project.click.click.deeplink.AppDeepLinkRouter // pragma: allowlist secret
 import compose.project.click.click.events.AttendeeRelationship // pragma: allowlist secret
 import compose.project.click.click.events.DirectoryAttendee // pragma: allowlist secret
 import compose.project.click.click.events.allowsDirectoryConnectActions // pragma: allowlist secret
@@ -73,6 +82,20 @@ fun EventDirectoryUserProfileSheet(
         )
     }
     var legacyProfile by remember(attendee.userId) { mutableStateOf<UserPublicProfile?>(null) }
+    val notConnected =
+        attendee.relationship != AttendeeRelationship.Connection && attendee.relationship != AttendeeRelationship.Self
+    // Aura ring for people the viewer hasn't Clicked with (iOS `PublicProfileView`).
+    var auraColors by remember(attendee.userId) { mutableStateOf<List<Color>>(emptyList()) }
+    LaunchedEffect(attendee.userId, notConnected) {
+        if (!notConnected) return@LaunchedEffect
+        auraColors =
+            ApiClient()
+                .getPublicProfileUnauthenticated(attendee.userId)
+                .getOrNull()
+                ?.auraColors
+                .orEmpty()
+                .mapNotNull(::parseAuraHex)
+    }
     var legacyLoading by remember(attendee.userId) { mutableStateOf(true) }
     var legacyError by remember(attendee.userId) { mutableStateOf<String?>(null) }
 
@@ -127,17 +150,29 @@ fun EventDirectoryUserProfileSheet(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                ConnectionListUserAvatarFace(
-                    displayName = displayName,
-                    email = resolved?.email,
-                    avatarUrl = resolved?.image ?: attendee.avatarUrl,
-                    userId = attendee.userId,
-                    modifier =
-                        Modifier
-                            .size(68.dp)
-                            .clip(CircleShape)
-                            .border(clickBorderWidth(), border, CircleShape),
-                )
+                Box(modifier = Modifier.size(80.dp), contentAlignment = Alignment.Center) {
+                    if (notConnected) {
+                        val ring = auraColors.ifEmpty { listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.tertiary) }
+                        Box(
+                            modifier =
+                                Modifier
+                                    .size(80.dp)
+                                    .alpha(0.55f)
+                                    .background(Brush.linearGradient(if (ring.size == 1) ring + ring else ring), CircleShape),
+                        )
+                    }
+                    ConnectionListUserAvatarFace(
+                        displayName = displayName,
+                        email = resolved?.email,
+                        avatarUrl = resolved?.image ?: attendee.avatarUrl,
+                        userId = attendee.userId,
+                        modifier =
+                            Modifier
+                                .size(68.dp)
+                                .clip(CircleShape)
+                                .border(clickBorderWidth(), border, CircleShape),
+                    )
+                }
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = displayName,
@@ -150,6 +185,13 @@ fun EventDirectoryUserProfileSheet(
                         style = MaterialTheme.typography.bodyMedium,
                         color = onVariant,
                     )
+                    if (notConnected) {
+                        Text(
+                            text = "You haven't Clicked yet",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = onVariant,
+                        )
+                    }
                 }
             }
 
@@ -170,12 +212,27 @@ fun EventDirectoryUserProfileSheet(
                 ) {
                     Text("Message", fontWeight = FontWeight.SemiBold)
                 }
-            } else if (attendee.relationship != AttendeeRelationship.Self) {
-                Text(
-                    text = "View only — connect in person if you meet.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = onVariant,
-                )
+            } else if (notConnected) {
+                Column(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(18.dp))
+                            .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text("Connect in person", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "Click connects people who've actually met. When you're together, open Add Click and tap " +
+                            "phones, or scan each other's QR code.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = onVariant,
+                    )
+                    OutlinedButton(onClick = {
+                        onDismiss()
+                        AppDeepLinkRouter.open(AppDeepLink.AddClick)
+                    }) { Text("Open Add Click") }
+                }
             }
 
             if (attendee.sharedInterests.isNotEmpty()) {
@@ -207,5 +264,16 @@ fun EventDirectoryUserProfileSheet(
                 modifier = Modifier.fillMaxWidth(),
             )
         }
+    }
+}
+
+/** "#RRGGBB" / "RRGGBB" / "#AARRGGBB" → [Color]; null for anything else. */
+internal fun parseAuraHex(raw: String): Color? {
+    val hex = raw.trim().removePrefix("#")
+    val value = hex.toLongOrNull(16) ?: return null
+    return when (hex.length) {
+        6 -> Color(0xFF000000 or value)
+        8 -> Color(value)
+        else -> null
     }
 }

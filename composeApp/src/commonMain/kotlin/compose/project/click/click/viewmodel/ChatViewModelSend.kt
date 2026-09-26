@@ -6,7 +6,10 @@
 package compose.project.click.click.viewmodel
 
 import androidx.lifecycle.viewModelScope
+import compose.project.click.click.crypto.MessageCryptoV2 // pragma: allowlist secret
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
+import compose.project.click.click.data.chat.PendingSend // pragma: allowlist secret
+import compose.project.click.click.data.chat.PendingSendStore // pragma: allowlist secret
 import compose.project.click.click.data.models.ChatMessageType // pragma: allowlist secret
 import compose.project.click.click.data.models.ChatWithDetails // pragma: allowlist secret
 import compose.project.click.click.data.models.Message // pragma: allowlist secret
@@ -233,6 +236,22 @@ internal fun ChatViewModel.sendMessageImpl() {
             appendOutgoingOptimistic(optimistic, currentUser)
         }
 
+        // Persist before sending: if the app dies mid-send the row comes back and resends.
+        val outboxItem =
+            PendingSend(
+                tempId = tempId,
+                userId = userId,
+                threadKey = connectionId,
+                apiChatId = apiChatId,
+                content = content,
+                metadataJson = metadataCaptured.toOutboxJson(),
+                localSentAtMs = localMs,
+                clientMessageId = MessageCryptoV2.generateClientMessageId(),
+                sendConnectionId = sendConnectionId,
+            )
+        inFlightOutboxIds += tempId
+        PendingSendStore.upsert(tokenStorage, outboxItem)
+
         outboundChatMessageMutex.withLock {
             _isMessageSubmitInProgress.value = true
             try {
@@ -244,8 +263,11 @@ internal fun ChatViewModel.sendMessageImpl() {
                         metadata = metadataCaptured,
                         clientLocalSentAtMs = localMs,
                         connectionId = sendConnectionId,
+                        clientMessageId = outboxItem.clientMessageId,
                     )
                 if (message != null) {
+                    // Drop the outbox row first so the restore collector never re-adds the temp row.
+                    PendingSendStore.remove(tokenStorage, tempId)
                     _replyingTo.value = null
                     applyInsertedMessage(message, currentUser, userId, optimisticTempId = tempId)
                     activateConnectionIfPending(connectionId)
@@ -273,6 +295,7 @@ internal fun ChatViewModel.sendMessageImpl() {
                 }
             } finally {
                 _isMessageSubmitInProgress.value = false
+                inFlightOutboxIds -= tempId
             }
         }
     }

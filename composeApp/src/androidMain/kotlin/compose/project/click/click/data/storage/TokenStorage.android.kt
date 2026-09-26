@@ -68,6 +68,7 @@ class AndroidTokenStorage(
         private const val KEY_AMBIENT_NOISE_OPT_IN = "ambient_noise_opt_in"
         private const val KEY_CALENDAR_DISCONNECTED = "calendar_disconnected"
         private const val KEY_TELEMETRY_QUEUE = "telemetry_connection_flow_queue"
+        private const val KEY_PENDING_SENDS = "chat_pending_sends"
         private const val KEY_BAROMETRIC_CONTEXT_OPT_IN = "barometric_context_opt_in"
         private const val KEY_PLAN_CUSTOM_IDEAS = "plan_custom_ideas"
         private const val KEY_HANGOUT_DETECTION_OPT_IN = "hangout_detection_opt_in"
@@ -141,6 +142,15 @@ class AndroidTokenStorage(
         } else {
             null
         }
+
+    override suspend fun savePendingSends(json: String?) {
+        sharedPreferences.edit().apply {
+            if (json == null) remove(KEY_PENDING_SENDS) else putString(KEY_PENDING_SENDS, json)
+            apply()
+        }
+    }
+
+    override suspend fun getPendingSends(): String? = sharedPreferences.getString(KEY_PENDING_SENDS, null)
 
     override suspend fun saveTelemetryQueue(json: String?) {
         sharedPreferences.edit().apply {
@@ -359,6 +369,7 @@ class AndroidTokenStorage(
                     KEY_CALL_NOTIFICATIONS_ENABLED,
                     KEY_AMBIENT_NOISE_OPT_IN,
                     KEY_CALENDAR_DISCONNECTED,
+                    KEY_PENDING_SENDS,
                     KEY_BAROMETRIC_CONTEXT_OPT_IN,
                     // Presence pings must never follow the device to another account.
                     KEY_HANGOUT_DETECTION_OPT_IN,

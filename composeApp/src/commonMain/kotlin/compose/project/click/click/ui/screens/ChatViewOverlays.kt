@@ -20,6 +20,7 @@ import compose.project.click.click.data.ChatMuteStore
 import compose.project.click.click.data.models.FriendshipStats
 import compose.project.click.click.data.models.MessageWithUser // pragma: allowlist secret
 import compose.project.click.click.data.models.canForward
+import compose.project.click.click.data.models.replyRef // pragma: allowlist secret
 import compose.project.click.click.data.models.toFriendshipEncounter
 import compose.project.click.click.ui.chat.ChatBeaconDetailSheet // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatExpandedPhotoPreview // pragma: allowlist secret
@@ -28,6 +29,7 @@ import compose.project.click.click.ui.chat.ConnectionActionSheet // pragma: allo
 import compose.project.click.click.ui.chat.ConnectionMenuAction // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ConnectionSheetDialog // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ConnectionSheetDialogs // pragma: allowlist secret
+import compose.project.click.click.ui.chat.LiftedMessageOverlay // pragma: allowlist secret
 import compose.project.click.click.ui.chat.MessageActionCapabilities // pragma: allowlist secret
 import compose.project.click.click.ui.chat.MessageActionHandlers // pragma: allowlist secret
 import compose.project.click.click.ui.chat.MessageActionSheet // pragma: allowlist secret
@@ -169,37 +171,59 @@ internal fun BoxScope.ChatViewOverlays(
                 .padding(end = 20.dp, bottom = edgeBottomInset + 16.dp),
     )
 
-    // Message long-press context sheet
+    // Message long-press: the bubble lifts in place (04 §8); "+" opens the full sheet's emoji picker.
     if (contextMenuMessage != null) {
         val selectedMessage = contextMenuMessage!!
-        MessageActionSheet(
-            messageWithUser = selectedMessage,
-            capabilities =
-                MessageActionCapabilities(
-                    canReply = selectedMessage.message.messageType.lowercase() != "call_log",
-                    canSaveMedia = canExportMessageMedia(selectedMessage.message),
-                    canShareMedia = canExportMessageMedia(selectedMessage.message),
-                    canEdit = canEditMessage(selectedMessage),
-                    canForward = selectedMessage.message.canForward(),
-                    canRetry = selectedMessage.message.canRetrySend(),
-                    canDiscard = selectedMessage.message.canDiscardFailed(),
-                    canDelete = selectedMessage.isSent && !selectedMessage.message.id.startsWith("temp-"),
-                ),
-            handlers =
-                MessageActionHandlers(
-                    onReply = viewModel::startReplyTo,
-                    onReact = { messageId, reaction -> viewModel.addReaction(messageId, reaction) },
-                    fetchDecryptedMediaBytes = viewModel::fetchDecryptedChatMediaBytes,
-                    onEdit = { selected ->
-                        viewModel.startEditMessage(selected.message.id, selected.message.content)
-                    },
-                    onDelete = { selected -> viewModel.deleteMessage(selected.message.id) },
-                    onForward = { selected -> forwardingMessage = selected.message },
-                    onRetry = { selected -> viewModel.retryFailedMessage(selected.message.id) },
-                    onDiscard = { selected -> viewModel.discardFailedMessage(selected.message.id) },
-                ),
-            onDismiss = { contextMenuMessage = null },
-        )
+        var fullSheetForEmoji by remember(selectedMessage.message.id) { mutableStateOf(false) }
+        val capabilities =
+            MessageActionCapabilities(
+                canReply = selectedMessage.message.messageType.lowercase() != "call_log",
+                canSaveMedia = canExportMessageMedia(selectedMessage.message),
+                canShareMedia = canExportMessageMedia(selectedMessage.message),
+                canEdit = canEditMessage(selectedMessage),
+                canForward = selectedMessage.message.canForward(),
+                canRetry = selectedMessage.message.canRetrySend(),
+                canDiscard = selectedMessage.message.canDiscardFailed(),
+                canDelete = selectedMessage.isSent && !selectedMessage.message.id.startsWith("temp-"),
+            )
+        val handlers =
+            MessageActionHandlers(
+                onReply = viewModel::startReplyTo,
+                onReact = { messageId, reaction -> viewModel.addReaction(messageId, reaction) },
+                fetchDecryptedMediaBytes = viewModel::fetchDecryptedChatMediaBytes,
+                onEdit = { selected ->
+                    viewModel.startEditMessage(selected.message.id, selected.message.content)
+                },
+                onDelete = { selected -> viewModel.deleteMessage(selected.message.id) },
+                onForward = { selected -> forwardingMessage = selected.message },
+                onRetry = { selected -> viewModel.retryFailedMessage(selected.message.id) },
+                onDiscard = { selected -> viewModel.discardFailedMessage(selected.message.id) },
+            )
+        if (fullSheetForEmoji) {
+            MessageActionSheet(
+                messageWithUser = selectedMessage,
+                capabilities = capabilities,
+                handlers = handlers,
+                onDismiss = { contextMenuMessage = null },
+                startInEmojiPicker = true,
+            )
+        } else {
+            val replyTarget =
+                selectedMessage.message.replyRef()?.let { ref ->
+                    (chatMessagesState as? ChatMessagesState.Success)
+                        ?.messages
+                        ?.firstOrNull { it.message.id == ref.replyToId }
+                        ?.message
+                }
+            LiftedMessageOverlay(
+                messageWithUser = selectedMessage,
+                replyTarget = replyTarget,
+                capabilities = capabilities,
+                handlers = handlers,
+                onMoreEmoji = { fullSheetForEmoji = true },
+                onDismiss = { contextMenuMessage = null },
+            )
+        }
     }
 
     forwardingMessage?.let { message ->

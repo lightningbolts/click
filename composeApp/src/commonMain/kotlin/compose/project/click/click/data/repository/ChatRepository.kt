@@ -135,6 +135,8 @@ interface ChatRepository {
         clientLocalSentAtMs: Long? = null,
         /** Fallback for gatekeeper when [chatId] is missing/invalid. */
         connectionId: String? = null,
+        /** v2 client message id to reuse (outbox retries); null generates a fresh one. */
+        clientMessageId: String? = null,
     ): Message?
 
     /**

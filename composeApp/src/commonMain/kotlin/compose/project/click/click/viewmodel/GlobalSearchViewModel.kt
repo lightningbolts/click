@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import compose.project.click.click.data.ActiveHubEntry // pragma: allowlist secret
 import compose.project.click.click.data.AppDataManager
+import compose.project.click.click.data.chat.LocalMessageStore // pragma: allowlist secret
+import compose.project.click.click.data.chat.StoredChatMessage // pragma: allowlist secret
 import compose.project.click.click.data.models.AvailabilityIntentRow
 import compose.project.click.click.data.models.ChatWithDetails
 import compose.project.click.click.data.models.MapBeacon
@@ -286,6 +288,10 @@ class GlobalSearchViewModel(
         // pragma: allowlist secret
         chatRepository.searchConversationHits(query)
     },
+    /** On-device history (05 §D6); unit tests pass a no-op so no real IO thread is involved. */
+    private val searchLocalMessages: suspend (userId: String, query: String) -> List<StoredChatMessage> = { userId, query ->
+        LocalMessageStore.search(userId, query, limit = 120)
+    },
 ) : ViewModel() {
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
@@ -566,6 +572,11 @@ class GlobalSearchViewModel(
     ): List<SearchResult.MessageHit> =
         coroutineScope {
             val apiHitsD = async { searchConversationHits(lowerQuery) }
+            // On-device history (05 §D6): matches from messages already opened, even offline.
+            val storedByThread =
+                runCatching { searchLocalMessages(userId, lowerQuery) }
+                    .getOrDefault(emptyList())
+                    .groupBy { it.threadKey }
             val limiter = Semaphore(MESSAGE_SEARCH_CONCURRENCY)
             val directAll =
                 (activeRows + archivedRows)
@@ -581,8 +592,15 @@ class GlobalSearchViewModel(
                 categories: Set<SearchResultCategory>,
                 hub: ActiveHubEntry? = null,
             ): List<SearchResult.MessageHit> {
+                val stored =
+                    (
+                        storedByThread[row.connection.id].orEmpty() +
+                            row.chat.id
+                                ?.let { storedByThread[it] }
+                                .orEmpty()
+                    ).map { it.toMessage() }
                 val local =
-                    (listOfNotNull(row.lastMessage) + row.chat.messages)
+                    (listOfNotNull(row.lastMessage) + row.chat.messages + stored)
                         .distinctBy { it.id }
                         .filter { it.content.contains(lowerQuery, ignoreCase = true) }
                 return local.map { msg ->
@@ -1059,3 +1077,13 @@ private fun emitLocationBuckets(
         )
     }
 }
+
+private fun StoredChatMessage.toMessage(): Message =
+    Message(
+        id = id,
+        user_id = senderId,
+        content = text,
+        timeCreated = createdMs,
+        messageType = messageType,
+        isRead = true,
+    )

@@ -23,7 +23,7 @@ fun Message.canForward(): Boolean {
     if (isDisposableRoll() || isBeaconChatMessage() || planOrNull() != null) return false
     return when (messageType.ifBlank { ChatMessageType.TEXT }.lowercase()) {
         ChatMessageType.TEXT -> content.isNotBlank()
-        ChatMessageType.IMAGE -> true
+        ChatMessageType.IMAGE, ChatMessageType.AUDIO, ChatMessageType.FILE -> true
         else -> false
     }
 }

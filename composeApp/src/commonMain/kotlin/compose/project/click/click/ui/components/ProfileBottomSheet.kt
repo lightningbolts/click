@@ -35,6 +35,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
@@ -53,6 +54,8 @@ import compose.project.click.click.data.models.UserPublicProfile // pragma: allo
 import compose.project.click.click.data.models.toFriendshipEncounter
 import compose.project.click.click.data.repository.ConnectionRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
+import compose.project.click.click.deeplink.AppDeepLink // pragma: allowlist secret
+import compose.project.click.click.deeplink.AppDeepLinkRouter // pragma: allowlist secret
 import compose.project.click.click.deeplink.EventDeepLinkRouter // pragma: allowlist secret
 import compose.project.click.click.ui.chat.fetchImageBytesFromUrl // pragma: allowlist secret
 import compose.project.click.click.ui.chat.saveDecryptedAttachmentToDownloads // pragma: allowlist secret
@@ -69,6 +72,7 @@ import compose.project.click.click.viewmodel.GroupTogetherViewModel
 import compose.project.click.click.viewmodel.PeerFriendshipViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
@@ -202,6 +206,9 @@ fun ProfileBottomSheet(
         mutableStateOf<Map<String, String>>(emptyMap())
     }
     var profileTabsHydrating by remember { mutableStateOf(false) }
+    // Group shared media pages (04 §11): 60 at a time, older pages as the grid scrolls to its end.
+    var groupMediaHasMore by remember(state.connectionId) { mutableStateOf(false) }
+    var groupMediaLoadingMore by remember(state.connectionId) { mutableStateOf(false) }
     var resolvingMediaIds by remember(state.connectionId, selectedUserId, effectiveViewerUserId) {
         mutableStateOf<Set<String>>(emptySet())
     }
@@ -221,19 +228,16 @@ fun ProfileBottomSheet(
             }
 
             val fetched =
-                if (!effectiveViewerUserId.isNullOrBlank()) {
+                if (state.isGroup) {
+                    // Never decrypt a whole group's history here: media decrypts per row as it is
+                    // shown, and links come from the open chat's loaded messages.
+                    emptyList()
+                } else if (!effectiveViewerUserId.isNullOrBlank()) {
                     runCatching {
-                        if (state.isGroup) {
-                            connectionRepository.fetchDecryptedMessagesForChat(
-                                chatId = connectionId,
-                                viewerUserId = effectiveViewerUserId,
-                            )
-                        } else {
-                            connectionRepository.fetchDecryptedMessagesForProfileConnection(
-                                connectionId = connectionId,
-                                viewerUserId = effectiveViewerUserId,
-                            )
-                        }
+                        connectionRepository.fetchDecryptedMessagesForProfileConnection(
+                            connectionId = connectionId,
+                            viewerUserId = effectiveViewerUserId,
+                        )
                     }.getOrDefault(emptyList())
                 } else {
                     emptyList()
@@ -255,9 +259,16 @@ fun ProfileBottomSheet(
 
             val tabsPayload =
                 runCatching {
-                    connectionRepository.fetchConnectionTabs(connectionId).getOrNull()
+                    if (state.isGroup) {
+                        connectionRepository
+                            .fetchConnectionTabs(connectionId, chatId = connectionId, limit = GROUP_MEDIA_PAGE_SIZE)
+                            .getOrNull()
+                    } else {
+                        connectionRepository.fetchConnectionTabs(connectionId).getOrNull()
+                    }
                 }.getOrNull()
             connectionChatId = tabsPayload?.chatId
+            groupMediaHasMore = state.isGroup && tabsPayload?.hasMore == true
 
             connectionTabMedia =
                 tabsPayload
@@ -287,6 +298,39 @@ fun ProfileBottomSheet(
         } finally {
             profileTabsHydrating = false
         }
+    }
+
+    // Next group media page when the Media grid nears its end.
+    LaunchedEffect(mediaScroll, groupMediaHasMore, state.connectionId) {
+        if (!state.isGroup || !groupMediaHasMore) return@LaunchedEffect
+        snapshotFlow { mediaScroll.maxValue > 0 && mediaScroll.value >= mediaScroll.maxValue - 600 }
+            .filter { it }
+            .collect {
+                if (groupMediaLoadingMore || !groupMediaHasMore) return@collect
+                val chatId = state.connectionId?.trim().orEmpty()
+                val oldest = connectionTabMedia.map { it.sortEpochMs }.filter { it > 0 }.minOrNull() ?: return@collect
+                groupMediaLoadingMore = true
+                val page =
+                    runCatching {
+                        connectionRepository
+                            .fetchConnectionTabs(chatId, chatId = chatId, limit = GROUP_MEDIA_PAGE_SIZE, beforeEpochMs = oldest)
+                            .getOrNull()
+                    }.getOrNull()
+                if (page != null) {
+                    val known = connectionTabMedia.mapTo(HashSet()) { it.id }
+                    connectionTabMedia =
+                        (connectionTabMedia + page.media.mapNotNull { it.toProfileSheetMediaFromTab() }.filterNot { it.id in known })
+                            .sortedByDescending { profileMediaSortEpoch(it) }
+                    val knownFiles = connectionTabFiles.mapTo(HashSet()) { it.id }
+                    connectionTabFiles =
+                        connectionTabFiles +
+                        page.files
+                            .mapNotNull { it.toProfileSheetFileFromTab().takeIf { f -> f.canOpenProfileFile() } }
+                            .filterNot { it.id in knownFiles }
+                    groupMediaHasMore = page.hasMore
+                }
+                groupMediaLoadingMore = false
+            }
     }
 
     val profileLocalMessages =
@@ -866,7 +910,7 @@ fun ProfileBottomSheet(
                         },
                         upcomingPlans = groupPlans,
                         onPlan = onPlan,
-                        onOpenPlan = { onMessage() },
+                        onOpenPlan = { upcoming -> openPlanInChat(upcoming, sheetOnDismiss) },
                     )
                 }
 
@@ -887,7 +931,7 @@ fun ProfileBottomSheet(
                         onPlan = onPlan,
                         onOpenStory = { showStory = true },
                         onOpenMap = { showEncounterMap = true },
-                        onOpenPlan = { onMessage() },
+                        onOpenPlan = { upcoming -> openPlanInChat(upcoming, sheetOnDismiss) },
                     )
                     notice?.let { text ->
                         LaunchedEffect(text) {
@@ -1106,3 +1150,15 @@ fun ProfileBottomSheet(
         }
     }
 }
+
+/** Opens the plan's chat scrolled to the plan message (the same path as `click://chat/{id}?m=`). */
+private fun openPlanInChat(
+    upcoming: compose.project.click.click.data.models.UpcomingPlan, // pragma: allowlist secret
+    dismissSheet: () -> Unit,
+) {
+    dismissSheet()
+    AppDeepLinkRouter.open(AppDeepLink.Chat(upcoming.chatId, upcoming.messageId))
+}
+
+/** Group shared-media page size (`/api/connections/{chatId}/tabs?limit=`), as on iOS. */
+private const val GROUP_MEDIA_PAGE_SIZE = 60

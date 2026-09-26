@@ -7,6 +7,7 @@ package compose.project.click.click.viewmodel
 
 import androidx.lifecycle.viewModelScope
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
+import compose.project.click.click.data.chat.PendingSendStore // pragma: allowlist secret
 import compose.project.click.click.data.models.Message // pragma: allowlist secret
 import compose.project.click.click.data.models.MessageDeliveryState // pragma: allowlist secret
 import compose.project.click.click.data.models.MessageReaction // pragma: allowlist secret
@@ -580,6 +581,9 @@ internal fun ChatViewModel.appendOutgoingOptimistic(
 }
 
 internal fun ChatViewModel.markOptimisticSendFailed(tempId: String) {
+    if (PendingSendStore.byTempId(tempId) != null) {
+        viewModelScope.launch { PendingSendStore.markFailed(tokenStorage, tempId) }
+    }
     val currentState = _chatMessagesState.value as? ChatMessagesState.Success ?: return
     _chatMessagesState.value =
         currentState.copy(

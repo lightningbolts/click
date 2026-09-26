@@ -416,6 +416,7 @@ fun ConnectionsListView(
     }
 
     var cliqueAddableMask by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
+    var cliqueIneligibleReasons by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var cliqueCreateGraphOk by remember { mutableStateOf(false) }
 
     /** False while edge RPCs run — blocks taps so users cannot pick ineligible friends during load. */
@@ -455,6 +456,7 @@ fun ConnectionsListView(
             cliqueAddableMask = mask
             cliqueCreateGraphOk = fullOk
             cliqueSheetEligibilityReady = true
+            cliqueIneligibleReasons = viewModel.cliqueIneligibleReasons(uidNonNull, selectedCliqueFriendIds, mask)
         }
     }
 
@@ -847,6 +849,7 @@ fun ConnectionsListView(
                 selectedIds = selectedCliqueFriendIds,
                 onSelectedIdsChange = { selectedCliqueFriendIds = it },
                 eligibilityMask = cliqueAddableMask,
+                ineligibleReasons = cliqueIneligibleReasons,
                 eligibilityReady = cliqueSheetEligibilityReady,
                 eligibilityCheckingLabel = "Checking who can join…",
                 errorMessage =

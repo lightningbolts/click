@@ -3,6 +3,8 @@
 package compose.project.click.click.data // pragma: allowlist secret
 
 import compose.project.click.click.data.api.CommunityHubNearbyDto // pragma: allowlist secret
+import compose.project.click.click.data.chat.LocalMessageStore // pragma: allowlist secret
+import compose.project.click.click.data.chat.PendingSendStore // pragma: allowlist secret
 import compose.project.click.click.data.models.CachedAppSnapshot // pragma: allowlist secret
 import compose.project.click.click.data.models.Connection // pragma: allowlist secret
 import compose.project.click.click.data.models.LocationPreferences // pragma: allowlist secret
@@ -72,6 +74,9 @@ internal suspend fun AppDataManager.clearDataImpl() {
     ChatMuteStore.clear()
     IdentityCache.clear()
     EventReminders.cancelAll()
+    // Unsent drafts and on-device history never carry over to another account.
+    runCatching { PendingSendStore.clear(tokenStorage) }
+    runCatching { LocalMessageStore.wipeAll() }
     loadAllDataJob?.cancel()
     loadAllDataJob = null
     chatPrefetchJob?.cancel()
