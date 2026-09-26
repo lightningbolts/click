@@ -42,6 +42,7 @@ import compose.project.click.click.ui.chat.ChatWarmLoadingView // pragma: allowl
 import compose.project.click.click.ui.chat.GroupMembersPickerContext // pragma: allowlist secret
 import compose.project.click.click.ui.chat.rememberChatMediaPickers // pragma: allowlist secret
 import compose.project.click.click.ui.chat.rememberChatThreadRuntime // pragma: allowlist secret
+import compose.project.click.click.ui.chat.typingLabel
 import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeftPeek // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberEdgeToEdgeBottomPadding // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberGlassToastState // pragma: allowlist secret
@@ -436,10 +437,19 @@ fun ChatView(
                         AvailabilityOverlapCache.put(v, peer, result)
                         chatHasIntentOverlap = result
                     }
+                    val typingUserIds by viewModel.typingUserIds.collectAsState()
                     val typingPeerLabel =
-                        remember(chatDetails.otherUser.name, isGroupChat) {
+                        remember(chatDetails.otherUser.name, isGroupChat, typingUserIds, chatDetails.groupMemberUsers) {
                             if (isGroupChat) {
-                                "Someone is typing"
+                                val names =
+                                    typingUserIds.map { id ->
+                                        chatDetails.groupMemberUsers
+                                            .firstOrNull { it.id == id }
+                                            ?.name
+                                            ?.substringBefore(' ')
+                                            ?.ifBlank { null } ?: "Someone"
+                                    }
+                                typingLabel(names) ?: "Someone is typing"
                             } else {
                                 "${chatDetails.otherUser.name ?: "Someone"} is typing"
                             }

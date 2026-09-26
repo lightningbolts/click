@@ -193,6 +193,7 @@ internal fun HubChatViewModel.applyVisibleHubParticipants(
     senderProfilesVisible: Boolean,
 ) {
     hubParticipantIds = participantIds.toSet()
+    _participantIds.value = if (senderProfilesVisible) participantIds.distinct() else emptyList()
     hubSenderProfilesVisible = senderProfilesVisible
     if (!senderProfilesVisible) {
         senderUiCache.clear()

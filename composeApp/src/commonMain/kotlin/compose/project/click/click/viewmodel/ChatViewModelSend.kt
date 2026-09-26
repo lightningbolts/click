@@ -593,7 +593,13 @@ internal fun ChatViewModel.leaveChatRoomImpl(clearMessageSurface: Boolean = true
     currentConnectionId = null
     currentApiChatId = null
     _scheduledMessages.value = emptyList()
+    _readCursors.value = emptyMap()
+    _tombstones.value = emptyMap()
     _plannerOpen.value = false
+    _chatSearchOpen.value = false
+    typingExpiryJobs.values.forEach { it.cancel() }
+    typingExpiryJobs.clear()
+    _typingUserIds.value = emptySet()
     _stagedChatImages.value = emptyList()
     _stagedBeacon.value = null
     _messageSendError.value = null

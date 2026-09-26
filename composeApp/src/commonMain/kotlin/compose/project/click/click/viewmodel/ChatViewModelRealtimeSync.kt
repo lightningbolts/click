@@ -10,6 +10,7 @@ import compose.project.click.click.data.AppDataManager // pragma: allowlist secr
 import compose.project.click.click.data.models.Message // pragma: allowlist secret
 import compose.project.click.click.data.models.MessageDeliveryState // pragma: allowlist secret
 import compose.project.click.click.data.models.MessageReaction // pragma: allowlist secret
+import compose.project.click.click.data.models.MessageTombstone
 import compose.project.click.click.data.models.MessageWithUser // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.models.previewLabel // pragma: allowlist secret
@@ -149,6 +150,15 @@ internal fun ChatViewModel.subscribeToNewMessages(
                                         is MessageChangeEvent.Delete -> {
                                             val currentState = _chatMessagesState.value
                                             if (currentState is ChatMessagesState.Success) {
+                                                // Leave a "Message deleted" placeholder where it was (iOS tombstones).
+                                                currentState.messages
+                                                    .firstOrNull { it.message.id == event.messageId }
+                                                    ?.message
+                                                    ?.let { gone ->
+                                                        _tombstones.value =
+                                                            _tombstones.value +
+                                                            (gone.id to MessageTombstone(gone.id, gone.user_id, gone.timeCreated))
+                                                    }
                                                 val filtered = currentState.messages.filter { it.message.id != event.messageId }
                                                 _chatMessagesState.value = currentState.copy(messages = filtered)
                                             }
@@ -156,6 +166,13 @@ internal fun ChatViewModel.subscribeToNewMessages(
                                     }
                                 is ChatRealtimeEvent.Reaction -> {
                                     applyReactionChangeEvent(envelope.event)
+                                }
+                                is ChatRealtimeEvent.ReadCursorMoved -> {
+                                    val cursor = envelope.cursor
+                                    val current = _readCursors.value[cursor.userId] ?: 0L
+                                    if (cursor.readThrough > current) {
+                                        _readCursors.value = _readCursors.value + (cursor.userId to cursor.readThrough)
+                                    }
                                 }
                             }
                         }.launchIn(this)
@@ -308,6 +325,11 @@ internal suspend fun ChatViewModel.syncActiveChatMessages(
                 m.id.startsWith("temp-") && m.deliveryState == MessageDeliveryState.PENDING
             }.map { it.message }
     if (latestMessages == currentSansPending && pendingOptimistic.isEmpty()) return
+    // Rows that vanished were deleted (possibly while we were away): pick up their tombstones.
+    val latestIds = latestMessages.mapTo(HashSet()) { it.id }
+    if (currentSansPending.any { it.id !in latestIds }) {
+        refreshTombstonesImpl(chatId, windowSize = latestMessages.size + 20)
+    }
 
     val knownUsers =
         buildMap {
@@ -738,6 +760,14 @@ internal fun ChatViewModel.startTypingMonitoringImpl(chatId: String) {
                 val currentUser = _currentUserId.value
                 if (status.userId != currentUser && status.isTyping) {
                     _isPeerTyping.value = true
+                    _typingUserIds.value = _typingUserIds.value + status.userId
+                    typingExpiryJobs.remove(status.userId)?.cancel()
+                    typingExpiryJobs[status.userId] =
+                        launch {
+                            delay(3000)
+                            _typingUserIds.value = _typingUserIds.value - status.userId
+                            typingExpiryJobs.remove(status.userId)
+                        }
                     peerTypingTimeoutJob?.cancel()
                     peerTypingTimeoutJob =
                         launch {

@@ -69,6 +69,9 @@ class AndroidTokenStorage(
         private const val KEY_PLAN_CUSTOM_IDEAS = "plan_custom_ideas"
         private const val KEY_HANGOUT_DETECTION_OPT_IN = "hangout_detection_opt_in"
         private const val KEY_HOME_RECAP_CACHE = "home_recap_cache"
+        private const val KEY_CHAT_MUTES_CACHE = "chat_mutes_cache"
+        private const val KEY_PUSH_PREVIEW_KEYS = "push_preview_epoch_keys"
+        private const val KEY_RECENT_EMOJI = "recent_emoji"
         private const val KEY_LOCATION_EXPLAINER_SEEN = "location_explainer_seen"
         private const val KEY_ONBOARDING_STATE = "onboarding_state"
         private const val KEY_HAS_COMPLETED_ONBOARDING = "has_completed_onboarding"
@@ -219,6 +222,33 @@ class AndroidTokenStorage(
 
     override suspend fun getHomeRecapCache(): String? = sharedPreferences.getString(KEY_HOME_RECAP_CACHE, null)
 
+    override suspend fun saveChatMutesCache(json: String?) {
+        sharedPreferences.edit().apply {
+            if (json == null) remove(KEY_CHAT_MUTES_CACHE) else putString(KEY_CHAT_MUTES_CACHE, json)
+            apply()
+        }
+    }
+
+    override suspend fun getChatMutesCache(): String? = sharedPreferences.getString(KEY_CHAT_MUTES_CACHE, null)
+
+    override suspend fun savePushPreviewKeys(json: String?) {
+        sharedPreferences.edit().apply {
+            if (json == null) remove(KEY_PUSH_PREVIEW_KEYS) else putString(KEY_PUSH_PREVIEW_KEYS, json)
+            apply()
+        }
+    }
+
+    override suspend fun getPushPreviewKeys(): String? = sharedPreferences.getString(KEY_PUSH_PREVIEW_KEYS, null)
+
+    override suspend fun saveRecentEmoji(json: String?) {
+        sharedPreferences.edit().apply {
+            if (json == null) remove(KEY_RECENT_EMOJI) else putString(KEY_RECENT_EMOJI, json)
+            apply()
+        }
+    }
+
+    override suspend fun getRecentEmoji(): String? = sharedPreferences.getString(KEY_RECENT_EMOJI, null)
+
     override suspend fun saveLocationExplainerSeen(seen: Boolean) {
         sharedPreferences.edit().apply {
             putBoolean(KEY_LOCATION_EXPLAINER_SEEN, seen)
@@ -337,6 +367,8 @@ class AndroidTokenStorage(
                     // Presence pings must never follow the device to another account.
                     KEY_HANGOUT_DETECTION_OPT_IN,
                     KEY_HOME_RECAP_CACHE,
+                    KEY_CHAT_MUTES_CACHE,
+                    KEY_PUSH_PREVIEW_KEYS,
                     KEY_LOCATION_EXPLAINER_SEEN,
                     KEY_ONBOARDING_STATE,
                     KEY_HAS_COMPLETED_ONBOARDING,

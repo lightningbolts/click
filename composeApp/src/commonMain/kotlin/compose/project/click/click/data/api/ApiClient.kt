@@ -13,6 +13,7 @@ import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.ClientRequestException
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.parameter
 import io.ktor.client.request.patch
@@ -204,6 +205,18 @@ class ApiClient {
     }
 
     @OptIn(ExperimentalEncodingApi::class)
+    /** DELETE `/api/groups/{groupId}/avatar` — removes the group photo. */
+    suspend fun deleteGroupAvatar(groupId: String): Result<Unit> {
+        val gid = groupId.trim()
+        if (gid.isEmpty()) return Result.failure(IllegalArgumentException("groupId required"))
+        return try {
+            val response = clickWebClient.delete("${ApiClient.clickWebAuthOrigin}/api/groups/$gid/avatar")
+            if (response.status.value in 200..299) Result.success(Unit) else clickWebFailure(response)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     suspend fun uploadGroupAvatar(
         groupId: String,
         imageBytes: ByteArray,

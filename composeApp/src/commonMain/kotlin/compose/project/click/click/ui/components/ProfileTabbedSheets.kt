@@ -2,9 +2,12 @@
 
 package compose.project.click.click.ui.components // pragma: allowlist secret
 
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -13,6 +16,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.api.ApiClient // pragma: allowlist secret
@@ -246,6 +250,9 @@ fun TabbedGroupProfileSheet(
     localMessages: List<ProfileSheetLocalMessage> = emptyList(),
     /** Opens the group chat with the planner showing. */
     onPlan: (() -> Unit)? = null,
+    /** True when the group's encryption still needs updating after a membership change. */
+    needsSecuring: Boolean = false,
+    onFinishSecuring: (() -> Unit)? = null,
 ) {
     val resolvedChatId = chatId?.trim().orEmpty()
     if (resolvedChatId.isBlank()) return
@@ -256,6 +263,7 @@ fun TabbedGroupProfileSheet(
         mutableStateOf(avatarUrl?.trim()?.takeIf { it.isNotEmpty() })
     }
     var avatarUploading by remember { mutableStateOf(false) }
+    var showPhotoOptions by remember { mutableStateOf(false) }
     var avatarUploadError by remember { mutableStateOf<String?>(null) }
     val mediaPickers =
         rememberChatMediaPickers(
@@ -337,10 +345,43 @@ fun TabbedGroupProfileSheet(
             )
         }
 
+    if (showPhotoOptions) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showPhotoOptions = false },
+            title = { Text("Group photo") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showPhotoOptions = false
+                    mediaPickers.openPhotoLibrary()
+                }) { Text("Change photo") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showPhotoOptions = false
+                    scope.launch {
+                        apiClient.deleteGroupAvatar(resolvedGroupId).fold(
+                            onSuccess = {
+                                groupAvatarUrl = null
+                                onGroupAvatarUrlChanged?.invoke("")
+                            },
+                            onFailure = { avatarUploadError = "Could not remove group photo" },
+                        )
+                    }
+                }) { Text("Remove photo", color = MaterialTheme.colorScheme.error) }
+            },
+        )
+    }
+
     ClickFormBottomSheet(
         onDismissRequest = onDismiss,
         fillBody = true,
     ) {
+        if (needsSecuring && onFinishSecuring != null) {
+            TextButton(
+                onClick = onFinishSecuring,
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("Finish securing group", color = MaterialTheme.colorScheme.error) }
+        }
         ProfileBottomSheet(
             state = state,
             onMessage = {
@@ -358,9 +399,12 @@ fun TabbedGroupProfileSheet(
                         onDismiss()
                     }
                 },
+            // Only the creator changes the group photo (iOS GroupProfileView).
             onAvatarClick =
-                if (resolvedGroupId.isNotBlank()) {
-                    { mediaPickers.openPhotoLibrary() }
+                if (resolvedGroupId.isNotBlank() && viewerUserId != null && viewerUserId == groupCreatorId) {
+                    {
+                        if (groupAvatarUrl.isNullOrBlank()) mediaPickers.openPhotoLibrary() else showPhotoOptions = true
+                    }
                 } else {
                     null
                 },

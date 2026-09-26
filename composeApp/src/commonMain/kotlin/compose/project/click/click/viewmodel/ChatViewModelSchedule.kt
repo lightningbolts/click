@@ -99,6 +99,16 @@ internal fun ChatViewModel.cancelScheduledMessageImpl(id: String) {
     }
 }
 
+/** Loads tombstones for the latest [windowSize] messages of [apiChatId] into [ChatViewModel.tombstones]. */
+internal suspend fun ChatViewModel.refreshTombstonesImpl(
+    apiChatId: String,
+    windowSize: Int,
+) {
+    val rows = chatRepository.fetchTombstones(apiChatId, windowSize)
+    if (currentApiChatId != apiChatId || rows.isEmpty()) return
+    _tombstones.value = _tombstones.value + rows.associateBy { it.messageId }
+}
+
 /** An outgoing realtime insert may be a delivered scheduled message: drop rows that are due. */
 internal fun ChatViewModel.pruneDeliveredScheduledMessages() {
     val now = Clock.System.now().toEpochMilliseconds()

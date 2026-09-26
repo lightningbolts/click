@@ -62,6 +62,7 @@ import compose.project.click.click.data.models.PlanRsvp
 import compose.project.click.click.data.models.hasLocalMediaUri
 import compose.project.click.click.data.models.hubMediaPathOrNull
 import compose.project.click.click.data.models.isBeaconChatMessage
+import compose.project.click.click.data.models.isDeletedPlaceholder
 import compose.project.click.click.data.models.isEncryptedMedia
 import compose.project.click.click.data.models.mediaUrlOrNull
 import compose.project.click.click.data.models.parsedMediaMetadata
@@ -74,6 +75,9 @@ import compose.project.click.click.viewmodel.SecureChatMediaHost
 import compose.project.click.click.viewmodel.SecureChatMediaLoadState
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+
+/** The reaction a double-tap toggles. */
+internal const val DOUBLE_TAP_REACTION: String = "❤️"
 
 internal data class ChatAudioPlaybackSource(
     /** A public/legacy media URL. Private hub object paths must never be used here. */
@@ -140,8 +144,14 @@ fun ChatMessageBubble(
     onPlanRsvp: (messageId: String, rsvp: PlanRsvp?) -> Unit = { _, _ -> },
     /** Plan cards: "N going · M can't" opens the responses sheet. */
     onShowPlanResponses: (MessageWithUser, HangoutPlan) -> Unit = { _, _ -> },
+    /** Tapping a reaction chip opens who-reacted details; null keeps tap-to-toggle. */
+    onOpenReactions: ((MessageWithUser) -> Unit)? = null,
 ) {
     val message = messageWithUser.message
+    if (message.isDeletedPlaceholder()) {
+        DeletedMessageRow(isSent = messageWithUser.isSent)
+        return
+    }
     if (message.messageType == "call_log") {
         CallLogSystemRow(message = message)
         return
@@ -376,6 +386,11 @@ fun ChatMessageBubble(
                     onLongPress = {
                         PlatformHapticsPolicy.heavyImpact()
                         onLongPress(messageWithUser)
+                    },
+                    // Double-tap hearts a message (iOS); a second double-tap removes it.
+                    onDoubleTap = {
+                        PlatformHapticsPolicy.lightImpact()
+                        onToggleReaction(DOUBLE_TAP_REACTION)
                     },
                 )
             }
@@ -890,7 +905,7 @@ fun ChatMessageBubble(
                                                         shape = RoundedCornerShape(ChatBubbleTokens.reactionChipCorner),
                                                     ).clickable {
                                                         PlatformHapticsPolicy.lightImpact()
-                                                        onToggleReaction(emoji)
+                                                        onOpenReactions?.invoke(messageWithUser) ?: onToggleReaction(emoji)
                                                     }.padding(
                                                         horizontal = ChatBubbleTokens.reactionChipPadH,
                                                         vertical = ChatBubbleTokens.reactionChipPadV,
@@ -923,6 +938,27 @@ fun ChatMessageBubble(
                 }
             }
         }
+    }
+}
+
+/** "Message deleted" in place of a deleted message; no actions. */
+@Composable
+private fun DeletedMessageRow(isSent: Boolean) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = if (isSent) Arrangement.End else Arrangement.Start,
+    ) {
+        Text(
+            text = "Message deleted",
+            style = MaterialTheme.typography.bodyMedium,
+            fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+            modifier =
+                Modifier
+                    .clip(RoundedCornerShape(ChatBubbleTokens.cornerMain))
+                    .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f), RoundedCornerShape(ChatBubbleTokens.cornerMain))
+                    .padding(horizontal = 14.dp, vertical = 8.dp),
+        )
     }
 }
 

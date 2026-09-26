@@ -632,6 +632,28 @@ async function recipientAllowsPush(
   return data.message_push_enabled !== false;
 }
 
+/**
+ * Per-conversation mutes (click-web migration 20260926120000_chat_mutes.sql): a row with a null
+ * or future `muted_until` silences chat and hub message pushes for that recipient.
+ */
+async function recipientMutedChat(
+  supabase: ReturnType<typeof createClient>,
+  requestBody: ResolvedPushRequestBody,
+): Promise<boolean> {
+  const cat = getPushCategory(requestBody);
+  if (cat !== "chat_message" && cat !== "hub_message") return false;
+  const chatId = asNonEmptyString(requestBody.data?.chat_id) ?? asNonEmptyString(requestBody.data?.hub_id);
+  if (!chatId) return false;
+  const { data, error } = await supabase
+    .from("chat_mutes")
+    .select("muted_until")
+    .eq("user_id", requestBody.recipient_user_id)
+    .eq("chat_id", chatId)
+    .maybeSingle<{ muted_until: string | null }>();
+  if (error || !data) return false;
+  return data.muted_until === null || Date.parse(data.muted_until) > Date.now();
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
@@ -663,7 +685,10 @@ Deno.serve(async (req: Request) => {
 
     const resolvedRequestBody = await resolvePushRequest(req, supabase, requestBody);
 
-    if (!(await recipientAllowsPush(supabase, resolvedRequestBody))) {
+    if (
+      !(await recipientAllowsPush(supabase, resolvedRequestBody)) ||
+      (await recipientMutedChat(supabase, resolvedRequestBody))
+    ) {
       return new Response(JSON.stringify({ success: true, sent: 0, skipped: true }), {
         status: 200,
         headers: { "Content-Type": "application/json", ...corsHeaders },

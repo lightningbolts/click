@@ -160,7 +160,29 @@ internal suspend fun SupabaseChatRepository.subscribeToMessagesImpl(
                 }
             }
 
-    val merged = merge(messageFlow, reactionFlow)
+    val readCursorFlow =
+        channel
+            .postgresChangeFlow<PostgresAction>(schema = "public") {
+                table = "chat_read_cursors"
+            }.mapNotNull { action ->
+                val record =
+                    when (action) {
+                        is PostgresAction.Insert -> action.record
+                        is PostgresAction.Update -> action.record
+                        else -> null
+                    } ?: return@mapNotNull null
+
+                fun field(key: String) = record[key]?.toString()?.trim('"')
+                if (field("chat_id") != chatId) return@mapNotNull null
+                val userId = field("user_id") ?: return@mapNotNull null
+                val readThrough = field("read_through")?.toLongOrNull() ?: return@mapNotNull null
+                ChatRealtimeEvent.ReadCursorMoved(
+                    compose.project.click.click.data.models
+                        .ReadCursor(userId, readThrough),
+                )
+            }
+
+    val merged = merge(messageFlow, reactionFlow, readCursorFlow)
     return SupabaseMessageSubscription(channel) to merged
 }
 
