@@ -101,5 +101,7 @@ fun hasFiniteCoordinates(
     latitude: Double,
     longitude: Double,
 ): Boolean =
-    latitude.isFinite() && longitude.isFinite() &&
-        abs(latitude) <= 90.0 && abs(longitude) <= 180.0
+    latitude.isFinite() &&
+        longitude.isFinite() &&
+        abs(latitude) <= 90.0 &&
+        abs(longitude) <= 180.0
