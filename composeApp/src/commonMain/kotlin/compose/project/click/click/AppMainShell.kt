@@ -26,6 +26,7 @@ import compose.project.click.click.collaboration.CollaborationSession // pragma:
 import compose.project.click.click.collaboration.CollaborationSessionManager // pragma: allowlist secret
 import compose.project.click.click.data.ActiveHubEntry // pragma: allowlist secret
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
+import compose.project.click.click.data.ChatMuteStore
 import compose.project.click.click.data.OpenMeteoWeatherService // pragma: allowlist secret
 import compose.project.click.click.data.api.ApiClient
 import compose.project.click.click.data.auth.EnsureFreshAccessToken // pragma: allowlist secret
@@ -310,6 +311,10 @@ internal fun AppMainShell(
         ChatDeepLinkManager.consume()
         pendingChatId = connId
         navigateTo(NavigationItem.Connections.route)
+    }
+
+    LaunchedEffect(currentUser.id) {
+        if (currentUser.id.isNotBlank()) ChatMuteStore.refresh()
     }
 
     // Opt-in hangout detection: one precise presence ping per foreground, throttled to 10 minutes.

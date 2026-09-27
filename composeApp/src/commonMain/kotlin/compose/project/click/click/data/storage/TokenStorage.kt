@@ -70,6 +70,21 @@ interface TokenStorage {
 
     suspend fun getHomeRecapCache(): String? = null
 
+    /** Per-chat push mutes (JSON map chatId -> muted-until ms); cleared with the session. */
+    suspend fun saveChatMutesCache(json: String?) {}
+
+    suspend fun getChatMutesCache(): String? = null
+
+    /** Recent E2EE v2 epoch keys for on-device push previews (encrypted prefs); cleared with the session. */
+    suspend fun savePushPreviewKeys(json: String?) {}
+
+    suspend fun getPushPreviewKeys(): String? = null
+
+    /** Recently used reaction emoji (JSON list, newest first). Device-local. */
+    suspend fun saveRecentEmoji(json: String?) {}
+
+    suspend fun getRecentEmoji(): String? = null
+
     suspend fun saveLocationExplainerSeen(seen: Boolean)
 
     suspend fun getLocationExplainerSeen(): Boolean?

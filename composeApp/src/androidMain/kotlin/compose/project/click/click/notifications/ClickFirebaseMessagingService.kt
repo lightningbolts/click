@@ -11,10 +11,14 @@ import android.os.Build
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.app.Person
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import compose.project.click.click.MainActivity // pragma: allowlist secret
 import compose.project.click.click.crypto.MessageCrypto // pragma: allowlist secret
+import compose.project.click.click.crypto.PushPreviewKeyStore
+import compose.project.click.click.data.ChatMuteStore
+import compose.project.click.click.data.storage.createTokenStorage
 
 private const val CLICK_MESSAGES_CHANNEL_ID = "click_messages"
 private const val CLICK_MESSAGES_CHANNEL_NAME = "Click messages"
@@ -156,6 +160,12 @@ class ClickFirebaseMessagingService : FirebaseMessagingService() {
             return
         }
 
+        // Defense in depth: the push function enforces mutes, but drop a muted chat here too.
+        val pushChatId = message.data["chat_id"] ?: message.data["hub_id"]
+        if (pushChatId != null && isChatMutedLocally(pushChatId)) {
+            return
+        }
+
         val activeChatId = NotificationRuntimeState.getActiveChatId()
         if (!activeChatId.isNullOrBlank() && activeChatId == message.data["chat_id"]) {
             return
@@ -209,13 +219,30 @@ class ClickFirebaseMessagingService : FirebaseMessagingService() {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
 
+        val notifyTag =
+            if (deepLinkId.isNotBlank()) {
+                chatNotificationTag(deepLinkId)
+            } else {
+                message.messageId?.let { chatNotificationTag(it) }
+            }
+
+        // One conversation-style notification per chat: new messages append (iOS threads by
+        // chat_id); group pushes are titled with the group name.
+        val groupName = message.data["group_name"]?.trim()?.takeIf { it.isNotEmpty() }
+        val style =
+            (notifyTag?.let { existingMessagingStyle(it) } ?: NotificationCompat.MessagingStyle(Person.Builder().setName("You").build()))
+                .setConversationTitle(groupName)
+                .setGroupConversation(groupName != null)
+                .addMessage(body, System.currentTimeMillis(), Person.Builder().setName(senderName).build())
+
         val notification =
             NotificationCompat
                 .Builder(this, CLICK_MESSAGES_CHANNEL_ID)
                 .setSmallIcon(android.R.drawable.ic_dialog_info)
-                .setContentTitle(senderName)
+                .setContentTitle(groupName ?: senderName)
                 .setContentText(body)
-                .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+                .setStyle(style)
+                .setCategory(NotificationCompat.CATEGORY_MESSAGE)
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setAutoCancel(true)
                 .setContentIntent(pendingIntent)
@@ -227,19 +254,34 @@ class ClickFirebaseMessagingService : FirebaseMessagingService() {
         ) {
             return
         }
-
-        val notifyTag =
-            if (deepLinkId.isNotBlank()) {
-                chatNotificationTag(deepLinkId)
-            } else {
-                message.messageId?.let { chatNotificationTag(it) }
-            }
         if (notifyTag != null) {
             NotificationManagerCompat.from(this).notify(notifyTag, 0, notification)
         } else {
             NotificationManagerCompat.from(this).notify(body.hashCode(), notification)
         }
     }
+
+    /** The messaging style of this chat's notification that is still showing, so we can append. */
+    private fun existingMessagingStyle(tag: String): NotificationCompat.MessagingStyle? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return null
+        val manager = getSystemService(NotificationManager::class.java) ?: return null
+        val active = runCatching { manager.activeNotifications }.getOrNull() ?: return null
+        val existing = active.firstOrNull { it.tag == tag && it.id == 0 }?.notification ?: return null
+        return NotificationCompat.MessagingStyle.extractMessagingStyleFromNotification(existing)
+    }
+
+    private fun isChatMutedLocally(chatId: String): Boolean =
+        ChatMuteStore.isMuted(chatId) ||
+            runCatching {
+                kotlinx.coroutines.runBlocking {
+                    val persisted =
+                        ChatMuteStore.loadPersisted(
+                            compose.project.click.click.data.storage
+                                .createTokenStorage(),
+                        )
+                    ChatMuteStore.isMuted(persisted, chatId, System.currentTimeMillis())
+                }
+            }.getOrDefault(false)
 
     private fun allowedForLegacyType(
         type: String?,
@@ -289,6 +331,13 @@ class ClickFirebaseMessagingService : FirebaseMessagingService() {
     ): String? {
         if (encryptedContent.isBlank()) return null
         if (!MessageCrypto.isAnyE2eeWireContent(encryptedContent)) return encryptedContent
+        if (MessageCrypto.isV2Encrypted(encryptedContent)) {
+            return runCatching {
+                kotlinx.coroutines.runBlocking {
+                    PushPreviewKeyStore.decryptPreview(createTokenStorage(), encryptedContent)
+                }
+            }.getOrNull()
+        }
         if (!MessageCrypto.isEncrypted(encryptedContent)) return null
         if (connectionId.isBlank() || senderUserId.isBlank() || recipientUserId.isBlank()) return null
 

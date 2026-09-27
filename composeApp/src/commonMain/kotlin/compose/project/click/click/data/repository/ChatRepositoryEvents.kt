@@ -8,9 +8,17 @@ import kotlinx.serialization.Serializable
  * Events emitted by the realtime messages subscription ([ChatRepository.subscribeToMessages]).
  */
 sealed class MessageChangeEvent {
-    data class Insert(val message: Message) : MessageChangeEvent()
-    data class Update(val message: Message) : MessageChangeEvent()
-    data class Delete(val messageId: String) : MessageChangeEvent()
+    data class Insert(
+        val message: Message,
+    ) : MessageChangeEvent()
+
+    data class Update(
+        val message: Message,
+    ) : MessageChangeEvent()
+
+    data class Delete(
+        val messageId: String,
+    ) : MessageChangeEvent()
 }
 
 /**
@@ -18,8 +26,18 @@ sealed class MessageChangeEvent {
  * (matches web `chat:${chatId}`: one subscribe so reaction inserts are not dropped on mobile).
  */
 sealed class ChatRealtimeEvent {
-    data class Message(val event: MessageChangeEvent) : ChatRealtimeEvent()
-    data class Reaction(val event: ReactionChangeEvent) : ChatRealtimeEvent()
+    data class Message(
+        val event: MessageChangeEvent,
+    ) : ChatRealtimeEvent()
+
+    data class Reaction(
+        val event: ReactionChangeEvent,
+    ) : ChatRealtimeEvent()
+
+    /** A member's read cursor moved (group "seen by"). */
+    data class ReadCursorMoved(
+        val cursor: compose.project.click.click.data.models.ReadCursor,
+    ) : ChatRealtimeEvent()
 }
 
 /**
@@ -34,9 +52,18 @@ data class MessageListInsertEvent(
 
 /** Reaction row changes delivered over the shared chat realtime channel. */
 sealed class ReactionChangeEvent {
-    data class Insert(val reaction: MessageReaction) : ReactionChangeEvent()
-    data class Delete(val reactionId: String, val messageId: String) : ReactionChangeEvent()
+    data class Insert(
+        val reaction: MessageReaction,
+    ) : ReactionChangeEvent()
+
+    data class Delete(
+        val reactionId: String,
+        val messageId: String,
+    ) : ReactionChangeEvent()
 }
 
 @Serializable
-data class TypingStatus(val userId: String, val isTyping: Boolean)
+data class TypingStatus(
+    val userId: String,
+    val isTyping: Boolean,
+)

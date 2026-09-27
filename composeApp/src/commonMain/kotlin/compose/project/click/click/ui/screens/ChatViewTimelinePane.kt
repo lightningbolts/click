@@ -43,24 +43,31 @@ import compose.project.click.click.data.models.HangoutPlan
 import compose.project.click.click.data.models.IcebreakerPrompt // pragma: allowlist secret
 import compose.project.click.click.data.models.MessageWithUser // pragma: allowlist secret
 import compose.project.click.click.data.models.PlanResponses
+import compose.project.click.click.data.models.seenByPlacement
+import compose.project.click.click.data.models.withTombstonePlaceholders
 import compose.project.click.click.encounter.EncounterTetherManager // pragma: allowlist secret
 import compose.project.click.click.ui.chat.CHAT_SEARCH_FOCUS_HOLD_MS // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatChromeMotion // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatComposerStripReserve // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatMediaPickerHandles // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatMessageTimeline // pragma: allowlist secret
+import compose.project.click.click.ui.chat.ChatSearchBar
 import compose.project.click.click.ui.chat.ChatTypingDots // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ConnectionChatMessageComposer // pragma: allowlist secret
 import compose.project.click.click.ui.chat.IcebreakerPanel // pragma: allowlist secret
+import compose.project.click.click.ui.chat.JumpToLatestButton
 import compose.project.click.click.ui.chat.PlanResponsesSheet
+import compose.project.click.click.ui.chat.ReactorsSheet
 import compose.project.click.click.ui.chat.applyTimestampPeekDragStep // pragma: allowlist secret
 import compose.project.click.click.ui.chat.buildChatTimelineEntriesNewestFirst // pragma: allowlist secret
 import compose.project.click.click.ui.chat.chatBubbleReplySnippetStyle // pragma: allowlist secret
 import compose.project.click.click.ui.chat.chatBubbleScaledDp // pragma: allowlist secret
 import compose.project.click.click.ui.chat.chatComposerKeyboardMotion // pragma: allowlist secret
+import compose.project.click.click.ui.chat.chatSearchMatches
 import compose.project.click.click.ui.chat.chatTimelineKeyboardViewport // pragma: allowlist secret
 import compose.project.click.click.ui.chat.chatTimelineShouldFollowKeyboard // pragma: allowlist secret
 import compose.project.click.click.ui.chat.chatTimestampPeekOnSwipeLeft // pragma: allowlist secret
+import compose.project.click.click.ui.chat.firstUnreadMessageId
 import compose.project.click.click.ui.chat.indexOfMessageId // pragma: allowlist secret
 import compose.project.click.click.ui.chat.isTimestampPeekRevealed // pragma: allowlist secret
 import compose.project.click.click.ui.chat.launchTimestampPeekReplyStyleSettle // pragma: allowlist secret
@@ -69,6 +76,7 @@ import compose.project.click.click.ui.chat.rememberTimestampPeekRevealPx // prag
 import compose.project.click.click.ui.chat.rememberTimestampPeekSoftKneePx // pragma: allowlist secret
 import compose.project.click.click.ui.chat.restoreTimestampPeekRawFromDisplay // pragma: allowlist secret
 import compose.project.click.click.ui.chat.scrollChatTimelineToMessage // pragma: allowlist secret
+import compose.project.click.click.ui.chat.withUnreadDivider
 import compose.project.click.click.ui.components.GlassCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeftPeek // pragma: allowlist secret
 import compose.project.click.click.ui.theme.* // pragma: allowlist secret
@@ -78,6 +86,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonObject
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -137,6 +146,7 @@ internal fun ColumnScope.ChatViewTimelinePane(
     var openBeaconDetailMetadata by openBeaconDetailMetadataState
     var openBeaconDetailContent by openBeaconDetailContentState
     var planResponsesTarget by remember { mutableStateOf<HangoutPlan?>(null) }
+    var reactionsForMessageId by remember { mutableStateOf<String?>(null) }
     var planResponsesMessageId by remember { mutableStateOf<String?>(null) }
     val timelineFollowsKeyboardState =
         rememberChatTimelineKeyboardFollow(
@@ -266,9 +276,47 @@ internal fun ColumnScope.ChatViewTimelinePane(
                                 }
                             }
                         } else {
+                            val tombstones by viewModel.tombstones.collectAsState()
+                            // Captured once per open: where "New messages" starts.
+                            var firstUnreadId by remember(chatId) { mutableStateOf<String?>(null) }
+                            var unreadCaptured by remember(chatId) { mutableStateOf(false) }
+                            if (!unreadCaptured && messages.isNotEmpty() && !state.isLoadingMessages) {
+                                unreadCaptured = true
+                                firstUnreadId = firstUnreadMessageId(messages)
+                            }
                             val timelineEntries =
-                                remember(messages) {
-                                    buildChatTimelineEntriesNewestFirst(messages)
+                                remember(messages, tombstones, firstUnreadId) {
+                                    val usersById = messages.associate { it.user.id to it.user }
+                                    withUnreadDivider(
+                                        buildChatTimelineEntriesNewestFirst(
+                                            withTombstonePlaceholders(
+                                                messages = messages,
+                                                tombstones = tombstones.values,
+                                                userFor = { id ->
+                                                    usersById[id] ?: compose.project.click.click.data.models
+                                                        .User(id = id)
+                                                },
+                                                viewerUserId = currentUserId,
+                                            ),
+                                        ),
+                                        firstUnreadId,
+                                    )
+                                }
+                            val readCursors by viewModel.readCursors.collectAsState()
+                            val seenBy =
+                                remember(messages, readCursors, isGroupChat, currentUserId) {
+                                    if (!isGroupChat || readCursors.isEmpty()) {
+                                        emptyMap()
+                                    } else {
+                                        val users =
+                                            buildMap {
+                                                chatDetails.groupMemberUsers.forEach { put(it.id, it) }
+                                                messages.forEach { putIfAbsent(it.user.id, it.user) }
+                                            }
+                                        seenByPlacement(messages.map { it.message }, readCursors, currentUserId)
+                                            .mapValues { (_, ids) -> ids.mapNotNull { users[it] } }
+                                            .filterValues { it.isNotEmpty() }
+                                    }
                                 }
                             LaunchedEffect(chatId, targetMessageId, timelineEntries) {
                                 val id =
@@ -429,6 +477,8 @@ internal fun ColumnScope.ChatViewTimelinePane(
                                 isLoadingOlderMessages = isLoadingOlderMessages,
                                 highlightedMessageId = focusedSearchMessageId,
                                 onPlanRsvp = { id, rsvp -> viewModel.setPlanRsvp(id, rsvp) },
+                                onOpenReactions = { mwu -> reactionsForMessageId = mwu.message.id },
+                                seenBy = seenBy,
                                 onShowPlanResponses = { mwu, plan ->
                                     planResponsesMessageId = mwu.message.id
                                     planResponsesTarget = plan
@@ -451,6 +501,56 @@ internal fun ColumnScope.ChatViewTimelinePane(
                                             },
                                         ),
                             )
+                            // Jump to latest, with how many incoming messages arrived while scrolled up.
+                            val scrolledAway by remember(listState) { derivedStateOf { listState.firstVisibleItemIndex > 6 } }
+                            var awayAnchorMs by remember(chatId) { mutableStateOf<Long?>(null) }
+                            LaunchedEffect(scrolledAway) {
+                                awayAnchorMs = if (scrolledAway) messages.maxOfOrNull { it.message.timeCreated } else null
+                            }
+                            val unseen =
+                                awayAnchorMs?.let { anchor -> messages.count { !it.isSent && it.message.timeCreated > anchor } } ?: 0
+                            if (scrolledAway) {
+                                JumpToLatestButton(
+                                    unseenCount = unseen,
+                                    onClick = {
+                                        focusedSearchMessageId = null
+                                        coroutineScope.launch { listState.animateScrollToItem(0) }
+                                    },
+                                    modifier =
+                                        Modifier
+                                            .align(Alignment.BottomEnd)
+                                            .padding(end = 16.dp, bottom = ChatComposerStripReserve + 16.dp),
+                                )
+                            }
+                            // In-conversation search over loaded (decrypted) messages.
+                            val searchOpen by viewModel.chatSearchOpen.collectAsState()
+                            if (searchOpen) {
+                                var query by remember(chatId) { mutableStateOf("") }
+                                var matchIndex by remember(chatId) { mutableStateOf(0) }
+                                val matches = remember(messages, query) { chatSearchMatches(messages, query) }
+                                LaunchedEffect(matches, matchIndex) {
+                                    val id = matches.getOrNull(matchIndex) ?: return@LaunchedEffect
+                                    focusedSearchMessageId = id
+                                    val index = timelineEntries.indexOfMessageId(id)
+                                    if (index >= 0) listState.animateScrollToItem(index)
+                                }
+                                ChatSearchBar(
+                                    query = query,
+                                    onQueryChange = {
+                                        query = it
+                                        matchIndex = 0
+                                    },
+                                    position = if (matches.isEmpty()) 0 else matchIndex + 1,
+                                    total = matches.size,
+                                    onOlder = { if (matchIndex < matches.lastIndex) matchIndex++ },
+                                    onNewer = { if (matchIndex > 0) matchIndex-- },
+                                    onClose = {
+                                        focusedSearchMessageId = null
+                                        viewModel.closeChatSearch()
+                                    },
+                                    modifier = Modifier.align(Alignment.TopCenter),
+                                )
+                            }
                         }
                     }
                 }
@@ -543,6 +643,32 @@ internal fun ColumnScope.ChatViewTimelinePane(
                 }
             }
         }
+    }
+    reactionsForMessageId?.let { messageId ->
+        val reactions by viewModel.messageReactions.collectAsState()
+        val chatMessagesState by viewModel.chatMessagesState.collectAsState()
+        val successMessages = (chatMessagesState as? ChatMessagesState.Success)?.messages.orEmpty()
+        val forMessage = reactions[messageId].orEmpty()
+        LaunchedEffect(forMessage.isEmpty()) { if (forMessage.isEmpty()) reactionsForMessageId = null }
+        val names =
+            remember(successMessages, chatDetails) {
+                buildMap {
+                    put(chatDetails.otherUser.id, chatDetails.otherUser.name ?: "Someone")
+                    chatDetails.groupMemberUsers.forEach { u -> u.name?.let { put(u.id, it) } }
+                    successMessages.forEach { mwu -> mwu.user.name?.let { put(mwu.user.id, it) } }
+                }
+            }
+        ReactorsSheet(
+            reactions = forMessage,
+            viewerUserId = currentUserId,
+            nameFor = { id -> names[id] ?: "Someone" },
+            onRemoveMine = { emoji -> viewModel.toggleReaction(messageId, emoji) },
+            onAddReaction = {
+                reactionsForMessageId = null
+                successMessages.firstOrNull { it.message.id == messageId }?.let { contextMenuMessage = it }
+            },
+            onDismiss = { reactionsForMessageId = null },
+        )
     }
     val responsesPlan = planResponsesTarget
     val responsesMessageId = planResponsesMessageId

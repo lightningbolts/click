@@ -18,10 +18,12 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Forward
 import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -31,6 +33,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -54,9 +57,11 @@ import compose.project.click.click.data.models.isDisposableRollLocked // pragma:
 import compose.project.click.click.data.models.isEncryptedMedia // pragma: allowlist secret
 import compose.project.click.click.data.models.mediaUrlOrNull // pragma: allowlist secret
 import compose.project.click.click.data.models.originalMimeTypeOrNull // pragma: allowlist secret
+import compose.project.click.click.data.storage.createTokenStorage
 import compose.project.click.click.ui.components.BentoGlassOptionRow // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickActionBottomSheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.EmojiCatalog // pragma: allowlist secret
+import compose.project.click.click.ui.components.EmojiSearch
 import compose.project.click.click.ui.components.GlassAlertDialog // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
@@ -70,13 +75,19 @@ internal data class MessageActionCapabilities(
     val canShareMedia: Boolean = true,
     val canEdit: Boolean = false,
     val canDelete: Boolean = false,
+    val canForward: Boolean = false,
+    val canRetry: Boolean = false,
+    val canDiscard: Boolean = false,
 )
 
 /** Edit is offered only for your own plain-text messages (not media, beacons, call logs). */
 internal fun canEditMessage(messageWithUser: MessageWithUser): Boolean {
     val message = messageWithUser.message
     val type = message.messageType.ifBlank { ChatMessageType.TEXT }.lowercase()
-    return messageWithUser.isSent && type == ChatMessageType.TEXT && !message.isBeaconChatMessage()
+    return messageWithUser.isSent &&
+        type == ChatMessageType.TEXT &&
+        !message.isBeaconChatMessage() &&
+        !message.id.startsWith("temp-")
 }
 
 /** A Click Drop stays unsaveable and unshareable until its collaboration window ends. */
@@ -88,6 +99,9 @@ internal class MessageActionHandlers(
     val fetchDecryptedMediaBytes: suspend (Message) -> ByteArray? = { null },
     val onEdit: (MessageWithUser) -> Unit = {},
     val onDelete: (MessageWithUser) -> Unit = {},
+    val onForward: (MessageWithUser) -> Unit = {},
+    val onRetry: (MessageWithUser) -> Unit = {},
+    val onDiscard: (MessageWithUser) -> Unit = {},
 )
 
 /**
@@ -193,6 +207,36 @@ internal fun MessageActionSheet(
                         modifier = Modifier.padding(start = 4.dp),
                     )
                 }
+                var emojiQuery by remember { mutableStateOf("") }
+                var emojiNames by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+                var recentEmoji by remember { mutableStateOf<List<String>>(emptyList()) }
+                val emojiStorage = remember { createTokenStorage() }
+                val emojiScope = rememberCoroutineScope()
+                LaunchedEffect(Unit) {
+                    recentEmoji = EmojiSearch.loadRecents(emojiStorage)
+                    emojiNames = EmojiSearch.buildIndex()
+                }
+                val shown =
+                    remember(emojiQuery, emojiNames) {
+                        if (emojiQuery.isBlank() || emojiNames.isEmpty()) EmojiCatalog.all else EmojiSearch.search(emojiQuery, emojiNames)
+                    }
+
+                fun pick(emoji: String) {
+                    PlatformHapticsPolicy.lightImpact()
+                    handlers.onReact(message.id, emoji)
+                    emojiScope.launch { EmojiSearch.recordRecent(emojiStorage, emoji) }
+                    onDismiss()
+                }
+                androidx.compose.material3.OutlinedTextField(
+                    value = emojiQuery,
+                    onValueChange = { emojiQuery = it },
+                    placeholder = { Text("Search emoji") },
+                    singleLine = true,
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 4.dp),
+                )
                 LazyVerticalGrid(
                     columns = GridCells.Adaptive(44.dp),
                     modifier =
@@ -203,18 +247,25 @@ internal fun MessageActionSheet(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    items(EmojiCatalog.all, key = { it }) { emoji ->
-                        Text(
-                            text = emoji,
-                            fontSize = 24.sp,
-                            modifier =
-                                Modifier
-                                    .clickable {
-                                        PlatformHapticsPolicy.lightImpact()
-                                        handlers.onReact(message.id, emoji)
-                                        onDismiss()
-                                    }.padding(8.dp),
-                        )
+                    if (emojiQuery.isBlank() && recentEmoji.isNotEmpty()) {
+                        item(span = {
+                            androidx.compose.foundation.lazy.grid
+                                .GridItemSpan(maxLineSpan)
+                        }) {
+                            Text("Recently used", style = MaterialTheme.typography.labelMedium, color = onSurface)
+                        }
+                        items(recentEmoji, key = { "recent-$it" }) { emoji ->
+                            Text(text = emoji, fontSize = 24.sp, modifier = Modifier.clickable { pick(emoji) }.padding(8.dp))
+                        }
+                        item(span = {
+                            androidx.compose.foundation.lazy.grid
+                                .GridItemSpan(maxLineSpan)
+                        }) {
+                            Text("All", style = MaterialTheme.typography.labelMedium, color = onSurface)
+                        }
+                    }
+                    items(shown, key = { it }) { emoji ->
+                        Text(text = emoji, fontSize = 24.sp, modifier = Modifier.clickable { pick(emoji) }.padding(8.dp))
                     }
                 }
             } else {
@@ -371,6 +422,70 @@ internal fun MessageActionSheet(
                             Icon(
                                 imageVector = Icons.Default.ContentCopy,
                                 contentDescription = "Copy",
+                                tint = onVariant,
+                            )
+                        },
+                    )
+                }
+
+                if (capabilities.canRetry) {
+                    BentoGlassOptionRow(
+                        title = "Retry sending",
+                        onClick = {
+                            handlers.onRetry(messageWithUser)
+                            onDismiss()
+                        },
+                        cornerRadius = optionRadius,
+                        showBorder = false,
+                        horizontalInset = 0.dp,
+                        verticalInset = 0.dp,
+                        leading = {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = "Retry sending",
+                                tint = PrimaryBlue,
+                            )
+                        },
+                    )
+                }
+
+                if (capabilities.canDiscard) {
+                    BentoGlassOptionRow(
+                        title = "Discard",
+                        onClick = {
+                            handlers.onDiscard(messageWithUser)
+                            onDismiss()
+                        },
+                        destructive = true,
+                        cornerRadius = optionRadius,
+                        showBorder = false,
+                        horizontalInset = 0.dp,
+                        verticalInset = 0.dp,
+                        leading = {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = "Discard unsent message",
+                                tint = Color(0xFFFF4444),
+                            )
+                        },
+                    )
+                }
+
+                if (capabilities.canForward) {
+                    BentoGlassOptionRow(
+                        title = "Forward",
+                        onClick = {
+                            handlers.onForward(messageWithUser)
+                            onDismiss()
+                        },
+                        cornerRadius = optionRadius,
+                        showBorder = false,
+                        horizontalInset = 0.dp,
+                        verticalInset = 0.dp,
+                        leading = {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.Forward,
+                                contentDescription = "Forward message",
                                 tint = onVariant,
                             )
                         },

@@ -12,12 +12,14 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.outlined.NotificationsOff
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -59,6 +61,7 @@ fun ConnectionItem(
     onGroupMembersPicker: (GroupMembersPickerContext) -> Unit = {},
     onClick: () -> Unit,
     onLongPress: () -> Unit = {},
+    isMuted: Boolean = false,
 ) {
     val isGroup = chatDetails.groupClique != null
     val headline =
@@ -182,13 +185,23 @@ fun ConnectionItem(
         },
         trailing = {
             Column(horizontalAlignment = Alignment.End) {
-                Text(
-                    timeText,
-                    fontWeight = FontWeight.Normal,
-                    fontSize = 12.sp,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (isMuted) {
+                        Icon(
+                            Icons.Outlined.NotificationsOff,
+                            contentDescription = "Muted",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(14.dp).padding(end = 2.dp),
+                        )
+                    }
+                    Text(
+                        timeText,
+                        fontWeight = FontWeight.Normal,
+                        fontSize = 12.sp,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 if (unreadCount > 0) {
                     Spacer(modifier = Modifier.height(6.dp))
                     ClickUnreadDot()

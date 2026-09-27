@@ -158,6 +158,16 @@ internal data class HubLeaveRequestBody(
 )
 
 @Serializable
+internal data class TombstonesEnvelope(
+    val tombstones: List<compose.project.click.click.data.models.MessageTombstone> = emptyList(),
+)
+
+@Serializable
+internal data class ReadCursorsEnvelope(
+    val cursors: List<compose.project.click.click.data.models.ReadCursor> = emptyList(),
+)
+
+@Serializable
 internal data class ClickWebSendMessageBody(
     @SerialName("chat_id") val chat_id: String? = null,
     @SerialName("connection_id") val connection_id: String? = null,

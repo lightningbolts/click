@@ -180,6 +180,14 @@ class HubChatViewModel(
     internal var participantDenied: Boolean = false
     internal var hubE2eeV2Session: HubE2eeV2Session? = null
     internal var hubParticipantIds: Set<String> = emptySet()
+
+    /** Visible hub members (Hub Info); empty when the server hides sender profiles. */
+    internal val _participantIds = MutableStateFlow<List<String>>(emptyList())
+    val participantIds: StateFlow<List<String>> = _participantIds.asStateFlow()
+
+    /** Cached display name for a hub member, when their profile is visible. */
+    fun participantName(userId: String): String? = senderUiCache[userId]?.first?.takeIf { it.isNotBlank() }
+
     internal var hubSenderProfilesVisible: Boolean = false
     internal val reactionHydrationMutex = Mutex()
     internal val queuedReactionEvents = mutableListOf<HubReactionRealtimeEvent>()

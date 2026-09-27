@@ -69,6 +69,7 @@ internal fun AppDataManager.mergeCachedCommunityHubsFromDtoImpl(incoming: List<C
  * Clear all data (on logout)
  */
 internal suspend fun AppDataManager.clearDataImpl() {
+    ChatMuteStore.clear()
     loadAllDataJob?.cancel()
     loadAllDataJob = null
     chatPrefetchJob?.cancel()

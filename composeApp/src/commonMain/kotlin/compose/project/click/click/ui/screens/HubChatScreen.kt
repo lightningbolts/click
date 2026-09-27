@@ -34,6 +34,9 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.NotificationsOff
 import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -67,6 +70,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
+import compose.project.click.click.data.ChatMuteStore
 import compose.project.click.click.data.models.ChatMessageType // pragma: allowlist secret
 import compose.project.click.click.data.models.MessageWithUser // pragma: allowlist secret
 import compose.project.click.click.ui.camera.DisposableCameraView // pragma: allowlist secret
@@ -90,6 +94,7 @@ import compose.project.click.click.ui.chat.ChatThreadAutoFollowEffects // pragma
 import compose.project.click.click.ui.chat.MessageActionCapabilities // pragma: allowlist secret
 import compose.project.click.click.ui.chat.MessageActionHandlers // pragma: allowlist secret
 import compose.project.click.click.ui.chat.MessageActionSheet // pragma: allowlist secret
+import compose.project.click.click.ui.chat.MuteDurationDialog
 import compose.project.click.click.ui.chat.applyTimestampPeekDragStep // pragma: allowlist secret
 import compose.project.click.click.ui.chat.buildChatTimelineEntriesNewestFirst // pragma: allowlist secret
 import compose.project.click.click.ui.chat.canEditMessage // pragma: allowlist secret
@@ -125,6 +130,8 @@ import compose.project.click.click.viewmodel.HubChatViewModel // pragma: allowli
 import compose.project.click.click.viewmodel.HubRealtimeState // pragma: allowlist secret
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.datetime.Clock
 
 data class HubChatNavArgs(
     val hubId: String,
@@ -189,6 +196,10 @@ fun HubChatScreen(
     val resolvedCreatorId by viewModel.resolvedCreatorId.collectAsState()
     val hubDetails by viewModel.hubDetails.collectAsState()
     var settingsMenuExpanded by remember { mutableStateOf(false) }
+    val hubMutes by ChatMuteStore.mutes.collectAsState()
+    var showHubInfo by remember { mutableStateOf(false) }
+    var showHubMuteDialog by remember { mutableStateOf(false) }
+    val hubMuteScope = rememberCoroutineScope()
     var showEditDialog by remember { mutableStateOf(false) }
     var showLeaveConfirm by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
@@ -631,6 +642,34 @@ fun HubChatScreen(
         )
     }
 
+    if (showHubInfo) {
+        val occupants by viewModel.occupantCount.collectAsState()
+        val members by viewModel.participantIds.collectAsState()
+        val eventHub by viewModel.isEventHubFlow.collectAsState()
+        HubInfoSheet(
+            name = hubDetails.name,
+            category = hubDetails.category,
+            isEventHub = eventHub,
+            isOwner = hubDetails.isCreator,
+            occupantCount = occupants,
+            memberIds = members,
+            viewerUserId = currentUserId,
+            memberName = { id -> viewModel.participantName(id) ?: "Click user" },
+            onCategoryChange = { next -> viewModel.editHubDetails(hubDetails.name, next) },
+            onDismiss = { showHubInfo = false },
+        )
+    }
+
+    if (showHubMuteDialog) {
+        MuteDurationDialog(
+            onPick = { duration ->
+                showHubMuteDialog = false
+                hubMuteScope.launch { ChatMuteStore.setMuted(args.hubId, duration) }
+            },
+            onDismiss = { showHubMuteDialog = false },
+        )
+    }
+
     if (settingsMenuExpanded) {
         val menuItems =
             visibleHubSettingsMenuItems(
@@ -658,6 +697,45 @@ fun HubChatScreen(
                             .align(Alignment.CenterHorizontally),
                 )
                 HorizontalDivider(color = GlassSheetTokens.GlassBorder())
+
+                BentoGlassOptionRow(
+                    showBorder = false,
+                    title = "Hub info",
+                    subtitle = "Category, who's here, and members",
+                    onClick = {
+                        settingsMenuExpanded = false
+                        showHubInfo = true
+                    },
+                    leading = {
+                        Icon(
+                            Icons.Outlined.Info,
+                            contentDescription = null,
+                            tint = GlassSheetTokens.OnOledMuted(),
+                        )
+                    },
+                )
+
+                val hubMuted = ChatMuteStore.isMuted(hubMutes, args.hubId, Clock.System.now().toEpochMilliseconds())
+                BentoGlassOptionRow(
+                    showBorder = false,
+                    title = if (hubMuted) "Unmute notifications" else "Mute notifications",
+                    subtitle = if (hubMuted) "Turn this hub's notifications back on" else "Silence notifications from this hub",
+                    onClick = {
+                        settingsMenuExpanded = false
+                        if (hubMuted) {
+                            hubMuteScope.launch { ChatMuteStore.setMuted(args.hubId, null) }
+                        } else {
+                            showHubMuteDialog = true
+                        }
+                    },
+                    leading = {
+                        Icon(
+                            if (hubMuted) Icons.Outlined.Notifications else Icons.Outlined.NotificationsOff,
+                            contentDescription = null,
+                            tint = GlassSheetTokens.OnOledMuted(),
+                        )
+                    },
+                )
 
                 if (HubSettingsMenuItem.Leave in menuItems) {
                     BentoGlassOptionRow(

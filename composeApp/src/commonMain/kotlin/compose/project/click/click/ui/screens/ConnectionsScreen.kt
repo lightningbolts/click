@@ -94,6 +94,7 @@ fun ConnectionsScreen(
     val screenScope = rememberCoroutineScope()
     var closeCleanupJob by remember { mutableStateOf<Job?>(null) }
     var profileUserId by remember { mutableStateOf<String?>(null) }
+    val groupsNeedingSecuring by viewModel.groupsNeedingSecuring.collectAsState()
     val deepLinkProfileUserId by ChatDeepLinkManager.pendingProfileUserId.collectAsState()
     LaunchedEffect(deepLinkProfileUserId) {
         if (deepLinkProfileUserId.isNullOrBlank()) return@LaunchedEffect
@@ -377,6 +378,8 @@ fun ConnectionsScreen(
                             openChat(chatId)
                         }
                     },
+                needsSecuring = groupPickerContext.chatId in groupsNeedingSecuring,
+                onFinishSecuring = groupPickerContext.chatId?.let { chatId -> { viewModel.finishSecuringGroup(chatId) } },
                 onPlan =
                     groupPickerContext.chatId?.let { chatId ->
                         {

@@ -115,11 +115,7 @@ fun ProfileLegacyTimelineContent(
         val scope = rememberCoroutineScope()
         var priorBusy by remember { mutableStateOf(false) }
         var priorError by remember { mutableStateOf<String?>(null) }
-        val canRespondPrior =
-            isPrior &&
-                conn?.isPending() == true &&
-                !viewerId.isNullOrBlank() &&
-                (conn.responderId == viewerId || (conn.initiatorId != viewerId && viewerId in conn.user_ids))
+        val canRespondPrior = conn?.awaitsPriorResponseFrom(viewerId) == true
         val hasMoment =
             conn != null &&
                 listOfNotNull(

@@ -84,12 +84,19 @@ Almost everything here is therefore Android client work.
 | 01 Scheduling | 1 feature (7 acceptance criteria) | Code-complete. Cross-platform check with iOS still open. |
 | 02 Profile / stories / recaps | 8 sections | 7 of 8. §6 is partial: bio, relationship line and tag editing are done; the "Reconnected · Nth time" / "Extended Hangout" titles, merged common-ground layout and public-profile check are still open. |
 | 03 Hangouts | 14 (A1–A7, B1–B7) | 14 (code). Reminder delivery under Doze has not been verified. |
-| 04 Chat / groups / hubs | 13 sections | 0 |
+| 04 Chat / groups / hubs | 13 sections | 10 of 13 (code) plus a partial §10. Still open: §8 lifted-bubble action overlay (UX only); §11 shared-content paging (group photo rules and immediate re-securing are done); §13 clique-eligibility naming; §10 persisting the failed-send queue across restarts (retry and discard are done). |
 | 05 App-wide | 34 rows (A1–E3) | 0 |
 
 Android-specific notes from Phase 2:
 - **Upcoming plans (03 §A6)** are read from `messages.metadata.plan` through PostgREST, because Android has no on-device message store.
 - **Tapping a plan** in the profile "Coming up" list opens the chat, but does not jump to the plan message.
 - **Encounter-tag edits** show immediately in the timeline and persist to `connection_encounters`.
+
+Android-specific notes from Phase 3:
+- **Mutes are now enforced by this repo's `send-push-notification`.** Its source didn't check `chat_mutes`, even though the migration comment says it does. The function needs a deploy.
+- **v2 push previews** use recent epoch keys kept in the app's encrypted prefs: at most 3 epochs per chat and 200 chats, wiped at sign-out.
+- **"Message deleted" placeholders** cover the latest window and realtime deletes. Older history pages don't show tombstones.
+- **In-chat search** covers loaded (decrypted) messages only. Android has no on-device full-text store yet (05 D6).
+- **Forwarding** supports text and photos, not voice or files.
 
 After each item lands, add a row to `click-ios/Docs/PARITY_LEDGER.md` (or a mirrored Android ledger) so both repos agree on status. `click-ios/Docs/BACKEND_CONTRACT_MATRIX.md` is also stale: it lacks `/api/hangouts*`, `/api/me/presence`, `/api/connections/{id}/wave`, `/api/chat/scheduled`, `/api/chat/notifications` and `/api/chat/messages/read`. Update it alongside Phase 1.

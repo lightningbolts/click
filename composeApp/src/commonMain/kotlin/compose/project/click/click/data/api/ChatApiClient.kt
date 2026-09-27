@@ -683,6 +683,62 @@ class ChatApiClient(
         authToken: String,
     ): Result<Message> = editMessage(chatId, messageId, userId, content, authToken)
 
+    /** GET `/api/chat/messages/read?chatId=` — every member's read cursor (group read receipts). */
+    suspend fun getReadCursors(
+        chatId: String,
+        authToken: String,
+    ): Result<List<compose.project.click.click.data.models.ReadCursor>> =
+        try {
+            val token = resolveClickWebAccessToken(tokenStorage) ?: authToken.trim().takeIf { it.isNotEmpty() }
+            if (token.isNullOrBlank()) {
+                Result.failure(Exception("Session expired. Sign in again."))
+            } else {
+                val response =
+                    client.get("$clickWebBaseUrl/api/chat/messages/read") {
+                        header(HttpHeaders.Authorization, clickWebBearerHeader(token))
+                        parameter("chatId", chatId)
+                    }
+                if (response.status.value in 200..299) {
+                    Result.success(response.body<ReadCursorsEnvelope>().cursors)
+                } else {
+                    Result.failure(Exception(readClickWebErrorMessage(response)))
+                }
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+
+    /**
+     * Tombstones for the latest [windowSize] messages (`include_tombstones=1`), i.e. where
+     * recently deleted messages were. Only the tombstones are used; history loads elsewhere.
+     */
+    suspend fun getTombstones(
+        chatId: String,
+        windowSize: Int,
+        authToken: String,
+    ): Result<List<compose.project.click.click.data.models.MessageTombstone>> =
+        try {
+            val token = resolveClickWebAccessToken(tokenStorage) ?: authToken.trim().takeIf { it.isNotEmpty() }
+            if (token.isNullOrBlank()) {
+                Result.failure(Exception("Session expired. Sign in again."))
+            } else {
+                val response =
+                    client.get("$clickWebBaseUrl/api/chat/messages") {
+                        header(HttpHeaders.Authorization, clickWebBearerHeader(token))
+                        parameter("chatId", chatId)
+                        parameter("include_tombstones", "1")
+                        parameter("limit", windowSize.coerceIn(1, 200))
+                    }
+                if (response.status.value in 200..299) {
+                    Result.success(response.body<TombstonesEnvelope>().tombstones)
+                } else {
+                    Result.failure(Exception(readClickWebErrorMessage(response)))
+                }
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+
     /**
      * Marks messages from other participants as read for [chat_id] (JWT identifies the reader).
      */
