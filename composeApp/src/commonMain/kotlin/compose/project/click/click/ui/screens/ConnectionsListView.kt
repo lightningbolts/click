@@ -946,12 +946,7 @@ fun ConnectionsListView(
                 onMenuAction = { action ->
                     val connId = selected.connection.id
                     when (action) {
-                        ConnectionMenuAction.Nudge -> {
-                            val chatId = selected.chat.id
-                            if (chatId != null) {
-                                viewModel.sendNudgeToChat(chatId, selected.otherUser.name ?: "them")
-                            }
-                        }
+                        ConnectionMenuAction.Nudge -> viewModel.waveAt(connId, selected.otherUser.name ?: "them")
                         ConnectionMenuAction.Archive -> {
                             viewModel.archiveConnectionById(connId) { }
                         }
@@ -967,6 +962,7 @@ fun ConnectionsListView(
                         ConnectionMenuAction.MarkUnread -> {
                             viewModel.markConversationUnread(connId)
                         }
+                        ConnectionMenuAction.PlanHangout -> Unit
                         ConnectionMenuAction.RequestRemove -> {
                             dialogConnectionId = connId
                             pendingConnectionDialog = ConnectionSheetDialog.Remove

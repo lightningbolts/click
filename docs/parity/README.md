@@ -76,13 +76,20 @@ Almost everything here is therefore Android client work.
 
 ## Parity scoreboard (fill in as work lands)
 
+"Code" means implemented with unit tests; device checks are still open.
+
 | Area | Items | Done |
 |---|---|---|
-| 00 P0 fixes | 8 | 0 |
-| 01 Scheduling | 1 feature (7 acceptance criteria) | 0 |
-| 02 Profile / stories / recaps | 8 sections | 0 |
-| 03 Hangouts | 14 (A1–A7, B1–B7) | 0 |
+| 00 P0 fixes | 8 | 8 (code). Device checks open: in-person ultrasonic matrix, push rendering. |
+| 01 Scheduling | 1 feature (7 acceptance criteria) | Code-complete. Cross-platform check with iOS still open. |
+| 02 Profile / stories / recaps | 8 sections | 7 of 8. §6 is partial: bio, relationship line and tag editing are done; the "Reconnected · Nth time" / "Extended Hangout" titles, merged common-ground layout and public-profile check are still open. |
+| 03 Hangouts | 14 (A1–A7, B1–B7) | 14 (code). Reminder delivery under Doze has not been verified. |
 | 04 Chat / groups / hubs | 13 sections | 0 |
 | 05 App-wide | 34 rows (A1–E3) | 0 |
+
+Android-specific notes from Phase 2:
+- **Upcoming plans (03 §A6)** are read from `messages.metadata.plan` through PostgREST, because Android has no on-device message store.
+- **Tapping a plan** in the profile "Coming up" list opens the chat, but does not jump to the plan message.
+- **Encounter-tag edits** show immediately in the timeline and persist to `connection_encounters`.
 
 After each item lands, add a row to `click-ios/Docs/PARITY_LEDGER.md` (or a mirrored Android ledger) so both repos agree on status. `click-ios/Docs/BACKEND_CONTRACT_MATRIX.md` is also stale: it lacks `/api/hangouts*`, `/api/me/presence`, `/api/connections/{id}/wave`, `/api/chat/scheduled`, `/api/chat/notifications` and `/api/chat/messages/read`. Update it alongside Phase 1.

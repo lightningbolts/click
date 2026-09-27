@@ -17,3 +17,6 @@ expect fun ByteArray.toChatDisplayImageBitmap(maxEdgePx: Int = 720): ImageBitmap
  * live RenderEffect blur re-rasters every frame and flickers. This returns a static bitmap.
  */
 expect fun ImageBitmap.softBlurredForLockedDrop(): ImageBitmap
+
+/** PNG-encodes a rendered bitmap (shareable story / souvenir cards); null when encoding fails. */
+expect fun ImageBitmap.toPngBytes(): ByteArray?

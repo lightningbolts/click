@@ -89,6 +89,11 @@ internal fun ChatViewModel.confirmEditMessage(messageId: String) {
  */
 internal fun ChatViewModel.deleteMessageImpl(messageId: String) {
     val connectionId = currentConnectionId ?: return
+    // Deleting a plan cancels it: drop its local reminder too.
+    compose.project.click.click.notifications.LocalReminderScheduler.cancel(
+        compose.project.click.click.notifications.PlanReminderTiming
+            .reminderId(messageId),
+    )
 
     // Optimistic: remove from local state immediately
     val currentState = _chatMessagesState.value

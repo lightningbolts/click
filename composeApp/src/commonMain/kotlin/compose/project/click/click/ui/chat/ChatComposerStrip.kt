@@ -5,9 +5,10 @@
 
 package compose.project.click.click.ui.chat // pragma: allowlist secret
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -22,9 +23,13 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -48,6 +53,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
 import compose.project.click.click.hapticSendMessage
 import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
 import compose.project.click.click.ui.theme.clickBorderColor // pragma: allowlist secret
@@ -62,6 +68,7 @@ internal fun chatComposerCanSubmit(
 /**
  * Shared text/attach/send row for connection and hub chat.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun ChatComposerStrip(
     value: String,
@@ -78,6 +85,8 @@ internal fun ChatComposerStrip(
     modifier: Modifier = Modifier,
     attachBackground: Color = MaterialTheme.colorScheme.surfaceVariant,
     attachTint: Color = MaterialTheme.colorScheme.onSurfaceVariant,
+    /** Long-press on send offers "Send Later" (text only). Null where scheduling isn't supported. */
+    onScheduleSend: (() -> Unit)? = null,
 ) {
     val auxButtonSize = 48.dp
     val attachIconSize = 21.dp
@@ -93,6 +102,7 @@ internal fun ChatComposerStrip(
     val fieldInteraction = remember { MutableInteractionSource() }
     val focusRequester = remember { FocusRequester() }
     var submitGuarded by remember { mutableStateOf(false) }
+    var sendMenuExpanded by remember { mutableStateOf(false) }
 
     LaunchedEffect(value, submitGuarded) {
         if (submitGuarded && value.isBlank()) {
@@ -229,7 +239,7 @@ internal fun ChatComposerStrip(
                     .clip(sendShape)
                     .background(if (canSend) PrimaryBlue else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.84f))
                     .border(clickBorderWidth(), clickBorderColor(), sendShape)
-                    .clickable(
+                    .combinedClickable(
                         interactionSource = sendInteraction,
                         indication = null,
                         enabled = canSend,
@@ -238,9 +248,28 @@ internal fun ChatComposerStrip(
                             hapticSendMessage()
                             onSend()
                         },
+                        onLongClick =
+                            onScheduleSend?.let {
+                                {
+                                    PlatformHapticsPolicy.lightImpact()
+                                    sendMenuExpanded = true
+                                }
+                            },
                     ),
             contentAlignment = Alignment.Center,
         ) {
+            if (onScheduleSend != null) {
+                DropdownMenu(expanded = sendMenuExpanded, onDismissRequest = { sendMenuExpanded = false }) {
+                    DropdownMenuItem(
+                        text = { Text("Send Later") },
+                        leadingIcon = { Icon(Icons.Filled.Schedule, contentDescription = null) },
+                        onClick = {
+                            sendMenuExpanded = false
+                            onScheduleSend()
+                        },
+                    )
+                }
+            }
             Icon(
                 sendIcon,
                 contentDescription = sendContentDescription,

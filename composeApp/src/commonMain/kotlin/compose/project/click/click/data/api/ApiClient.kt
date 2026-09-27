@@ -279,6 +279,7 @@ class ApiClient {
         tags: List<String>? = null,
         birthday: String? = null,
         personalityTags: List<String>? = null,
+        bio: String? = null,
     ): Result<User> =
         patchUserProfileImpl(
             userId = userId,
@@ -288,6 +289,7 @@ class ApiClient {
             tags = tags,
             birthday = birthday,
             personalityTags = personalityTags,
+            bio = bio,
         )
 
     /**

@@ -592,6 +592,8 @@ internal fun ChatViewModel.leaveChatRoomImpl(clearMessageSurface: Boolean = true
     }
     currentConnectionId = null
     currentApiChatId = null
+    _scheduledMessages.value = emptyList()
+    _plannerOpen.value = false
     _stagedChatImages.value = emptyList()
     _stagedBeacon.value = null
     _messageSendError.value = null

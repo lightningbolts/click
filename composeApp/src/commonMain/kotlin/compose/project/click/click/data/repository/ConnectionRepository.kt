@@ -304,6 +304,13 @@ class ConnectionRepository(
         return apiClient.getConnectionTabs(connectionId)
     }
 
+    /** Edit an encounter's context tags from the profile timeline; returns the saved list. */
+    suspend fun setEncounterContextTags(
+        encounterId: String,
+        picked: List<String>,
+        existing: List<String>,
+    ): Result<List<String>> = setEncounterContextTagsImpl(encounterId, picked, existing)
+
     /** POST `/api/connections/encounter` on click-web (JWT via ApiClient). */
     suspend fun postConnectionEncounter(
         userId: String,

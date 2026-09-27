@@ -51,6 +51,8 @@ fun TabbedUserProfileSheet(
     onNudge: (() -> Unit)? = null,
     onOpenDisposableRoll: ((String) -> Unit)? = null,
     localMessages: List<ProfileSheetLocalMessage> = emptyList(),
+    /** Opens the chat with this connection with the planner showing; receives the connection id. */
+    onPlan: ((String) -> Unit)? = null,
     /**
      * When set, used instead of looking the connection up from [AppDataManager.connections].
      * Map pins pass this so Timeline / Beacons / Media / Links hydrate even if the pin's
@@ -195,6 +197,15 @@ fun TabbedUserProfileSheet(
                         }
                     }
                 },
+            onPlan =
+                profileConnectionId?.let { cid ->
+                    onPlan?.let { plan ->
+                        {
+                            plan(cid)
+                            onDismiss()
+                        }
+                    }
+                },
         )
     }
 }
@@ -233,6 +244,8 @@ fun TabbedGroupProfileSheet(
     onMemberClick: ((String) -> Unit)? = null,
     onGroupAvatarUrlChanged: ((String) -> Unit)? = null,
     localMessages: List<ProfileSheetLocalMessage> = emptyList(),
+    /** Opens the group chat with the planner showing. */
+    onPlan: (() -> Unit)? = null,
 ) {
     val resolvedChatId = chatId?.trim().orEmpty()
     if (resolvedChatId.isBlank()) return
@@ -352,6 +365,13 @@ fun TabbedGroupProfileSheet(
                     null
                 },
             avatarUploading = avatarUploading,
+            onPlan =
+                onPlan?.let { plan ->
+                    {
+                        plan()
+                        onDismiss()
+                    }
+                },
         )
     }
 }

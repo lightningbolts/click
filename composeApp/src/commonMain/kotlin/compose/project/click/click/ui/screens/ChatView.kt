@@ -157,10 +157,25 @@ fun ChatView(
         viewModel.clearNudgeResult()
         toastState.show(coroutineScope, r)
     }
+    val chatNotice by viewModel.chatNotice.collectAsState()
+    LaunchedEffect(chatNotice) {
+        val notice = chatNotice ?: return@LaunchedEffect
+        viewModel.clearChatNotice()
+        toastState.show(coroutineScope, notice)
+    }
 
     LaunchedEffect(chatId, currentUserId) {
         if (currentUserId.isNullOrBlank()) return@LaunchedEffect
         viewModel.loadChatMessages(chatId)
+    }
+    // Profile "Plan" / group revival handoff: open the planner once this chat has loaded.
+    val pendingPlannerKey by viewModel.pendingPlannerChatKey.collectAsState()
+    val loadedDetails = (viewModel.chatMessagesState.collectAsState().value as? ChatMessagesState.Success)?.chatDetails
+    LaunchedEffect(pendingPlannerKey, loadedDetails?.chat?.id) {
+        val key = pendingPlannerKey ?: return@LaunchedEffect
+        val details = loadedDetails ?: return@LaunchedEffect
+        val keys = setOfNotNull(chatId, details.chat.id, details.connection.id, details.groupClique?.groupId)
+        if (key in keys && viewModel.consumePlannerRequest(key)) viewModel.openPlanner()
     }
 
     val activeApiChatId = (chatMessagesState as? ChatMessagesState.Success)?.chatDetails?.chat?.id

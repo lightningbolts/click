@@ -27,13 +27,16 @@ import compose.project.click.click.collaboration.CollaborationSessionManager // 
 import compose.project.click.click.data.ActiveHubEntry // pragma: allowlist secret
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.OpenMeteoWeatherService // pragma: allowlist secret
+import compose.project.click.click.data.api.ApiClient
 import compose.project.click.click.data.auth.EnsureFreshAccessToken // pragma: allowlist secret
 import compose.project.click.click.data.hub.HubConnectionManager // pragma: allowlist secret
 import compose.project.click.click.data.hub.HubVerifyResult // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.models.isPendingSync // pragma: allowlist secret
+import compose.project.click.click.data.repository.HangoutPresence
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
 import compose.project.click.click.data.storage.TokenStorage // pragma: allowlist secret
+import compose.project.click.click.data.storage.createTokenStorage
 import compose.project.click.click.deeplink.ConnectionDeepLinkRouter // pragma: allowlist secret
 import compose.project.click.click.deeplink.EventDeepLinkRouter // pragma: allowlist secret
 import compose.project.click.click.encounter.EncounterTetherManager // pragma: allowlist secret
@@ -53,6 +56,7 @@ import compose.project.click.click.ui.components.rememberUnifiedToastState // pr
 import compose.project.click.click.ui.screens.* // pragma: allowlist secret
 import compose.project.click.click.ui.theme.* // pragma: allowlist secret
 import compose.project.click.click.utils.LocationResult // pragma: allowlist secret
+import compose.project.click.click.utils.LocationService
 import compose.project.click.click.viewmodel.AuthViewModel // pragma: allowlist secret
 import compose.project.click.click.viewmodel.ChatViewModel // pragma: allowlist secret
 import compose.project.click.click.viewmodel.ConnectionState // pragma: allowlist secret
@@ -306,6 +310,15 @@ internal fun AppMainShell(
         ChatDeepLinkManager.consume()
         pendingChatId = connId
         navigateTo(NavigationItem.Connections.route)
+    }
+
+    // Opt-in hangout detection: one precise presence ping per foreground, throttled to 10 minutes.
+    val foregroundTick by platformForegroundTickFlow().collectAsState()
+    val presenceDeps = remember { Triple(createTokenStorage(), LocationService(), ApiClient()) }
+    LaunchedEffect(foregroundTick, currentUser.id) {
+        if (currentUser.id.isBlank()) return@LaunchedEffect
+        val (storage, location, api) = presenceDeps
+        HangoutPresence.reportIfEnabled(storage, location, api)
     }
 
     // Profile deep links open on the Clicks tab, where ConnectionsScreen owns the profile sheet.

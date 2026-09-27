@@ -79,6 +79,8 @@ data class User(
     val lastName: String? = null,
     /** ISO calendar date string from DB (yyyy-MM-dd) when present. */
     val birthday: String? = null,
+    /** Short self-description (`users.bio`, at most 160 characters). */
+    val bio: String? = null,
     val connections: List<String> = emptyList(),
     val paired_with: List<String> = emptyList(),
     val connection_today: Int = -1,
@@ -173,6 +175,7 @@ data class UserCore(
     val lastPolled: Long? = null,
     @SerialName("personality_tags")
     val personalityTags: List<String> = emptyList(),
+    val bio: String? = null,
 ) {
     /**
      * Convert to full User model with defaults for missing fields.
@@ -197,6 +200,7 @@ data class UserCore(
             firstName = firstName,
             lastName = lastName,
             birthday = birthday,
+            bio = bio?.trim()?.takeIf { it.isNotEmpty() },
             connections = emptyList(),
             paired_with = emptyList(),
             connection_today = -1,

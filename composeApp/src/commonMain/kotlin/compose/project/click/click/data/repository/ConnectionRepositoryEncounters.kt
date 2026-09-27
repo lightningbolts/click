@@ -236,3 +236,33 @@ internal suspend fun ConnectionRepository.updateConnectionTagsImpl(
         Result.failure(e)
     }
 }
+
+/**
+ * The tags a user picked plus any `at_event` already on the row (event attachment is not
+ * user-editable). Mirrors iOS `EncounterContextRepository.setTags`.
+ */
+internal fun mergedEncounterTags(
+    picked: List<String>,
+    existing: List<String>,
+): List<String> {
+    val cleaned = picked.map { it.trim() }.filter { it.isNotEmpty() && it != AT_EVENT_TAG }.distinct()
+    return if (AT_EVENT_TAG in existing) cleaned + AT_EVENT_TAG else cleaned
+}
+
+private const val AT_EVENT_TAG = "at_event"
+
+/** Replaces one encounter's `context_tags` (RLS allows the pair to update their encounters). */
+internal suspend fun ConnectionRepository.setEncounterContextTagsImpl(
+    encounterId: String,
+    picked: List<String>,
+    existing: List<String>,
+): Result<List<String>> =
+    runCatching {
+        val tags = mergedEncounterTags(picked, existing)
+        supabase
+            .from("connection_encounters")
+            .update(buildJsonObject { put("context_tags", JsonArray(tags.map { JsonPrimitive(it) })) }) {
+                filter { eq("id", encounterId) }
+            }
+        tags
+    }

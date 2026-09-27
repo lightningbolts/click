@@ -79,15 +79,17 @@ actual object LocalReminderScheduler {
                         *targetData,
                     ),
                 ).build()
-        WorkManager
-            .getInstance(context)
-            .enqueueUniqueWork(WORK_PREFIX + reminder.id, ExistingWorkPolicy.REPLACE, request)
-        return true
+        // A reminder is best-effort: never let WorkManager failures break the chat action that asked.
+        return runCatching {
+            WorkManager
+                .getInstance(context)
+                .enqueueUniqueWork(WORK_PREFIX + reminder.id, ExistingWorkPolicy.REPLACE, request)
+        }.isSuccess
     }
 
     actual fun cancel(id: String) {
         val context = contextOrNull() ?: return
-        WorkManager.getInstance(context).cancelUniqueWork(WORK_PREFIX + id)
+        runCatching { WorkManager.getInstance(context).cancelUniqueWork(WORK_PREFIX + id) }
     }
 }
 

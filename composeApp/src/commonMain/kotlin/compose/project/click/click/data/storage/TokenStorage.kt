@@ -55,6 +55,21 @@ interface TokenStorage {
 
     suspend fun getBarometricContextOptIn(): Boolean?
 
+    /** Custom plan ideas (JSON string array), shown first in the planner. Device-local. */
+    suspend fun savePlanCustomIdeas(json: String?) {}
+
+    suspend fun getPlanCustomIdeas(): String? = null
+
+    /** Opt-in "Hanging out?" detection; there is no server column (iOS keeps it local too). */
+    suspend fun saveHangoutDetectionOptIn(enabled: Boolean) {}
+
+    suspend fun getHangoutDetectionOptIn(): Boolean? = null
+
+    /** Home recap cache (JSON, one user at a time); cleared with the session. */
+    suspend fun saveHomeRecapCache(json: String?) {}
+
+    suspend fun getHomeRecapCache(): String? = null
+
     suspend fun saveLocationExplainerSeen(seen: Boolean)
 
     suspend fun getLocationExplainerSeen(): Boolean?

@@ -6,6 +6,7 @@ import compose.project.click.click.data.models.ChatWithDetails
 import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.Message
 import compose.project.click.click.data.models.MessageReaction
+import compose.project.click.click.data.models.ScheduledMessage
 import compose.project.click.click.data.models.User
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
@@ -135,6 +136,34 @@ interface ChatRepository {
         /** Fallback for gatekeeper when [chatId] is missing/invalid. */
         connectionId: String? = null,
     ): Message?
+
+    /**
+     * Send Later: encrypts [content] now; click-web delivers it at [sendAtEpochMs] (direct and
+     * group chats, text only). Fails with the server's message when out of range.
+     */
+    suspend fun scheduleMessage(
+        chatId: String,
+        userId: String,
+        content: String,
+        replyToId: String? = null,
+        sendAtEpochMs: Long,
+        connectionId: String? = null,
+    ): Result<ScheduledMessage> = Result.failure(UnsupportedOperationException("Scheduling unavailable"))
+
+    /** Plans in [chatId] that haven't ended, soonest first, with going counts. */
+    suspend fun fetchUpcomingPlans(
+        chatId: String,
+        nowEpochMs: Long,
+    ): List<compose.project.click.click.data.models.UpcomingPlan> = emptyList()
+
+    /** The viewer's pending scheduled messages for [chatId], soonest first. */
+    suspend fun fetchScheduledMessages(
+        chatId: String,
+        userId: String,
+    ): Result<List<ScheduledMessage>> = Result.success(emptyList())
+
+    /** Fails with [compose.project.click.click.data.api.ScheduledMessageGoneException] once delivered. */
+    suspend fun cancelScheduledMessage(id: String): Result<Unit> = Result.failure(UnsupportedOperationException("Scheduling unavailable"))
 
     suspend fun ensureChatForConnection(connectionId: String): Chat?
 
