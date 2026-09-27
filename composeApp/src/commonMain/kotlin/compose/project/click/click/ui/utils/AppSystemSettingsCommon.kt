@@ -1,7 +1,9 @@
+@file:Suppress("ktlint:standard:filename")
+
 package compose.project.click.click.ui.utils
 
 /**
- * Cross-platform runtime flags set from Android/iOS entry points before [App] composes.
+ * Cross-platform runtime flags set from Android entry points before [App] composes.
  */
 object AppSystemSettings {
     /** True for debuggable / non-release binaries when configured by the host app. */

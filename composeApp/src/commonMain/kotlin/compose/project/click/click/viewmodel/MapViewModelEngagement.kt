@@ -185,7 +185,6 @@ internal fun MapViewModel.engagementTelemetry(
         getPlatform().name.lowercase().let { name ->
             when {
                 name.contains("android") -> "android"
-                name.contains("ios") || name.contains("iphone") -> "ios"
                 else -> name.take(32)
             }
         }

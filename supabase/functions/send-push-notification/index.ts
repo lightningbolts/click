@@ -303,24 +303,13 @@ function resolveUserDisplayName(profile: UserProfileRow | null | undefined): str
   return "Someone";
 }
 
-function buildMessagePreview(content: string | null, messageType: string | null = null): string {
-  switch (messageType) {
-    case "image":
-      return "📷 Photo";
-    case "audio":
-      return "🎤 Voice message";
-    case "file":
-      return "📎 File";
-    case "beacon":
-      return "📍 Shared an event";
-  }
+function buildMessagePreview(content: string | null): string {
   const normalized = content?.trim();
   if (!normalized) {
     return "Open Click to view the latest message";
   }
-  // Any E2EE wire format (v1 `e2e:`, group `e2e_grp:`, v2 `e2e2:`): never echo ciphertext.
-  if (/^e2e[a-z0-9_]*:/i.test(normalized)) {
-    return "Sent you a message";
+  if (normalized.startsWith("e2e:")) {
+    return "Tap to view message";
   }
   return normalized.slice(0, 120);
 }
@@ -396,7 +385,7 @@ async function resolveChatMessageRequest(
     }
 
     const clientPreview = asNonEmptyString(data.message_preview);
-    const previewText = clientPreview ?? buildMessagePreview(encryptedContent, asNonEmptyString(data.message_type));
+    const previewText = clientPreview ?? buildMessagePreview(encryptedContent);
     const encryptedForFcm = encryptedContentForFcmPayload(encryptedContent);
 
     return {
@@ -414,20 +403,14 @@ async function resolveChatMessageRequest(
     };
   }
 
-  // Trusted service callers (scheduled-message delivery) send on the sender's behalf: no
-  // sender JWT, but the message, chat and membership checks below still apply.
-  let authUserId: string | null = null;
-  if (!isServiceSecretRequest(req)) {
-    const token = getBearerToken(req);
-    if (!token) {
-      throw new Error("Authorization header is required for direct chat message pushes");
-    }
+  const token = getBearerToken(req);
+  if (!token) {
+    throw new Error("Authorization header is required for direct chat message pushes");
+  }
 
-    const { data: authData, error: authError } = await supabase.auth.getUser(token);
-    if (authError || !authData.user) {
-      throw new Error(`Unable to authenticate chat message push: ${authError?.message ?? "missing user"}`);
-    }
-    authUserId = authData.user.id;
+  const { data: authData, error: authError } = await supabase.auth.getUser(token);
+  if (authError || !authData.user) {
+    throw new Error(`Unable to authenticate chat message push: ${authError?.message ?? "missing user"}`);
   }
 
   const data = requestBody.data ?? {};
@@ -440,16 +423,15 @@ async function resolveChatMessageRequest(
     throw new Error("chat_message pushes require chat_id and sender_user_id");
   }
 
-  if (authUserId !== null && authUserId !== senderUserId) {
+  if (authData.user.id !== senderUserId) {
     throw new Error("Authenticated user does not match sender_user_id");
   }
 
   let messageContent = providedBody;
-  let messageType: string | null = null;
   if (messageId) {
     const { data: message, error: messageError } = await supabase
       .from("messages")
-      .select("id, chat_id, user_id, content, message_type")
+      .select("id, chat_id, user_id, content")
       .eq("id", messageId)
       .maybeSingle();
 
@@ -462,7 +444,6 @@ async function resolveChatMessageRequest(
     }
 
     messageContent = asNonEmptyString(message.content) ?? messageContent;
-    messageType = asNonEmptyString(message.message_type);
   }
 
   const { data: chat, error: chatError } = await supabase
@@ -517,7 +498,7 @@ async function resolveChatMessageRequest(
   }
 
   const rawContent = messageContent ?? "";
-  const previewText = clientMessagePreview ?? buildMessagePreview(rawContent, messageType);
+  const previewText = clientMessagePreview ?? buildMessagePreview(rawContent);
   const encryptedForFcm = encryptedContentForFcmPayload(rawContent);
 
   return {
@@ -532,7 +513,6 @@ async function resolveChatMessageRequest(
       encrypted_content: encryptedForFcm,
       preview_text: previewText,
       recipient_user_id: recipientUserId,
-      ...(messageType ? { message_type: messageType } : {}),
     },
   };
 }
@@ -604,30 +584,10 @@ async function resolvePushRequest(
   return resolveChatMessageRequest(req, supabase, requestBody);
 }
 
-/** True while the recipient has muted this conversation (message pushes only). */
-async function isConversationMuted(
-  supabase: ReturnType<typeof createClient>,
-  requestBody: ResolvedPushRequestBody,
-): Promise<boolean> {
-  const type = requestBody.data?.type;
-  if (type !== "chat_message" && type !== "new_message" && type !== "hub_message") return false;
-  const chatKey = asNonEmptyString(requestBody.data?.chat_id) ?? asNonEmptyString(requestBody.data?.hub_id);
-  if (!chatKey) return false;
-  const { data } = await supabase
-    .from("chat_mutes")
-    .select("muted_until")
-    .eq("user_id", requestBody.recipient_user_id)
-    .eq("chat_id", chatKey)
-    .maybeSingle<{ muted_until: string | null }>();
-  if (!data) return false;
-  return data.muted_until === null || Date.parse(data.muted_until) > Date.now();
-}
-
 async function recipientAllowsPush(
   supabase: ReturnType<typeof createClient>,
   requestBody: ResolvedPushRequestBody,
 ): Promise<boolean> {
-  if (await isConversationMuted(supabase, requestBody)) return false;
   const { data, error } = await supabase
     .from("notification_preferences")
     .select(

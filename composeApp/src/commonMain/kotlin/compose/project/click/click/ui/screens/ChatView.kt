@@ -34,8 +34,6 @@ import compose.project.click.click.encounter.EncounterTetherWidgetBridge // prag
 import compose.project.click.click.encounter.recentEncounterId // pragma: allowlist secret
 import compose.project.click.click.encounter.tetherCompassMessage // pragma: allowlist secret
 import compose.project.click.click.notifications.NotificationRuntimeState // pragma: allowlist secret
-import compose.project.click.click.platform.KeyboardHeightProvider // pragma: allowlist secret
-import compose.project.click.click.platform.rememberKeyboardHeightProvider // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatAmbientMeshBackground // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatChannelLoadingView // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatHeaderIconButton // pragma: allowlist secret
@@ -46,7 +44,6 @@ import compose.project.click.click.ui.chat.GroupMembersPickerContext // pragma: 
 import compose.project.click.click.ui.chat.rememberChatMediaPickers // pragma: allowlist secret
 import compose.project.click.click.ui.chat.rememberChatThreadRuntime // pragma: allowlist secret
 import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeftPeek // pragma: allowlist secret
-import compose.project.click.click.ui.components.platformNativeHeaderClearance // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberEdgeToEdgeBottomPadding // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberGlassToastState // pragma: allowlist secret
 import compose.project.click.click.ui.theme.* // pragma: allowlist secret
@@ -90,12 +87,11 @@ fun ChatView(
     integrateTimestampPeekWithSwipeBackContainer: Boolean = false,
     onRegisterSwipeBackRightToLeftPeek: (InteractiveSwipeBackRightToLeftPeek?) -> Unit = {},
     /**
-     * When set (iOS chat overlay), matches [InteractiveSwipeBackContainer]'s drag pixels so the IME
+     * When set (chat overlay), matches [InteractiveSwipeBackContainer]'s drag pixels so the IME
      * can hide after a short rightward threshold while the container's [graphicsLayer] carries the
      * horizontal slide — avoid stacking a redundant [Modifier.offset] for the same translation.
      */
     parentInteractiveBackSwipePx: MutableFloatState? = null,
-    keyboardHeightProvider: KeyboardHeightProvider = rememberKeyboardHeightProvider(),
 ) {
     val chatMessagesState by viewModel.chatMessagesState.collectAsState()
     val chatListState by viewModel.chatListState.collectAsState()
@@ -123,11 +119,9 @@ fun ChatView(
     val threadRuntime =
         rememberChatThreadRuntime(
             threadKey = chatId,
-            keyboardHeightProvider = keyboardHeightProvider,
             parentInteractiveBackSwipePx = parentInteractiveBackSwipePx,
         )
     val listState = threadRuntime.listState
-    val nativeKeyboardInsets = threadRuntime.nativeKeyboardInsets
     val suppressKeyboardDismissWhileProgrammaticTimelineScroll =
         threadRuntime.suppressKeyboardDismissWhileProgrammaticTimelineScroll
     val dismissKeyboardOnUserMessageScroll = threadRuntime.dismissKeyboardOnUserMessageScroll
@@ -161,85 +155,6 @@ fun ChatView(
     var tetherToastMessage by tetherToastMessageState
     val tetherSenderAckState = remember { mutableStateOf<String?>(null) }
     var tetherSenderAck by tetherSenderAckState
-    val nativeNavChrome = LocalPlatformStyle.current.isIOS
-    val hintedChatRow =
-        (chatListState as? ChatListState.Success)
-            ?.chats
-            ?.firstOrNull { it.connection.id == chatId || it.chat.id == chatId }
-    val successChat =
-        (chatMessagesState as? ChatMessagesState.Success)?.takeIf { state ->
-            state.chatDetails.connection.id == chatId || state.chatDetails.chat.id == chatId
-        }
-    val bindIsGroup =
-        successChat?.chatDetails?.groupClique != null ||
-            hintedChatRow?.groupClique != null
-    val bindAvatarUrl =
-        successChat?.let { details ->
-            details.chatDetails.groupClique
-                ?.avatarUrl
-                ?.trim()
-                ?.takeIf { it.isNotEmpty() }
-                ?: details.chatDetails.otherUser.image
-                    ?.trim()
-                    ?.takeIf { it.isNotEmpty() }
-        } ?: hintedChatRow
-            ?.groupClique
-            ?.avatarUrl
-            ?.trim()
-            ?.takeIf { it.isNotEmpty() }
-            ?: hintedChatRow
-                ?.otherUser
-                ?.image
-                ?.trim()
-                ?.takeIf { it.isNotEmpty() }
-    val bindTitle =
-        successChat?.let { details ->
-            if (details.chatDetails.groupClique != null) {
-                details.chatDetails.groupClique
-                    ?.name
-                    ?.trim()
-                    .orEmpty()
-                    .ifBlank { "Group" }
-            } else {
-                details.chatDetails.otherUser.name ?: "Chat"
-            }
-        } ?: hintedChatRow
-            ?.groupClique
-            ?.name
-            ?.trim()
-            ?.takeIf { it.isNotEmpty() }
-            ?: hintedChatRow
-                ?.otherUser
-                ?.name
-                ?.trim()
-                ?.takeIf { it.isNotEmpty() }
-            ?: "Chat"
-    val chatNativeHasStackedSubtitle =
-        !bindIsGroup && (successChat != null || hintedChatRow != null)
-    val chatNativeClearance =
-        platformNativeHeaderClearance(
-            statusBarTop = topInset,
-            collapseFraction = 1f,
-            hasSubtitle = chatNativeHasStackedSubtitle,
-            stackSubtitle = chatNativeHasStackedSubtitle,
-        )
-    ChatViewNativeNavBinding(
-        viewModel = viewModel,
-        nativeNavChrome = nativeNavChrome,
-        chatId = chatId,
-        bindTitle = bindTitle,
-        bindIsGroup = bindIsGroup,
-        bindAvatarUrl = bindAvatarUrl,
-        successChat = successChat,
-        hintedChatRow = hintedChatRow,
-        onOpenUserProfile = onOpenUserProfile,
-        onOpenGroupMembersPicker = onOpenGroupMembersPicker,
-        onBackPressed = onBackPressed,
-        showConnectionSheetState = showConnectionSheetState,
-        showRenameGroupDialogState = showRenameGroupDialogState,
-        renameGroupDraftState = renameGroupDraftState,
-    )
-
     LaunchedEffect(nudgeResult) {
         val r = nudgeResult ?: return@LaunchedEffect
         viewModel.clearNudgeResult()
@@ -329,42 +244,36 @@ fun ChatView(
                             topInset = topInset,
                             onBackPressed = onBackPressed,
                             chatRow = hintedRow,
-                            composeHeader = !nativeNavChrome,
                         )
                     } else {
                         ChatChannelLoadingView(
                             topInset = topInset,
                             onBackPressed = onBackPressed,
-                            composeHeader = !nativeNavChrome,
                         )
                     }
                 }
                 is ChatMessagesState.Error -> {
-                    if (nativeNavChrome) {
-                        Spacer(modifier = Modifier.fillMaxWidth().height(chatNativeClearance))
-                    } else {
-                        Box(modifier = Modifier.padding(start = 20.dp, top = topInset, end = 20.dp)) {
-                            Row(
-                                modifier =
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .height(56.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                ChatHeaderIconButton(
-                                    icon = Icons.AutoMirrored.Filled.ArrowBack,
-                                    contentDescription = "Back",
-                                    onClick = onBackPressed,
-                                    showBorder = true,
-                                )
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Text(
-                                    text = "Chat",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                )
-                            }
+                    Box(modifier = Modifier.padding(start = 20.dp, top = topInset, end = 20.dp)) {
+                        Row(
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .height(56.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            ChatHeaderIconButton(
+                                icon = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Back",
+                                onClick = onBackPressed,
+                                showBorder = true,
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = "Chat",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
                         }
                     }
                     Box(
@@ -404,13 +313,11 @@ fun ChatView(
                                 topInset = topInset,
                                 onBackPressed = onBackPressed,
                                 chatRow = hintedRow,
-                                composeHeader = !nativeNavChrome,
                             )
                         } else {
                             ChatChannelLoadingView(
                                 topInset = topInset,
                                 onBackPressed = onBackPressed,
-                                composeHeader = !nativeNavChrome,
                             )
                         }
                         return@Column
@@ -573,9 +480,6 @@ fun ChatView(
                      * Full-screen ambient mesh behind header + thread. Top padding uses
                      * [WindowInsets.statusBars] only so opening the IME does not push the header past the
                      * top via [WindowInsets.safeDrawing] / display cutout coupling.
-                     *
-                     * iOS keeps the timeline scrollable by padding its bottom edge while the composer
-                     * follows the native keyboard on a graphics layer.
                      */
                     val reverseListNewestEdgePad = 6.dp
                     val showIcebreaker = showIcebreakerPanel && icebreakerPrompts.isNotEmpty() && messages.size < 5
@@ -599,8 +503,6 @@ fun ChatView(
                         Column(modifier = Modifier.fillMaxSize()) {
                             ChatViewSuccessHeader(
                                 viewModel = viewModel,
-                                nativeNavChrome = nativeNavChrome,
-                                chatNativeClearance = chatNativeClearance,
                                 topInset = topInset,
                                 chatDetails = chatDetails,
                                 isGroupChat = isGroupChat,
@@ -628,7 +530,6 @@ fun ChatView(
                                 activeApiChatId = activeApiChatId,
                                 listState = listState,
                                 coroutineScope = coroutineScope,
-                                nativeKeyboardInsets = nativeKeyboardInsets,
                                 dismissKeyboardOnUserMessageScroll = dismissKeyboardOnUserMessageScroll,
                                 suppressKeyboardDismissWhileProgrammaticTimelineScroll = suppressKeyboardDismissWhileProgrammaticTimelineScroll,
                                 initialTimelineScrollDoneState = initialTimelineScrollDoneState,

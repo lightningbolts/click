@@ -437,7 +437,7 @@ internal fun SoundtrackBeaconDetail(
         }
 
         if (preview != null) {
-            val player = rememberChatAudioPlayer(mediaUrl = preview, durationHintMs = 30_000L)
+            val player = rememberChatAudioPlayer(mediaUrl = preview)
             var tick by remember(preview) { mutableIntStateOf(0) }
             var isDragging by remember(preview) { mutableStateOf(false) }
             var sliderPosition by remember(preview) { mutableFloatStateOf(0f) }

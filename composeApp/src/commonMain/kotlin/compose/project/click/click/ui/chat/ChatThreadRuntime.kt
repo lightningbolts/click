@@ -16,7 +16,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.unit.dp
-import compose.project.click.click.platform.KeyboardHeightProvider // pragma: allowlist secret
 
 /**
  * Shared interaction state for every chat surface (1:1, group, proximity hub, event hub).
@@ -26,7 +25,6 @@ import compose.project.click.click.platform.KeyboardHeightProvider // pragma: al
  */
 internal data class ChatThreadRuntime(
     val listState: LazyListState,
-    val nativeKeyboardInsets: ChatNativeKeyboardInsets,
     val dismissKeyboardOnUserMessageScroll: NestedScrollConnection,
     val suppressKeyboardDismissWhileProgrammaticTimelineScroll: MutableState<Boolean>,
     val initialTimelineScrollDoneState: MutableState<Boolean>,
@@ -36,16 +34,10 @@ internal data class ChatThreadRuntime(
 @Composable
 internal fun rememberChatThreadRuntime(
     threadKey: String,
-    keyboardHeightProvider: KeyboardHeightProvider,
     parentInteractiveBackSwipePx: MutableFloatState?,
 ): ChatThreadRuntime {
     val listState = remember(threadKey) { LazyListState() }
     val density = LocalDensity.current
-    val nativeKeyboardInsets =
-        rememberChatNativeKeyboardInsets(
-            keyboardHeightProvider = keyboardHeightProvider,
-            subtractTabBarOverlay = true,
-        )
     val focusManagerState = rememberUpdatedState(LocalFocusManager.current)
     val keyboardControllerState = rememberUpdatedState(LocalSoftwareKeyboardController.current)
     val suppressKeyboardDismissWhileProgrammaticTimelineScroll =
@@ -81,7 +73,6 @@ internal fun rememberChatThreadRuntime(
     return remember(
         threadKey,
         listState,
-        nativeKeyboardInsets,
         dismissKeyboardOnUserMessageScroll,
         suppressKeyboardDismissWhileProgrammaticTimelineScroll,
         initialTimelineScrollDoneState,
@@ -89,7 +80,6 @@ internal fun rememberChatThreadRuntime(
     ) {
         ChatThreadRuntime(
             listState = listState,
-            nativeKeyboardInsets = nativeKeyboardInsets,
             dismissKeyboardOnUserMessageScroll = dismissKeyboardOnUserMessageScroll,
             suppressKeyboardDismissWhileProgrammaticTimelineScroll =
             suppressKeyboardDismissWhileProgrammaticTimelineScroll,

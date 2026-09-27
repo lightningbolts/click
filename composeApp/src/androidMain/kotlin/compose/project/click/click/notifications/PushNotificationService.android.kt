@@ -24,7 +24,7 @@ private const val PUSH_NOTIFICATION_PREFS = "push_notification_prefs"
 private const val PUSH_NOTIFICATION_PREFS_ENCRYPTED = "push_notification_prefs_encrypted"
 private const val KEY_PUSH_USER_ID = "push_user_id"
 
-// Per-tokenType pending slots (R0.6 — Android now matches iOS semantics).
+// Per-tokenType pending slots.
 // We intentionally do NOT use a single shared slot because FCM (standard)
 // can arrive before login and must be preserved.
 private const val PENDING_TOKEN_TYPES_KEY = "pending_push_token_types"

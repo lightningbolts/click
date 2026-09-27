@@ -534,7 +534,7 @@ internal fun ChatViewModel.updateMessageInputImpl(text: String) {
 
 /**
  * @param clearMessageSurface When false, skips forcing [ChatMessagesState.Loading] after teardown.
- * Use when the chat composable may still be attached for a frame (e.g. iOS interactive back)
+ * Use when the chat composable may still be attached for a frame (e.g. interactive back)
  * so the UI does not flash a full-screen loading state over the list.
  */
 internal fun ChatViewModel.leaveChatRoomImpl(clearMessageSurface: Boolean = true) {

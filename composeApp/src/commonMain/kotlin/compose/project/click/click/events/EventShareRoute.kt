@@ -4,25 +4,41 @@ import compose.project.click.click.data.models.MapBeacon
 import compose.project.click.click.qr.CLICK_WEB_BASE_URL
 import kotlin.math.abs
 
-/** HTTPS Maps URL — preferred open target (geo: fails on iOS without a registered handler). */
-fun eventMapsHttpUrl(latitude: Double, longitude: Double): String =
-    "https://maps.google.com/?q=$latitude,$longitude"
+/** HTTPS Maps URL — preferred open target. */
+fun eventMapsHttpUrl(
+    latitude: Double,
+    longitude: Double,
+): String = "https://maps.google.com/?q=$latitude,$longitude"
 
 /** Apple Maps HTTPS (optional alternate). */
-fun eventMapsAppleHttpUrl(latitude: Double, longitude: Double, label: String?): String {
-    val q = label?.trim()?.takeIf { it.isNotEmpty() }
-        ?.replace(" ", "+")
-        ?.take(80)
-        ?: "$latitude,$longitude"
+fun eventMapsAppleHttpUrl(
+    latitude: Double,
+    longitude: Double,
+    label: String?,
+): String {
+    val q =
+        label
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+            ?.replace(" ", "+")
+            ?.take(80)
+            ?: "$latitude,$longitude"
     return "https://maps.apple.com/?ll=$latitude,$longitude&q=$q"
 }
 
-/** Legacy geo: URI — unreliable on iOS; prefer [eventMapsHttpUrl]. */
-fun eventMapsGeoUri(latitude: Double, longitude: Double, label: String?): String {
-    val safeLabel = label?.trim()?.takeIf { it.isNotEmpty() }
-        ?.replace("(", "")
-        ?.replace(")", "")
-        ?.take(80)
+/** Legacy geo: URI — prefer [eventMapsHttpUrl]. */
+fun eventMapsGeoUri(
+    latitude: Double,
+    longitude: Double,
+    label: String?,
+): String {
+    val safeLabel =
+        label
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+            ?.replace("(", "")
+            ?.replace(")", "")
+            ?.take(80)
     return if (safeLabel != null) {
         "geo:$latitude,$longitude?q=$latitude,$longitude($safeLabel)"
     } else {
@@ -30,7 +46,7 @@ fun eventMapsGeoUri(latitude: Double, longitude: Double, label: String?): String
     }
 }
 
-/** Open directions via HTTPS maps (Google first, Apple Maps fallback). Avoids geo: NSOSStatus -10814 on iOS. */
+/** Open directions via HTTPS maps (Google first, Apple Maps fallback). */
 fun openEventMapsRoute(
     openUri: (String) -> Unit,
     latitude: Double,
@@ -54,9 +70,14 @@ fun buildEventShareText(
     scheduleLabel: String?,
     distanceLabel: String?,
 ): String {
-    val title = beacon.metadata.title?.trim()?.takeIf { it.isNotEmpty() }
-        ?: beacon.metadata.description?.trim()?.takeIf { it.isNotEmpty() }
-        ?: "Click event"
+    val title =
+        beacon.metadata.title
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+            ?: beacon.metadata.description
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
+            ?: "Click event"
     return buildString {
         append(title)
         scheduleLabel?.trim()?.takeIf { it.isNotEmpty() }?.let {
@@ -76,6 +97,9 @@ fun buildEventShareText(
     }
 }
 
-fun hasFiniteCoordinates(latitude: Double, longitude: Double): Boolean =
+fun hasFiniteCoordinates(
+    latitude: Double,
+    longitude: Double,
+): Boolean =
     latitude.isFinite() && longitude.isFinite() &&
         abs(latitude) <= 90.0 && abs(longitude) <= 180.0

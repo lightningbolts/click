@@ -174,8 +174,7 @@ fun TabbedUserProfileSheet(
     ClickFormBottomSheet(
         onDismissRequest = onDismiss,
         // Fill viewport so pager weight(1f) reaches the sheet bottom (scroll last rows).
-        useUiKitScrollHost = true,
-        uiKitFillViewport = true,
+        fillBody = true,
     ) {
         ProfileBottomSheet(
             state = state,
@@ -327,8 +326,7 @@ fun TabbedGroupProfileSheet(
 
     ClickFormBottomSheet(
         onDismissRequest = onDismiss,
-        useUiKitScrollHost = true,
-        uiKitFillViewport = true,
+        fillBody = true,
     ) {
         ProfileBottomSheet(
             state = state,

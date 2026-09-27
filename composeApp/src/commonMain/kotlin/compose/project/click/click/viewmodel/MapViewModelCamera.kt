@@ -158,13 +158,13 @@ internal fun MapViewModel.setZoomLevelImpl(zoom: Double) {
     if (pendingTarget != null) {
         val now = Clock.System.now().toEpochMilliseconds()
         val ageMs = now - pendingProgrammaticZoomSetAtMs
-        // MapKit span → zoom can disagree with our metersForZoom ladder by ~1 level; keep the
+        // Map SDK span → zoom can disagree with our metersForZoom ladder by ~1 level; keep the
         // guard loose so we clear pending when the map has essentially arrived.
         val reachedPendingTarget = abs(coerced - pendingTarget) <= 1.0
         if (reachedPendingTarget) {
             pendingProgrammaticZoomTarget = null
         } else if (ageMs > 1500L) {
-            // Do not apply this stale reading: it often underestimates zoom on iOS and would
+            // Do not apply this stale reading: it can underestimate zoom and would
             // snap _zoomLevel back below [clusterThreshold], reverting to cluster markers.
             pendingProgrammaticZoomTarget = null
             return

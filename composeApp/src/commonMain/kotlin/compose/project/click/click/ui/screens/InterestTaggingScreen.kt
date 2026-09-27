@@ -21,7 +21,6 @@ import androidx.compose.ui.unit.sp
 import compose.project.click.click.ui.components.INTEREST_ONBOARDING_MIN_TAGS
 import compose.project.click.click.ui.components.InterestEditor
 import compose.project.click.click.ui.theme.*
-import compose.project.click.click.ui.theme.LocalPlatformStyle
 
 /**
  * Interest tagging onboarding screen.
@@ -80,21 +79,15 @@ fun InterestTaggingScreen(
 
             Spacer(modifier = Modifier.height(28.dp))
 
-            val tagStyle = LocalPlatformStyle.current
             Button(
                 onClick = { onTagsSelected(selectedTags) },
                 modifier =
                     Modifier
                         .fillMaxWidth()
                         .height(56.dp),
-                shape = RoundedCornerShape(if (tagStyle.isIOS) 14.dp else 28.dp),
+                shape = RoundedCornerShape(28.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
-                elevation =
-                    if (tagStyle.isIOS) {
-                        ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp)
-                    } else {
-                        ButtonDefaults.buttonElevation()
-                    },
+                elevation = ButtonDefaults.buttonElevation(),
                 enabled = selectedTags.size >= INTEREST_ONBOARDING_MIN_TAGS,
             ) {
                 Text("Continue", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)

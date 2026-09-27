@@ -40,7 +40,6 @@ import compose.project.click.click.ui.components.MapPinKind // pragma: allowlist
 import compose.project.click.click.ui.components.PlatformMap // pragma: allowlist secret
 import compose.project.click.click.ui.components.toClusterPin // pragma: allowlist secret
 import compose.project.click.click.ui.theme.* // pragma: allowlist secret
-import compose.project.click.click.ui.theme.LocalPlatformStyle // pragma: allowlist secret
 import compose.project.click.click.ui.utils.* // pragma: allowlist secret
 import compose.project.click.click.ui.utils.CommunityHubPin // pragma: allowlist secret
 import compose.project.click.click.util.oneToOnePeerPairKey // pragma: allowlist secret
@@ -279,7 +278,7 @@ internal fun ZoomControls(
         modifier = modifier,
         onZoomIn = onZoomIn,
         onZoomOut = onZoomOut,
-        glassStrength = if (LocalPlatformStyle.current.isIOS) 0.78f else 0.4f,
+        glassStrength = 0.4f,
     )
 }
 

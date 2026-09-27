@@ -49,7 +49,6 @@ import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import compose.project.click.click.hapticSendMessage
-import compose.project.click.click.ui.theme.LocalPlatformStyle // pragma: allowlist secret
 import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
 import compose.project.click.click.ui.theme.clickBorderColor // pragma: allowlist secret
 import compose.project.click.click.ui.theme.clickBorderWidth // pragma: allowlist secret
@@ -62,10 +61,6 @@ internal fun chatComposerCanSubmit(
 
 /**
  * Shared text/attach/send row for connection and hub chat.
- *
- * The iOS treatment intentionally follows a messenger hierarchy: neutral attachment/input chrome,
- * then one brand-filled send control only while sending is actionable. The field does not become a
- * purple form outline on focus.
  */
 @Composable
 internal fun ChatComposerStrip(
@@ -84,14 +79,13 @@ internal fun ChatComposerStrip(
     attachBackground: Color = MaterialTheme.colorScheme.surfaceVariant,
     attachTint: Color = MaterialTheme.colorScheme.onSurfaceVariant,
 ) {
-    val composerStyle = LocalPlatformStyle.current
-    val auxButtonSize = if (composerStyle.isIOS) 42.dp else 48.dp
+    val auxButtonSize = 48.dp
     val attachIconSize = 21.dp
     val sendIconSize = 21.dp
-    val fieldCorner = if (composerStyle.isIOS) 22.dp else 12.dp
-    val composerGap = if (composerStyle.isIOS) 7.dp else 8.dp
+    val fieldCorner = 12.dp
+    val composerGap = 8.dp
     val fieldSideInset = auxButtonSize + composerGap
-    val sendShape = if (composerStyle.isIOS) CircleShape else RoundedCornerShape(fieldCorner)
+    val sendShape = RoundedCornerShape(fieldCorner)
     val fieldShape = RoundedCornerShape(fieldCorner)
 
     val attachInteraction = remember { MutableInteractionSource() }
@@ -208,14 +202,9 @@ internal fun ChatComposerStrip(
                         Modifier
                             .fillMaxSize()
                             .clip(CircleShape)
-                            .background(attachBackground.copy(alpha = if (composerStyle.isIOS) 0.84f else 1f))
-                            .then(
-                                if (composerStyle.isIOS) {
-                                    Modifier
-                                } else {
-                                    Modifier.border(clickBorderWidth(), clickBorderColor(), CircleShape)
-                                },
-                            ).chatSpringPressScale(attachInteraction),
+                            .background(attachBackground.copy(alpha = 1f))
+                            .border(clickBorderWidth(), clickBorderColor(), CircleShape)
+                            .chatSpringPressScale(attachInteraction),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
@@ -239,13 +228,8 @@ internal fun ChatComposerStrip(
                     .chatSpringPressScale(sendInteraction)
                     .clip(sendShape)
                     .background(if (canSend) PrimaryBlue else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.84f))
-                    .then(
-                        if (composerStyle.isIOS) {
-                            Modifier
-                        } else {
-                            Modifier.border(clickBorderWidth(), clickBorderColor(), sendShape)
-                        },
-                    ).clickable(
+                    .border(clickBorderWidth(), clickBorderColor(), sendShape)
+                    .clickable(
                         interactionSource = sendInteraction,
                         indication = null,
                         enabled = canSend,

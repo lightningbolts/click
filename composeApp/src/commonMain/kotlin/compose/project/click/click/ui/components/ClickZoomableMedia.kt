@@ -23,7 +23,7 @@ import androidx.compose.ui.input.pointer.pointerInput
  * and supports pinch-to-zoom / pan / double-tap zoom.
  *
  * Identity transform skips [graphicsLayer] — applying a layer to [androidx.compose.foundation.Image]
- * inside an iOS Compose [androidx.compose.ui.window.Dialog] can drop the bitmap (blank black
+ * inside a Compose [androidx.compose.ui.window.Dialog] can drop the bitmap (blank black
  * lightbox) until the user pinches.
  */
 @Composable

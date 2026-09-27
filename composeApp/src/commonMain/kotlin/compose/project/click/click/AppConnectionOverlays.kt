@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
 import compose.project.click.click.calendar.AvailabilityOverlapGap // pragma: allowlist secret
@@ -36,14 +35,11 @@ import compose.project.click.click.sensors.BarometricHeightMonitor // pragma: al
 import compose.project.click.click.sensors.HardwareVibeMonitor // pragma: allowlist secret
 import compose.project.click.click.sensors.captureConnectionSensorContext // pragma: allowlist secret
 import compose.project.click.click.ui.camera.DisposableCameraView // pragma: allowlist secret
-import compose.project.click.click.ui.components.AppScreenDefaults // pragma: allowlist secret
-import compose.project.click.click.ui.components.BindPlatformNativeNavigationBar // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionContextPresentation // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionContextSheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionRevealOverlay // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionRevealPhase // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionRevealUiState // pragma: allowlist secret
-import compose.project.click.click.ui.components.CoverPlatformOverlayNavigationBar // pragma: allowlist secret
 import compose.project.click.click.ui.screens.* // pragma: allowlist secret
 import compose.project.click.click.ui.theme.* // pragma: allowlist secret
 import compose.project.click.click.utils.LocationResult // pragma: allowlist secret
@@ -66,7 +62,6 @@ internal fun AppConnectionOverlays(
     showNfcScreen: Boolean,
     suppressConnectionContextSheet: Boolean,
     currentUser: User,
-    isIOS: Boolean,
     connectionViewModel: ConnectionViewModel,
     chatViewModel: ChatViewModel,
     connectionScope: CoroutineScope,
@@ -414,18 +409,6 @@ internal fun AppConnectionOverlays(
     ) {
         val cameraSession = activeRollSession
         val cameraConnectionId = rollConnectionId
-        if (isIOS) {
-            CoverPlatformOverlayNavigationBar()
-            BindPlatformNativeNavigationBar(
-                title = "Click Drops",
-                onNavigateBack = {
-                    disposableRollExitWithScale = true
-                    showConnectionDisposableRoll = false
-                    pendingRollSession = null
-                },
-                leadingClose = true,
-            )
-        }
         DisposableCameraView(
             onPhotoConfirmed = { bytes ->
                 if (cameraSession != null && !cameraConnectionId.isNullOrBlank()) {
@@ -449,13 +432,6 @@ internal fun AppConnectionOverlays(
                 showConnectionDisposableRoll = false
                 pendingRollSession = null
             },
-            extraBottomPadding =
-                if (isIOS) {
-                    // Native UITabBar stays visible under this overlay on iOS.
-                    AppScreenDefaults.IosTabBarContentHeight
-                } else {
-                    0.dp
-                },
             modifier =
                 Modifier
                     .fillMaxSize(),

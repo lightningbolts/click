@@ -31,15 +31,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
 import compose.project.click.click.data.models.heroImageUrl // pragma: allowlist secret
-import compose.project.click.click.getPlatform // pragma: allowlist secret
 import compose.project.click.click.ui.components.CardVisualHero // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickCircularGlassIconButton // pragma: allowlist secret
 import compose.project.click.click.ui.components.LiquidGlassPill // pragma: allowlist secret
-import compose.project.click.click.ui.components.LocalNativeChromeActive // pragma: allowlist secret
-import compose.project.click.click.ui.components.NativeMapLayerOption // pragma: allowlist secret
-import compose.project.click.click.ui.components.PlatformNativeMapFloatingChrome // pragma: allowlist secret
 import compose.project.click.click.ui.theme.* // pragma: allowlist secret
-import compose.project.click.click.ui.theme.LocalPlatformStyle // pragma: allowlist secret
 import compose.project.click.click.ui.utils.* // pragma: allowlist secret
 import compose.project.click.click.viewmodel.MapLayerFilter // pragma: allowlist secret
 
@@ -51,36 +46,8 @@ internal fun MapAlwaysOnChrome(
     onDropBeacon: () -> Unit,
     onZoomIn: () -> Unit,
     onZoomOut: () -> Unit,
-    chromeVisible: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
-    val style = LocalPlatformStyle.current
-    if (style.isIOS) {
-        PlatformNativeMapFloatingChrome(
-            visible = chromeVisible && LocalNativeChromeActive.current,
-            layerLabel = mapLayerFilterShortLabel(layerFilters),
-            layerOptions =
-                MapLayerFilter.entries.map { filter ->
-                    NativeMapLayerOption(
-                        id = filter.name,
-                        label = filter.label,
-                        selected =
-                            when (filter) {
-                                MapLayerFilter.ALL -> MapLayerFilter.ALL in layerFilters
-                                else -> filter in layerFilters
-                            },
-                    )
-                },
-            onToggleLayerId = { id ->
-                MapLayerFilter.entries.firstOrNull { it.name == id }?.let(onToggleLayerFilter)
-            },
-            onDropBeacon = onDropBeacon,
-            onZoomIn = onZoomIn,
-            onZoomOut = onZoomOut,
-            bottomPadding = dockBottomPadding,
-        )
-        return
-    }
     val glassStrength = 0.4f
     val topSafe =
         WindowInsets.safeDrawing.only(
@@ -181,7 +148,7 @@ internal fun mapLayerFilterShortLabel(selected: Set<MapLayerFilter>): String {
 }
 
 /**
- * Native [DropdownMenu] from a liquid-glass style pill (iOS) / solid surface (Android).
+ * Native [DropdownMenu] from a liquid-glass style pill.
  * Menu opens **upward** (negative offset) so it stays on-screen over the bottom bar, with a
  * fully opaque container for readable text.
  */
@@ -193,8 +160,6 @@ internal fun MapLayerFilterDropdown(
     opensDownward: Boolean = false,
 ) {
     var expanded by remember { mutableStateOf(false) }
-    val isIOS = remember { getPlatform().name.contains("iOS", ignoreCase = true) }
-    val style = LocalPlatformStyle.current
     val menuSurface = MaterialTheme.colorScheme.surface
     val onMenuSurface = MaterialTheme.colorScheme.onSurface
     val menuOutline = clickBorderColor()
@@ -207,7 +172,7 @@ internal fun MapLayerFilterDropdown(
         }
     val menuWidth = 240.dp
     val triggerWidth = 132.dp
-    val glassStrength = if (style.isIOS) 0.64f else 0.4f
+    val glassStrength = 0.4f
 
     val triggerShape = RoundedCornerShape(20.dp)
     Box(
@@ -258,7 +223,7 @@ internal fun MapLayerFilterDropdown(
                     .wrapContentWidth(Alignment.Start)
                     .zIndex(20f),
             offset = DpOffset(0.dp, -menuUpOffset),
-            shape = RoundedCornerShape(if (isIOS) 14.dp else 12.dp),
+            shape = RoundedCornerShape(12.dp),
             containerColor = menuSurface,
             tonalElevation = 0.dp,
             shadowElevation = 0.dp,

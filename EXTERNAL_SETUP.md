@@ -122,7 +122,7 @@ order by created_at desc;
 
 Expected result: one row with `platform = 'android'`, a stable `device_id`, and `token_type = 'standard'`. Uniqueness is `(user_id, device_id, token_type)` — re-registering replaces the row instead of accumulating. Formal migration: `supabase/migrations/20260813120000_push_tokens_device_id.sql`.
 
-## 4. Apple Push Notifications For iOS
+## 4. Apple Push Notifications (Edge Function secrets for click-ios)
 
 ### Apple Developer portal
 
@@ -138,22 +138,11 @@ Store these values for Supabase:
 1. `APNS_KEY`: contents of the `.p8` file
 2. `APNS_KEY_ID`: the key ID shown by Apple
 3. `APNS_TEAM_ID`: your Apple team ID
-4. `APNS_BUNDLE_ID`: the bundle ID used by the iOS target
+4. `APNS_BUNDLE_ID`: the bundle ID used by the click-ios app
 
-### Xcode capabilities
+### iOS app
 
-Open `click/iosApp/iosApp.xcodeproj` and verify the `iosApp` target has:
-
-1. `Push Notifications` capability enabled
-2. `Background Modes` enabled with `Audio, AirPlay, and Picture in Picture`
-3. `Background Modes` enabled with `Remote notifications` if you want background notification handling later
-
-### iOS runtime validation
-
-1. Build to a real iPhone. APNs device tokens do not fully validate on the simulator.
-2. Sign in.
-3. Accept notification permission.
-4. Confirm rows appear in `push_tokens` with `platform = 'ios'` — typically **two** per device (`token_type` `voip` and `standard`) sharing one `device_id`.
+The iOS client lives in the separate `click-ios` repository. The APNs secrets above are still configured here because this repo owns the `send-push-notification` Edge Function; Xcode capabilities and iOS token validation are documented in `click-ios`.
 
 ## 5. Triggering Pushes On New Messages
 
@@ -184,11 +173,10 @@ Then inspect:
 3. Deploy `send-push-notification`.
 4. Set all Supabase secrets.
 5. Add Firebase Android config and service-account JSON.
-6. Add Apple APNs key and capabilities.
+6. Add the Apple APNs key secrets (for click-ios).
 7. Set `click-web/.env.local` for Supabase.
 8. Run `npm install` in `click-web`.
 9. Sync Gradle in `click`.
 10. Verify Android push token upload.
-11. Verify iOS push token upload.
-12. Send a message and confirm push delivery.
+11. Send a message and confirm push delivery.
 

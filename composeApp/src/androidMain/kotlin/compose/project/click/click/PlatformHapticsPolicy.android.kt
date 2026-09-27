@@ -1,3 +1,5 @@
+@file:Suppress("ktlint:standard:function-naming")
+
 package compose.project.click.click
 
 import android.os.Build
@@ -31,11 +33,12 @@ actual object PlatformHapticsPolicy {
 
     actual fun successNotification() {
         val v = AndroidHapticHost.view() ?: return
-        val flag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            HapticFeedbackConstants.CONFIRM
-        } else {
-            HapticFeedbackConstants.LONG_PRESS
-        }
+        val flag =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                HapticFeedbackConstants.CONFIRM
+            } else {
+                HapticFeedbackConstants.LONG_PRESS
+            }
         v.performHapticFeedback(flag)
     }
 }
@@ -52,5 +55,3 @@ actual fun BindPlatformHapticsToViewHierarchy() {
         }
     }
 }
-
-actual fun shouldUseNoOpComposeHaptics(): Boolean = false

@@ -4,7 +4,7 @@
 > Click is built as a **people-first social utility**: fewer infinite feeds, more real-world presence. We optimize for intentional connection—not passive consumption—so moments in the room matter more than minutes on the timeline.
 
 **Click — The seamless offline-to-online connection app.**  
-This repository is the **Kotlin Multiplatform** mobile client: **Compose Multiplatform** UI with **Android** and **iOS** targets. Backend pieces (Postgres, Edge Functions, companion HTTP APIs) live in sibling services; the app integrates via **Supabase** and a configurable **web base URL** for QR and chat APIs.
+This repository is the **Kotlin Multiplatform** mobile client: **Compose Multiplatform** UI with an **Android** target (the iOS app lives in the separate **click-ios** repository). Backend pieces (Postgres, Edge Functions, companion HTTP APIs) live in sibling services; the app integrates via **Supabase** and a configurable **web base URL** for QR and chat APIs.
 
 ---
 
@@ -45,11 +45,9 @@ There is **no “hard lock”** or forced expiry that deletes relationships by t
 |----------|---------|
 | [`composeApp/src/commonMain/kotlin/`](./composeApp/src/commonMain/kotlin/) | Shared UI (Compose), ViewModels, repositories, Supabase client, chat, connections, maps, most business logic |
 | [`composeApp/src/androidMain/kotlin/`](./composeApp/src/androidMain/kotlin/) | Android `actual` implementations: FCM service, `TokenStorage`, crypto, location |
-| [`composeApp/src/iosMain/kotlin/`](./composeApp/src/iosMain/kotlin/) | iOS `actual` implementations: `TokenStorage`, push helpers, permission requesters, stubs/bridges to Swift where needed |
-| [`iosApp/iosApp/`](./iosApp/iosApp/) | Xcode app: **Swift** for UserNotifications, Google Sign-In, app lifecycle and Kotlin entry |
-| [`composeApp/build.gradle.kts`](./composeApp/build.gradle.kts) | Multiplatform targets, dependencies (e.g. Supabase KMP, Ktor) |
+| [`composeApp/build.gradle.kts`](./composeApp/build.gradle.kts) | Android target, dependencies (e.g. Supabase KMP, Ktor) |
 
-**Guideline:** add new features in **`commonMain`** first; use **`expect`/`actual`** (or small platform facades) only when you must touch **BLE / audio / GPS pipelines, Keychain, EncryptedSharedPreferences, or platform location**.
+**Guideline:** add new features in **`commonMain`** first; use **`expect`/`actual`** (or small platform facades) only when you must touch **BLE / audio / GPS pipelines, EncryptedSharedPreferences, or platform location**.
 
 ---
 
@@ -57,7 +55,7 @@ There is **no “hard lock”** or forced expiry that deletes relationships by t
 
 - **Tri-Factor proximity mesh + QR** — In-person discovery and connection via **BLE + ultrasonic + progressive GPS**; **QR** remains a fallback path that uses HTTP against the configured web base URL (see `QRModels.kt` / `QrCodeView.kt`). Connection metadata can record `connectionMethod` (e.g. `"qr"`, `"tri_factor"`).  
 - **Multi-Tap verified cliques** — Simultaneous 3+ person handshakes validated server-side; client-side encrypted group chat on success.
-- **Real-time chat** — Supabase **Realtime** channels, `SupabaseChatRepository` / `ChatViewModel`, typing and presence-oriented state, push hooks for background delivery (Edge Function + FCM/APNs). - **Presence** — Realtime subscriptions in home/chat/map-related ViewModels for online status and activity signals.  
+- **Real-time chat** — Supabase **Realtime** channels, `SupabaseChatRepository` / `ChatViewModel`, typing and presence-oriented state, push hooks for background delivery (Edge Function + FCM). - **Presence** — Realtime subscriptions in home/chat/map-related ViewModels for online status and activity signals.  
 - **Maps** — Map screens and Realtime channels (e.g. connection discovery) backed by Supabase-backed repositories.  
 - **Memory Capsules (opt-in)** — `rememberAmbientNoiseMonitor`, `rememberBarometricHeightMonitor`, and subjective tagging flows when the user opts in (settings + connection sheets).  
 - **Prior Connections** — Optional, skippable onboarding step. Contacts are hashed on-device (SHA-256 of E.164 / email) and matched via `POST /api/contacts/discover`. Self-reported edges use `source=prior` and never mint `connection_encounters` or handshake vanity metrics.
@@ -68,7 +66,6 @@ There is **no “hard lock”** or forced expiry that deletes relationships by t
 
 - **Kotlin Multiplatform** + **Compose Multiplatform**  
 - **Android:** Gradle, Jetpack lifecycle/viewmodel where used, **FCM** (`google-services.json` in `composeApp/`)  
-- **iOS:** Xcode project, **APNs** (via backend)  
 - **Supabase KMP:** Auth (with `SettingsSessionManager` + app `TokenStorage` sync in `SupabaseConfig`), Postgrest, Realtime  
 - **Ktor** client for companion HTTP APIs (QR, waitlist)  
 
@@ -81,9 +78,9 @@ There is **no “hard lock”** or forced expiry that deletes relationships by t
 Edit [`composeApp/src/commonMain/kotlin/compose/project/click/click/data/SupabaseConfig.kt`](./composeApp/src/commonMain/kotlin/compose/project/click/click/data/SupabaseConfig.kt):
 
 - `SUPABASE_URL`, `SUPABASE_ANON_KEY`  
-- Auth redirect scheme/host (`click` / `login`) must match Supabase Auth and the iOS/Android URL handlers.
+- Auth redirect scheme/host (`click` / `login`) must match Supabase Auth and the Android URL handler.
 
-`SupabaseConfig.startSessionSync(tokenStorage)` keeps the SDK session aligned with **`TokenStorage`** (Keychain on iOS / encrypted prefs on Android). iOS migrates the previous plaintext session once into Keychain and purges it after the secure write succeeds. Cold boot imports TokenStorage when the SDK session is **empty or expired**. Access-token wall-clock headroom is not enough to skip GoTrue refresh: TestFlight updates and dual-store drift otherwise keep a JWT that click-web rejects as `401 Unauthorized` until the user signs out. Boot, 45-minute ticker, foreground resume, and HTTP 401/403 retries call `refreshSession(forceRefresh = true)` (which always hits `/token` unless another refresh is already in-flight), then drop/reconnect the Realtime socket so hub subscribe and sends use the new bearer. `connect()` is a no-op on an open socket — `rebindRealtimeSocket()` disconnects first.
+`SupabaseConfig.startSessionSync(tokenStorage)` keeps the SDK session aligned with **`TokenStorage`** (encrypted prefs on Android). Cold boot imports TokenStorage when the SDK session is **empty or expired**. Access-token wall-clock headroom is not enough to skip GoTrue refresh: app updates and dual-store drift otherwise keep a JWT that click-web rejects as `401 Unauthorized` until the user signs out. Boot, 45-minute ticker, foreground resume, and HTTP 401/403 retries call `refreshSession(forceRefresh = true)` (which always hits `/token` unless another refresh is already in-flight), then drop/reconnect the Realtime socket so hub subscribe and sends use the new bearer. `connect()` is a no-op on an open socket — `rebindRealtimeSocket()` disconnects first.
 
 ### Web base URL (QR, waitlist)
 
@@ -92,10 +89,6 @@ Edit [`composeApp/src/commonMain/kotlin/compose/project/click/click/data/Supabas
 ### Android push (FCM)
 
 Place **`google-services.json`** in [`composeApp/`](./composeApp/) (package `compose.project.click.click`). The Supabase Edge Function uses a Firebase **service account** for server-side FCM.
-
-### iOS capabilities
-
-Enable Push Notifications, Background Modes (**Remote notifications**), and associated entitlements.
 
 ---
 
@@ -111,15 +104,7 @@ From this directory:
 
 Use Android Studio’s **composeApp** run configuration, or install the debug APK from `composeApp/build/outputs/`.
 
-Create `local.properties` at the repo root with `sdk.dir` and `MAPS_API_KEY` (see [`AGENTS.md`](./AGENTS.md)). If the file is missing, Gradle uses checked-in `local.defaults.properties` so the project still configures (required for Xcode’s Kotlin framework step).
-
-### iOS
-
-1. Open [`iosApp/iosApp.xcodeproj`](./iosApp/iosApp.xcodeproj) in Xcode.  
-2. Resolve Swift packages (**GoogleSignIn**).  
-3. Select the **iosApp** scheme, set signing team, build and run.
-
-Xcode’s **Compile Kotlin Framework** phase runs `./gradlew :composeApp:embedAndSignAppleFrameworkForXcode`. That Gradle configure step needs `MAPS_API_KEY` via `local.properties` or the checked-in `local.defaults.properties` fallback (Xcode Cloud writes `local.properties` in [`iosApp/ci_scripts/ci_pre_xcodebuild.sh`](./iosApp/ci_scripts/ci_pre_xcodebuild.sh)).
+Create `local.properties` at the repo root with `sdk.dir` and `MAPS_API_KEY` (see [`AGENTS.md`](./AGENTS.md)). If the file is missing, Gradle uses checked-in `local.defaults.properties`, so the project still configures.
 
 ### Maestro (E2E UI)
 
@@ -147,11 +132,11 @@ maestro test .maestro/auth --include-tags auth \
 
 `auth/tabs.yaml` also asserts `onboarding-avatar` is not visible and map chrome (`map-screen`) after `nav-map`.
 
-Package id is `compose.project.click.click` on Android and iOS. Grant runtime permissions in flows via `launchApp.permissions`. Cloud uploads (optional) use [`.github/workflows/maestro-cloud.yml`](./.github/workflows/maestro-cloud.yml) (`workflow_dispatch`, secrets `MAESTRO_API_KEY` + `MAESTRO_PROJECT_ID`).
+Package id is `compose.project.click.click`. Grant runtime permissions in flows via `launchApp.permissions`. Cloud uploads (optional) use [`.github/workflows/maestro-cloud.yml`](./.github/workflows/maestro-cloud.yml) (`workflow_dispatch`, secrets `MAESTRO_API_KEY` + `MAESTRO_PROJECT_ID`).
 
 ### Database and server-side setup
 
-SQL migrations and ordering: [`database/`](./database/). Full operator checklist (Edge Function secrets, APNs, FCM): **[`EXTERNAL_SETUP.md`](./EXTERNAL_SETUP.md)**.
+SQL migrations and ordering: [`database/`](./database/). Full operator checklist (Edge Function secrets, FCM): **[`EXTERNAL_SETUP.md`](./EXTERNAL_SETUP.md)**.
 
 Optional: [`quick_start_chat.sh`](./quick_start_chat.sh) for guided prompts around Supabase config.
 
@@ -161,10 +146,10 @@ Optional: [`quick_start_chat.sh`](./quick_start_chat.sh) for guided prompts arou
 
 See [`docs/archive/PERFORMANCE.md`](docs/archive/PERFORMANCE.md) (archived July 2026 notes) for hotspots, scale failure modes, and remediation (inbox RPC, `RealtimeCoordinator`, gated map prefetch).
 
-**Compile (Android + iOS):**
+**Compile:**
 
 ```bash
-./gradlew :composeApp:compileDebugKotlinAndroid :composeApp:compileKotlinIosSimulatorArm64
+./gradlew :composeApp:compileDebugKotlinAndroid
 ```
 
 ---
@@ -190,7 +175,7 @@ If your checkout includes **`click-web`** beside **`click/`**, run the Next.js a
 cd click-web && npm run dev   # http://localhost:3000
 
 # Terminal 2 — mobile
-# Set CLICK_WEB_BASE_URL in QRModels.kt / build config to http://localhost:3000 (simulator)
+# Set CLICK_WEB_BASE_URL in QRModels.kt / build config to http://10.0.2.2:3000 (emulator)
 # or your machine LAN IP for physical devices
 ```
 

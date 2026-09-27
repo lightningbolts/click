@@ -299,7 +299,7 @@ data class PushTokenRegisterResponse(
     val ok: Boolean,
 )
 
-/** GET `/api/users/[userId]/public-profile` — no JWT (App Clip / Instant preview). */
+/** GET `/api/users/[userId]/public-profile` — no JWT. */
 @Serializable
 data class PublicProfileUnauthenticatedResponse(
     @SerialName("display_name") val displayName: String,

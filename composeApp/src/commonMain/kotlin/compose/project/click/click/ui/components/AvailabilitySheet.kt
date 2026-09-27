@@ -38,7 +38,7 @@ import compose.project.click.click.viewmodel.AvailabilityViewModel // pragma: al
 /**
  * Availability intent editor.
  *
- * Same host path as search: UIKit fill-viewport + [sheetImePadding] (IME flush, no black gap)
+ * Same host path as search: fill body + [sheetImePadding] (IME flush, no black gap)
  * + rubber-band pull dismiss (no surface-drag flicker).
  */
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
@@ -70,8 +70,7 @@ fun AvailabilitySheet(
     ClickFormBottomSheet(
         onDismissRequest = onDismiss,
         // Same path as search: fill viewport + sheetImePadding (IME flush) + rubber-band dismiss.
-        useUiKitScrollHost = true,
-        uiKitFillViewport = true,
+        fillBody = true,
     ) {
         ProvideSheetSwipeDismiss(onDismissRequest = onDismiss, scrollAtTop = scrollAtTop) {
             Column(

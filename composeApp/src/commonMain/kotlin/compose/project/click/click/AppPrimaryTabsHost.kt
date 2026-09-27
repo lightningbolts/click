@@ -38,13 +38,10 @@ import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.opensAsEventHub // pragma: allowlist secret
 import compose.project.click.click.data.storage.TokenStorage // pragma: allowlist secret
 import compose.project.click.click.navigation.NavigationItem // pragma: allowlist secret
-import compose.project.click.click.navigation.shouldRenderHomeSwipeUnderlay // pragma: allowlist secret
 import compose.project.click.click.proximity.rememberProximityManager // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionRevealPhase // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionRevealUiState // pragma: allowlist secret
 import compose.project.click.click.ui.components.InteractiveSwipeBackContainer // pragma: allowlist secret
-import compose.project.click.click.ui.components.LocalNativeChromeActive // pragma: allowlist secret
-import compose.project.click.click.ui.components.PlatformNativeNavigationBarSwipeReveal // pragma: allowlist secret
 import compose.project.click.click.ui.components.UnifiedToastState // pragma: allowlist secret
 import compose.project.click.click.ui.components.interactiveSwipeBackUnderlay // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberInteractiveBackHostState // pragma: allowlist secret
@@ -71,7 +68,6 @@ internal fun AppPrimaryTabsHost(
     activeScreenKey: String,
     currentRoute: String,
     addClickOverlayKey: String?,
-    isIOS: Boolean,
     reduceMotion: Boolean,
     currentUser: User,
     client: HttpClient,
@@ -87,7 +83,6 @@ internal fun AppPrimaryTabsHost(
     toastState: UnifiedToastState,
     shareableMapBeacons: List<compose.project.click.click.data.models.MapBeacon>,
     navigateTo: (String) -> Unit,
-    navigatePrimaryRouteBackHome: (NavigationTransitionMode) -> Boolean,
     launchCommunityHubJoin: (String, String?) -> Unit,
     openConnectionDisposableRoll: (String?) -> Unit,
     openChatDisposableRoll: (String?) -> Unit,
@@ -129,7 +124,6 @@ internal fun AppPrimaryTabsHost(
     val screenKey = activeScreenKey
     val addClickBackHost = rememberInteractiveBackHostState()
     val addClickSwipeDragPx = addClickBackHost.dragOffsetPx
-    PlatformNativeNavigationBarSwipeReveal(addClickSwipeDragPx)
     var lastAddClickOverlayKey by remember { mutableStateOf<String?>(null) }
     var addClickOverlayTransitionMode by remember {
         mutableStateOf(NavigationTransitionMode.Tap)
@@ -194,10 +188,7 @@ internal fun AppPrimaryTabsHost(
         }
 
     @Composable
-    fun renderScreen(
-        animatedScreen: String,
-        allowInteractiveSwipeBack: Boolean = true,
-    ) {
+    fun renderScreen(animatedScreen: String) {
         @Composable
         fun renderPrimaryScreen(route: String) {
             if (route == NavigationItem.Home.route) {
@@ -372,44 +363,7 @@ internal fun AppPrimaryTabsHost(
             }
         }
 
-        val previousKey = NavigationItem.Home.route
-        val interactivePrimary =
-            allowInteractiveSwipeBack &&
-                isIOS &&
-                isPrimaryNavRoute(animatedScreen) &&
-                animatedScreen != NavigationItem.Connections.route &&
-                previousKey != animatedScreen &&
-                !(animatedScreen == NavigationItem.Connections.route && isConnectionsChatOpen)
-
-        if (interactivePrimary) {
-            InteractiveSwipeBackContainer(
-                enabled =
-                    !(
-                        animatedScreen == NavigationItem.Settings.route &&
-                            isSettingsSubpageOpen
-                    ),
-                edgeSwipeWidth = 44.dp,
-                onBack = { navigatePrimaryRouteBackHome(NavigationTransitionMode.GestureBack) },
-                previousContent = {
-                    // Exactly one slot owns movable Home. On commit currentRoute
-                    // flips before AnimatedContent disposes this outgoing route,
-                    // so relinquish the underlay in that same recomposition.
-                    // Never bind the shared tab UINavigationBar from this underlay —
-                    // Map has no tab header, and a stale Add Click title would paint
-                    // over the map the moment the back gesture starts.
-                    CompositionLocalProvider(
-                        LocalNativeChromeActive provides false,
-                    ) {
-                        if (shouldRenderHomeSwipeUnderlay(currentRoute)) {
-                            renderPrimaryScreen(previousKey)
-                        }
-                    }
-                },
-                currentContent = { renderPrimaryScreen(animatedScreen) },
-            )
-        } else {
-            renderPrimaryScreen(animatedScreen)
-        }
+        renderPrimaryScreen(animatedScreen)
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -503,19 +457,7 @@ internal fun AppPrimaryTabsHost(
                 },
                 label = "app_screen_transition",
             ) { animatedScreen ->
-                CompositionLocalProvider(
-                    LocalNativeChromeActive provides
-                        (animatedScreen == screenKey),
-                ) {
-                    // Primary tabs are peers selected by the persistent tab bar. They are not a
-                    // push stack, so never synthesize an iOS back-pop from Add Click/Map/Me to Home.
-                    // Pushed screens (settings subpages, chats, QR/NFC/My QR) own independent
-                    // InteractiveSwipeBackContainers and remain fully gesture-enabled.
-                    renderScreen(
-                        animatedScreen = animatedScreen,
-                        allowInteractiveSwipeBack = false,
-                    )
-                }
+                renderScreen(animatedScreen = animatedScreen)
             }
         }
 
@@ -569,7 +511,7 @@ internal fun AppPrimaryTabsHost(
                     }
                 }
                 InteractiveSwipeBackContainer(
-                    enabled = isIOS,
+                    enabled = false,
                     edgeSwipeWidth = 44.dp,
                     onBack = { dismissAddClickOverlay(NavigationTransitionMode.GestureBack) },
                     opaquePreviousBackground = false,

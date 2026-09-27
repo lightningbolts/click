@@ -11,7 +11,6 @@ import androidx.compose.runtime.remember
 @Composable
 actual fun rememberChatAudioPlayer(
     mediaUrl: String,
-    durationHintMs: Long,
     localFilePathForPlayback: String?,
 ): ChatAudioPlayer {
     val src = localFilePathForPlayback?.takeIf { it.isNotBlank() } ?: mediaUrl
@@ -22,22 +21,25 @@ actual fun rememberChatAudioPlayer(
     return player
 }
 
-private class AndroidChatAudioPlayer(private val url: String) : ChatAudioPlayer {
+private class AndroidChatAudioPlayer(
+    private val url: String,
+) : ChatAudioPlayer {
     private val positionPulse = mutableStateOf(0)
     private val handler = Handler(Looper.getMainLooper())
-    private val tick = object : Runnable {
-        override fun run() {
-            positionPulse.value = positionPulse.value + 1
-            val mp = mediaPlayer
-            val playing = mp?.isPlaying == true
-            if (!playing && isPlayingState.value) {
-                isPlayingState.value = false
-            }
-            if (playing) {
-                handler.postDelayed(this, 250)
+    private val tick =
+        object : Runnable {
+            override fun run() {
+                positionPulse.value = positionPulse.value + 1
+                val mp = mediaPlayer
+                val playing = mp?.isPlaying == true
+                if (!playing && isPlayingState.value) {
+                    isPlayingState.value = false
+                }
+                if (playing) {
+                    handler.postDelayed(this, 250)
+                }
             }
         }
-    }
 
     private var mediaPlayer: MediaPlayer? = null
     private var prepared = false

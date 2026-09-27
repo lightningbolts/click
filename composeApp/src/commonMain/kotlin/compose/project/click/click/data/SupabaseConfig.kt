@@ -168,7 +168,7 @@ object SupabaseConfig {
      * sync every refreshed token into our dual-storage TokenStorage.
      *
      * This eliminates the root cause of "random logouts": the SDK refreshes
-     * tokens into SettingsSessionManager but our Keychain / EncryptedPrefs
+     * tokens into SettingsSessionManager but our EncryptedPrefs
      * (TokenStorage) would go stale. Now they stay in sync.
      */
     fun startSessionSync(tokenStorage: TokenStorage) {

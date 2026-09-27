@@ -131,7 +131,7 @@ fun UnifiedPopupOverlay(
     /**
      * Pin the popup to the window origin and size it to [LocalWindowInfo]. Needed for media
      * lightboxes: a nested Popup is otherwise clipped to the chat column (below the native
-     * header, above the UITabBar).
+     * header, above the tab bar).
      */
     fillWindow: Boolean = false,
     content: @Composable () -> Unit,

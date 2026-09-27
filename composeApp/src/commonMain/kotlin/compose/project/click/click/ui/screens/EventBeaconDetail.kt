@@ -560,7 +560,6 @@ internal fun EventBeaconDetail(
             ClickFormBottomSheet(
                 onDismissRequest = { showPeopleDirectory = false },
                 expandable = true,
-                useUiKitScrollHost = true,
             ) {
                 EventPeopleDirectorySheetContent(
                     attendees =

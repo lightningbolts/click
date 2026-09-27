@@ -1,4 +1,0 @@
-language = Objective-C
-headers = ClickIosPickerLayout.h
-headerFilter = ClickIosPickerLayout.h
-package = click.ios.picker

@@ -309,7 +309,7 @@ class AuthViewModel(
     }
 
     /**
-     * Begin Google sign-in. On iOS/Android this uses the native Google SDK and completes
+     * Begin Google sign-in. On Android this uses the native Google SDK and completes
      * immediately when Supabase accepts the ID token. Browser OAuth is only used on
      * platforms without a native Google payload (e.g. desktop previews).
      */

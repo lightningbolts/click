@@ -1,7 +1,7 @@
 package compose.project.click.click.data.storage // pragma: allowlist secret
 
 /**
- * Encrypted / platform-backed session + lightweight prefs shared by Android and iOS.
+ * Encrypted / platform-backed session + lightweight prefs.
  */
 interface TokenStorage {
     suspend fun saveTokens(

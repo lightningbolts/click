@@ -4,7 +4,6 @@ package compose.project.click.click.calendar
  * Platform calendar access for read-only free/busy extraction.
  *
  * Android: [android.provider.CalendarContract]
- * iOS: EventKit
  */
 expect class CalendarProvider() {
     fun getAccessStatus(): CalendarAccessStatus

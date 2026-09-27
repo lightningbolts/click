@@ -69,8 +69,8 @@ private val ShareToChatMotion =
 
 /**
  * Multiselect share-to-chat picker for map beacons.
- * Uses [UnifiedPopupOverlay] (window Popup) so it stacks above ModalBottomSheet /
- * iOS page-sheet content instead of appearing behind the event sheet.
+ * Uses [UnifiedPopupOverlay] (window Popup) so it stacks above ModalBottomSheet
+ * content instead of appearing behind the event sheet.
  *
  * Open/close always run through the overlay's animated dismiss path — Cancel and Share
  * must not tear down composition by calling [onDismissRequest] / [onShare] synchronously.

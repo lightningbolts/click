@@ -1,11 +1,13 @@
+@file:Suppress("ktlint:standard:property-naming")
+
 package compose.project.click.click.ui.utils // pragma: allowlist secret
 
 /**
- * Shared map beacon pin metrics so Android / iOS (and web-aligned) hazard/SOS
+ * Shared map beacon pin metrics so Android (and web-aligned) hazard/SOS
  * pins stay compact and consistent — not oversized default platform markers.
  */
 object BeaconPinMetrics {
-    /** Circle diameter for avatar pins and cluster hubs (Android/iOS). */
+    /** Circle diameter for avatar pins and cluster hubs. */
     const val AvatarDiameterDp = 44f
 
     /** Circle radius for compact labeled / alert pins (matches prior Android labeled path). */

@@ -15,7 +15,7 @@ interface BarometricHeightMonitor {
 
     /**
      * Starts low-rate barometric sampling so a short [sampleHeightReading] window can reuse
-     * recent data instead of cold-starting the driver (especially important on iOS).
+     * recent data instead of cold-starting the driver.
      */
     fun ensureBackgroundCaching() {}
 

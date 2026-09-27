@@ -285,8 +285,7 @@ internal fun ConnectionRowItem(
         }
     val displayName = otherUser?.name ?: "Connection"
 
-    val rowStyle = LocalPlatformStyle.current
-    val rowShape = RoundedCornerShape(if (rowStyle.isIOS) 14.dp else 12.dp)
+    val rowShape = RoundedCornerShape(12.dp)
     Row(
         modifier =
             Modifier

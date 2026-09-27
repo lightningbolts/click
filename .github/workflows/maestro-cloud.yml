@@ -1,7 +1,7 @@
 # Free Android release-validation checks.
 # GitHub-hosted runners do not provide nested virtualization, so Android device
 # execution remains local; this workflow builds the APK and validates Maestro
-# smoke-flow definitions. iOS Maestro execution lives in ios-release-validation.yml.
+# smoke-flow definitions.
 
 name: Mobile Maestro Release Validation
 

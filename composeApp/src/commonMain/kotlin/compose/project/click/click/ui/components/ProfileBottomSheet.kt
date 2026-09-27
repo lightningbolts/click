@@ -67,9 +67,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-// Bounded pager height under UIKit scroll-host (Metal texture max 16384px @3x).
-private val ProfileSheetPagerHeight = 560.dp // fallback when not fill-viewport
-
 /**
  * Phase 2 — C13: shared profile bottom sheet displayed when a map pin is tapped.
  *
@@ -734,7 +731,6 @@ fun ProfileBottomSheet(
         onDismissRequest = sheetOnDismiss,
         scrollAtTop = profileScrollAtTop,
     ) {
-        val scrollOwnedByHost = LocalSheetScrollOwnedByHost.current
         Box(modifier = Modifier.fillMaxWidth().fillMaxSize()) {
             Column(
                 modifier =

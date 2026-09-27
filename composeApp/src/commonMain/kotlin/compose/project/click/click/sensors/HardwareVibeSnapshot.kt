@@ -4,7 +4,7 @@ import kotlinx.serialization.Serializable
 
 /**
  * 500ms hardware snapshot captured immediately before tri-factor BLE/audio broadcast.
- * [luxLevel] is true lux on Android; on iOS it is a [0,100] proxy derived from screen brightness.
+ * [luxLevel] is true lux on Android.
  */
 @Serializable
 data class HardwareVibeSnapshot(

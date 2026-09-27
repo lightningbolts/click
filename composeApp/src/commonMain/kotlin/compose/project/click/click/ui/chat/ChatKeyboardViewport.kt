@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.MutableFloatState
 import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -15,13 +14,10 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import compose.project.click.click.ui.components.rememberTabBarOverlayHeight
-import compose.project.click.click.ui.theme.LocalPlatformStyle
 import kotlinx.coroutines.flow.collect
 
 /**
@@ -70,11 +66,7 @@ internal class ChatKeyboardSessionLatch {
 }
 
 @Composable
-fun rememberChatTimelineKeyboardFollow(
-    nativeKeyboardLiftPxState: MutableFloatState? = null,
-    shouldFollowOnKeyboardOpen: () -> Boolean,
-): State<Boolean> {
-    val style = LocalPlatformStyle.current
+fun rememberChatTimelineKeyboardFollow(shouldFollowOnKeyboardOpen: () -> Boolean): State<Boolean> {
     val density = LocalDensity.current
     val imeInsets = WindowInsets.ime
     val navInsets = WindowInsets.navigationBars
@@ -82,16 +74,12 @@ fun rememberChatTimelineKeyboardFollow(
     val followState = remember { mutableStateOf(false) }
     val sessionLatch = remember { ChatKeyboardSessionLatch() }
 
-    LaunchedEffect(style.isIOS, nativeKeyboardLiftPxState, density) {
+    LaunchedEffect(density) {
         snapshotFlow {
-            if (style.isIOS) {
-                nativeKeyboardLiftPxState?.floatValue?.coerceAtLeast(0f) ?: 0f
-            } else {
-                effectiveChatKeyboardLiftPx(
-                    imeBottomPx = imeInsets.getBottom(density),
-                    navigationBottomPx = navInsets.getBottom(density),
-                ).toFloat()
-            }
+            effectiveChatKeyboardLiftPx(
+                imeBottomPx = imeInsets.getBottom(density),
+                navigationBottomPx = navInsets.getBottom(density),
+            ).toFloat()
         }.collect { liftPx ->
             followState.value =
                 sessionLatch.update(
@@ -104,22 +92,11 @@ fun rememberChatTimelineKeyboardFollow(
     return followState
 }
 
-fun Modifier.chatTimelineKeyboardViewport(
-    nativeKeyboardLiftPxState: MutableFloatState? = null,
-    followKeyboard: () -> Boolean,
-): Modifier =
+fun Modifier.chatTimelineKeyboardViewport(followKeyboard: () -> Boolean): Modifier =
     composed {
-        val style = LocalPlatformStyle.current
         val density = LocalDensity.current
         val imeInsets = WindowInsets.ime
         val navInsets = WindowInsets.navigationBars
-
-        if (style.isIOS) {
-            return@composed Modifier.graphicsLayer {
-                val liftPx = nativeKeyboardLiftPxState?.floatValue?.coerceAtLeast(0f) ?: 0f
-                translationY = if (followKeyboard()) -liftPx else 0f
-            }
-        }
 
         Modifier.offset {
             if (!followKeyboard()) return@offset IntOffset.Zero
@@ -132,33 +109,13 @@ fun Modifier.chatTimelineKeyboardViewport(
         }
     }
 
-fun Modifier.chatComposerKeyboardMotion(
-    extraBottom: Dp = 0.dp,
-    nativeKeyboardLiftPxState: MutableFloatState? = null,
-    clearNativeTabBar: Boolean = false,
-): Modifier =
+fun Modifier.chatComposerKeyboardMotion(extraBottom: Dp = 0.dp): Modifier =
     composed {
         val density = LocalDensity.current
-        val style = LocalPlatformStyle.current
         val imeInsets = WindowInsets.ime
         val navInsets = WindowInsets.navigationBars
         val navBottomPx = navInsets.getBottom(density)
         val navBottomDp = with(density) { navBottomPx.toDp() }
-
-        if (style.isIOS) {
-            val bottomPad =
-                if (clearNativeTabBar) {
-                    rememberTabBarOverlayHeight()
-                } else {
-                    navBottomDp
-                }
-            return@composed Modifier
-                .padding(bottom = bottomPad + extraBottom)
-                .graphicsLayer {
-                    val liftPx = nativeKeyboardLiftPxState?.floatValue?.coerceAtLeast(0f) ?: 0f
-                    translationY = -liftPx
-                }
-        }
 
         Modifier
             .padding(bottom = navBottomDp + extraBottom)

@@ -113,8 +113,6 @@ fun EventDirectoryUserProfileSheet(
 
     ClickFormBottomSheet(
         onDismissRequest = onDismiss,
-        // Column + sheetBodyScroll — UIKit host (native body swipe, no fill-sheet flicker).
-        useUiKitScrollHost = true,
     ) {
         Column(
             modifier =

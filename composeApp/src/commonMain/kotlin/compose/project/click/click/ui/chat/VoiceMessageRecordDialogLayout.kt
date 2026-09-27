@@ -1,3 +1,5 @@
+@file:Suppress("ktlint:standard:function-naming")
+
 package compose.project.click.click.ui.chat
 
 import androidx.compose.foundation.background
@@ -35,7 +37,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.media.rememberChatAudioPlayer
-import compose.project.click.click.ui.theme.LocalPlatformStyle
 
 enum class VoiceRecordUiPhase {
     Idle,
@@ -51,19 +52,21 @@ fun VoiceRecordingWaveform(
     inactiveAlpha: Float = 0.22f,
 ) {
     val n = 40
-    val arr = if (samples.isEmpty()) {
-        List(n) { 0.06f }
-    } else {
-        val tail = samples.takeLast(n)
-        if (tail.size < n) List(n - tail.size) { 0.06f } + tail else tail
-    }
+    val arr =
+        if (samples.isEmpty()) {
+            List(n) { 0.06f }
+        } else {
+            val tail = samples.takeLast(n)
+            if (tail.size < n) List(n - tail.size) { 0.06f } + tail else tail
+        }
     Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(44.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
-            .padding(horizontal = 8.dp, vertical = 8.dp),
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .height(44.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
+                .padding(horizontal = 8.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -71,12 +74,13 @@ fun VoiceRecordingWaveform(
             val h = raw.coerceIn(0.05f, 1f)
             val alpha = inactiveAlpha + (1f - inactiveAlpha) * h
             Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .height((6.dp + 26.dp * h))
-                    .padding(horizontal = 1.dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(barColor.copy(alpha = alpha)),
+                modifier =
+                    Modifier
+                        .weight(1f)
+                        .height((6.dp + 26.dp * h))
+                        .padding(horizontal = 1.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(barColor.copy(alpha = alpha)),
             )
         }
     }
@@ -90,14 +94,15 @@ private fun VoiceMessagePreviewPlayback(
     accentColor: Color,
 ) {
     val hintMs = durationHintSec.coerceAtLeast(0L) * 1000L
-    val player = rememberChatAudioPlayer(localMediaUrl, durationHintMs = hintMs)
-    val durationMs = remember(player.durationMs, hintMs) {
-        when {
-            player.durationMs > 0 -> player.durationMs
-            hintMs > 0 -> hintMs
-            else -> 1L
+    val player = rememberChatAudioPlayer(localMediaUrl)
+    val durationMs =
+        remember(player.durationMs, hintMs) {
+            when {
+                player.durationMs > 0 -> player.durationMs
+                hintMs > 0 -> hintMs
+                else -> 1L
+            }
         }
-    }
     var draggingSlider by remember(localMediaUrl) { mutableStateOf(false) }
     var sliderValue by remember(localMediaUrl) { mutableFloatStateOf(0f) }
     LaunchedEffect(player.positionMs, durationMs, player.isPlaying, draggingSlider) {
@@ -105,24 +110,27 @@ private fun VoiceMessagePreviewPlayback(
             sliderValue = (player.positionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f)
         }
     }
+
     fun formatMs(ms: Long): String {
         val totalSec = (ms / 1000).toInt().coerceAtLeast(0)
         val m = totalSec / 60
         val s = totalSec % 60
         return "$m:${s.toString().padStart(2, '0')}"
     }
-    val positionDisplayMs = if (draggingSlider) {
-        (sliderValue * durationMs).toLong()
-    } else {
-        player.positionMs
-    }
+    val positionDisplayMs =
+        if (draggingSlider) {
+            (sliderValue * durationMs).toLong()
+        } else {
+            player.positionMs
+        }
     val timeLabel = "${formatMs(positionDisplayMs)} / ${formatMs(durationMs)}"
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
-            .padding(horizontal = 4.dp, vertical = 4.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+                .padding(horizontal = 4.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
@@ -152,11 +160,12 @@ private fun VoiceMessagePreviewPlayback(
                 },
                 valueRange = 0f..1f,
                 modifier = Modifier.fillMaxWidth(),
-                colors = SliderDefaults.colors(
-                    thumbColor = accentColor,
-                    activeTrackColor = accentColor,
-                    inactiveTrackColor = contentColor.copy(alpha = 0.28f),
-                ),
+                colors =
+                    SliderDefaults.colors(
+                        thumbColor = accentColor,
+                        activeTrackColor = accentColor,
+                        inactiveTrackColor = contentColor.copy(alpha = 0.28f),
+                    ),
             )
             Text(
                 text = timeLabel,
@@ -180,35 +189,35 @@ fun VoiceMessageRecordDialogLayout(
     onSend: () -> Unit,
     errorMessage: String? = null,
 ) {
-    val style = LocalPlatformStyle.current
     val m = (displaySeconds / 60).toInt()
     val s = (displaySeconds % 60).toInt()
     val timeLabel = "$m:${s.toString().padStart(2, '0')}"
     val onBody = MaterialTheme.colorScheme.onSurface
     val accent = MaterialTheme.colorScheme.primary
 
-    val title = when (phase) {
-        VoiceRecordUiPhase.Recording -> "Recording"
-        VoiceRecordUiPhase.Preview -> "Review voice message"
-        VoiceRecordUiPhase.Idle -> "New voice message"
-    }
-    val hint = when (phase) {
-        VoiceRecordUiPhase.Recording ->
-            "Tap Stop when you're finished. You can listen before sending."
-        VoiceRecordUiPhase.Preview ->
-            "Play to review, then Send or Re-record."
-        VoiceRecordUiPhase.Idle ->
-            "Tap Record, speak clearly, then tap Stop when done."
-    }
+    val title =
+        when (phase) {
+            VoiceRecordUiPhase.Recording -> "Recording"
+            VoiceRecordUiPhase.Preview -> "Review voice message"
+            VoiceRecordUiPhase.Idle -> "New voice message"
+        }
+    val hint =
+        when (phase) {
+            VoiceRecordUiPhase.Recording ->
+                "Tap Stop when you're finished. You can listen before sending."
+            VoiceRecordUiPhase.Preview ->
+                "Play to review, then Send or Re-record."
+            VoiceRecordUiPhase.Idle ->
+                "Tap Record, speak clearly, then tap Stop when done."
+        }
 
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(if (style.isIOS) 14.dp else 12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text(
             text = title,
-            style = if (style.isIOS) MaterialTheme.typography.titleMedium
-            else MaterialTheme.typography.titleLarge,
+            style = MaterialTheme.typography.titleLarge,
             color = onBody,
         )
         VoiceRecordingWaveform(

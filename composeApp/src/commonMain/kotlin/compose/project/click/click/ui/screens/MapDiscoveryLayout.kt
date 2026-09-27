@@ -264,8 +264,8 @@ internal fun EventsReopenChip(
 /**
  * Nearby discovery presented through Click's canonical platform sheet. The historical name is kept
  * so MapScreen does not need a second navigation path, but this is no longer a full-screen route.
- * Detail sheets are composed from inside this sheet's UIKit/Compose host, so the platform sheet
- * manager stacks them above Nearby instead of dismissing and replacing Nearby.
+ * Detail sheets are composed from inside this sheet's host, so they stack above Nearby instead of
+ * dismissing and replacing Nearby.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -299,7 +299,7 @@ internal fun EventsDiscoveryFullScreen(
     }
 
     // The outer Map container can still close this state during route changes. Always tear down
-    // focus/IME with the sheet composition so iOS cannot leave the keyboard attached to the map.
+    // focus/IME with the sheet composition so the keyboard is not left attached to the map.
     DisposableEffect(Unit) {
         onDispose {
             keyboardController?.hide()
@@ -361,8 +361,7 @@ internal fun EventsDiscoveryFullScreen(
     ClickPlatformSheet(
         onDismissRequest = dismissNearby,
         expandable = true,
-        useUiKitScrollHost = true,
-        uiKitFillViewport = true,
+        fillBody = true,
         contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
     ) {
         ProvideSheetSwipeDismiss(
@@ -565,9 +564,8 @@ internal fun EventsDiscoveryFullScreen(
             }
         }
 
-        // Important: detail sheets live compositionally inside Nearby's native sheet host. On iOS
-        // MapIosNativeSheetManager can therefore identify Nearby as their presentation parent and
-        // stack them without dismissing the root. The root's query/sort/list state remains mounted.
+        // Important: detail sheets live compositionally inside Nearby's sheet host, so they stack
+        // without dismissing the root. The root's query/sort/list state remains mounted.
         detailContent()
     }
 }

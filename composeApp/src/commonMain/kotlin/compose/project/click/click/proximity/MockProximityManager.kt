@@ -3,13 +3,12 @@ package compose.project.click.click.proximity
 import kotlinx.coroutines.delay
 
 /**
- * Deterministic tri-factor stand-in for iOS Simulator / Android emulator.
+ * Deterministic tri-factor stand-in for Android emulator.
  *
  * [startHandshakeListening] waits briefly then returns a synthetic token so
  * [bind-proximity-connection] can be exercised without radios.
  */
 class MockProximityManager : ProximityManager {
-
     override suspend fun startHandshakeBroadcast(ephemeralToken: String) {
         // No hardware: broadcast is a no-op for the mock path.
     }
@@ -26,8 +25,7 @@ class MockProximityManager : ProximityManager {
 
     override fun supportsTapExchange(): Boolean = true
 
-    override fun capabilityNote(): String =
-        "Simulator / emulator mock: returns a fixed heard token after 2s (no BLE or ultrasound)."
+    override fun capabilityNote(): String = "Simulator / emulator mock: returns a fixed heard token after 2s (no BLE or ultrasound)."
 
     override fun openRadiosSettings() {}
 }
