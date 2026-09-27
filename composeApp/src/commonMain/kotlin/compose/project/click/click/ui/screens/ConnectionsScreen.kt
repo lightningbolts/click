@@ -106,6 +106,7 @@ fun ConnectionsScreen(
     var pendingRemoveGroupMember by remember { mutableStateOf<ConnectionSheetDialog.RemoveGroupMember?>(null) }
     var selectedAddMemberIds by remember { mutableStateOf(setOf<String>()) }
     var addMemberEligibilityMask by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
+    var addMemberIneligibleReasons by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var addMemberEligibilityReady by remember { mutableStateOf(false) }
 
     /** Last opened thread id so overlay exit animation still composes [ChatView] after [selectedChatId] clears. */
@@ -482,6 +483,16 @@ fun ConnectionsScreen(
                         selectedCandidateIds = selectedAddMemberIds,
                     )
                 addMemberEligibilityReady = true
+                addMemberIneligibleReasons =
+                    AppDataManager.currentUser.value
+                        ?.id
+                        ?.let { viewer ->
+                            viewModel.cliqueIneligibleReasons(
+                                viewer,
+                                groupPickerContext.memberUserIds + selectedAddMemberIds,
+                                addMemberEligibilityMask,
+                            )
+                        }.orEmpty()
             }
             ConnectionMemberPickerSheet(
                 onDismissRequest = {
@@ -494,6 +505,7 @@ fun ConnectionsScreen(
                 selectedIds = selectedAddMemberIds,
                 onSelectedIdsChange = { selectedAddMemberIds = it },
                 eligibilityMask = addMemberEligibilityMask,
+                ineligibleReasons = addMemberIneligibleReasons,
                 eligibilityReady = addMemberEligibilityReady,
                 eligibilityCheckingLabel = "Checking who can join…",
                 onSelectionBlocked = { viewModel.notifyVerifiedCliqueSelectionBlocked() },

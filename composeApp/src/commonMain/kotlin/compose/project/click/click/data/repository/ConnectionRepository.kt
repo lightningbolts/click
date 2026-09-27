@@ -294,14 +294,19 @@ class ConnectionRepository(
      * part of this payload: message `content` is E2EE on the wire, so link extraction
      * has to run against the locally-decrypted chat state.
      */
-    suspend fun fetchConnectionTabs(connectionId: String): Result<compose.project.click.click.data.api.ConnectionTabsGetResponse> {
+    suspend fun fetchConnectionTabs(
+        connectionId: String,
+        chatId: String? = null,
+        limit: Int? = null,
+        beforeEpochMs: Long? = null,
+    ): Result<compose.project.click.click.data.api.ConnectionTabsGetResponse> {
         // Profile media tabs share the click-web bearer path — refresh before first call so a
         // stale cold-start JWT does not permanently empty the Media tab until sign-out.
         runCatching { authRepository.refreshSession() }
-        val first = apiClient.getConnectionTabs(connectionId)
+        val first = apiClient.getConnectionTabs(connectionId, chatId, limit, beforeEpochMs)
         if (first.isSuccess) return first
         runCatching { authRepository.refreshSession() }
-        return apiClient.getConnectionTabs(connectionId)
+        return apiClient.getConnectionTabs(connectionId, chatId, limit, beforeEpochMs)
     }
 
     /** Edit an encounter's context tags from the profile timeline; returns the saved list. */

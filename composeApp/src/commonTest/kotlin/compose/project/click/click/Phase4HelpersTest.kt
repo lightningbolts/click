@@ -335,8 +335,9 @@ class Phase4HelpersTest {
             listOf("1st", "2nd", "3rd", "4th", "11th", "12th", "22nd", "101st"),
             listOf(1, 2, 3, 4, 11, 12, 22, 101).map(::ordinalLabel),
         )
-        assertEquals("3rd time with Sam", reconnectSubtitle("Sam", priorEncounters = 2))
-        assertEquals("Another crossing with Sam", reconnectSubtitle("Sam", priorEncounters = 0))
+        assertEquals("3rd time with Sam", reconnectSubtitle("Sam", encounterCount = 3, extendedHangout = false))
+        assertEquals("Another crossing with Sam", reconnectSubtitle("Sam", encounterCount = 1, extendedHangout = false))
+        assertEquals("Extended Hangout · still with Sam", reconnectSubtitle("Sam", encounterCount = 4, extendedHangout = true))
     }
 
     // endregion

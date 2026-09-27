@@ -257,6 +257,24 @@ internal fun TimelineMetricPill(
     }
 }
 
+/** Server tag for a same-place, same-12-hour reconnect folded into the previous row (F71). */
+internal const val EXTENDED_HANGOUT_TAG = "Extended Hangout"
+
+/** iOS `ProfileView.title`: "First Clicked at X", "Reconnected at X", or "Extended Hangout at X". */
+internal fun encounterTimelineTitle(
+    place: String?,
+    isFirst: Boolean,
+    tags: List<String>,
+): String {
+    val lead =
+        when {
+            isFirst -> "First Clicked"
+            tags.any { it.trim().equals(EXTENDED_HANGOUT_TAG, ignoreCase = true) } -> EXTENDED_HANGOUT_TAG
+            else -> "Reconnected"
+        }
+    return place?.trim()?.takeIf { it.isNotEmpty() }?.let { "$lead at $it" } ?: lead
+}
+
 @Composable
 internal fun OurTimelineSection(
     encounters: List<ConnectionEncounter>,
@@ -329,15 +347,6 @@ internal fun OurTimelineSection(
                     )
                 }
                 Column(modifier = Modifier.weight(1f)) {
-                    if (isOldest) {
-                        Text(
-                            text = "Where it started",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = LightBlue.copy(alpha = 0.95f),
-                            modifier = Modifier.padding(bottom = 4.dp),
-                        )
-                    }
                     Text(
                         text =
                             formatEncounterTimelineWhenLine(enc.encounteredAt)
@@ -347,11 +356,16 @@ internal fun OurTimelineSection(
                     )
                     Text(
                         text =
-                            formatEncounterPlaceLine(
-                                locationName = enc.locationName,
-                                displayLocation = enc.displayLocation,
-                                semanticLocationJson = enc.semanticLocation,
-                            ) ?: "Unknown place",
+                            encounterTimelineTitle(
+                                place =
+                                    formatEncounterPlaceLine(
+                                        locationName = enc.locationName,
+                                        displayLocation = enc.displayLocation,
+                                        semanticLocationJson = enc.semanticLocation,
+                                    ),
+                                isFirst = isOldest,
+                                tags = tagOverrides[enc.id] ?: enc.contextTags,
+                            ),
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.SemiBold,
                         color = body,

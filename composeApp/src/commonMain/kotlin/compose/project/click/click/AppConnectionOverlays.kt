@@ -18,6 +18,7 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.zIndex
 import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
@@ -53,6 +54,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -95,6 +97,25 @@ internal fun AppConnectionOverlays(
         }
     }
 
+    val revealTagging = connectionState as? ConnectionState.TaggingContext
+    val revealKey = revealTagging?.newConnections?.firstOrNull()?.id
+    var revealedForKey by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(revealKey, showNfcScreen) {
+        val tagging = revealTagging ?: return@LaunchedEffect
+        if (showNfcScreen || revealKey == null || revealKey == revealedForKey) return@LaunchedEffect
+        if (!revealBeforeTags(tagging.isNewConnection, tagging.requiresSelection, tagging.newConnections.size)) return@LaunchedEffect
+        revealedForKey = revealKey
+        PlatformHapticsPolicy.successNotification()
+        connectionRevealState =
+            ConnectionRevealUiState(
+                methodLabel = "Tap",
+                phase = ConnectionRevealPhase.Success,
+                connectedName = tagging.targetUsers.firstOrNull { it.id != currentUser.id }?.displayName,
+            )
+        delay(REVEAL_BEFORE_TAGS_MS)
+        connectionRevealState = null
+    }
+
     if (connectionState is ConnectionState.TaggingContext &&
         !showNfcScreen &&
         !suppressConnectionContextSheet
@@ -121,6 +142,8 @@ internal fun AppConnectionOverlays(
             } else {
                 ConnectionContextPresentation.NewSpark
             }
+        // iOS order (F70): the connection already exists, so the reveal plays first and tags follow.
+        val revealFirst = revealBeforeTags(tagging.isNewConnection, tagging.requiresSelection, tagging.newConnections.size)
 
         fun taggingForSelectedPeers(selectedIds: Set<String>): ConnectionState.TaggingContext {
             if (selectedIds.isEmpty() || sheetSelectableUsers.size < 2) return tagging
@@ -198,6 +221,7 @@ internal fun AppConnectionOverlays(
             connectionId = reconnectConnectionId,
             peerUserId = reconnectPeerId,
             currentUserId = currentUser.id,
+            encounterAlreadySaved = reconnectPeerId != null && reconnectPeerId in tagging.bindEncounterPersistedPeerIds,
             onSendClickDrop =
                 reconnectConnectionId?.let { connId ->
                     {
@@ -224,7 +248,7 @@ internal fun AppConnectionOverlays(
                 }
             },
             onConfirm = { contextTag, noiseOptIn, selectedIds ->
-                if (tagging.isNewConnection) {
+                if (tagging.isNewConnection && !revealFirst) {
                     PlatformHapticsPolicy.successNotification()
                     connectionRevealState =
                         ConnectionRevealUiState(
@@ -446,3 +470,15 @@ internal fun AppConnectionOverlays(
         )
     }
 }
+
+private const val REVEAL_BEFORE_TAGS_MS = 1_100L
+
+/**
+ * One-to-one (or already-created group) taps show the reveal before the tag sheet, as iOS does.
+ * Host selection keeps tags first: the connection is only created when the host confirms.
+ */
+internal fun revealBeforeTags(
+    isNewConnection: Boolean,
+    requiresSelection: Boolean,
+    createdConnections: Int,
+): Boolean = isNewConnection && !requiresSelection && createdConnections > 0

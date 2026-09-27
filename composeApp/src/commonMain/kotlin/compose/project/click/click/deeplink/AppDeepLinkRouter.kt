@@ -28,6 +28,9 @@ sealed interface AppDeepLink {
 
     /** The Clicks list; only reached from push taps, never parsed from a URL. */
     data object Clicks : AppDeepLink
+
+    /** The Add Click tab (public profile "Open Add Click"); not parsed from a URL. */
+    data object AddClick : AppDeepLink
 }
 
 /** Minimal URL split; enough for `click://` and joinclick.co links without platform URI types. */

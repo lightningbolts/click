@@ -180,6 +180,7 @@ class FakeChatRepository(
         metadata: JsonElement?,
         clientLocalSentAtMs: Long?,
         connectionId: String?,
+        clientMessageId: String?,
     ): Message? = onSendMessage(chatId, userId, content, messageType, metadata, clientLocalSentAtMs)
 
     override suspend fun ensureChatForConnection(connectionId: String): Chat? = onEnsureChatForConnection(connectionId)

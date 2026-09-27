@@ -94,7 +94,8 @@ class Phase3HelpersTest {
         assertFalse(msg("temp-3", 1).canForward())
         assertFalse(msg("4", 1, state = MessageDeliveryState.ERROR).canForward())
         assertFalse(msg("5", 1, type = "call_log").canForward())
-        assertFalse(msg("6", 1, type = "audio").canForward())
+        assertTrue(msg("6", 1, type = "audio").canForward())
+        assertTrue(msg("6f", 1, type = "file").canForward())
         assertFalse(msg("7", 1, metadata = buildJsonObject { put("disposable_roll", true) }).canForward())
         val plan =
             buildJsonObject {

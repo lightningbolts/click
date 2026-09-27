@@ -351,6 +351,7 @@ class SupabaseChatRepository(
         metadata: JsonElement?,
         clientLocalSentAtMs: Long?,
         connectionId: String?,
+        clientMessageId: String?,
     ): Message? =
         sendMessageImpl(
             chatId = chatId,
@@ -360,6 +361,7 @@ class SupabaseChatRepository(
             metadata = metadata,
             clientLocalSentAtMs = clientLocalSentAtMs,
             connectionId = connectionId,
+            clientMessageId = clientMessageId,
         )
 
     override suspend fun scheduleMessage(

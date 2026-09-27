@@ -93,6 +93,8 @@ data class ConnectionTabsGetResponse(
     val media: List<ConnectionTabMessage> = emptyList(),
     val files: List<ConnectionTabMessage> = emptyList(),
     val beacons: List<ConnectionTabMessage> = emptyList(),
+    /** More attachments older than the oldest returned (paged requests only). */
+    val hasMore: Boolean = false,
 )
 
 @Serializable

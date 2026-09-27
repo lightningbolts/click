@@ -106,6 +106,8 @@ internal suspend fun SupabaseChatRepository.prepareOutboundWire(
     content: String,
     messageType: String,
     metadata: JsonElement?,
+    /** Reused on outbox retries; media sends keep the id their attachment was sealed with. */
+    clientMessageId: String? = null,
 ): OutboundWire {
     val legacyCrypto = resolveChatCrypto(chatId, userId)
     val v2Session = resolveE2eeV2ChatCrypto(chatId, userId, allowLifecycle = true)
@@ -118,9 +120,9 @@ internal suspend fun SupabaseChatRepository.prepareOutboundWire(
         }
     val mediaUpload = e2eeV2MediaRecordForReference(mediaReference)
     mediaUpload?.requireMatches(chatId, v2Session)
-    val clientMessageId =
+    val resolvedClientMessageId =
         v2Session?.let {
-            mediaUpload?.metadata?.clientMessageId ?: MessageCryptoV2.generateClientMessageId()
+            mediaUpload?.metadata?.clientMessageId ?: clientMessageId ?: MessageCryptoV2.generateClientMessageId()
         }
     return OutboundWire(
         legacyCrypto = legacyCrypto,
@@ -129,7 +131,7 @@ internal suspend fun SupabaseChatRepository.prepareOutboundWire(
         baseMetadata = enrichMediaEncryptionMetadata(messageType, metadata),
         mediaUpload = mediaUpload,
         v2Session = v2Session,
-        clientMessageId = clientMessageId,
+        clientMessageId = resolvedClientMessageId,
         resolveFreshV2Session = {
             resolveE2eeV2ChatCrypto(chatId, userId, forceRefresh = true, allowLifecycle = true)
         },

@@ -1,6 +1,7 @@
 package compose.project.click.click.viewmodel
 
 import androidx.lifecycle.viewModelScope
+import compose.project.click.click.data.chat.PendingSendStore // pragma: allowlist secret
 import compose.project.click.click.data.models.ChatMessageType // pragma: allowlist secret
 import compose.project.click.click.data.models.Message // pragma: allowlist secret
 import compose.project.click.click.data.models.MessageDeliveryState // pragma: allowlist secret
@@ -24,8 +25,12 @@ fun Message.canRetrySend(): Boolean =
 fun Message.canDiscardFailed(): Boolean = deliveryState == MessageDeliveryState.ERROR && id.startsWith("temp-")
 
 internal fun ChatViewModel.discardFailedMessageImpl(tempId: String) {
-    val state = _chatMessagesState.value as? ChatMessagesState.Success ?: return
-    _chatMessagesState.value = state.copy(messages = state.messages.filterNot { it.message.id == tempId })
+    viewModelScope.launch {
+        // Out of the outbox first, or the restore collector would bring the row back.
+        PendingSendStore.remove(tokenStorage, tempId)
+        val state = _chatMessagesState.value as? ChatMessagesState.Success ?: return@launch
+        _chatMessagesState.value = state.copy(messages = state.messages.filterNot { it.message.id == tempId })
+    }
 }
 
 internal fun ChatViewModel.retryFailedMessageImpl(tempId: String) {
@@ -43,6 +48,14 @@ internal fun ChatViewModel.retryFailedMessageImpl(tempId: String) {
                 },
         )
     viewModelScope.launch {
+        // Persisted sends retry with the same client message id (the server can drop a duplicate).
+        PendingSendStore.byTempId(tempId)?.let { item ->
+            PendingSendStore.markFailed(tokenStorage, tempId, failed = false)
+            if (!resendOutboxItem(item.copy(failed = false))) {
+                _messageSendError.value = "Still couldn't send. Check your connection and try again."
+            }
+            return@launch
+        }
         val apiChatId =
             resolveOrCreateApiChatId(connectionId) ?: run {
                 markOptimisticSendFailed(tempId)

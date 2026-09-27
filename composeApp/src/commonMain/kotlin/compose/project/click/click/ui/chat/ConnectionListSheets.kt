@@ -220,10 +220,12 @@ private fun ConnectionPickerUserRow(
     selected: Boolean,
     enabled: Boolean,
     onToggle: () -> Unit,
+    ineligibleReason: String? = null,
 ) {
     val label = user.name?.trim()?.ifBlank { null } ?: "Connection"
     ClickListRow(
         title = label,
+        subtitle = ineligibleReason?.takeIf { !selected },
         onClick = if (enabled || selected) onToggle else null,
         leading = {
             ConnectionPickerListAvatar(
@@ -256,6 +258,8 @@ internal fun ConnectionMemberPickerSheet(
     onPrimaryClick: () -> Unit,
     eligibilityMask: Map<String, Boolean> = emptyMap(),
     eligibilityReady: Boolean = true,
+    /** "Hasn't Clicked with Lena" under candidates that can't join the current selection. */
+    ineligibleReasons: Map<String, String> = emptyMap(),
     eligibilityCheckingLabel: String? = null,
     errorMessage: String? = null,
     onSelectionBlocked: (() -> Unit)? = null,
@@ -419,6 +423,7 @@ internal fun ConnectionMemberPickerSheet(
                                         selected = selected,
                                         enabled = enabled,
                                         onToggle = { toggleUser(user.id) },
+                                        ineligibleReason = ineligibleReasons[user.id].takeIf { eligibilityReady },
                                     )
                                 }
                             }

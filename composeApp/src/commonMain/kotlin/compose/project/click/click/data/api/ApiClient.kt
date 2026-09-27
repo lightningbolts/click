@@ -281,8 +281,13 @@ class ApiClient {
 
     suspend fun getActivityRecap(window: String = "week"): Result<ActivityRecapDto> = getActivityRecapImpl(window = window)
 
-    suspend fun getConnectionTabs(connectionId: String): Result<ConnectionTabsGetResponse> =
-        getConnectionTabsImpl(connectionId = connectionId)
+    suspend fun getConnectionTabs(
+        connectionId: String,
+        chatId: String? = null,
+        limit: Int? = null,
+        beforeEpochMs: Long? = null,
+    ): Result<ConnectionTabsGetResponse> =
+        getConnectionTabsImpl(connectionId = connectionId, chatId = chatId, limit = limit, beforeEpochMs = beforeEpochMs)
 
     suspend fun patchUserProfile(
         userId: String,

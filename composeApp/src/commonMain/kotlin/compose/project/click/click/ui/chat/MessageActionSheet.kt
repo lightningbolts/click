@@ -93,6 +93,41 @@ internal fun canEditMessage(messageWithUser: MessageWithUser): Boolean {
 /** A Click Drop stays unsaveable and unshareable until its collaboration window ends. */
 internal fun canExportMessageMedia(message: Message): Boolean = !message.isDisposableRollLocked()
 
+/** Saves an image message to the gallery (decrypting first when needed); true on success. */
+internal suspend fun saveMessageImage(
+    message: Message,
+    handlers: MessageActionHandlers,
+): Boolean {
+    val reference = message.mediaUrlOrNull() ?: message.hubMediaPathOrNull() ?: return false
+    return if (message.isEncryptedMedia()) {
+        val bytes = handlers.fetchDecryptedMediaBytes(message) ?: return false
+        saveChatImageToGallery(
+            imageUrl = reference,
+            decryptedImageBytes = bytes,
+            mimeTypeHint = message.originalMimeTypeOrNull(),
+        ).isSuccess
+    } else {
+        saveChatImageToGallery(reference).isSuccess
+    }
+}
+
+/** Opens the share sheet for a decrypted image message; true when it was shown. */
+internal suspend fun shareMessageImage(
+    message: Message,
+    handlers: MessageActionHandlers,
+): Boolean {
+    val bytes = handlers.fetchDecryptedMediaBytes(message) ?: return false
+    val mime = message.originalMimeTypeOrNull().orEmpty()
+    val ext =
+        when {
+            mime.contains("png", ignoreCase = true) -> "png"
+            mime.contains("webp", ignoreCase = true) -> "webp"
+            else -> "jpg"
+        }
+    shareDecryptedImage(bytes, "click_chat.$ext")
+    return true
+}
+
 internal class MessageActionHandlers(
     val onReply: (MessageWithUser) -> Unit = {},
     val onReact: (String, String) -> Unit = { _, _ -> },
@@ -115,13 +150,15 @@ internal fun MessageActionSheet(
     capabilities: MessageActionCapabilities,
     handlers: MessageActionHandlers,
     onDismiss: () -> Unit,
+    /** Opened from the lifted overlay's "+": go straight to the full emoji picker. */
+    startInEmojiPicker: Boolean = false,
 ) {
     val message = messageWithUser.message
     val scope = rememberCoroutineScope()
     val clipboardManager = LocalClipboardManager.current
     var showDeleteMessageConfirm by remember { mutableStateOf(false) }
     var showDeleteMessageFinalConfirm by remember { mutableStateOf(false) }
-    var emojiPickMode by remember { mutableStateOf(false) }
+    var emojiPickMode by remember { mutableStateOf(startInEmojiPicker) }
 
     ClickActionBottomSheet(
         onDismissRequest = onDismiss,
@@ -335,20 +372,7 @@ internal fun MessageActionSheet(
                         BentoGlassOptionRow(
                             title = "Save to gallery",
                             onClick = {
-                                scope.launch {
-                                    if (message.isEncryptedMedia()) {
-                                        val bytes = handlers.fetchDecryptedMediaBytes(message)
-                                        if (bytes != null) {
-                                            saveChatImageToGallery(
-                                                imageUrl = imageReference,
-                                                decryptedImageBytes = bytes,
-                                                mimeTypeHint = message.originalMimeTypeOrNull(),
-                                            ).onSuccess { onDismiss() }
-                                        }
-                                    } else {
-                                        saveChatImageToGallery(imageReference).onSuccess { onDismiss() }
-                                    }
-                                }
+                                scope.launch { if (saveMessageImage(message, handlers)) onDismiss() }
                             },
                             cornerRadius = optionRadius,
                             showBorder = false,
@@ -367,25 +391,7 @@ internal fun MessageActionSheet(
                         BentoGlassOptionRow(
                             title = "Share image",
                             onClick = {
-                                scope.launch {
-                                    val bytes = handlers.fetchDecryptedMediaBytes(message)
-                                    if (bytes != null) {
-                                        val ext =
-                                            when {
-                                                message.originalMimeTypeOrNull()?.contains(
-                                                    "png",
-                                                    ignoreCase = true,
-                                                ) == true -> "png"
-                                                message.originalMimeTypeOrNull()?.contains(
-                                                    "webp",
-                                                    ignoreCase = true,
-                                                ) == true -> "webp"
-                                                else -> "jpg"
-                                            }
-                                        shareDecryptedImage(bytes, "click_chat.$ext")
-                                        onDismiss()
-                                    }
-                                }
+                                scope.launch { if (shareMessageImage(message, handlers)) onDismiss() }
                             },
                             cornerRadius = optionRadius,
                             showBorder = false,

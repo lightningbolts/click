@@ -344,6 +344,7 @@ internal fun AppMainShell(
                 showUnifiedSearchSheet = true
             }
             AppDeepLink.Clicks -> navigateTo(NavigationItem.Connections.route)
+            AppDeepLink.AddClick -> navigateTo(NavigationItem.AddClick.route)
             is AppDeepLink.Chat, is AppDeepLink.Profile -> Unit
         }
     }

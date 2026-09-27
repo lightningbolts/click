@@ -45,6 +45,11 @@ interface TokenStorage {
 
     suspend fun getCalendarDisconnected(): Boolean
 
+    /** Unconfirmed text sends (JSON array, per user, bounded); wiped at sign-out. */
+    suspend fun savePendingSends(json: String?)
+
+    suspend fun getPendingSends(): String?
+
     /** Pending connection-flow telemetry (JSON array, bounded); survives restarts until sent. */
     suspend fun saveTelemetryQueue(json: String?)
 

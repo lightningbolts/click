@@ -31,6 +31,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.Velocity
@@ -332,6 +334,11 @@ internal fun ChatMessageTimeline(
                                     }
                                     ChatSearchFocusFrame(
                                         active = highlightedMessageId == messageWithUser.message.id,
+                                        // Long-press lifts a copy of the bubble exactly where it sits.
+                                        modifier =
+                                            Modifier.onGloballyPositioned { coords ->
+                                                MessageBubbleBounds.put(messageWithUser.message.id, coords.boundsInWindow())
+                                            },
                                     ) {
                                         ChatMessageBubble(
                                             messageWithUser = messageWithUser,

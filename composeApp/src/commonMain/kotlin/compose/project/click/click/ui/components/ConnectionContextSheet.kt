@@ -101,13 +101,19 @@ internal fun ordinalLabel(n: Int): String {
 }
 
 /**
- * Reconnect subtitle (iOS `PostConnectModel.subtitle`): "3rd time with Sam". [priorEncounters] is the
- * history before this crossing, which is saved when the sheet is confirmed.
+ * Reconnect subtitle (iOS `PostConnectModel.subtitle`): "Extended Hangout · still with Sam",
+ * "3rd time with Sam", or "Another crossing with Sam". [encounterCount] includes this crossing.
  */
 internal fun reconnectSubtitle(
     firstName: String,
-    priorEncounters: Int,
-): String = if (priorEncounters >= 1) "${ordinalLabel(priorEncounters + 1)} time with $firstName" else "Another crossing with $firstName"
+    encounterCount: Int,
+    extendedHangout: Boolean,
+): String =
+    when {
+        extendedHangout -> "Extended Hangout · still with $firstName"
+        encounterCount >= 2 -> "${ordinalLabel(encounterCount)} time with $firstName"
+        else -> "Another crossing with $firstName"
+    }
 
 enum class ConnectionContextPresentation {
     /** Proximity new edge — “Sparking…” + tag chips + Connect. */
@@ -311,6 +317,8 @@ fun ConnectionContextSheet(
     initialSelectedUserIds: Set<String> = emptySet(),
     /** One-to-one only: closes the sheet and opens the Click Drop camera for the new chat (F98). */
     onSendClickDrop: (() -> Unit)? = null,
+    /** The tap bind already saved this crossing server-side (it may have been folded into an Extended Hangout). */
+    encounterAlreadySaved: Boolean = false,
 ) {
     val hourOfDay =
         remember {
@@ -339,6 +347,7 @@ fun ConnectionContextSheet(
     // Souvenir for one-to-one taps (iOS PostConnectView): what this hangout added to the friendship.
     var souvenirEncounters by remember(connectionId, peerUserId) { mutableStateOf<List<FriendshipEncounter>>(emptyList()) }
     var souvenirCondition by remember(connectionId, peerUserId) { mutableStateOf<String?>(null) }
+    var latestIsExtendedHangout by remember(connectionId, peerUserId) { mutableStateOf(false) }
     LaunchedEffect(peerUserId, currentUserId, connectedUsers.size) {
         val peer = peerUserId?.takeIf { it.isNotBlank() } ?: return@LaunchedEffect
         val viewer = currentUserId?.takeIf { it.isNotBlank() } ?: return@LaunchedEffect
@@ -348,6 +357,8 @@ fun ConnectionContextSheet(
                 ?: return@LaunchedEffect
         val latestWire = connection.connectionEncounters.maxByOrNull { it.encounteredAt }
         souvenirCondition = latestWire?.weatherSnapshot?.condition?.takeIf { it.isNotBlank() }
+        latestIsExtendedHangout =
+            latestWire?.contextTags.orEmpty().any { it.trim().equals(EXTENDED_HANGOUT_TAG, ignoreCase = true) }
         souvenirEncounters = connection.connectionEncounters.mapNotNull { it.toFriendshipEncounter() }
     }
     var selectedTagId by remember { mutableStateOf<String?>(suggestions.firstOrNull()?.id) }
@@ -473,7 +484,11 @@ fun ConnectionContextSheet(
                 titleText = "Reconnected"
                 subtitleText =
                     if (souvenirEncounters.isNotEmpty()) {
-                        reconnectSubtitle(name.substringBefore(' '), souvenirEncounters.size)
+                        reconnectSubtitle(
+                            firstName = name.substringBefore(' '),
+                            encounterCount = souvenirEncounters.size + if (encounterAlreadySaved) 0 else 1,
+                            extendedHangout = encounterAlreadySaved && latestIsExtendedHangout,
+                        )
                     } else {
                         "Save this crossing to your shared history with $name."
                     }
@@ -507,6 +522,18 @@ fun ConnectionContextSheet(
                 connectedUsers.isEmpty() -> {
                     titleText = "Sparking a new connection…"
                     subtitleText = "Pick what best describes this moment. You can skip and keep going."
+                }
+                // The connection already exists (reveal played first, iOS order F70): tags are optional extras.
+                connectedUsers.size == 1 && !connectionId.isNullOrBlank() -> {
+                    val first =
+                        connectedUsers
+                            .first()
+                            .displayName
+                            .trim()
+                            .substringBefore(' ')
+                            .ifEmpty { "them" }
+                    titleText = "You Clicked"
+                    subtitleText = "You and $first just Clicked. What brought you together?"
                 }
                 connectedUsers.size == 1 -> {
                     titleText = "Sparking a new connection…"

@@ -235,6 +235,7 @@ internal suspend fun SupabaseChatRepository.sendMessageImpl(
     metadata: JsonElement?,
     clientLocalSentAtMs: Long?,
     connectionId: String?,
+    clientMessageId: String? = null,
 ): Message? {
     return try {
         val wire =
@@ -244,6 +245,7 @@ internal suspend fun SupabaseChatRepository.sendMessageImpl(
                 content = content,
                 messageType = messageType,
                 metadata = metadata,
+                clientMessageId = clientMessageId,
             )
         val crypto = wire.legacyCrypto
 
