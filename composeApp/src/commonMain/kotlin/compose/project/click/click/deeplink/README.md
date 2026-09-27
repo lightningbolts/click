@@ -8,6 +8,10 @@ The `deeplink` package routes **incoming URLs** into Click's connection handshak
 
 ## Architecture
 
+### AppDeepLinkRouter
+
+Parses the in-app routes iOS `AppRouter` supports beyond `/c`, `/e` and `/hub`: `click://chat/{chatId}?m=`, `click://profile/{userId}` (alias `u`), `click://myqr`, `click://scan`, `click://tap`, `click://search?q=` and `https://joinclick.co/search?q=`. Chat and profile links go through `ChatDeepLinkManager`; the others are queued on `pending` for `AppMainShell`, which opens My QR, the scanner, tap-to-connect or the search sheet. Me → My QR uses the same path. Push taps that should land on the Clicks list use `AppDeepLink.Clicks`.
+
 ### ConnectionDeepLinkRouter
 
 Singleton `object` with `StateFlow<String?> pendingConnectionUserId`:
@@ -120,6 +124,7 @@ After OAuth completes, `AuthViewModel.observeOAuthCompletion()` detects `Session
 | File | Role |
 |------|------|
 | `deeplink/ConnectionDeepLinkRouter.kt` | Connection URL queue |
+| `deeplink/AppDeepLinkRouter.kt` | chat / profile / myqr / scan / tap / search routes |
 | `QRModels.kt` | `parseQrPayload`, `toUserIdFromClickUrl`, hub patterns |
 | `Click.kt` | `openHubFromDeepLink` iOS entry |
 | `notifications/ChatDeepLinkManager.kt` | Hub + chat push routing |
@@ -145,14 +150,13 @@ Click is a proximity-first social app for real-world connection. Every feature b
 - **Map beacons** — Discover people and events pinned on the social map.
 - **Match alerts** — Get notified when availability and interests align with someone nearby.
 - **Availability intents** — Signal when you're free this week; others can lock overlapping gaps.
-- **Core connections** — Pin your most important people; they stay visible even in ghost mode on the map.
+- **Core connections** — Pin your most important people; they stay at the top of your list.
 
 ### Messaging & Calls
 - **Private encrypted chat** — End-to-end encrypted direct and group threads.
 - **Send photos/files/voice notes** — Rich media in chat with encrypted upload.
 - **Emoji reactions** — React to individual messages.
 - **Typing & read receipts** — Live presence indicators in conversations.
-- **Voice & video calls** — In-app WebRTC calls with push-wake on incoming rings.
 
 ### Memory & Context
 - **Memory Capsules** — Rich encounter records: place, weather, noise, elevation, motion, lux.
@@ -164,7 +168,6 @@ Click is a proximity-first social app for real-world connection. Every feature b
 - **Collaboration sessions & disposable rolls** — Re-bump existing friends to open a time-locked Disposable Roll camera window and squad map drops.
 
 ### Privacy & Safety
-- **Ghost mode** — Pause location sharing and background sync for a private session.
 - **Block & report** — Block users and report abusive behavior.
 
 ### Profile & Account

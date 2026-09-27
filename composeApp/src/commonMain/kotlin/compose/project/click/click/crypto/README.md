@@ -204,7 +204,6 @@ Android parity: `ClickFirebaseMessagingService` performs the same preview decryp
 - **Send photos, files & voice notes:** Share media in chat; files are encrypted before upload.
 - **Emoji reactions:** React to messages with emoji.
 - **Typing indicators & read receipts:** See when someone is typing and when they've read your message.
-- **Voice & video calls:** Call any connection with high-quality audio/video.
 - **Memory Capsules:** Optionally save the "feel" of how you met—noise level, elevation, tags like "after class."
 - **48-hour gentle archive:** New connections you don't act on move to archive after 48 hours (not deleted).
 - **Connection map & timeline:** See where and when you met people on a map and journal timeline.
@@ -217,7 +216,6 @@ Android parity: `ClickFirebaseMessagingService` performs the same preview decryp
 - **Global search:** Find connections, chats, and hubs across the app.
 - **Core connections:** Pin your most important people.
 - **Collaboration sessions & disposable rolls:** Fun timed photo reveals with friends after connecting.
-- **Ghost mode:** Browse with reduced presence visibility when enabled.
 - **Block & report:** Safety tools to block or report users.
 - **Profile & interests:** Set your display name, avatar, and interest tags.
 - **Onboarding:** Welcome flow with interest tagging after sign-up.

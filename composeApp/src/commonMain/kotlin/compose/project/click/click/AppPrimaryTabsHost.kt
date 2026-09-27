@@ -60,7 +60,6 @@ import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -337,16 +336,9 @@ internal fun AppPrimaryTabsHost(
 
                     NavigationItem.Settings.route ->
                         SettingsScreen(
-                            isDarkMode = isDarkMode,
+                            onOpenClicks = { navigateTo(NavigationItem.Connections.route) },
                             onOpenSearch = { showUnifiedSearchSheet = true },
                             onSubpageOpenChanged = { isSettingsSubpageOpen = it },
-                            onToggleDarkMode = {
-                                val next = !isDarkMode
-                                isDarkMode = next
-                                appScope.launch {
-                                    tokenStorage.saveDarkModeEnabled(next)
-                                }
-                            },
                             onSignOut = { authViewModel.signOut() },
                             mapViewModel = mapViewModel,
                             onShareBeaconToChats = { beacon, chatIds, openConnectionId ->

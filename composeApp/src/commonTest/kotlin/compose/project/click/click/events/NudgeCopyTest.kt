@@ -1,33 +1,14 @@
 package compose.project.click.click.events // pragma: allowlist secret
 
-import compose.project.click.click.data.api.EventTeaserDto // pragma: allowlist secret
-import compose.project.click.click.data.api.EventTeaserResponseDto // pragma: allowlist secret
 import compose.project.click.click.data.api.InboxNudgesResponseDto // pragma: allowlist secret
 import kotlinx.serialization.json.Json
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
-import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-class SeedRoomCopyTest {
+class NudgeCopyTest {
     private val json = Json { ignoreUnknownKeys = true }
-
-    @Test
-    fun teaserHeadline_interestCountIsAnonymous() {
-        val headline = teaserHeadline(3, "interest")
-        assertEquals("3 people going who share an interest", headline)
-        assertFalse(headline.contains("Sam", ignoreCase = true))
-        assertFalse(headline.contains("@"))
-    }
-
-    @Test
-    fun teaserHeadline_includesSharedTagWhenPresent() {
-        assertEquals(
-            "1 person going who share your interest in Hiking",
-            teaserHeadline(1, "interest", "Hiking"),
-        )
-    }
 
     @Test
     fun reconnectCopy_matchesProductExamples() {
@@ -42,19 +23,6 @@ class SeedRoomCopyTest {
         val copy = sharedEventNudgeCopy("Sam", "Picnic")
         assertEquals("Sam is going too", copy.title)
         assertEquals("You and Sam are both going to Picnic.", copy.body)
-    }
-
-    @Test
-    fun eventTeaserDto_parsesRecipientPayloadWithoutNames() {
-        val payload =
-            json.decodeFromString<EventTeaserResponseDto>(
-                """{"teaser":{"id":"t1","teaser_type":"shared_interest","count":3,"label":"interest","headline":"3 people going who share an interest"}}""",
-            )
-        val teaser = payload.teaser
-        assertEquals(3, teaser?.count)
-        assertEquals("interest", teaser?.label)
-        assertNull(teaser?.sharedTag)
-        assertFalse(json.encodeToString(EventTeaserDto.serializer(), teaser!!).contains("name", ignoreCase = true))
     }
 
     @Test

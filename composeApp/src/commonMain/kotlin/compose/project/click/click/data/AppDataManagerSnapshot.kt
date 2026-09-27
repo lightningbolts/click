@@ -7,7 +7,6 @@ import compose.project.click.click.data.api.toEventBookmarkItemDto // pragma: al
 import compose.project.click.click.data.api.toStoredEventBookmark // pragma: allowlist secret
 import compose.project.click.click.data.models.CachedAppSnapshot // pragma: allowlist secret
 import compose.project.click.click.data.models.Connection // pragma: allowlist secret
-import compose.project.click.click.data.models.HomeLayoutMode // pragma: allowlist secret
 import compose.project.click.click.data.models.StoredCommunityHubPin // pragma: allowlist secret
 import compose.project.click.click.data.models.richerConnectionEncounters // pragma: allowlist secret
 import compose.project.click.click.data.models.shouldPreserveLocalConnectionJunctions // pragma: allowlist secret
@@ -286,43 +285,32 @@ internal suspend fun AppDataManager.restoreActiveHubs() {
     }
 }
 
-internal fun AppDataManager.restoreHomeLayoutMode() {
-    scope.launch {
-        _homeLayoutMode.value = HomeLayoutMode.fromStored(tokenStorage.getHomeLayoutMode())
-    }
+/** Mirrors [preferences] into the prefs the FCM service reads while the app is not running. */
+internal fun syncRuntimeNotificationPreferences(preferences: NotificationPreferences) {
+    NotificationRuntimeState.setNotificationPreferences(
+        messageEnabled = preferences.messagePushEnabled,
+        eventReminderEnabled = preferences.eventReminderPushEnabled,
+        availabilityMatchEnabled = preferences.availabilityMatchPushEnabled,
+        hubMessageEnabled = preferences.hubMessagePushEnabled,
+        reconnectNudgeEnabled = preferences.reconnectNudgePushEnabled,
+    )
 }
 
 internal fun AppDataManager.updateNotificationPreferences(preferences: NotificationPreferences) {
     val userId = _currentUser.value?.id ?: return
     val previousPreferences = _notificationPreferences.value
     _notificationPreferences.value = preferences
-    NotificationRuntimeState.setNotificationPreferences(
-        messageEnabled = preferences.messagePushEnabled,
-        callEnabled = preferences.callPushEnabled,
-        eventReminderEnabled = preferences.eventReminderPushEnabled,
-        availabilityMatchEnabled = preferences.availabilityMatchPushEnabled,
-        hubMessageEnabled = preferences.hubMessagePushEnabled,
-        eventTeaserEnabled = preferences.eventTeaserPushEnabled,
-        reconnectNudgeEnabled = preferences.reconnectNudgePushEnabled,
-    )
+    syncRuntimeNotificationPreferences(preferences)
 
+    _notificationPreferencesSaving.value = true
     scope.launch {
         tokenStorage.saveMessageNotificationsEnabled(preferences.messagePushEnabled)
-        tokenStorage.saveCallNotificationsEnabled(preferences.callPushEnabled)
         val saveResult = notificationPreferencesRepository.savePreferences(userId, preferences)
+        _notificationPreferencesSaving.value = false
         if (saveResult.isFailure) {
             _notificationPreferences.value = previousPreferences
-            NotificationRuntimeState.setNotificationPreferences(
-                messageEnabled = previousPreferences.messagePushEnabled,
-                callEnabled = previousPreferences.callPushEnabled,
-                eventReminderEnabled = previousPreferences.eventReminderPushEnabled,
-                availabilityMatchEnabled = previousPreferences.availabilityMatchPushEnabled,
-                hubMessageEnabled = previousPreferences.hubMessagePushEnabled,
-                eventTeaserEnabled = previousPreferences.eventTeaserPushEnabled,
-                reconnectNudgeEnabled = previousPreferences.reconnectNudgePushEnabled,
-            )
+            syncRuntimeNotificationPreferences(previousPreferences)
             tokenStorage.saveMessageNotificationsEnabled(previousPreferences.messagePushEnabled)
-            tokenStorage.saveCallNotificationsEnabled(previousPreferences.callPushEnabled)
             val msg =
                 saveResult
                     .exceptionOrNull()
@@ -334,7 +322,7 @@ internal fun AppDataManager.updateNotificationPreferences(preferences: Notificat
             return@launch
         }
 
-        if (preferences.messagePushEnabled || preferences.callPushEnabled) {
+        if (preferences.messagePushEnabled) {
             runCatching { pushNotificationService.requestPermission() }
                 .onFailure { println("AppDataManager: Push permission request failed after settings update: ${it.message}") }
             runCatching { pushNotificationService.registerToken(userId) }

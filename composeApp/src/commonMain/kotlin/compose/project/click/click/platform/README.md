@@ -192,7 +192,6 @@ Each `actual` in `androidMain` / `iosMain` wires the native SDK or stub (simulat
 - **Global search:** Find connections, chats, and hubs across the app.
 - **Core connections:** Pin your most important people.
 - **Collaboration sessions & disposable rolls:** Fun timed photo reveals with friends after connecting.
-- **Ghost mode:** Browse with reduced presence visibility when enabled.
 - **Block & report:** Safety tools to block or report users.
 - **Profile & interests:** Set your display name, avatar, and interest tags.
 - **Onboarding:** Welcome flow with interest tagging after sign-up.

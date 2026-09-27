@@ -82,10 +82,10 @@ Almost everything here is therefore Android client work.
 |---|---|---|
 | 00 P0 fixes | 8 | 8 (code). Device checks open: in-person ultrasonic matrix, push rendering. |
 | 01 Scheduling | 1 feature (7 acceptance criteria) | Code-complete. Cross-platform check with iOS still open. |
-| 02 Profile / stories / recaps | 8 sections | 7 of 8. §6 is partial: bio, relationship line and tag editing are done; the "Reconnected · Nth time" / "Extended Hangout" titles, merged common-ground layout and public-profile check are still open. |
+| 02 Profile / stories / recaps | 8 sections | 7 of 8. §6 is partial: bio, relationship line, tag editing and the post-connect "Reconnected · Nth time" subtitle are done; the "Extended Hangout" title, merged common-ground layout and public-profile check are still open. |
 | 03 Hangouts | 14 (A1–A7, B1–B7) | 14 (code). Reminder delivery under Doze has not been verified. |
 | 04 Chat / groups / hubs | 13 sections | 10 of 13 (code) plus a partial §10. Still open: §8 lifted-bubble action overlay (UX only); §11 shared-content paging (group photo rules and immediate re-securing are done); §13 clique-eligibility naming; §10 persisting the failed-send queue across restarts (retry and discard are done). |
-| 05 App-wide | 34 rows (A1–E3) | 0 |
+| 05 App-wide | 34 rows (A1–E3) | 29 (code): A1–A4, B1–B11, C1–C5, C7–C9, D1–D5, E1. Partial: E2 (Nth-time copy done, Extended Hangout open), E3 (souvenir and "Go together?" sit above the tags, but the reveal step itself is unchanged). Deferred: C6 soundtrack resolver (optional), D6 local message store (optional, large). Out of scope: D7 App Clip. |
 
 Android-specific notes from Phase 2:
 - **Upcoming plans (03 §A6)** are read from `messages.metadata.plan` through PostgREST, because Android has no on-device message store.
@@ -98,5 +98,17 @@ Android-specific notes from Phase 3:
 - **"Message deleted" placeholders** cover the latest window and realtime deletes. Older history pages don't show tombstones.
 - **In-chat search** covers loaded (decrypted) messages only. Android has no on-device full-text store yet (05 D6).
 - **Forwarding** supports text and photos, not voice or files.
+
+Android-specific notes from Phase 4:
+- **Ghost Mode** is gone. Each sign-in also sends `PATCH /api/user/ghost-mode {enabled:false}`, as iOS does, so an older client can't leave someone hidden.
+- **Event teasers** are gone. Their preference, and the call-notification preference, are no longer sent; the server treats both fields as optional. `event_teaser` and `incoming_call` pushes are dropped.
+- **Appearance** defaults to System. It is stored in the old dark-mode pref, where "absent" means System, so existing Light/Dark choices carry over.
+- **Delete account** opens `joinclick.co/?tab=settings` in a Custom Tab (two taps from Me), matching iOS. The app never calls `DELETE /api/user/delete`.
+- **Calendar → Disconnect** is a local switch that stops Click reading the calendar; Android can't revoke a runtime permission from inside the app.
+- **Photos permission** shows "Not needed", because Android uses the system photo picker.
+- **Push taps** go through one table (`PushRoutes`) that follows iOS: `archive_warning` opens the person's profile (or the Clicks list) rather than the Archived tab named in 05 §D2.
+- **Music links** are checked against the server's exact allowlist (https Spotify, Apple Music, YouTube). SoundCloud isn't on it, so it isn't accepted, despite 05 §C5.
+- **Event reminders** are rebuilt from the RSVP cache and saved events on start, after RSVP/save changes, and when the Alerts toggle changes. RSVPs for events the app hasn't loaded yet are picked up once the event is seen.
+- **"Couldn't refresh"** appears only when the network is up and `/api/ping` answers. Otherwise the banner says "You're offline".
 
 After each item lands, add a row to `click-ios/Docs/PARITY_LEDGER.md` (or a mirrored Android ledger) so both repos agree on status. `click-ios/Docs/BACKEND_CONTRACT_MATRIX.md` is also stale: it lacks `/api/hangouts*`, `/api/me/presence`, `/api/connections/{id}/wave`, `/api/chat/scheduled`, `/api/chat/notifications` and `/api/chat/messages/read`. Update it alongside Phase 1.

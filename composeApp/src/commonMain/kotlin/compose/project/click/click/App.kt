@@ -7,6 +7,7 @@
 package compose.project.click.click // pragma: allowlist secret
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -40,6 +41,7 @@ import compose.project.click.click.ui.components.ConnectionRevealUiState // prag
 import compose.project.click.click.ui.components.INTEREST_ONBOARDING_MIN_TAGS // pragma: allowlist secret
 import compose.project.click.click.ui.screens.* // pragma: allowlist secret
 import compose.project.click.click.ui.theme.* // pragma: allowlist secret
+import compose.project.click.click.ui.theme.AppAppearance // pragma: allowlist secret
 import compose.project.click.click.ui.utils.PermissionCoordinatorHost // pragma: allowlist secret
 import compose.project.click.click.ui.utils.rememberLocationPermissionRequester // pragma: allowlist secret
 import compose.project.click.click.ui.utils.rememberMicrophonePermissionRequester // pragma: allowlist secret
@@ -73,9 +75,14 @@ import kotlin.coroutines.resume
 @Composable
 @Preview
 fun App() {
-    // Functional Clarity: light-first until persisted preference is loaded.
-    val isDarkModeState = remember { mutableStateOf(false) }
+    // Follows Me → Appearance; System (the default) tracks the phone's dark theme.
+    val systemDark = isSystemInDarkTheme()
+    val isDarkModeState = remember { mutableStateOf(systemDark) }
     var isDarkMode by isDarkModeState
+    val appearanceMode by AppAppearance.mode.collectAsState()
+    LaunchedEffect(appearanceMode, systemDark) {
+        isDarkMode = appearanceMode.resolveDark(systemDark)
+    }
     val reduceMotion = rememberReduceMotionEnabled()
 
     // Ktor client
@@ -107,7 +114,7 @@ fun App() {
     val connectivityViewModel: ConnectivityViewModel = viewModel { ConnectivityViewModel() }
     val connectionViewModel: ConnectionViewModel = viewModel { ConnectionViewModel() }
     val isOnline by connectivityViewModel.isOnline.collectAsState()
-    val showOfflineBanner by connectivityViewModel.showOfflineBanner.collectAsState()
+    val syncBanner by connectivityViewModel.syncBanner.collectAsState()
 
     // Location service for capturing GPS during QR scans
     val locationService =
@@ -151,10 +158,7 @@ fun App() {
     val appError by AppDataManager.error.collectAsState()
 
     LaunchedEffect(Unit) {
-        val persisted = tokenStorage.getDarkModeEnabled()
-        if (persisted != null) {
-            isDarkMode = persisted
-        }
+        AppAppearance.restore(tokenStorage)
         ambientNoiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: false
         barometricContextOptIn = tokenStorage.getBarometricContextOptIn() ?: false
     }
@@ -746,7 +750,8 @@ fun App() {
                             ambientMonitor = ambientMonitor,
                             baroMonitor = baroMonitor,
                             openMeteoWeather = openMeteoWeather,
-                            showOfflineBanner = showOfflineBanner,
+                            syncBanner = syncBanner,
+                            onRetrySync = connectivityViewModel::retryRefresh,
                             isInitialLoading = isInitialLoading,
                             pendingConnectionsCount = pendingConnectionsCount,
                             appError = appError,

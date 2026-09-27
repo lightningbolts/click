@@ -20,7 +20,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -636,37 +635,6 @@ internal fun formatBeaconDistance(meters: Double): String {
         val whole = tenths / 10
         val frac = tenths % 10
         "$whole.$frac km away"
-    }
-}
-
-@Composable
-internal fun MemoriesPillContent(
-    memories: Int,
-    liveCount: Int,
-    ghostMode: Boolean,
-) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(
-            imageVector = if (ghostMode) Icons.Filled.LocationOff else Icons.Filled.LocationOn,
-            contentDescription = null,
-            modifier = Modifier.size(18.dp),
-            tint = if (ghostMode) Color.Gray else PrimaryBlue,
-        )
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(
-            if (ghostMode) {
-                "Ghost Mode"
-            } else {
-                "$memories ${if (memories == 1) "memory" else "memories"}"
-            },
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
-        if (!ghostMode && liveCount > 0) {
-            Spacer(modifier = Modifier.width(10.dp))
-            LiveIndicator(count = liveCount)
-        }
     }
 }
 

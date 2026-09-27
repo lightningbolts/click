@@ -23,15 +23,13 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
-import compose.project.click.click.data.api.ApiClient // pragma: allowlist secret
-import compose.project.click.click.data.api.ConnectionEventRecommendationDto // pragma: allowlist secret
-import compose.project.click.click.data.api.EventTeaserDto // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
 import compose.project.click.click.data.models.withPreservedEventScheduleFrom // pragma: allowlist secret
 import compose.project.click.click.events.EventChatOpenState // pragma: allowlist secret
 import compose.project.click.click.events.EventChatResolver // pragma: allowlist secret
 import compose.project.click.click.events.EventRsvpRequestStatus // pragma: allowlist secret
+import compose.project.click.click.events.JOIN_REQUEST_POLL_MS // pragma: allowlist secret
 import compose.project.click.click.events.buildEventShareText // pragma: allowlist secret
 import compose.project.click.click.events.buildEventShareUrl // pragma: allowlist secret
 import compose.project.click.click.events.eventCheckInCtaLabel // pragma: allowlist secret
@@ -40,6 +38,7 @@ import compose.project.click.click.events.formatEventPostedAtLabel // pragma: al
 import compose.project.click.click.events.formatEventScheduleRange // pragma: allowlist secret
 import compose.project.click.click.events.isEnded // pragma: allowlist secret
 import compose.project.click.click.events.isLive // pragma: allowlist secret
+import compose.project.click.click.events.joinRequestDecisionMessage // pragma: allowlist secret
 import compose.project.click.click.events.label // pragma: allowlist secret
 import compose.project.click.click.events.openEventMapsRoute // pragma: allowlist secret
 import compose.project.click.click.events.parseEventListingOptions // pragma: allowlist secret
@@ -52,7 +51,6 @@ import compose.project.click.click.ui.components.ClickDropdownMenu // pragma: al
 import compose.project.click.click.ui.components.ClickFormBottomSheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickMenuItem // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickOutlinedTextField // pragma: allowlist secret
-import compose.project.click.click.ui.components.ConnectionEventRecommendationCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.EventDirectoryUserProfileSheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.EventMarkdownText // pragma: allowlist secret
 import compose.project.click.click.ui.components.EventPeopleDirectorySection // pragma: allowlist secret
@@ -88,12 +86,20 @@ internal fun BeaconDetailSheetContent(
                 .orEmpty(),
         )
     }
+    var showEventEdit by remember(beacon.id) { mutableStateOf(false) }
+    var eventEditSaving by remember(beacon.id) { mutableStateOf(false) }
+    var eventEditError by remember(beacon.id) { mutableStateOf<String?>(null) }
     val openEdit: () -> Unit = {
-        editDraft =
-            beacon.metadata.description
-                ?.trim()
-                .orEmpty()
-        showEditDialog = true
+        if (beacon.kind == MapBeaconKind.EVENT && beacon.eventSchedule() != null) {
+            eventEditError = null
+            showEventEdit = true
+        } else {
+            editDraft =
+                beacon.metadata.description
+                    ?.trim()
+                    .orEmpty()
+            showEditDialog = true
+        }
     }
     val openDelete: () -> Unit = { showDeleteConfirm = true }
 
@@ -135,6 +141,28 @@ internal fun BeaconDetailSheetContent(
                 )
             }
         }
+    }
+
+    if (showEventEdit) {
+        val current =
+            viewModel.mapBeacons
+                .collectAsState()
+                .value
+                .firstOrNull { it.id == beacon.id } ?: beacon
+        EventEditSheet(
+            beacon = current,
+            saving = eventEditSaving,
+            errorMessage = eventEditError,
+            onDismiss = { if (!eventEditSaving) showEventEdit = false },
+            onSave = { draft, bytes, mime ->
+                eventEditSaving = true
+                eventEditError = null
+                viewModel.updateOwnedEvent(beacon.id, draft, bytes, mime) { error ->
+                    eventEditSaving = false
+                    if (error == null) showEventEdit = false else eventEditError = error
+                }
+            },
+        )
     }
 
     AnimatedClickDialog(
@@ -327,12 +355,27 @@ internal fun EventBeaconDetail(
     var showPeopleDirectory by remember(beacon.id) { mutableStateOf(false) }
     var directoryProfileUserId by remember(beacon.id) { mutableStateOf<String?>(null) }
     var pendingDirectoryProfileUserId by remember(beacon.id) { mutableStateOf<String?>(null) }
-    var seedTeaser by remember(beacon.id) { mutableStateOf<EventTeaserDto?>(null) }
-    var seedTeaserDismissed by remember(beacon.id) { mutableStateOf(false) }
-    val seedApi = remember { ApiClient() }
+    var showGuestList by remember(beacon.id) { mutableStateOf(false) }
+
+    // While a join request is pending, re-check every 30 s, only while this screen is showing (F86).
+    var joinDecisionNotice by remember(beacon.id) { mutableStateOf<String?>(null) }
+    var lastRequestStatus by remember(beacon.id) { mutableStateOf(rsvpRequestStatus) }
+    LaunchedEffect(displayBeacon.id, rsvpRequestStatus) {
+        if (rsvpRequestStatus != EventRsvpRequestStatus.PENDING) return@LaunchedEffect
+        while (true) {
+            delay(JOIN_REQUEST_POLL_MS)
+            viewModel.loadBeaconRsvp(displayBeacon.id, forceRefresh = true)
+        }
+    }
+    LaunchedEffect(rsvpRequestStatus, currentUserSignedUp) {
+        joinRequestDecisionMessage(lastRequestStatus, rsvpRequestStatus, currentUserSignedUp)?.let {
+            joinDecisionNotice = it
+            viewModel.ensureEventBeaconDetail(displayBeacon.id, seed = displayBeacon)
+        }
+        lastRequestStatus = rsvpRequestStatus
+    }
 
     LaunchedEffect(displayBeacon.id) {
-        seedTeaser = seedApi.getEventTeaser(displayBeacon.id).getOrNull()?.teaser
         viewModel.loadBeaconRsvp(displayBeacon.id, forceRefresh = true)
         viewModel.loadBeaconEngagement(displayBeacon.id, forceRefresh = true)
         viewModel.recordEventImpression(displayBeacon.id)
@@ -536,24 +579,17 @@ internal fun EventBeaconDetail(
             onOpenDirectory = { showPeopleDirectory = true },
         )
 
-        if (!seedTeaserDismissed) {
-            seedTeaser?.let { teaser ->
-                ConnectionEventRecommendationCard(
-                    recommendation =
-                        ConnectionEventRecommendationDto(
-                            beaconId = displayBeacon.id,
-                            title = displayBeacon.displayDynamicTitle(),
-                            peerName = "",
-                            peerUserId = "",
-                        ),
-                    onRsvp = {},
-                    onDismiss = { seedTeaserDismissed = true },
-                    headline = teaser.headline,
-                    chipLabel = "Seed a Room",
-                    showRsvp = false,
-                    subtitle = "Names stay private until you Click.",
-                )
+        if (isEventCreator) {
+            ClickButton(
+                onClick = { showGuestList = true },
+                modifier = Modifier.fillMaxWidth(),
+                variant = ClickButtonVariant.Secondary,
+            ) {
+                Text("Guest list", fontWeight = FontWeight.SemiBold)
             }
+        }
+        if (showGuestList) {
+            EventGuestListSheet(beaconId = displayBeacon.id, onDismiss = { showGuestList = false })
         }
 
         if (showPeopleDirectory) {
@@ -766,6 +802,15 @@ internal fun EventBeaconDetail(
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text("Join Event Route", fontWeight = FontWeight.SemiBold)
+        }
+
+        joinDecisionNotice?.let { notice ->
+            Text(
+                text = notice,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.primary,
+            )
         }
 
         if (ended) {

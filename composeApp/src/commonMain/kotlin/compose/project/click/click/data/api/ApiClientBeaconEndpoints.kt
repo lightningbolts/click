@@ -426,24 +426,6 @@ internal suspend fun ApiClient.getMyEventBookmarksImpl(
         Result.failure(e)
     }
 
-internal suspend fun ApiClient.getEventTeaserImpl(beaconId: String): Result<EventTeaserResponseDto> {
-    val id = beaconId.trim()
-    if (id.isEmpty()) return Result.failure(IllegalArgumentException("beaconId required"))
-    return try {
-        val response: HttpResponse =
-            clickWebClient.get("${ApiClient.clickWebAuthOrigin}/api/me/event-bookmarks/$id/teaser")
-        if (response.status.value in 200..299) {
-            Result.success(response.body<EventTeaserResponseDto>())
-        } else {
-            Result.failure(Exception(readClickWebErrorMessage(response)))
-        }
-    } catch (e: ClientRequestException) {
-        Result.failure(Exception(readClickWebErrorMessage(e.response)))
-    } catch (e: Exception) {
-        Result.failure(e)
-    }
-}
-
 internal suspend fun ApiClient.getBeaconGuestListImpl(beaconId: String): Result<GuestListStatusDto> {
     val id = beaconId.trim()
     if (id.isEmpty()) return Result.failure(IllegalArgumentException("beaconId required"))

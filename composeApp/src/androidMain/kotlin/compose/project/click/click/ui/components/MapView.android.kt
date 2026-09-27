@@ -46,7 +46,6 @@ actual fun PlatformMap(
     zoom: Double,
     centerLat: Double?,
     centerLon: Double?,
-    ghostMode: Boolean,
     mapGesturesEnabled: Boolean,
     showCompass: Boolean,
     onPinTapped: (MapPin) -> Unit,
@@ -58,7 +57,7 @@ actual fun PlatformMap(
 ) {
     val locationService = remember { LocationService() }
     val hasLocationPermission = locationService.hasLocationPermission()
-    val canShowMyLocation = !ghostMode && hasLocationPermission
+    val canShowMyLocation = hasLocationPermission
     val deviceLocation by AppDataManager.lastKnownDeviceLocation.collectAsState()
     val isDarkMode = LocalIsDarkMode.current
 
@@ -140,16 +139,15 @@ actual fun PlatformMap(
             }
     }
 
-    // Map basemap: ghost → grayscale; dark app → zinc dark style; light app → default color tiles
+    // Map basemap: dark app → zinc dark style; light app → default color tiles
     // (PR #44 map_color_android + Track A dark/light policy).
     val mapProperties =
-        remember(ghostMode, canShowMyLocation, isDarkMode) {
+        remember(canShowMyLocation, isDarkMode) {
             MapProperties(
                 // Enabling my-location without runtime permission crashes with SecurityException.
                 isMyLocationEnabled = canShowMyLocation,
                 mapStyleOptions =
                     when {
-                        ghostMode -> MapStyleOptions(GRAYSCALE_MAP_STYLE)
                         isDarkMode -> MapStyleOptions(DARK_MAP_STYLE)
                         else -> null
                     },
@@ -718,22 +716,6 @@ private const val DARK_MAP_STYLE = """
     "featureType": "transit",
     "elementType": "geometry",
     "stylers": [{"color": "#18181b"}]
-  }
-]
-"""
-
-// Grayscale map style for ghost mode
-private const val GRAYSCALE_MAP_STYLE = """
-[
-  {
-    "stylers": [
-      {"saturation": -100},
-      {"lightness": -30}
-    ]
-  },
-  {
-    "elementType": "labels",
-    "stylers": [{"visibility": "simplified"}]
   }
 ]
 """

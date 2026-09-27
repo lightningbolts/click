@@ -184,7 +184,7 @@ Hubs may host events; beacon `venue_id` in QR can tie to hub coordinates.
 ### Global search
 `GlobalSearchViewModel` includes beacon matches with distance sorting.
 
-### Core connections / Collaboration / Ghost mode / Block & report
+### Core connections / Collaboration / Block & report
 Unrelated to event module.
 
 ### Profile & interests / Onboarding / Auth

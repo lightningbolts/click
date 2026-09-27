@@ -46,6 +46,7 @@ import compose.project.click.click.ui.chat.typingLabel
 import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeftPeek // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberEdgeToEdgeBottomPadding // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberGlassToastState // pragma: allowlist secret
+import compose.project.click.click.ui.components.rememberIdentityNames // pragma: allowlist secret
 import compose.project.click.click.ui.theme.* // pragma: allowlist secret
 import compose.project.click.click.util.AvailabilityOverlapCache // pragma: allowlist secret
 import compose.project.click.click.util.ViewerAvailabilityBubblesCache // pragma: allowlist secret
@@ -438,15 +439,16 @@ fun ChatView(
                         chatHasIntentOverlap = result
                     }
                     val typingUserIds by viewModel.typingUserIds.collectAsState()
+                    val typingIdentities = rememberIdentityNames(if (isGroupChat) typingUserIds else emptyList())
                     val typingPeerLabel =
-                        remember(chatDetails.otherUser.name, isGroupChat, typingUserIds, chatDetails.groupMemberUsers) {
+                        remember(chatDetails.otherUser.name, isGroupChat, typingUserIds, chatDetails.groupMemberUsers, typingIdentities) {
                             if (isGroupChat) {
                                 val names =
                                     typingUserIds.map { id ->
-                                        chatDetails.groupMemberUsers
-                                            .firstOrNull { it.id == id }
-                                            ?.name
-                                            ?.substringBefore(' ')
+                                        (
+                                            chatDetails.groupMemberUsers.firstOrNull { it.id == id }?.name
+                                                ?: typingIdentities[id]?.name
+                                        )?.substringBefore(' ')
                                             ?.ifBlank { null } ?: "Someone"
                                     }
                                 typingLabel(names) ?: "Someone is typing"

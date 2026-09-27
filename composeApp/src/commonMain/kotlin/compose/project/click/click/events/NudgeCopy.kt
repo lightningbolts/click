@@ -5,28 +5,6 @@ data class NudgeCopy(
     val body: String,
 )
 
-fun teaserHeadline(
-    count: Int,
-    label: String,
-    sharedTag: String? = null,
-): String {
-    val n = count.coerceAtLeast(1)
-    val people = if (n == 1) "person" else "people"
-    val verb = if (n == 1) "is" else "are"
-    return when (label) {
-        "interest" -> {
-            val tag = sharedTag?.trim()?.takeIf { it.isNotEmpty() }
-            if (tag != null) {
-                "$n $people going who share your interest in $tag"
-            } else {
-                "$n $people going who share an interest"
-            }
-        }
-        "org" -> "$n $people going from a group you are in"
-        else -> "$n $people you know $verb going"
-    }
-}
-
 fun reconnectNudgeCopy(
     peerFirstName: String,
     daysSinceEncounter: Int,

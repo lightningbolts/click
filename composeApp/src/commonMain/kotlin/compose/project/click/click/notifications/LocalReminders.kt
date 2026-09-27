@@ -34,6 +34,9 @@ expect object LocalReminderScheduler {
     fun schedule(reminder: LocalReminder): Boolean
 
     fun cancel(id: String)
+
+    /** Cancels every reminder whose id starts with `"$group."` (e.g. all `event.*` on sign-out). */
+    fun cancelGroup(group: String)
 }
 
 /** Timing rules for plan reminders, shared with iOS `PlanReminders.update`. */

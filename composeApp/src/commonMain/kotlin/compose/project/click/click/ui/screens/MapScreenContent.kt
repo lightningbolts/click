@@ -50,7 +50,6 @@ internal fun MapContent(
     renderData: MapRenderData,
     communityHubs: List<CommunityHubPin>,
     zoom: Double,
-    ghostMode: Boolean,
     mapGesturesEnabled: Boolean = true,
     showCompass: Boolean = true,
     cameraTarget: compose.project.click.click.viewmodel.CameraTarget?, // pragma: allowlist secret
@@ -117,7 +116,6 @@ internal fun MapContent(
         zoom = mapZoom,
         centerLat = mapCenterLat,
         centerLon = mapCenterLon,
-        ghostMode = ghostMode,
         mapGesturesEnabled = mapGesturesEnabled,
         showCompass = showCompass,
         onPinTapped = onPinTapped,

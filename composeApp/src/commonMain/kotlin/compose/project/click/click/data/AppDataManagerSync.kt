@@ -18,19 +18,17 @@ internal fun AppDataManager.startPresenceHeartbeat(userId: String) {
     presenceHeartbeatJob =
         scope.launch {
             while (_currentUser.value?.id == userId) {
-                if (!_ghostModeEnabled.value) {
-                    val now = Clock.System.now().toEpochMilliseconds()
-                    val jwt =
-                        compose.project.click.click.data.auth.EnsureFreshAccessToken.get( // pragma: allowlist secret
-                            tokenStorage = tokenStorage,
-                            authRepository = authRepository,
-                        )
-                    if (jwt.isNullOrBlank()) {
-                        println("AppDataManager: Skipping last_polled — no fresh JWT")
-                    } else {
-                        supabaseRepository.updateUserLastPolled(userId, now)
-                        _currentUser.value = _currentUser.value?.copy(lastPolled = now)
-                    }
+                val now = Clock.System.now().toEpochMilliseconds()
+                val jwt =
+                    compose.project.click.click.data.auth.EnsureFreshAccessToken.get( // pragma: allowlist secret
+                        tokenStorage = tokenStorage,
+                        authRepository = authRepository,
+                    )
+                if (jwt.isNullOrBlank()) {
+                    println("AppDataManager: Skipping last_polled — no fresh JWT")
+                } else {
+                    supabaseRepository.updateUserLastPolled(userId, now)
+                    _currentUser.value = _currentUser.value?.copy(lastPolled = now)
                 }
                 delay(PRESENCE_HEARTBEAT_MS)
             }

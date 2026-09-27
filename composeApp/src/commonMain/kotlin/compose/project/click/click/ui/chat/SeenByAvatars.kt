@@ -19,6 +19,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionListUserAvatarFace // pragma: allowlist secret
+import compose.project.click.click.ui.components.rememberIdentityNames // pragma: allowlist secret
 
 private const val SEEN_BY_MAX_FACES = 5
 
@@ -28,7 +29,8 @@ internal fun SeenByAvatars(
     readers: List<User>,
     alignEnd: Boolean,
 ) {
-    val names = readers.map { it.name?.substringBefore(' ')?.ifBlank { null } ?: "Someone" }
+    val identities = rememberIdentityNames(readers.filter { it.name.isNullOrBlank() }.map { it.id })
+    val names = readers.map { (it.name?.ifBlank { null } ?: identities[it.id]?.name)?.substringBefore(' ')?.ifBlank { null } ?: "Someone" }
     Row(
         modifier =
             Modifier

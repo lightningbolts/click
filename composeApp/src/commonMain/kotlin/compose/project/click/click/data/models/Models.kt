@@ -243,7 +243,6 @@ fun isResolvedDisplayName(value: String?): Boolean =
 
 /**
  * Location privacy preferences stored on the user's Supabase profile row.
- * Ghost mode (AppDataManager.ghostModeEnabled) overrides all when active.
  */
 @Serializable
 data class LocationPreferences(
@@ -479,6 +478,14 @@ data class Connection(
                 .thenBy { it.encounteredAt }
                 .thenBy { it.id },
         )
+
+    /** Map person callout (iOS `ClickMapView`): "Met at Blue Bottle", or "First met here" without a place. */
+    fun firstMetLabel(): String {
+        val place =
+            originEncounter?.locationName?.trim()?.takeIf { it.isNotEmpty() }
+                ?: originEncounter?.displayLocation?.trim()?.takeIf { it.isNotEmpty() }
+        return place?.let { "Met at $it" } ?: "First met here"
+    }
 
     /** Origin story (oldest crossing) for profile / first-meet copy. */
     fun originMemoryCapsule(): MemoryCapsule? = originEncounter?.toMemoryCapsule() ?: memoryCapsule

@@ -12,8 +12,6 @@ class FakeTokenStorage(
     private var activeHubsJson: String? = null
     private var pendingEncounterQueueJson: String? = null
 
-    private var homeLayoutMode: String? = null
-
     override suspend fun saveTokens(
         jwt: String,
         refreshToken: String,
@@ -41,23 +39,21 @@ class FakeTokenStorage(
 
     override suspend fun getTagsInitialized(): Boolean? = null
 
-    override suspend fun saveDarkModeEnabled(isDarkMode: Boolean) {}
+    override suspend fun saveDarkModeEnabled(isDarkMode: Boolean?) {}
 
     override suspend fun getDarkModeEnabled(): Boolean? = null
-
-    override suspend fun saveHomeLayoutMode(mode: String) {
-        homeLayoutMode = mode
-    }
-
-    override suspend fun getHomeLayoutMode(): String? = homeLayoutMode
 
     override suspend fun saveMessageNotificationsEnabled(enabled: Boolean) {}
 
     override suspend fun getMessageNotificationsEnabled(): Boolean? = null
 
-    override suspend fun saveCallNotificationsEnabled(enabled: Boolean) {}
+    override suspend fun saveCalendarDisconnected(disconnected: Boolean) {}
 
-    override suspend fun getCallNotificationsEnabled(): Boolean? = null
+    override suspend fun getCalendarDisconnected(): Boolean = false
+
+    override suspend fun saveTelemetryQueue(json: String?) {}
+
+    override suspend fun getTelemetryQueue(): String? = null
 
     override suspend fun saveAmbientNoiseOptIn(enabled: Boolean) {}
 

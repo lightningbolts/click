@@ -46,6 +46,19 @@ object ChatDeepLinkManager {
         _pendingConnectionId.value = connectionId
     }
 
+    private var pendingTargetMessageId: String? = null
+
+    /** Message to scroll to once the pending chat opens (`click://chat/{id}?m=`). */
+    fun setPendingTargetMessage(messageId: String) {
+        pendingTargetMessageId = messageId.trim().takeIf { it.isNotEmpty() }
+    }
+
+    fun consumeTargetMessage(): String? {
+        val value = pendingTargetMessageId
+        pendingTargetMessageId = null
+        return value
+    }
+
     fun consume(): String? {
         val value = _pendingConnectionId.value
         _pendingConnectionId.value = null
