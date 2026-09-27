@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -32,6 +33,7 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.unit.IntOffset
 import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.data.AppDataManager
+import compose.project.click.click.notifications.ChatDeepLinkManager
 import compose.project.click.click.notifications.ChatNotificationDismisser
 import compose.project.click.click.ui.chat.ConnectionMemberPickerSheet
 import compose.project.click.click.ui.chat.ConnectionSheetDialog
@@ -92,6 +94,11 @@ fun ConnectionsScreen(
     val screenScope = rememberCoroutineScope()
     var closeCleanupJob by remember { mutableStateOf<Job?>(null) }
     var profileUserId by remember { mutableStateOf<String?>(null) }
+    val deepLinkProfileUserId by ChatDeepLinkManager.pendingProfileUserId.collectAsState()
+    LaunchedEffect(deepLinkProfileUserId) {
+        if (deepLinkProfileUserId.isNullOrBlank()) return@LaunchedEffect
+        profileUserId = ChatDeepLinkManager.consumeProfile()
+    }
     var groupMembersPickerContext by remember { mutableStateOf<GroupMembersPickerContext?>(null) }
     var showGroupMembersSheet by remember { mutableStateOf(false) }
     var showGroupAddMemberPicker by remember { mutableStateOf(false) }

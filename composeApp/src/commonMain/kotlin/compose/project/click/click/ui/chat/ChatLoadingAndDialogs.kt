@@ -2,8 +2,6 @@
 
 package compose.project.click.click.ui.chat // pragma: allowlist secret
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -11,36 +9,22 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.wrapContentHeight
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.DialogProperties
-import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
 import compose.project.click.click.data.models.ChatWithDetails // pragma: allowlist secret
-import compose.project.click.click.data.models.isActiveForUser // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickLogoPulse
-import compose.project.click.click.ui.components.GlassAlertDialog // pragma: allowlist secret
-import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.platformNativeHeaderClearance
-import compose.project.click.click.viewmodel.ChatListState // pragma: allowlist secret
 
 /**
  * Chat-screen loading states and the cross-chat forward dialog.
@@ -167,75 +151,4 @@ internal fun ChatChannelLoadingView(
             ClickLogoPulse(logoSize = 72.dp)
         }
     }
-}
-
-/**
- * Alert dialog offering a list of other chats to forward a message to.
- * Active chats only, most-recent-first, with graceful empty/loading/
- * error states.
- */
-@Composable
-internal fun ForwardDialog(
-    chatListState: ChatListState,
-    currentChatId: String,
-    archivedConnectionIds: Set<String>,
-    hiddenConnectionIds: Set<String>,
-    onSelect: (String) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    GlassAlertDialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false),
-        title = { Text("Forward to...") },
-        text = {
-            Box(
-                modifier =
-                    Modifier
-                        .fillMaxWidth(0.9f)
-                        .wrapContentHeight(),
-            ) {
-                when (chatListState) {
-                    is ChatListState.Success -> {
-                        val options =
-                            chatListState.chats
-                                .filter {
-                                    it.connection.id != currentChatId &&
-                                        it.connection.isActiveForUser(archivedConnectionIds, hiddenConnectionIds)
-                                }.sortedByDescending { connectionListActivityTs(it) }
-                        if (options.isEmpty()) {
-                            Text("No other chats available")
-                        } else {
-                            LazyColumn(modifier = Modifier.heightIn(max = 280.dp)) {
-                                items(options, key = { it.connection.id }) { item ->
-                                    ListItem(
-                                        headlineContent = { Text(item.otherUser.name ?: "Unknown") },
-                                        supportingContent = { Text(item.otherUser.email ?: "") },
-                                        modifier =
-                                            Modifier
-                                                .fillMaxWidth()
-                                                .padding(vertical = 4.dp)
-                                                .clip(RoundedCornerShape(8.dp))
-                                                .background(GlassSheetTokens.GlassSurface())
-                                                .padding(8.dp)
-                                                .clickable {
-                                                    onSelect(item.connection.id)
-                                                },
-                                    )
-                                }
-                            }
-                        }
-                    }
-                    is ChatListState.Loading -> {
-                        AdaptiveCircularProgressIndicator()
-                    }
-                    is ChatListState.Error -> {
-                        Text("Failed to load chats")
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Close") }
-        },
-    )
 }

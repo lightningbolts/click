@@ -612,11 +612,6 @@ class ChatViewModel(
         reactionType: String,
     ) = removeReactionImpl(messageId = messageId, reactionType = reactionType)
 
-    fun forwardMessage(
-        messageId: String,
-        targetChatId: String,
-    ) = forwardMessageImpl(messageId = messageId, targetChatId = targetChatId)
-
     fun sendBeaconMessage(beacon: compose.project.click.click.data.models.MapBeacon) = sendBeaconMessageImpl(beacon = beacon)
 
     fun sendBeaconMessageToChat(

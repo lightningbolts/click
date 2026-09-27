@@ -13,7 +13,6 @@ import compose.project.click.click.data.models.Message // pragma: allowlist secr
 import compose.project.click.click.data.models.MessageDeliveryState // pragma: allowlist secret
 import compose.project.click.click.data.models.MessageWithUser // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
-import compose.project.click.click.data.models.replySnippetForMessage // pragma: allowlist secret
 import compose.project.click.click.util.isOfflineNetworkFailure
 import compose.project.click.click.util.isPersistedApiChatId
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
@@ -132,7 +131,6 @@ internal fun ChatViewModel.sendMessageImpl() {
         if (replyTargetCaptured != null) {
             buildJsonObject {
                 put("reply_to_id", replyTargetCaptured.message.id)
-                put("reply_to_content", replySnippetForMessage(replyTargetCaptured.message))
             }
         } else {
             null
@@ -427,7 +425,6 @@ internal fun ChatViewModel.commitStagedMediaToUploadImpl() {
                                         put("original_mime_type", item.mimeType)
                                         put("is_encrypted_media", true)
                                         put("reply_to_id", replyTarget.message.id)
-                                        put("reply_to_content", replySnippetForMessage(replyTarget.message))
                                     }
                                 }
                                 else -> {

@@ -16,7 +16,6 @@ import compose.project.click.click.data.models.ChatMessageType // pragma: allowl
 import compose.project.click.click.data.models.Message // pragma: allowlist secret
 import compose.project.click.click.data.models.MessageDeliveryState // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
-import compose.project.click.click.data.models.replySnippetForMessage // pragma: allowlist secret
 import compose.project.click.click.data.repository.ChatRepository // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatAttachmentDownloadOutcome // pragma: allowlist secret
 import compose.project.click.click.ui.chat.saveDecryptedAttachmentToDownloads // pragma: allowlist secret
@@ -180,7 +179,6 @@ internal fun ChatViewModel.sendChatAudioImpl(
                         if (durationSeconds != null) put("duration_seconds", durationSeconds)
                         if (replyTarget != null) {
                             put("reply_to_id", replyTarget.message.id)
-                            put("reply_to_content", replySnippetForMessage(replyTarget.message))
                         }
                     }
                 val currentUser =
@@ -229,7 +227,6 @@ internal fun ChatViewModel.sendChatAudioImpl(
                             put("is_encrypted_media", true)
                             if (durationSeconds != null) put("duration_seconds", durationSeconds)
                             put("reply_to_id", replyTarget.message.id)
-                            put("reply_to_content", replySnippetForMessage(replyTarget.message))
                         }
                     } else {
                         buildJsonObject {
@@ -328,7 +325,6 @@ internal fun ChatViewModel.sendChatFileImpl(
                                 put("attachment_size", bytes.size.toLong())
                                 if (replyTarget != null) {
                                     put("reply_to_id", replyTarget.message.id)
-                                    put("reply_to_content", replySnippetForMessage(replyTarget.message))
                                 }
                             },
                         localSentAt = localMs,
@@ -370,7 +366,6 @@ internal fun ChatViewModel.sendChatFileImpl(
                         put("attachment_size", uploaded.sizeBytes)
                         if (replyTarget != null) {
                             put("reply_to_id", replyTarget.message.id)
-                            put("reply_to_content", replySnippetForMessage(replyTarget.message))
                         }
                     }
 

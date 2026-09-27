@@ -722,6 +722,24 @@ class ApiClient {
 
     suspend fun markInboxNudgeActed(nudgeId: String): Result<Unit> = postInboxNudgeActionImpl(nudgeId, "acted")
 
+    suspend fun getPendingHangouts(): Result<List<PendingHangoutDto>> = getPendingHangoutsImpl()
+
+    /** Fails with [HangoutPendingExistsException] when the pair already has an open request. */
+    suspend fun logHangout(body: LogHangoutBody): Result<PendingHangoutDto> = logHangoutImpl(body)
+
+    suspend fun confirmHangout(hangoutId: String): Result<HangoutConfirmResponseDto> = confirmHangoutImpl(hangoutId)
+
+    suspend fun declineHangout(hangoutId: String): Result<Unit> = declineHangoutImpl(hangoutId)
+
+    suspend fun wave(connectionId: String): Result<WaveResponseDto> = waveImpl(connectionId)
+
+    suspend fun reportPresence(
+        lat: Double,
+        lon: Double,
+    ): Result<PresencePingResponseDto> = reportPresenceImpl(lat, lon)
+
+    suspend fun clearPresence(): Result<Unit> = clearPresenceImpl()
+
     fun close() {
         if (clickWebClientLazy.isInitialized()) clickWebClientLazy.value.close()
         if (clickWebPlainClientLazy.isInitialized()) clickWebPlainClientLazy.value.close()

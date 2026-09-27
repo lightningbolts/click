@@ -1096,16 +1096,6 @@ class ChatApiClient(
         authToken: String,
     ): Result<Boolean> = Result.failure(Exception("updateMessageStatus is no longer served; use markMessagesDelivered / markChatAsRead"))
 
-    /**
-     * Forward a message — not yet implemented on click-web; do not call a dead Flask host.
-     */
-    suspend fun forwardMessage(
-        messageId: String,
-        targetChatId: String,
-        userId: String,
-        authToken: String,
-    ): Result<Message> = Result.failure(Exception("forwardMessage is not available on click-web yet"))
-
     suspend fun searchConversations(
         query: String,
         authToken: String,

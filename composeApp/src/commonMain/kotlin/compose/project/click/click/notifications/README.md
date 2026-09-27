@@ -39,7 +39,7 @@ Endpoint: `POST {SUPABASE_URL}/functions/v1/send-push-notification`
     "chat_id": "...",
     "message_id": "...",
     "sender_user_id": "...",
-    "message_preview": "optional plaintext preview"
+    "message_type": "text | image | audio | file | beacon"
   }
 }
 ```

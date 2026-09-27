@@ -261,12 +261,6 @@ class FakeChatRepository(
         status: String,
     ): Boolean = false
 
-    override suspend fun forwardMessage(
-        messageId: String,
-        targetChatId: String,
-        userId: String,
-    ): Message? = null
-
     override suspend fun searchMessages(
         chatId: String,
         query: String,

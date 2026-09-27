@@ -25,6 +25,8 @@ import compose.project.click.click.ui.chat.ConnectionSheetDialogs // pragma: all
 import compose.project.click.click.ui.chat.MessageActionCapabilities // pragma: allowlist secret
 import compose.project.click.click.ui.chat.MessageActionHandlers // pragma: allowlist secret
 import compose.project.click.click.ui.chat.MessageActionSheet // pragma: allowlist secret
+import compose.project.click.click.ui.chat.canEditMessage // pragma: allowlist secret
+import compose.project.click.click.ui.chat.canExportMessageMedia // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickOutlinedTextField // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassToastHost // pragma: allowlist secret
@@ -160,7 +162,9 @@ internal fun BoxScope.ChatViewOverlays(
             capabilities =
                 MessageActionCapabilities(
                     canReply = selectedMessage.message.messageType.lowercase() != "call_log",
-                    canEdit = selectedMessage.isSent,
+                    canSaveMedia = canExportMessageMedia(selectedMessage.message),
+                    canShareMedia = canExportMessageMedia(selectedMessage.message),
+                    canEdit = canEditMessage(selectedMessage),
                     canDelete = selectedMessage.isSent,
                 ),
             handlers =

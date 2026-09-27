@@ -49,6 +49,8 @@ import compose.project.click.click.data.models.Message // pragma: allowlist secr
 import compose.project.click.click.data.models.MessageWithUser // pragma: allowlist secret
 import compose.project.click.click.data.models.copyableText // pragma: allowlist secret
 import compose.project.click.click.data.models.hubMediaPathOrNull // pragma: allowlist secret
+import compose.project.click.click.data.models.isBeaconChatMessage // pragma: allowlist secret
+import compose.project.click.click.data.models.isDisposableRollLocked // pragma: allowlist secret
 import compose.project.click.click.data.models.isEncryptedMedia // pragma: allowlist secret
 import compose.project.click.click.data.models.mediaUrlOrNull // pragma: allowlist secret
 import compose.project.click.click.data.models.originalMimeTypeOrNull // pragma: allowlist secret
@@ -69,6 +71,16 @@ internal data class MessageActionCapabilities(
     val canEdit: Boolean = false,
     val canDelete: Boolean = false,
 )
+
+/** Edit is offered only for your own plain-text messages (not media, beacons, call logs). */
+internal fun canEditMessage(messageWithUser: MessageWithUser): Boolean {
+    val message = messageWithUser.message
+    val type = message.messageType.ifBlank { ChatMessageType.TEXT }.lowercase()
+    return messageWithUser.isSent && type == ChatMessageType.TEXT && !message.isBeaconChatMessage()
+}
+
+/** A Click Drop stays unsaveable and unshareable until its collaboration window ends. */
+internal fun canExportMessageMedia(message: Message): Boolean = !message.isDisposableRollLocked()
 
 internal class MessageActionHandlers(
     val onReply: (MessageWithUser) -> Unit = {},

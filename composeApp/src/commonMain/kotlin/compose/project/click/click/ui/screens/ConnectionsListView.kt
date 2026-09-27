@@ -36,14 +36,16 @@ import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
 import compose.project.click.click.data.ActiveHubEntry // pragma: allowlist secret
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.api.ApiClient // pragma: allowlist secret
-import compose.project.click.click.data.api.InboxNudgeDto // pragma: allowlist secret
 import compose.project.click.click.data.models.ChatWithDetails // pragma: allowlist secret
+import compose.project.click.click.data.models.InboxNudge // pragma: allowlist secret
+import compose.project.click.click.data.models.NudgeAction // pragma: allowlist secret
 import compose.project.click.click.data.models.ProfileAvailabilityIntentBubble // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.models.collapseOneToOneChatsByPeer // pragma: allowlist secret
 import compose.project.click.click.data.models.isActiveForUser // pragma: allowlist secret
 import compose.project.click.click.data.models.isArchivedChannelForUser // pragma: allowlist secret
 import compose.project.click.click.data.models.previewLabel // pragma: allowlist secret
+import compose.project.click.click.data.models.typed // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
 import compose.project.click.click.deeplink.EventDeepLinkRouter // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ConnectionActionSheet // pragma: allowlist secret
@@ -148,7 +150,7 @@ fun ConnectionsListView(
     var selectedCliqueFriendIds by remember { mutableStateOf(setOf<String>()) }
     val listScope = rememberCoroutineScope()
     val inboxNudgeApi = remember { ApiClient() }
-    var inboxNudges by remember { mutableStateOf<List<InboxNudgeDto>>(emptyList()) }
+    var inboxNudges by remember { mutableStateOf<List<InboxNudge>>(emptyList()) }
     var proximityCliqueHintUsers by remember { mutableStateOf<List<User>>(emptyList()) }
     var cliqueProximityAutofillLoading by remember { mutableStateOf(false) }
 
@@ -269,6 +271,7 @@ fun ConnectionsListView(
                 .getOrNull()
                 ?.nudges
                 .orEmpty()
+                .mapNotNull { it.typed() }
                 .take(2)
     }
 
@@ -641,25 +644,77 @@ fun ConnectionsListView(
                                 InboxNudgeBanner(
                                     nudge = nudge,
                                     onOpen = {
-                                        listScope.launch { inboxNudgeApi.markInboxNudgeActed(nudge.id) }
+                                        val action = nudge.primaryAction()
+                                        if (action == null) {
+                                            // Payload can't drive its action; drop it locally, never mark acted.
+                                            inboxNudges = inboxNudges.filterNot { it.id == nudge.id }
+                                            return@InboxNudgeBanner
+                                        }
                                         inboxNudges = inboxNudges.filterNot { it.id == nudge.id }
-                                        val eventId = nudge.beaconId?.trim().orEmpty()
-                                        if (nudge.nudgeType == "shared_upcoming_event" && eventId.isNotEmpty()) {
-                                            EventDeepLinkRouter.setPendingBeaconId(eventId)
-                                        } else {
-                                            val connectionId = nudge.connectionId?.trim().orEmpty()
-                                            val chatId =
-                                                displayedChats
-                                                    .firstOrNull { it.connection.id == connectionId }
-                                                    ?.chat
-                                                    ?.id
-                                                    ?: connectionId
-                                            if (chatId.isNotBlank()) onChatSelected(chatId)
+                                        // Confirm resolves server-side; a wave is marked acted only once it lands.
+                                        if (action !is NudgeAction.ConfirmHangout && action !is NudgeAction.WaveBack) {
+                                            listScope.launch { inboxNudgeApi.markInboxNudgeActed(nudge.id) }
+                                        }
+                                        when (action) {
+                                            is NudgeAction.OpenEvent -> EventDeepLinkRouter.setPendingBeaconId(action.beaconId)
+                                            is NudgeAction.OpenChat -> {
+                                                val chatId =
+                                                    displayedChats
+                                                        .firstOrNull { it.connection.id == action.connectionId }
+                                                        ?.chat
+                                                        ?.id
+                                                        ?: action.connectionId
+                                                onChatSelected(chatId)
+                                            }
+                                            is NudgeAction.OpenGroupChat -> onChatSelected(action.chatId)
+                                            is NudgeAction.OpenProfile -> onUserProfileClick(action.userId)
+                                            is NudgeAction.ConfirmHangout ->
+                                                listScope.launch {
+                                                    val result = inboxNudgeApi.confirmHangout(action.confirmationId)
+                                                    val message =
+                                                        result.fold(
+                                                            onSuccess = {
+                                                                when {
+                                                                    it.alreadyLogged -> "Already logged. You two are on the map."
+                                                                    it.status == "confirmed" -> "Hangout confirmed"
+                                                                    else -> "Confirmed. Waiting on them."
+                                                                }
+                                                            },
+                                                            onFailure = { "Couldn't confirm that hangout" },
+                                                        )
+                                                    if (result.isFailure) inboxNudges = listOf(nudge) + inboxNudges
+                                                    toastState.show(listScope, message)
+                                                }
+                                            is NudgeAction.WaveBack ->
+                                                listScope.launch {
+                                                    val result = inboxNudgeApi.wave(action.connectionId)
+                                                    if (result.isSuccess) {
+                                                        inboxNudgeApi.markInboxNudgeActed(nudge.id)
+                                                    } else {
+                                                        inboxNudges = listOf(nudge) + inboxNudges
+                                                    }
+                                                    val message =
+                                                        result.fold(
+                                                            onSuccess = {
+                                                                if (it.alreadyWavedToday) "You already waved today" else "Waved back 👋"
+                                                            },
+                                                            onFailure = { "Couldn't wave right now" },
+                                                        )
+                                                    toastState.show(listScope, message)
+                                                }
                                         }
                                     },
                                     onDismiss = {
-                                        listScope.launch { inboxNudgeApi.dismissInboxNudge(nudge.id) }
                                         inboxNudges = inboxNudges.filterNot { it.id == nudge.id }
+                                        val hangoutId = nudge.confirmationId
+                                        listScope.launch {
+                                            if (nudge.resolvedByHangoutEndpoints && hangoutId != null) {
+                                                // "Not us": declining resolves the nudge server-side.
+                                                inboxNudgeApi.declineHangout(hangoutId)
+                                            } else {
+                                                inboxNudgeApi.dismissInboxNudge(nudge.id)
+                                            }
+                                        }
                                     },
                                     modifier = Modifier.padding(bottom = 4.dp),
                                 )

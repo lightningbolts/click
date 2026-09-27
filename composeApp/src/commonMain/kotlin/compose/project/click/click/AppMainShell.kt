@@ -308,6 +308,13 @@ internal fun AppMainShell(
         navigateTo(NavigationItem.Connections.route)
     }
 
+    // Profile deep links open on the Clicks tab, where ConnectionsScreen owns the profile sheet.
+    val deepLinkProfileUserId by ChatDeepLinkManager.pendingProfileUserId.collectAsState()
+    LaunchedEffect(deepLinkProfileUserId, currentUser.id) {
+        if (deepLinkProfileUserId.isNullOrBlank() || currentUser.id.isBlank()) return@LaunchedEffect
+        navigateTo(NavigationItem.Connections.route)
+    }
+
     val pendingCommunityHubId by ChatDeepLinkManager.pendingCommunityHubId.collectAsState()
 
     val pendingConnectionUserId by ConnectionDeepLinkRouter.pendingConnectionUserId.collectAsState()

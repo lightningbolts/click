@@ -25,6 +25,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.EventAvailable
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Height
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Shield
@@ -61,6 +62,7 @@ import compose.project.click.click.data.repository.SupabaseRepository // pragma:
 import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
 import compose.project.click.click.platformForegroundTickFlow // pragma: allowlist secret
 import compose.project.click.click.sensors.rememberAmbientNoiseMonitor // pragma: allowlist secret
+import compose.project.click.click.sensors.rememberBarometricHeightMonitor // pragma: allowlist secret
 import compose.project.click.click.ui.chat.rememberChatMediaPickers // pragma: allowlist secret
 import compose.project.click.click.ui.components.AdaptiveBackground // pragma: allowlist secret
 import compose.project.click.click.ui.components.AppScreenScaffold // pragma: allowlist secret
@@ -138,6 +140,7 @@ fun SettingsScreen(
 
     val tokenStorage = remember { createTokenStorage() }
     val ambientNoiseMonitor = rememberAmbientNoiseMonitor()
+    val barometricHeightMonitor = rememberBarometricHeightMonitor()
     val locationService = remember { LocationService() }
     val requestMicrophonePermissionThen = rememberMicrophonePermissionRequester()
     val requestLocationPermissionThen = rememberLocationPermissionRequester()
@@ -181,6 +184,7 @@ fun SettingsScreen(
     val foregroundSyncTick by platformForegroundTickFlow().collectAsState()
 
     var ambientNoiseOptIn by remember { mutableStateOf(false) }
+    var barometricContextOptIn by remember { mutableStateOf(false) }
     var micPermissionBump by remember { mutableIntStateOf(0) }
     var locationPermissionBump by remember { mutableIntStateOf(0) }
     var microphoneGranted by remember { mutableStateOf(ambientNoiseMonitor.hasPermission) }
@@ -207,6 +211,7 @@ fun SettingsScreen(
 
     LaunchedEffect(Unit) {
         ambientNoiseOptIn = tokenStorage.getAmbientNoiseOptIn() ?: false
+        barometricContextOptIn = tokenStorage.getBarometricContextOptIn() ?: false
     }
 
     LaunchedEffect(currentUser?.id) {
@@ -511,8 +516,8 @@ fun SettingsScreen(
                                         SettingsDivider()
                                         SettingsToggleRow(
                                             icon = Icons.Default.Notifications,
-                                            title = "Reconnect nudges",
-                                            subtitle = "When you and someone you Clicked haven't talked in a while, or you're both going to the same event.",
+                                            title = "Relationship moments",
+                                            subtitle = "Anniversaries, memories, quiet groups, reconnecting and shared events.",
                                             checked = notificationPreferences.reconnectNudgePushEnabled,
                                             onCheckedChange = { AppDataManager.setReconnectNudgeNotificationsEnabled(it) },
                                         )
@@ -532,36 +537,62 @@ fun SettingsScreen(
                                             checked = notificationPreferences.hubMessagePushEnabled,
                                             onCheckedChange = { AppDataManager.setHubMessageNotificationsEnabled(it) },
                                         )
-                                        SettingsDivider()
-                                        SettingsToggleRow(
-                                            icon = Icons.Default.Mic,
-                                            title = "Ambient sound enrichment",
-                                            subtitle = "Short mic sample at connect time for a noise category only. No recordings stored.",
-                                            checked = ambientNoiseOptIn,
-                                            onCheckedChange = { enabled ->
-                                                settingsScope.launch {
-                                                    ambientNoiseOptIn = enabled
-                                                    tokenStorage.saveAmbientNoiseOptIn(enabled)
-                                                    if (enabled && !ambientNoiseMonitor.hasPermission) {
-                                                        requestMicrophonePermissionThen { micPermissionBump++ }
-                                                    }
-                                                }
-                                            },
-                                        )
-                                        if (ambientNoiseOptIn && !microphoneGranted) {
-                                            Text(
-                                                text = "Microphone access is off — enable it in system settings to use ambient enrichment.",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.error,
-                                                modifier = Modifier.padding(start = 36.dp, top = 4.dp, end = 4.dp),
-                                            )
-                                        }
                                     }
                             }
                         }
                     }
 
                     SettingsPage.Privacy -> {
+                        item {
+                            // Encounter context (iOS Privacy -> Encounter context): optional sensor labels on new encounters.
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                SettingsSectionHeader("Encounter context")
+                                Column(modifier = Modifier.fillMaxWidth()) {
+                                    SettingsToggleRow(
+                                        icon = Icons.Default.Mic,
+                                        title = "Ambient sound",
+                                        subtitle = "Adds a noise-level label to new encounters. Nothing is recorded or stored.",
+                                        checked = ambientNoiseOptIn,
+                                        onCheckedChange = { enabled ->
+                                            settingsScope.launch {
+                                                ambientNoiseOptIn = enabled
+                                                tokenStorage.saveAmbientNoiseOptIn(enabled)
+                                                if (enabled && !ambientNoiseMonitor.hasPermission) {
+                                                    requestMicrophonePermissionThen { micPermissionBump++ }
+                                                }
+                                            }
+                                        },
+                                    )
+                                    if (ambientNoiseOptIn && !microphoneGranted) {
+                                        Text(
+                                            text = "Microphone access is off — enable it in system settings to use ambient sound.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.error,
+                                            modifier = Modifier.padding(start = 36.dp, top = 4.dp, end = 4.dp),
+                                        )
+                                    }
+                                    SettingsDivider()
+                                    SettingsToggleRow(
+                                        icon = Icons.Default.Height,
+                                        title = "Barometric context",
+                                        subtitle =
+                                            if (barometricHeightMonitor.isAvailable) {
+                                                "Adds an elevation label to new encounters using this phone's barometer."
+                                            } else {
+                                                "This phone has no barometer, so no elevation label is added."
+                                            },
+                                        checked = barometricContextOptIn && barometricHeightMonitor.isAvailable,
+                                        onCheckedChange = { enabled ->
+                                            if (!barometricHeightMonitor.isAvailable) return@SettingsToggleRow
+                                            settingsScope.launch {
+                                                barometricContextOptIn = enabled
+                                                tokenStorage.saveBarometricContextOptIn(enabled)
+                                            }
+                                        },
+                                    )
+                                }
+                            }
+                        }
                         item {
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 SettingsSectionHeader("Privacy & data")

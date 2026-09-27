@@ -3,9 +3,9 @@ package compose.project.click.click.ui.chat
 import compose.project.click.click.data.models.ChatWithDetails
 import compose.project.click.click.data.models.Connection
 
-/**
+/*
  * Tiny pure helpers used across the connection-list UI (ConnectionItem,
- * ConnectionsListView, ForwardDialog). Extracted from ConnectionsScreen.kt
+ * ConnectionsListView). Extracted from ConnectionsScreen.kt
  * for clarity and independent testability; no behavior change.
  */
 

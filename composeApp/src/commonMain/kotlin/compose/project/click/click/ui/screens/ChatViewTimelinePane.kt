@@ -116,7 +116,6 @@ internal fun ColumnScope.ChatViewTimelinePane(
     onOpenDisposableRollForChat: ((chatId: String) -> Unit)?,
     shareableBeacons: List<compose.project.click.click.data.models.MapBeacon>,
     mapViewModel: compose.project.click.click.viewmodel.MapViewModel?,
-    forwardMessageIdState: MutableState<String?>,
     contextMenuMessageState: MutableState<MessageWithUser?>,
     expandedPhotoTargetState: MutableState<MessageWithUser?>,
     openBeaconDetailIdState: MutableState<String?>,
@@ -128,7 +127,6 @@ internal fun ColumnScope.ChatViewTimelinePane(
     var focusedSearchMessageId by focusedSearchMessageIdState
     var icebreakerPanelHeightPx by icebreakerPanelHeightPxState
     var tetherSenderAck by tetherSenderAckState
-    var forwardMessageId by forwardMessageIdState
     var contextMenuMessage by contextMenuMessageState
     var expandedPhotoTarget by expandedPhotoTargetState
     var openBeaconDetailId by openBeaconDetailIdState
@@ -397,7 +395,6 @@ internal fun ColumnScope.ChatViewTimelinePane(
                                 onToggleReaction = { messageId, reaction ->
                                     viewModel.toggleReaction(messageId, reaction)
                                 },
-                                onForward = { msgId -> forwardMessageId = msgId },
                                 onLongPress = { contextMenuMessage = it },
                                 onSwipeReply = { viewModel.startReplyTo(it) },
                                 onPeerAvatarClick = onOpenUserProfile,

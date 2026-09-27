@@ -21,7 +21,6 @@ import compose.project.click.click.data.models.hasLocalMediaUri // pragma: allow
 import compose.project.click.click.data.models.hubMediaPathOrNull // pragma: allowlist secret
 import compose.project.click.click.data.models.isEncryptedMedia // pragma: allowlist secret
 import compose.project.click.click.data.models.mediaUrlOrNull // pragma: allowlist secret
-import compose.project.click.click.data.models.replySnippetForMetadata // pragma: allowlist secret
 import compose.project.click.click.data.realtime.subscribeWithTimeout // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.normalizeEncryptedMediaPayload // pragma: allowlist secret
@@ -381,7 +380,6 @@ class HubChatViewModel(
             replyTarget?.let { target ->
                 buildJsonObject {
                     put("reply_to_id", target.message.id)
-                    put("reply_to_content", replySnippetForMetadata(target.message.content))
                 }
             }
 
@@ -528,7 +526,6 @@ class HubChatViewModel(
                         buildJsonObject {
                             replyTarget?.let { target ->
                                 put("reply_to_id", target.message.id)
-                                put("reply_to_content", replySnippetForMetadata(target.message.content))
                             }
                             put("media_path", JsonPrimitive(path))
                             put("media_bucket", JsonPrimitive("hub-media"))
@@ -635,7 +632,6 @@ class HubChatViewModel(
                         buildJsonObject {
                             replyTarget?.let { target ->
                                 put("reply_to_id", target.message.id)
-                                put("reply_to_content", replySnippetForMetadata(target.message.content))
                             }
                             put("media_path", JsonPrimitive(path))
                             put("media_bucket", JsonPrimitive("hub-media"))

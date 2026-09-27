@@ -24,6 +24,24 @@ object ChatDeepLinkManager {
     private val _pendingEventHub = MutableStateFlow<PendingEventHub?>(null)
     val pendingEventHub: StateFlow<PendingEventHub?> = _pendingEventHub.asStateFlow()
 
+    private val _pendingProfileUserId = MutableStateFlow<String?>(null)
+
+    /** Peer profile to open (relationship-moment pushes: anniversary, memory prompt, hangout confirm). */
+    val pendingProfileUserId: StateFlow<String?> = _pendingProfileUserId.asStateFlow()
+
+    fun setPendingProfile(userId: String) {
+        val trimmed = userId.trim()
+        if (trimmed.isNotEmpty()) {
+            _pendingProfileUserId.value = trimmed
+        }
+    }
+
+    fun consumeProfile(): String? {
+        val value = _pendingProfileUserId.value
+        _pendingProfileUserId.value = null
+        return value
+    }
+
     fun setPendingChat(connectionId: String) {
         _pendingConnectionId.value = connectionId
     }
