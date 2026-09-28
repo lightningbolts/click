@@ -221,7 +221,8 @@ async function sendIosPush(
         title: requestBody.title,
         body: requestBody.body,
       },
-      sound: "default",
+      // Bundled in the iOS app (Resources/Sounds); iOS falls back to the default sound without it.
+      sound: "click.caf",
       // Lets the Notification Service Extension decrypt E2EE `encrypted_content` for the banner body.
       ...(category === "chat_message" ? { "mutable-content": 1 } : {}),
     },
