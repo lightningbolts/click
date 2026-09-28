@@ -22,6 +22,7 @@ import compose.project.click.click.events.EVENT_CHECK_IN_RADIUS_METADATA_KEY // 
 import compose.project.click.click.events.EVENT_VENUE_SCALE_METADATA_KEY // pragma: allowlist secret
 import compose.project.click.click.events.EventEditDraft // pragma: allowlist secret
 import compose.project.click.click.events.EventListingOptions // pragma: allowlist secret
+import compose.project.click.click.events.EventRecurrence // pragma: allowlist secret
 import compose.project.click.click.events.EventReminderCoordinator // pragma: allowlist secret
 import compose.project.click.click.events.EventReminders // pragma: allowlist secret
 import compose.project.click.click.events.EventSchedule // pragma: allowlist secret
@@ -451,6 +452,7 @@ internal fun MapViewModel.submitBeaconDropImpl(
     venueScale: EventVenueScale = EventVenueScale.DEFAULT,
     eventLocation: GeocodedPlace? = null,
     eventListingOptions: EventListingOptions? = null,
+    eventRecurrence: EventRecurrence? = null,
     imageBytes: ByteArray? = null,
     imageMime: String? = null,
     onAcceptedLocally: () -> Unit = {},
@@ -706,6 +708,7 @@ internal fun MapViewModel.submitBeaconDropImpl(
                     guestListVisibility = listingForInsert?.guestListVisibility?.apiValue,
                     coverThemeId = listingForInsert?.coverThemeId,
                     encounterId = squadSession?.encounterId,
+                    recurrence = eventRecurrence.takeIf { kind == MapBeaconKind.EVENT },
                 )
             val optimisticId = "optimistic:${Clock.System.now().toEpochMilliseconds()}:${Random.Default.nextInt()}"
             val optimisticBeacon =

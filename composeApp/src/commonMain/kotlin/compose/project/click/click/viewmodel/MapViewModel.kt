@@ -469,6 +469,7 @@ class MapViewModel : ViewModel() {
         venueScale: EventVenueScale = EventVenueScale.DEFAULT,
         eventLocation: GeocodedPlace? = null,
         eventListingOptions: EventListingOptions? = null,
+        eventRecurrence: compose.project.click.click.events.EventRecurrence? = null, // pragma: allowlist secret
         imageBytes: ByteArray? = null,
         imageMime: String? = null,
         onAcceptedLocally: () -> Unit = {},
@@ -487,6 +488,7 @@ class MapViewModel : ViewModel() {
         venueScale = venueScale,
         eventLocation = eventLocation,
         eventListingOptions = eventListingOptions,
+        eventRecurrence = eventRecurrence,
         imageBytes = imageBytes,
         imageMime = imageMime,
         onAcceptedLocally = onAcceptedLocally,

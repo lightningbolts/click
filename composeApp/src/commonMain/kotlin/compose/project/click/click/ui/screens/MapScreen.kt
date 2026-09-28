@@ -651,9 +651,10 @@ fun MapScreen(
 
     if (showBeaconDropSheet) {
         ClickFormBottomSheet(
+            // Swipe-down, back, and scrim taps keep the draft; it resets only once posted.
             onDismissRequest = {
                 showBeaconDropSheet = false
-                createBeaconViewModel.reset()
+                createBeaconViewModel.onSheetDismissed()
             },
             contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
             expandable = true,
@@ -709,6 +710,7 @@ fun MapScreen(
                     venueScale,
                     eventLocation,
                     eventListingOptions,
+                    eventRecurrence,
                     imageBytes,
                     imageMime,
                     onRejectedEarly,
@@ -726,6 +728,7 @@ fun MapScreen(
                         venueScale = venueScale,
                         eventLocation = eventLocation,
                         eventListingOptions = eventListingOptions,
+                        eventRecurrence = eventRecurrence,
                         imageBytes = imageBytes,
                         imageMime = imageMime,
                         onAcceptedLocally = {
@@ -738,7 +741,7 @@ fun MapScreen(
                 },
                 onCreateHub = {
                     showBeaconDropSheet = false
-                    createBeaconViewModel.reset()
+                    createBeaconViewModel.onSheetDismissed()
                     showCreateHubModal = true
                 },
             )

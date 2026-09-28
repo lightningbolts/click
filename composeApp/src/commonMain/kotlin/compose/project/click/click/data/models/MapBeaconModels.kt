@@ -200,6 +200,8 @@ data class MapBeaconInsert(
     @SerialName("cover_theme_id") val coverThemeId: String? = null,
     /** Active collaboration session — server applies Squad pin 2× radius/TTL when valid. */
     @SerialName("encounter_id") val encounterId: String? = null,
+    /** Events only: repeat as a series of separate events. */
+    val recurrence: compose.project.click.click.events.EventRecurrence? = null, // pragma: allowlist secret
 )
 
 /**

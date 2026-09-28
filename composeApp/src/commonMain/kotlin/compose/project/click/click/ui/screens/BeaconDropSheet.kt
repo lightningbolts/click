@@ -66,9 +66,11 @@ import compose.project.click.click.data.AppDataManager // pragma: allowlist secr
 import compose.project.click.click.data.models.BeaconVisibilityAudience // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
 import compose.project.click.click.events.EventListingOptions // pragma: allowlist secret
+import compose.project.click.click.events.EventRecurrence // pragma: allowlist secret
 import compose.project.click.click.events.EventVenueScale // pragma: allowlist secret
 import compose.project.click.click.events.EventVisibility // pragma: allowlist secret
 import compose.project.click.click.events.GuestListVisibility // pragma: allowlist secret
+import compose.project.click.click.events.eventRecurrenceValidationError // pragma: allowlist secret
 import compose.project.click.click.events.validateEventSchedule // pragma: allowlist secret
 import compose.project.click.click.ui.chat.rememberChatMediaPickers // pragma: allowlist secret
 import compose.project.click.click.ui.components.ActionChipButton // pragma: allowlist secret
@@ -176,6 +178,7 @@ fun BeaconDropSheetContent(
         venueScale: compose.project.click.click.events.EventVenueScale, // pragma: allowlist secret
         eventLocation: GeocodedPlace?,
         eventListingOptions: EventListingOptions?,
+        eventRecurrence: EventRecurrence?,
         imageBytes: ByteArray?,
         imageMime: String?,
         onRejectedEarly: () -> Unit,
@@ -376,6 +379,15 @@ fun BeaconDropSheetContent(
                             validationError = form.eventScheduleError,
                             uiState = schedulePickerUi,
                             includeDialogs = false,
+                        )
+                        EventRepeatPicker(
+                            frequency = form.repeatFrequency,
+                            occurrences = form.occurrences,
+                            onFrequency = {
+                                viewModel.setRepeatFrequency(it)
+                                viewModel.setSubmitValidationError(null)
+                            },
+                            onOccurrences = viewModel::setOccurrences,
                         )
                         EventCategoryPicker(
                             selected = form.eventCategories.toList(),
@@ -873,7 +885,12 @@ fun BeaconDropSheetContent(
                                 title = title,
                                 soundtrackUrl = url,
                                 hasEventLocation = form.selectedEventLocation != null,
-                            )
+                            ) ?: if (isEvent) {
+                                // The drop closes optimistically, so catch what the server would reject.
+                                eventRecurrenceValidationError(form.eventSchedule, form.repeatFrequency)
+                            } else {
+                                null
+                            }
                         if (fieldError != null) {
                             viewModel.setSubmitValidationError(fieldError)
                             viewModel.setSubmitting(false)
@@ -920,6 +937,7 @@ fun BeaconDropSheetContent(
                                     } else {
                                         null
                                     },
+                                    if (isEvent) form.eventRecurrence else null,
                                     form.stagedPhotoBytes,
                                     form.stagedPhotoMime,
                                 ) {
