@@ -35,17 +35,12 @@ interface PushTokenRow {
   token: string;
   platform: "android" | "ios";
   token_type?: "standard" | "voip";
-  device_id?: string | null;
   updated_at: number;
 }
 
 interface NotificationPreferenceRow {
   message_push_enabled: boolean;
-  event_reminder_push_enabled?: boolean;
-  event_teaser_push_enabled?: boolean;
-  reconnect_nudge_push_enabled?: boolean;
-  availability_match_push_enabled?: boolean;
-  hub_message_push_enabled?: boolean;
+  call_push_enabled: boolean;
 }
 
 interface UserProfileRow {
@@ -59,21 +54,13 @@ interface FcmServiceAccount {
   private_key: string;
 }
 
+/** Per-token failures. Device tokens are credentials: never in responses or logs. */
 type PushError = {
   platform: string;
-  code: "delivery_failed";
+  error: string;
 };
 
-type PushCategory =
-  | "chat_message"
-  | "archive_warning"
-  | "disposable_reveal"
-  | "event_reminder"
-  | "event_teaser"
-  | "reconnect_nudge"
-  | "shared_upcoming_event"
-  | "availability_match"
-  | "hub_message";
+type PushCategory = "chat_message" | "incoming_call" | "archive_warning" | "disposable_reveal";
 
 function normalizePrivateKey(value: string): string {
   return value.replace(/\\n/g, "\n");
@@ -158,9 +145,6 @@ async function sendAndroidPush(
     // Data-only: Android client decrypts when possible; preview_text is always safe to show if decrypt fails.
     delete data.title;
     delete data.body;
-  } else if (category === "archive_warning") {
-    if (requestBody.title && !data.title) data.title = requestBody.title;
-    if (requestBody.body && !data.body) data.body = requestBody.body;
   } else {
     if (requestBody.title && !data.title) data.title = requestBody.title;
     if (requestBody.body && !data.body) data.body = requestBody.body;
@@ -203,41 +187,63 @@ async function sendIosPush(
   }
 
   const tokenType = pushToken.token_type ?? "standard";
-  if (tokenType === "voip") {
-    return;
-  }
+  const isVoipToken = tokenType === "voip";
+  const isIncomingCall = category === "incoming_call";
+  // Apple VoIP pushes require push-type voip, topic <bundleId>.voip, and apns-expiration 0 (no delay).
+  const isVoipIncomingCall = isVoipToken && isIncomingCall;
 
   const headers: Record<string, string> = {
     authorization: `bearer ${apnsJwt}`,
     "content-type": "application/json",
     "apns-priority": "10",
-    "apns-topic": bundleId,
-    "apns-push-type": "alert",
   };
 
-  const body = {
-    aps: {
-      alert: {
-        title: requestBody.title,
-        body: requestBody.body,
-      },
-      // Bundled in the iOS app (Resources/Sounds); iOS falls back to the default sound without it.
-      sound: "click.caf",
-      // Lets the Notification Service Extension decrypt E2EE `encrypted_content` for the banner body.
-      ...(category === "chat_message" ? { "mutable-content": 1 } : {}),
-    },
-    ...(requestBody.data ?? {}),
-  };
+  if (isVoipIncomingCall) {
+    headers["apns-topic"] = `${bundleId}.voip`;
+    headers["apns-push-type"] = "voip";
+    headers["apns-expiration"] = "0";
+  } else {
+    headers["apns-topic"] = bundleId;
+    headers["apns-push-type"] = "alert";
+  }
 
-  const apnsRequestUrl = `${APNS_URL}/${pushToken.token}`;
+  const body = isVoipIncomingCall
+    ? {
+        aps: {
+          "content-available": 1,
+        },
+        ...(requestBody.data ?? {}),
+      }
+    : {
+        aps: {
+          alert: {
+            title: requestBody.title,
+            body: requestBody.body,
+          },
+          sound: "default",
+          // Lets the Notification Service Extension decrypt E2EE `encrypted_content` for the banner body.
+          ...(category === "chat_message" ? { "mutable-content": 1 } : {}),
+          ...(isIncomingCall
+            ? {
+                category: "CLICK_INCOMING_CALL",
+                "interruption-level": "time-sensitive",
+              }
+            : {}),
+        },
+        ...(requestBody.data ?? {}),
+      };
 
-  const response = await fetch(apnsRequestUrl, {
+  const response = await fetch(`${APNS_URL}/${pushToken.token}`, {
     method: "POST",
     headers,
     body: JSON.stringify(body),
   });
 
   const responseText = await response.text();
+  if (isVoipIncomingCall) {
+    console.log(`[APNs VoIP] Apple response: status=${response.status}, body=${responseText || "(empty)"}`);
+  }
+
   if (!response.ok) {
     throw new Error(`APNs send failed: ${response.status} ${responseText}`);
   }
@@ -245,29 +251,27 @@ async function sendIosPush(
 
 function getPushCategory(requestBody: PushRequestBody): PushCategory {
   const t = requestBody.data?.type;
+  if (t === "incoming_call") return "incoming_call";
   if (t === "archive_warning") return "archive_warning";
   if (t === "disposable_reveal") return "disposable_reveal";
-  if (t === "event_reminder") return "event_reminder";
-  if (t === "event_teaser") return "event_teaser";
-  if (t === "reconnect_nudge") return "reconnect_nudge";
-  if (t === "shared_upcoming_event") return "shared_upcoming_event";
-  if (t === "availability_match") return "availability_match";
-  if (t === "hub_message") return "hub_message";
   return "chat_message";
 }
 
 function shouldSendToToken(
-  _requestBody: ResolvedPushRequestBody,
+  requestBody: ResolvedPushRequestBody,
   pushToken: PushTokenRow,
 ): boolean {
   if (pushToken.platform !== "ios") {
     return true;
   }
-
-  const tokenType = pushToken.token_type ?? "standard";
-  return tokenType != "voip";
+  // incoming_call: send to every iOS token. VoIP wakes CallKit; standard APNs adds banner + sound if VoIP fails or is delayed.
+  if (getPushCategory(requestBody) === "incoming_call") {
+    return true;
+  }
+  return (pushToken.token_type ?? "standard") !== "voip";
 }
 
+/** APNs/FCM answers meaning the token will never work again (app deleted, token rotated). */
 function isDeadPushTokenError(error: unknown): boolean {
   const text = String(error).toLowerCase();
   return (
@@ -282,11 +286,11 @@ function isDeadPushTokenError(error: unknown): boolean {
 
 async function pruneDeadToken(
   supabase: ReturnType<typeof createClient>,
-  token: string,
+  token: PushTokenRow,
 ): Promise<void> {
-  const { error } = await supabase.from("push_tokens").delete().eq("token", token);
+  const { error } = await supabase.from("push_tokens").delete().eq("id", token.id);
   if (error) {
-    console.error("Failed to prune push token", error.message);
+    console.error("Failed to prune push token", { pushTokenId: token.id, error: error.message });
   }
 }
 
@@ -304,27 +308,26 @@ function resolveUserDisplayName(profile: UserProfileRow | null | undefined): str
   return "Someone";
 }
 
-/** Wire prefixes for E2EE message content (v1 direct, v1 group, v2) and encrypted attachments. */
-const ENCRYPTED_CONTENT_PREFIXES = ["e2e:", "e2e_grp:", "e2e2:", "ccx:"];
-
-function buildMessagePreview(content: string | null): string {
+function buildMessagePreview(content: string | null, messageType: string | null = null): string {
+  switch (messageType) {
+    case "image":
+      return "📷 Photo";
+    case "audio":
+      return "🎤 Voice message";
+    case "file":
+      return "📎 File";
+    case "beacon":
+      return "📍 Shared an event";
+  }
   const normalized = content?.trim();
   if (!normalized) {
     return "Open Click to view the latest message";
   }
-  if (ENCRYPTED_CONTENT_PREFIXES.some((prefix) => normalized.startsWith(prefix))) {
-    return "Tap to view message";
+  // Any E2EE wire format (v1 `e2e:`, group `e2e_grp:`, v2 `e2e2:`): never echo ciphertext.
+  if (/^e2e[a-z0-9_]*:/i.test(normalized)) {
+    return "Sent you a message";
   }
   return normalized.slice(0, 120);
-}
-
-/**
- * Older Android builds sent the decrypted message text as `message_preview`. Never relay it: the
- * push body must come from ciphertext the recipient decrypts on-device, or a generic label.
- */
-function withoutClientPreview(data: Record<string, unknown>): Record<string, unknown> {
-  const { message_preview: _ignored, ...rest } = data;
-  return rest;
 }
 
 /** FCM data payload limits — oversized ciphertext breaks client-side decrypt; omit and rely on preview_text. */
@@ -342,10 +345,53 @@ function getBearerToken(req: Request): string | null {
   return authHeader?.replace(/^Bearer\s+/i, "") ?? null;
 }
 
-function isServiceSecretRequest(req: Request): boolean {
-  const bearer = getBearerToken(req)?.trim();
-  const expected = serviceRoleOrCronSecret();
-  return !!bearer && !!expected && bearer === expected;
+async function validateIncomingCallRequest(
+  req: Request,
+  supabase: ReturnType<typeof createClient>,
+  requestBody: PushRequestBody,
+): Promise<void> {
+  if (getPushCategory(requestBody) !== "incoming_call") return;
+
+  const token = getBearerToken(req);
+  if (!token) {
+    throw new Error("Authorization header is required for incoming call pushes");
+  }
+
+  const data = requestBody.data ?? {};
+  const connectionId = typeof data.connection_id === "string" ? data.connection_id : null;
+  const callerId = typeof data.caller_id === "string" ? data.caller_id : null;
+  const calleeId = typeof data.callee_id === "string" ? data.callee_id : null;
+
+  if (!connectionId || !callerId || !calleeId) {
+    throw new Error("incoming_call pushes require connection_id, caller_id, and callee_id");
+  }
+
+  // Independent reads, together.
+  const [{ data: authData, error: authError }, { data: connection, error: connectionError }] = await Promise.all([
+    supabase.auth.getUser(token),
+    supabase.from("connections").select("id, user_ids").eq("id", connectionId).maybeSingle(),
+  ]);
+
+  if (authError || !authData.user) {
+    throw new Error(`Unable to authenticate incoming call push: ${authError?.message ?? "missing user"}`);
+  }
+
+  if (authData.user.id !== callerId) {
+    throw new Error("Authenticated user does not match caller_id");
+  }
+
+  if (requestBody.recipient_user_id !== calleeId) {
+    throw new Error("recipient_user_id must match callee_id for incoming_call pushes");
+  }
+
+  if (connectionError || !connection) {
+    throw new Error(`Unable to validate incoming call connection: ${connectionError?.message ?? "missing connection"}`);
+  }
+
+  const userIds = Array.isArray(connection.user_ids) ? connection.user_ids.map(String) : [];
+  if (!userIds.includes(callerId) || !userIds.includes(calleeId)) {
+    throw new Error("Connection does not contain caller/callee users");
+  }
 }
 
 async function resolveChatMessageRequest(
@@ -357,55 +403,39 @@ async function resolveChatMessageRequest(
   const providedTitle = asNonEmptyString(requestBody.title);
   const providedBody = asNonEmptyString(requestBody.body);
 
-  // Full-payload pushes (arbitrary recipient/title/body) are reserved for trusted
-  // service callers (pg_cron maintenance, internal jobs). User-originated requests
-  // must go through the validated chat-message path below, which authenticates the
-  // sender and verifies connection membership.
-  if (providedRecipientUserId && providedTitle && providedBody && isServiceSecretRequest(req)) {
+  if (providedRecipientUserId && providedTitle && providedBody) {
     const data = requestBody.data ?? {};
     const senderUserId = asNonEmptyString(data.sender_user_id);
     const messageId = asNonEmptyString(data.message_id);
     const chatId = asNonEmptyString(data.chat_id);
+    const providedConnectionId = asNonEmptyString(data.connection_id);
 
-    let senderName = "Someone";
-    if (senderUserId) {
-      const { data: senderProfile } = await supabase
-        .from("users")
-        .select("name, email")
-        .eq("id", senderUserId)
-        .maybeSingle<UserProfileRow>();
-      senderName = resolveUserDisplayName(senderProfile);
-    }
+    // Sender name, ciphertext and connection are independent reads: issue them together.
+    const [senderName, encryptedContent, connectionId] = await Promise.all([
+      senderUserId
+        ? supabase.from("users").select("name, email").eq("id", senderUserId).maybeSingle<UserProfileRow>()
+            .then(({ data: profile }) => resolveUserDisplayName(profile))
+        : Promise.resolve("Someone"),
+      messageId
+        ? supabase.from("messages").select("content").eq("id", messageId).maybeSingle()
+            .then(({ data: msg }) => (msg?.content as string | undefined) ?? "")
+        : Promise.resolve(""),
+      !providedConnectionId && chatId
+        ? supabase.from("chats").select("connection_id").eq("id", chatId).maybeSingle()
+            .then(({ data: chat }) => (chat?.connection_id as string | undefined) ?? null)
+        : Promise.resolve(providedConnectionId),
+    ]);
 
-    let encryptedContent = "";
-    if (messageId) {
-      const { data: msg } = await supabase
-        .from("messages")
-        .select("content")
-        .eq("id", messageId)
-        .maybeSingle();
-      encryptedContent = msg?.content ?? "";
-    }
-
-    let connectionId = asNonEmptyString(data.connection_id);
-    if (!connectionId && chatId) {
-      const { data: chat } = await supabase
-        .from("chats")
-        .select("connection_id")
-        .eq("id", chatId)
-        .maybeSingle();
-      connectionId = chat?.connection_id ?? null;
-    }
-
-    const previewText = buildMessagePreview(encryptedContent);
+    const clientPreview = asNonEmptyString(data.message_preview);
+    const previewText = clientPreview ?? buildMessagePreview(encryptedContent, asNonEmptyString(data.message_type));
     const encryptedForFcm = encryptedContentForFcmPayload(encryptedContent);
 
     return {
       recipient_user_id: providedRecipientUserId,
       title: providedTitle,
-      body: providedBody,
+      body: clientPreview ?? providedBody,
       data: {
-        ...withoutClientPreview(data),
+        ...data,
         sender_name: senderName,
         encrypted_content: encryptedForFcm,
         preview_text: previewText,
@@ -415,37 +445,49 @@ async function resolveChatMessageRequest(
     };
   }
 
-  const token = getBearerToken(req);
-  if (!token) {
-    throw new Error("Authorization header is required for direct chat message pushes");
-  }
-
-  const { data: authData, error: authError } = await supabase.auth.getUser(token);
-  if (authError || !authData.user) {
-    throw new Error(`Unable to authenticate chat message push: ${authError?.message ?? "missing user"}`);
-  }
-
   const data = requestBody.data ?? {};
   const chatId = asNonEmptyString(data.chat_id);
   const senderUserId = asNonEmptyString(data.sender_user_id);
   const messageId = asNonEmptyString(data.message_id);
+  const clientMessagePreview = asNonEmptyString(data.message_preview);
+
+  // Trusted service callers (scheduled-message delivery) send on the sender's behalf: no
+  // sender JWT, but the message, chat and membership checks below still apply.
+  const isService = isServiceSecretRequest(req);
+  const token = isService ? null : getBearerToken(req);
+  if (!isService && !token) {
+    throw new Error("Authorization header is required for direct chat message pushes");
+  }
 
   if (!chatId || !senderUserId) {
     throw new Error("chat_message pushes require chat_id and sender_user_id");
   }
 
-  if (authData.user.id !== senderUserId) {
-    throw new Error("Authenticated user does not match sender_user_id");
+  // Every read below depends only on the request, so they run together (was ~6 sequential
+  // round trips); each result is still validated in the original order.
+  const [authResult, messageResult, chatResult, senderProfileResult] = await Promise.all([
+    token ? supabase.auth.getUser(token) : Promise.resolve(null),
+    messageId
+      ? supabase.from("messages").select("id, chat_id, user_id, content, message_type").eq("id", messageId).maybeSingle()
+      : Promise.resolve(null),
+    supabase.from("chats").select("id, connection_id").eq("id", chatId).maybeSingle(),
+    supabase.from("users").select("name, email").eq("id", senderUserId).maybeSingle<UserProfileRow>(),
+  ]);
+
+  if (authResult) {
+    const { data: authData, error: authError } = authResult;
+    if (authError || !authData.user) {
+      throw new Error(`Unable to authenticate chat message push: ${authError?.message ?? "missing user"}`);
+    }
+    if (authData.user.id !== senderUserId) {
+      throw new Error("Authenticated user does not match sender_user_id");
+    }
   }
 
   let messageContent = providedBody;
-  if (messageId) {
-    const { data: message, error: messageError } = await supabase
-      .from("messages")
-      .select("id, chat_id, user_id, content")
-      .eq("id", messageId)
-      .maybeSingle();
-
+  let messageType: string | null = null;
+  if (messageResult) {
+    const { data: message, error: messageError } = messageResult;
     if (messageError || !message) {
       throw new Error(`Unable to validate chat message push message: ${messageError?.message ?? "missing message"}`);
     }
@@ -455,14 +497,10 @@ async function resolveChatMessageRequest(
     }
 
     messageContent = asNonEmptyString(message.content) ?? messageContent;
+    messageType = asNonEmptyString(message.message_type);
   }
 
-  const { data: chat, error: chatError } = await supabase
-    .from("chats")
-    .select("id, connection_id")
-    .eq("id", chatId)
-    .maybeSingle();
-
+  const { data: chat, error: chatError } = chatResult;
   if (chatError || !chat?.connection_id) {
     throw new Error(`Unable to validate chat message push chat: ${chatError?.message ?? "missing chat"}`);
   }
@@ -491,25 +529,16 @@ async function resolveChatMessageRequest(
     throw new Error("recipient_user_id does not belong to the chat connection");
   }
 
-  const { data: senderProfile, error: senderProfileError } = await supabase
-    .from("users")
-    .select("name, email")
-    .eq("id", senderUserId)
-    .maybeSingle<UserProfileRow>();
-
+  const { data: senderProfile, error: senderProfileError } = senderProfileResult;
   if (senderProfileError) {
     throw new Error(`Unable to resolve sender display name: ${senderProfileError.message}`);
   }
 
   const senderDisplayName = resolveUserDisplayName(senderProfile);
-
-  let resolvedTitle = providedTitle;
-  if (!resolvedTitle) {
-    resolvedTitle = `New message from ${senderDisplayName}`;
-  }
+  const resolvedTitle = providedTitle ?? `New message from ${senderDisplayName}`;
 
   const rawContent = messageContent ?? "";
-  const previewText = buildMessagePreview(rawContent);
+  const previewText = clientMessagePreview ?? buildMessagePreview(rawContent, messageType);
   const encryptedForFcm = encryptedContentForFcmPayload(rawContent);
 
   return {
@@ -517,13 +546,14 @@ async function resolveChatMessageRequest(
     title: resolvedTitle,
     body: previewText,
     data: {
-      ...withoutClientPreview(requestBody.data ?? {}),
+      ...(requestBody.data ?? {}),
       chat_id: chatId,
       connection_id: chat.connection_id,
       sender_name: senderDisplayName,
       encrypted_content: encryptedForFcm,
       preview_text: previewText,
       recipient_user_id: recipientUserId,
+      ...(messageType ? { message_type: messageType } : {}),
     },
   };
 }
@@ -536,6 +566,12 @@ function serviceRoleOrCronSecret(): string | undefined {
     Deno.env.get("SUPABASE_SERVICE_KEY") ??
     Deno.env.get("SUPABASE_KEY")
   );
+}
+
+function isServiceSecretRequest(req: Request): boolean {
+  const bearer = getBearerToken(req)?.trim();
+  const expected = serviceRoleOrCronSecret();
+  return !!bearer && !!expected && bearer === expected;
 }
 
 function isArchiveWarningServiceRequest(req: Request, requestBody: PushRequestBody): boolean {
@@ -553,106 +589,81 @@ function isDisposableRevealServiceRequest(req: Request, requestBody: PushRequest
   return !!provided && !!expected && provided === expected;
 }
 
+/** Service pushes that carry their own recipient, title and body (no lookups needed). */
+function requirePassThrough(requestBody: PushRequestBody, label: string): ResolvedPushRequestBody {
+  const recipientUserId = asNonEmptyString(requestBody.recipient_user_id);
+  const title = asNonEmptyString(requestBody.title);
+  const body = asNonEmptyString(requestBody.body);
+  if (!recipientUserId || !title || !body) {
+    throw new Error(`${label} pushes require recipient_user_id, title, and body`);
+  }
+  return { recipient_user_id: recipientUserId, title, body, data: requestBody.data };
+}
+
 async function resolvePushRequest(
   req: Request,
   supabase: ReturnType<typeof createClient>,
   requestBody: PushRequestBody,
 ): Promise<ResolvedPushRequestBody> {
-  if (requestBody.data?.type === "incoming_call") {
-    throw new Error("incoming_call pushes are no longer supported");
-  }
-
   if (isArchiveWarningServiceRequest(req, requestBody)) {
-    const recipientUserId = asNonEmptyString(requestBody.recipient_user_id);
-    const title = asNonEmptyString(requestBody.title);
-    const body = asNonEmptyString(requestBody.body);
-    if (!recipientUserId || !title || !body) {
-      throw new Error("archive_warning pushes require recipient_user_id, title, and body");
-    }
-    return {
-      recipient_user_id: recipientUserId,
-      title,
-      body,
-      data: requestBody.data,
-    };
+    return requirePassThrough(requestBody, "archive_warning");
   }
 
   if (isDisposableRevealServiceRequest(req, requestBody)) {
-    const recipientUserId = asNonEmptyString(requestBody.recipient_user_id);
-    const title = asNonEmptyString(requestBody.title);
-    const body = asNonEmptyString(requestBody.body);
-    if (!recipientUserId || !title || !body) {
-      throw new Error("disposable_reveal pushes require recipient_user_id, title, and body");
-    }
-    return {
-      recipient_user_id: recipientUserId,
-      title,
-      body,
-      data: requestBody.data,
-    };
+    return requirePassThrough(requestBody, "disposable_reveal");
+  }
+
+  if (getPushCategory(requestBody) === "incoming_call") {
+    await validateIncomingCallRequest(req, supabase, requestBody);
+    return requirePassThrough(requestBody, "incoming_call");
   }
 
   return resolveChatMessageRequest(req, supabase, requestBody);
 }
 
-async function recipientAllowsPush(
+/** True while the recipient has muted this conversation (message pushes only). */
+async function isConversationMuted(
+  supabase: ReturnType<typeof createClient>,
+  requestBody: ResolvedPushRequestBody,
+): Promise<boolean> {
+  const type = requestBody.data?.type;
+  if (type !== "chat_message" && type !== "new_message" && type !== "hub_message") return false;
+  const chatKey = asNonEmptyString(requestBody.data?.chat_id) ?? asNonEmptyString(requestBody.data?.hub_id);
+  if (!chatKey) return false;
+  const { data } = await supabase
+    .from("chat_mutes")
+    .select("muted_until")
+    .eq("user_id", requestBody.recipient_user_id)
+    .eq("chat_id", chatKey)
+    .maybeSingle<{ muted_until: string | null }>();
+  if (!data) return false;
+  return data.muted_until === null || Date.parse(data.muted_until) > Date.now();
+}
+
+async function preferencesAllowPush(
   supabase: ReturnType<typeof createClient>,
   requestBody: ResolvedPushRequestBody,
 ): Promise<boolean> {
   const { data, error } = await supabase
     .from("notification_preferences")
-    .select(
-      "message_push_enabled, event_reminder_push_enabled, event_teaser_push_enabled, reconnect_nudge_push_enabled, availability_match_push_enabled, hub_message_push_enabled",
-    )
+    .select("message_push_enabled, call_push_enabled")
     .eq("user_id", requestBody.recipient_user_id)
     .maybeSingle<NotificationPreferenceRow>();
 
   if (error || !data) {
     return true;
   }
-
-  const cat = getPushCategory(requestBody);
-  if (cat === "event_reminder") {
-    return data.event_reminder_push_enabled !== false;
-  }
-  if (cat === "event_teaser") {
-    return data.event_teaser_push_enabled !== false;
-  }
-  if (cat === "reconnect_nudge" || cat === "shared_upcoming_event") {
-    return data.reconnect_nudge_push_enabled !== false;
-  }
-  if (cat === "availability_match") {
-    return data.availability_match_push_enabled !== false;
-  }
-  if (cat === "hub_message") {
-    return data.hub_message_push_enabled !== false;
-  }
-  if (cat === "disposable_reveal" || cat === "chat_message" || cat === "archive_warning") {
-    return data.message_push_enabled !== false;
+  if (getPushCategory(requestBody) === "incoming_call") {
+    return data.call_push_enabled !== false;
   }
   return data.message_push_enabled !== false;
 }
 
-/**
- * Per-conversation mutes (click-web migration 20260926120000_chat_mutes.sql): a row with a null
- * or future `muted_until` silences chat and hub message pushes for that recipient.
- */
-async function recipientMutedChat(
-  supabase: ReturnType<typeof createClient>,
-  requestBody: ResolvedPushRequestBody,
-): Promise<boolean> {
-  const cat = getPushCategory(requestBody);
-  if (cat !== "chat_message" && cat !== "hub_message") return false;
-  const chatId = asNonEmptyString(requestBody.data?.chat_id) ?? asNonEmptyString(requestBody.data?.hub_id);
-  if (!chatId) return false;
-  const { data, error } = await supabase
-    .from("chat_mutes")
-    .select("muted_until")
-    .eq("user_id", requestBody.recipient_user_id)
-    .eq("chat_id", chatId)
-    .maybeSingle<{ muted_until: string | null }>();
-  if (error || !data) return false;
-  return data.muted_until === null || Date.parse(data.muted_until) > Date.now();
+function json(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json", ...corsHeaders },
+  });
 }
 
 Deno.serve(async (req: Request) => {
@@ -661,24 +672,18 @@ Deno.serve(async (req: Request) => {
   }
 
   if (req.method !== "POST") {
-    return new Response(JSON.stringify({ success: false, sent: 0, error: "Method not allowed" }), {
-      status: 405,
-      headers: { "Content-Type": "application/json", ...corsHeaders },
-    });
+    return json({ success: false, sent: 0, error: "Method not allowed" }, 405);
   }
 
   try {
     const requestBody = await req.json() as PushRequestBody;
-    // Log routing metadata only — title/body/data may contain message previews.
-    console.log(
-      "Received push request:",
-      JSON.stringify({
-        category: getPushCategory(requestBody),
-        has_recipient: !!requestBody.recipient_user_id,
-        has_title: !!requestBody.title,
-        has_body: !!requestBody.body,
-      }),
-    );
+    // Routing metadata only: title/body/data can carry message previews.
+    console.log("Received push request:", JSON.stringify({
+      category: getPushCategory(requestBody),
+      has_recipient: !!requestBody.recipient_user_id,
+      has_title: !!requestBody.title,
+      has_body: !!requestBody.body,
+    }));
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
       auth: { autoRefreshToken: false, persistSession: false },
@@ -686,106 +691,65 @@ Deno.serve(async (req: Request) => {
 
     const resolvedRequestBody = await resolvePushRequest(req, supabase, requestBody);
 
-    if (
-      !(await recipientAllowsPush(supabase, resolvedRequestBody)) ||
-      (await recipientMutedChat(supabase, resolvedRequestBody))
-    ) {
-      return new Response(JSON.stringify({ success: true, sent: 0, skipped: true }), {
-        status: 200,
-        headers: { "Content-Type": "application/json", ...corsHeaders },
-      });
-    }
+    // Mute, preferences and tokens are independent reads of the recipient: fetch together.
+    const [muted, allowed, { data: tokens, error }] = await Promise.all([
+      isConversationMuted(supabase, resolvedRequestBody),
+      preferencesAllowPush(supabase, resolvedRequestBody),
+      supabase.from("push_tokens").select("*").eq("user_id", resolvedRequestBody.recipient_user_id),
+    ]);
 
-    const { data: tokens, error } = await supabase
-      .from("push_tokens")
-      .select("*")
-      .eq("user_id", resolvedRequestBody.recipient_user_id);
+    if (muted || !allowed) {
+      return json({ success: true, sent: 0, skipped: true });
+    }
 
     if (error) {
       throw new Error(`Failed to fetch recipient push tokens: ${error.message}`);
     }
 
-    if (!tokens || tokens.length === 0) {
-      return new Response(JSON.stringify({ success: true, sent: 0 }), {
-        status: 200,
-        headers: { "Content-Type": "application/json", ...corsHeaders },
-      });
+    const pushTokens = ((tokens ?? []) as PushTokenRow[]).filter((token) => shouldSendToToken(resolvedRequestBody, token));
+    if (pushTokens.length === 0) {
+      return json({ success: true, sent: 0 });
     }
 
-    let fcmAccessToken: string | null = null;
-    let fcmProjectId: string | null = null;
-    let apnsJwt: string | null = null;
+    // Provider credentials are created at most once per request, shared by every token.
+    let fcmAuth: Promise<{ accessToken: string; projectId: string }> | null = null;
+    let apnsJwt: Promise<string> | null = null;
+    const ensureFcm = () => {
+      if (!fcmAuth) {
+        const serviceAccountJson = Deno.env.get("FCM_SERVICE_ACCOUNT_JSON");
+        fcmAuth = serviceAccountJson
+          ? getFcmAccessToken(serviceAccountJson)
+          : Promise.reject(new Error("Missing FCM_SERVICE_ACCOUNT_JSON secret"));
+      }
+      return fcmAuth;
+    };
+    const ensureApns = () => (apnsJwt ??= getApnsJwt());
+
     const errors: PushError[] = [];
     let sent = 0;
 
-    const pushTokens = (tokens ?? []) as PushTokenRow[];
-
-    const ensureFcm = async () => {
-      if (!fcmAccessToken || !fcmProjectId) {
-        const serviceAccountJson = Deno.env.get("FCM_SERVICE_ACCOUNT_JSON");
-        if (!serviceAccountJson) {
-          throw new Error("Missing FCM_SERVICE_ACCOUNT_JSON secret");
-        }
-        const fcmAuth = await getFcmAccessToken(serviceAccountJson);
-        fcmAccessToken = fcmAuth.accessToken;
-        fcmProjectId = fcmAuth.projectId;
-      }
-    };
-
-    const ensureApns = async () => {
-      if (!apnsJwt) {
-        apnsJwt = await getApnsJwt();
-      }
-    };
-
-    const deliverOne = async (token: PushTokenRow): Promise<boolean> => {
-      if (!shouldSendToToken(resolvedRequestBody, token)) return false;
+    // Every device at once: one slow or dead token no longer delays the others.
+    await Promise.all(pushTokens.map(async (token) => {
       try {
         if (token.platform === "android") {
-          await ensureFcm();
-          await sendAndroidPush(token, resolvedRequestBody, fcmAccessToken!, fcmProjectId!);
+          const { accessToken, projectId } = await ensureFcm();
+          await sendAndroidPush(token, resolvedRequestBody, accessToken, projectId);
         } else {
-          await ensureApns();
-          await sendIosPush(token, resolvedRequestBody, apnsJwt!);
+          await sendIosPush(token, resolvedRequestBody, await ensureApns());
         }
         sent += 1;
-        return true;
       } catch (tokenError) {
-        // Device tokens are credentials. Keep the caller response and logs free of them.
-        console.error("Push send failed", {
-          platform: token.platform,
-          pushTokenId: token.id,
-          deadToken: isDeadPushTokenError(tokenError),
-        });
-        errors.push({
-          platform: token.platform,
-          code: "delivery_failed",
-        });
-        if (isDeadPushTokenError(tokenError)) {
-          await pruneDeadToken(supabase, token.token);
-        }
-        return false;
+        const dead = isDeadPushTokenError(tokenError);
+        // Device tokens are credentials: identify the row by ID only.
+        console.error("Push send failed", { platform: token.platform, pushTokenId: token.id, deadToken: dead });
+        errors.push({ platform: token.platform, error: dead ? "dead_token" : "delivery_failed" });
+        if (dead) await pruneDeadToken(supabase, token);
       }
-    };
+    }));
 
-    for (const token of pushTokens) {
-      await deliverOne(token);
-    }
-
-    return new Response(JSON.stringify({
-      success: errors.length === 0,
-      sent,
-      failed: errors.length,
-    }), {
-      status: 200,
-      headers: { "Content-Type": "application/json", ...corsHeaders },
-    });
+    return json({ success: errors.length === 0, sent, errors });
   } catch (error) {
-    // The caller only needs a stable error; provider/database details stay out of the response.
-    console.error("Fatal error in send-push-notification", { type: error instanceof Error ? error.name : "unknown" });
-    return new Response(JSON.stringify({ success: false, sent: 0, error: "PUSH_DELIVERY_UNAVAILABLE" }), {
-      status: 500,
-      headers: { "Content-Type": "application/json", ...corsHeaders },
-    });
+    console.error("Fatal error in send-push-notification", error instanceof Error ? error.message : String(error));
+    return json({ success: false, sent: 0, error: String(error) }, 500);
   }
 });
