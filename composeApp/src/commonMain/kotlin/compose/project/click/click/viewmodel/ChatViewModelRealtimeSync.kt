@@ -176,6 +176,10 @@ internal fun ChatViewModel.subscribeToNewMessages(
                                     }
                                 }
                             }
+                        }.catch { e ->
+                            // Decrypt failures already degrade to "New message"; anything else must not crash the app.
+                            if (e is CancellationException) throw e
+                            println("ChatViewModel: message stream failed: ${e.redactedRestMessage()}")
                         }.launchIn(this)
 
                     subscription.attach()

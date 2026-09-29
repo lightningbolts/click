@@ -63,6 +63,17 @@ internal suspend fun SupabaseChatRepository.fetchMessagesForChatImpl(
                         }.decodeList<Message>()
                 }
             }
+        // Opening a chat warms (or heals) the v2 session so its rows decrypt below instead of
+        // falling back to "New message" when nothing has cached a session for this chat yet.
+        if (!viewerUserId.isNullOrBlank() && rows.any { MessageCrypto.isV2Encrypted(it.content) }) {
+            var session = resolveE2eeV2ChatCryptoForRead(chatId, viewerUserId)
+            // Rows from epochs this device doesn't hold yet: another of the user's devices may have
+            // shared them since the session was cached (email-approved history), so re-fetch once.
+            val missingEpochs = missingV2Epochs(rows.map { it.content }, session?.epochKeys?.keys.orEmpty())
+            if (session != null && missingEpochs.isNotEmpty()) {
+                refreshE2eeV2SessionForSharedHistory(chatId, viewerUserId)?.let { session = it }
+            }
+        }
         val decrypted =
             withContext(Dispatchers.Default) {
                 rows.map { decryptMessageOnCurrentThread(it, crypto) }

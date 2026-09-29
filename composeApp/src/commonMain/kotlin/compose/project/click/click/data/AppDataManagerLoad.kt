@@ -42,6 +42,7 @@ internal fun AppDataManager.recoverSessionAndRealtime(
         // RealtimeCoordinator.stop() runs inside recovery — re-subscribe with the fresh JWT.
         _currentUser.value?.id?.takeIf { it.isNotBlank() }?.let { uid ->
             runCatching { RealtimeCoordinator.ensureStarted(uid) }
+            syncDeviceHistory(uid)
         }
 
         val dataStale = now - lastRefreshTime > REFRESH_COOLDOWN_MS
@@ -95,6 +96,7 @@ internal suspend fun AppDataManager.loadAllData() {
         val effectiveUserId = authUser?.id ?: cachedUserId ?: localSessionUserId!!
 
         println("AppDataManager: Loading data for user $effectiveUserId")
+        syncDeviceHistory(effectiveUserId)
 
         requestMapDiscoveryPrefetch()
 
