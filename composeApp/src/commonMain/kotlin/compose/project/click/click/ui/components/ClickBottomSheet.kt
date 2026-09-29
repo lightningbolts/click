@@ -121,7 +121,7 @@ fun ClickSheetChrome(
                 fontWeight = FontWeight.SemiBold,
                 color = GlassSheetTokens.OnOled(),
             )
-            Spacer(modifier.height(ClickSheetDefaults.TitleBottomSpacing))
+            Spacer(Modifier.height(ClickSheetDefaults.TitleBottomSpacing))
         }
         content()
     }
