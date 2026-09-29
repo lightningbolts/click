@@ -14,8 +14,12 @@ import compose.project.click.click.util.redactedRestMessage // pragma: allowlist
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.query.Columns
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.datetime.Clock
 
 internal class E2eeV2RequiredException : IllegalStateException("E2EE_V2_REQUIRED")
 
@@ -54,6 +58,24 @@ private object E2eeV2SessionCache {
     }
 }
 
+/** One heal attempt per chat per [HEAL_INTERVAL_MS], so a chat full of unreadable rows asks click-web once. */
+private object E2eeV2HealThrottle {
+    const val HEAL_INTERVAL_MS = 60_000L
+    private val mutex = Mutex()
+    private val lastAttemptMs = mutableMapOf<String, Long>()
+
+    suspend fun tryAcquire(chatId: String): Boolean =
+        mutex.withLock {
+            val now = Clock.System.now().toEpochMilliseconds()
+            val last = lastAttemptMs[chatId]
+            if (last != null && now - last < HEAL_INTERVAL_MS) return@withLock false
+            lastAttemptMs[chatId] = now
+            true
+        }
+
+    suspend fun clear() = mutex.withLock { lastAttemptMs.clear() }
+}
+
 internal fun zeroizeE2eeV2EpochKeys(epochKeySets: Iterable<Collection<ByteArray>>) {
     epochKeySets
         .flatten()
@@ -63,6 +85,80 @@ internal fun zeroizeE2eeV2EpochKeys(epochKeySets: Iterable<Collection<ByteArray>
 
 internal fun clearE2eeV2SessionCache() {
     E2eeV2SessionCache.clear()
+}
+
+internal suspend fun clearE2eeV2HealThrottle() = E2eeV2HealThrottle.clear()
+
+/**
+ * Read-side session lookup: never throws. When this device holds no key for the chat's current
+ * epoch (e.g. a reinstall gave it a new device identity, so no epoch key was wrapped for it),
+ * it heals the chat the same way a send does: register this device and start a new epoch wrapped
+ * for every registered device. Messages from before the heal stay unreadable on this device.
+ */
+internal suspend fun SupabaseChatRepository.resolveE2eeV2ChatCryptoForRead(
+    chatId: String,
+    viewerUserId: String,
+): E2eeV2ChatSession? {
+    if (viewerUserId.isBlank()) return null
+    E2eeV2SessionCache.get(chatId)?.let { return it }
+    return try {
+        resolveE2eeV2ChatCrypto(chatId, viewerUserId)
+    } catch (e: CancellationException) {
+        throw e
+    } catch (_: E2eeV2RequiredException) {
+        healE2eeV2Access(chatId, viewerUserId)
+    } catch (e: Exception) {
+        println("ChatRepository: v2 session lookup failed chatId=$chatId: ${e.redactedRestMessage()}")
+        null
+    }
+}
+
+/** Epochs referenced by v2 message [contents] that are not in [held]. Pure. */
+internal fun missingV2Epochs(
+    contents: List<String>,
+    held: Set<Int>,
+): Set<Int> =
+    contents
+        .asSequence()
+        .filter { MessageCrypto.isV2Encrypted(it) }
+        .mapNotNull { runCatching { MessageCryptoV2.parseE2eeV2Envelope(it) }.getOrNull() as? MessageCryptoV2.MessageEnvelope }
+        .map { it.epoch }
+        .filterNot { it in held }
+        .toSet()
+
+/**
+ * Re-reads this device's epoch envelopes (no lifecycle changes) so keys shared by the user's other
+ * devices after an email approval become usable. Throttled per chat like [healE2eeV2Access].
+ */
+internal suspend fun SupabaseChatRepository.refreshE2eeV2SessionForSharedHistory(
+    chatId: String,
+    viewerUserId: String,
+): E2eeV2ChatSession? {
+    if (!E2eeV2HealThrottle.tryAcquire("history:$chatId")) return null
+    return try {
+        resolveE2eeV2ChatCrypto(chatId, viewerUserId, forceRefresh = true)
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        println("ChatRepository: shared-history refresh failed chatId=$chatId: ${e.redactedRestMessage()}")
+        null
+    }
+}
+
+private suspend fun SupabaseChatRepository.healE2eeV2Access(
+    chatId: String,
+    viewerUserId: String,
+): E2eeV2ChatSession? {
+    if (!E2eeV2HealThrottle.tryAcquire(chatId)) return E2eeV2SessionCache.get(chatId)
+    println("ChatRepository: no v2 key for the current epoch of chatId=$chatId; re-keying for this device")
+    return try {
+        resolveE2eeV2ChatCrypto(chatId, viewerUserId, forceRefresh = true, allowLifecycle = true)
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        println("ChatRepository: v2 heal failed chatId=$chatId: ${e.redactedRestMessage()}")
+        null
+    }
 }
 
 internal suspend fun SupabaseChatRepository.ensureFreshJwtForChat(): String? =
@@ -582,24 +678,34 @@ private fun decryptV2Message(
             )
         val epochKey = session.epochKeys[envelope.epoch] ?: error("E2EE v2 epoch key is unavailable")
         message.copy(content = MessageCryptoV2.decryptMessage(metadata, epochKey, message.content, session.replayGuard))
-    }.getOrElse { message.copy(content = "New message") }
+    }.getOrElse { e ->
+        message.copy(content = "New message")
+    }
 
+/** Never throws (except cancellation): an undecryptable row comes back as "New message". */
 internal suspend fun SupabaseChatRepository.decryptMessage(
     message: Message,
     crypto: ChatSessionCaches.ResolvedChatCrypto?,
 ): Message =
     withContext(Dispatchers.Default) {
-        val v2 =
-            if (MessageCrypto.isV2Encrypted(message.content)) {
-                val envelope =
-                    runCatching { MessageCryptoV2.parseE2eeV2Envelope(message.content) }
-                        .getOrNull() as? MessageCryptoV2.MessageEnvelope
-                resolveE2eeV2ChatCrypto(
-                    chatId = envelope?.chatId ?: return@withContext message.copy(content = "New message"),
-                    viewerUserId = supabase.auth.currentUserOrNull()?.id ?: "",
-                )
-            } else {
-                null
-            }
-        decryptMessageOnCurrentThread(message, crypto, v2)
+        try {
+            val v2 =
+                if (MessageCrypto.isV2Encrypted(message.content)) {
+                    val envelope =
+                        runCatching { MessageCryptoV2.parseE2eeV2Envelope(message.content) }
+                            .getOrNull() as? MessageCryptoV2.MessageEnvelope
+                    resolveE2eeV2ChatCryptoForRead(
+                        chatId = envelope?.chatId ?: return@withContext message.copy(content = "New message"),
+                        viewerUserId = supabase.auth.currentUserOrNull()?.id ?: "",
+                    )
+                } else {
+                    null
+                }
+            decryptMessageOnCurrentThread(message, crypto, v2)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            println("ChatRepository: decrypt failed messageId=${message.id}: ${e.redactedRestMessage()}")
+            message.copy(content = "New message")
+        }
     }

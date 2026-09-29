@@ -74,6 +74,7 @@ internal suspend fun AppDataManager.clearDataImpl() {
     ChatMuteStore.clear()
     IdentityCache.clear()
     EventReminders.cancelAll()
+    resetDeviceHistorySyncThrottle()
     // Unsent drafts and on-device history never carry over to another account.
     runCatching { PendingSendStore.clear(tokenStorage) }
     runCatching { LocalMessageStore.wipeAll() }
