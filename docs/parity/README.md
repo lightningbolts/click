@@ -28,6 +28,7 @@ Almost everything here is therefore Android client work.
 | 03 | [Hangouts](03-hangouts.md) | Chat plans (propose, RSVP, reminders), logged hangouts (log, confirm), waves, hangout detection, relationship-moment nudges and pushes. |
 | 04 | [Chat, groups and hubs](04-chat-groups-hubs.md) | Mutes, forwarding, reaction details, read cursors, tombstones, search, group profile, Hub Info, and more. |
 | 05 | [App-wide remainder](05-app-wide.md) | Me/Settings, events, map, deep links, push, telemetry, and retired-feature cleanup. |
+| 06 | [Post-9/29 features](06-post-9-29-features.md) | Feature flags, Click Drop develop state, alert confirmations, Listening now, event drops + recap + history, shared drops, reconnect near here, pilot analytics. |
 
 ## Conventions used in every sheet
 
