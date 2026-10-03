@@ -621,6 +621,56 @@ async function resolvePushRequest(
   return resolveChatMessageRequest(req, supabase, requestBody);
 }
 
+/**
+ * Alert pushes that also land in the recipient's in-app activity inbox (`activity_items`), whether
+ * or not push reaches them. Messages, calls and device approvals have their own surfaces; pending
+ * prior-connection requests are shown live from the inbox, not as history.
+ */
+const ACTIVITY_TYPES = new Set([
+  "event_reminder",
+  "event_recap",
+  "event_teaser",
+  "event_drop_recap",
+  "shared_upcoming_event",
+  "availability_match",
+  "reconnect_nudge",
+  "reconnect_lull",
+  "reconnect_nearby",
+  "anniversary",
+  "memory_prompt",
+  "group_revival",
+  "wave",
+  "hangout_confirm",
+  "shared_drop_released",
+  "disposable_reveal",
+  "archive_warning",
+  "prior_connection_accepted",
+]);
+
+/** Records an alert in the activity inbox. Service callers only (they own title and body). */
+async function recordActivity(
+  req: Request,
+  supabase: ReturnType<typeof createClient>,
+  requestBody: ResolvedPushRequestBody,
+): Promise<void> {
+  const data = requestBody.data ?? {};
+  const type = asNonEmptyString(data.type);
+  if (!type || !ACTIVITY_TYPES.has(type) || !isServiceSecretRequest(req)) return;
+  const actorId = asNonEmptyString(data.peer_user_id) ?? asNonEmptyString(data.sender_user_id) ??
+    asNonEmptyString(data.poster_id);
+  const { error } = await supabase.rpc("record_activity", {
+    p_user_id: requestBody.recipient_user_id,
+    p_type: type,
+    p_title: requestBody.title,
+    p_body: requestBody.body,
+    p_data: Object.fromEntries(Object.entries(data).map(([key, value]) => [key, String(value)])),
+    p_actor_id: actorId && actorId !== requestBody.recipient_user_id ? actorId : null,
+    p_group_key: null,
+  });
+  // Never fails the push: the inbox is best effort next to delivery.
+  if (error) console.error("Failed to record activity", { type, error: error.message });
+}
+
 /** True while the recipient has muted this conversation (message pushes only). */
 async function isConversationMuted(
   supabase: ReturnType<typeof createClient>,
@@ -691,11 +741,15 @@ Deno.serve(async (req: Request) => {
 
     const resolvedRequestBody = await resolvePushRequest(req, supabase, requestBody);
 
-    // Mute, preferences and tokens are independent reads of the recipient: fetch together.
+    // Mute, preferences and tokens are independent reads of the recipient: fetch together. The
+    // activity record rides along (before the push gates, so it lands even with push off).
     const [muted, allowed, { data: tokens, error }] = await Promise.all([
       isConversationMuted(supabase, resolvedRequestBody),
       preferencesAllowPush(supabase, resolvedRequestBody),
       supabase.from("push_tokens").select("*").eq("user_id", resolvedRequestBody.recipient_user_id),
+      recordActivity(req, supabase, resolvedRequestBody).catch((activityError) =>
+        console.error("Failed to record activity", String(activityError))
+      ),
     ]);
 
     if (muted || !allowed) {
