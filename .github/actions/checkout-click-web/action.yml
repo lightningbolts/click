@@ -1,5 +1,7 @@
 name: Checkout click-web source of truth
-description: Check out lightningbolts/click-web main as the shared source of truth.
+description: >-
+  Check out lightningbolts/click-web at the SHA pinned in .click-web-ref (D9),
+  so new web migrations do not turn Android CI red until the pin is bumped.
 
 inputs:
   token:
@@ -9,15 +11,26 @@ inputs:
     description: Destination path relative to github.workspace
     required: false
     default: _click-web
+  ref:
+    description: Manual override (branch, tag or SHA). Empty uses the pin in .click-web-ref.
+    required: false
+    default: ""
 
 runs:
   using: composite
   steps:
+    - name: Resolve click-web ref
+      id: resolve
+      shell: bash
+      env:
+        CLICK_WEB_REF: ${{ inputs.ref }}
+      run: echo "ref=$(bash scripts/resolve-click-web-ref.sh)" >> "$GITHUB_OUTPUT"
+
     - name: Checkout click-web
       uses: actions/checkout@v4
       with:
         repository: lightningbolts/click-web
-        ref: main
+        ref: ${{ steps.resolve.outputs.ref }}
         path: ${{ inputs.path }}
         fetch-depth: 0
         token: ${{ inputs.token }}
