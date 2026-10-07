@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.sp
 import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
 import compose.project.click.click.data.api.ApiConfig
 import compose.project.click.click.ui.components.ClickOutlinedTextField
+import compose.project.click.click.ui.components.LegalAgreementText
 import compose.project.click.click.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -282,7 +283,10 @@ fun LoginScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(20.dp))
+            LegalAgreementText(modifier = Modifier.fillMaxWidth())
+
+            Spacer(modifier = Modifier.height(24.dp))
 
             // Sign Up Link
             Row(

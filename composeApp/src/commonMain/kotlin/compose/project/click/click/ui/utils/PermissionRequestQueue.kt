@@ -77,23 +77,25 @@ object PermissionRequestQueue {
     }
 }
 
+/** Matches the iOS purpose strings (`INFOPLIST_KEY_NS*UsageDescription`), worded for Android. */
 fun permissionPrimeCopy(kind: PermissionKind): Pair<String, String> =
     when (kind) {
         PermissionKind.Location ->
             "Location" to
-                "Click uses your location for the Memory Map, nearby hubs, and QR check-ins. Only you see your map."
+                "Click uses your location to show the map, find people and events near you, and remember where you met someone when you connect."
         PermissionKind.Microphone ->
             "Microphone" to
-                "Click uses the microphone for calls, voice notes, and the tap handshake."
+                "Click uses your microphone for Tap to Connect ultrasonic sensing and voice notes."
         PermissionKind.Camera ->
             "Camera" to
-                "Click uses the camera to scan QR codes and capture Disposable Roll photos."
+                "Click uses your camera to scan QR codes and capture photos."
         PermissionKind.ProximityHardware ->
             "Nearby devices" to
                 "Microphone access enables Tap to Connect. Bluetooth improves nearby matching when available, but Click can fall back to ultrasonic audio and GPS if Bluetooth is unavailable."
         PermissionKind.Calendar ->
             "Calendar" to
-                "Click can add events you save to your device calendar."
+                "Click checks your calendar on this phone to show whether you're free for plans and events. " +
+                    "It reads only busy times, and only adds events you ask it to."
         PermissionKind.Contacts ->
             "Contacts" to
                 "Click hashes phone numbers and emails on this device to find people you already know. Your address book never leaves your phone."

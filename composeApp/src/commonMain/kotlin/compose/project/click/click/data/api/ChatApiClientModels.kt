@@ -77,6 +77,8 @@ internal data class ClickWebChatDevicesEnvelope(
 internal data class ClickWebRegisterChatDeviceBody(
     @SerialName("device_id") val deviceId: String,
     @SerialName("identity_public_key") val identityPublicKey: String,
+    /** "Pixel 9": what kind of device this is (1..64 chars), shown when another device approves it. */
+    @SerialName("device_label") val deviceLabel: String? = null,
 )
 
 @Serializable

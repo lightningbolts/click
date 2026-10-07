@@ -46,6 +46,7 @@ import compose.project.click.click.ui.chat.rememberChatMediaPickers // pragma: a
 import compose.project.click.click.ui.components.BirthdayVisualTransformation // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickOutlinedTextField // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
+import compose.project.click.click.ui.components.LegalAgreementText // pragma: allowlist secret
 import compose.project.click.click.ui.components.birthdayDigitsInput // pragma: allowlist secret
 import compose.project.click.click.ui.components.birthdayIsoToUtcMidnightMillis // pragma: allowlist secret
 import compose.project.click.click.ui.components.formatBirthdayDigitsInput // pragma: allowlist secret
@@ -604,6 +605,9 @@ fun SignUpScreen(
                     )
                 }
             }
+
+            Spacer(modifier = Modifier.height(16.dp))
+            LegalAgreementText(modifier = Modifier.fillMaxWidth())
 
             Spacer(modifier = Modifier.height(32.dp))
 
