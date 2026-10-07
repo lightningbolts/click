@@ -29,6 +29,8 @@ Almost everything here is therefore Android client work.
 | 04 | [Chat, groups and hubs](04-chat-groups-hubs.md) | Mutes, forwarding, reaction details, read cursors, tombstones, search, group profile, Hub Info, and more. |
 | 05 | [App-wide remainder](05-app-wide.md) | Me/Settings, events, map, deep links, push, telemetry, and retired-feature cleanup. |
 | 06 | [Post-9/29 features](06-post-9-29-features.md) | Feature flags, Click Drop develop state, alert confirmations, Listening now, event drops + recap + history, shared drops, reconnect near here, pilot analytics. |
+| 07 | [Gap closure, Oct 2026](07-gap-closure-2026-10.md) | First plan for iOS #13–#60. Superseded by 08 as the working plan; still the detailed spec for rows 08 marks "= 07". |
+| 08 | [Gap closure v2 (verified)](08-gap-closure-v2-2026-10-06.md) | **Working plan.** Corrects 07 against HEAD of all three repos; adds iOS #61–#67, web #132–#136, click-web (W-) and iOS (I-) work items, and a contract appendix. |
 
 ## Conventions used in every sheet
 
