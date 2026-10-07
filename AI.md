@@ -23,8 +23,9 @@ This file is **authoritative guidance** for future developers and AI assistants 
 
 ## 3. Push notifications
 
-- **Android:** FCM through the Supabase Edge Function **`send-push-notification`**, using a service account JSON configured as a Supabase secret. Voice and video calls were removed from mobile — do not re-add call pushes.
-- `incoming_call` push payloads are rejected by the edge function and ignored by the client.
+- **Android:** FCM through the Supabase Edge Function **`send-push-notification`**, using a service account JSON configured as a Supabase secret. Voice and video calls were removed from the Android client — do not re-add call handling on Android.
+- **Calls are pending owner decision D1.** Until D1 is decided, the edge function **accepts** `incoming_call` pushes (the iOS VoIP path): it validates the caller, callee and connection, honours `call_push_enabled`, and sends to every iOS token, including `voip` tokens with `apns-push-type: voip` (`supabase/functions/send-push-notification/index.ts`, `getPushCategory`, `shouldSendToToken`, `validateIncomingCallRequest`). The **Android client ignores** `incoming_call` (and retired `event_teaser`) data messages (`ClickFirebaseMessagingService.kt`, `onMessageReceived`). No click-web code sends `incoming_call` today. Do not change this behaviour without a D1 decision.
+- The per-chat mute check (`chat_mutes`) applies only to `chat_message`, `new_message` and `hub_message` pushes.
 
 ---
 
