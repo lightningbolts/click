@@ -68,6 +68,7 @@ import compose.project.click.click.ui.components.ClickListRowShimmer // pragma: 
 import compose.project.click.click.ui.components.ConnectionsSegmentBar // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassToastHost // pragma: allowlist secret
+import compose.project.click.click.ui.components.DeviceHistoryBanner // pragma: allowlist secret
 import compose.project.click.click.ui.components.InboxNudgeBanner // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberFabAboveNavPadding // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberGlassToastState // pragma: allowlist secret
@@ -555,6 +556,10 @@ fun ConnectionsListView(
                             alpha = tabContentAlpha.value
                         },
                 ) {
+                    // This device waiting for another one to share past messages (empty otherwise).
+                    item(key = "device_history_banner", contentType = "device_history_banner") {
+                        DeviceHistoryBanner(modifier = Modifier.padding(bottom = 8.dp))
+                    }
                     if (effectiveChats.isNotEmpty() || activeHubs.isNotEmpty()) {
                         item(key = "clicks_segment_bar", contentType = "segment_bar") {
                             Box(modifier = Modifier.padding(bottom = 8.dp)) {

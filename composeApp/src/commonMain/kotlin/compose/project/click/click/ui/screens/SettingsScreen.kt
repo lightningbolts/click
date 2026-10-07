@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.EventAvailable
@@ -65,6 +66,7 @@ import compose.project.click.click.calendar.DeviceCalendar // pragma: allowlist 
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.IdentityCache // pragma: allowlist secret
 import compose.project.click.click.data.api.ApiClient
+import compose.project.click.click.data.api.deleteAccountImpl // pragma: allowlist secret
 import compose.project.click.click.data.api.BlockedUserDto // pragma: allowlist secret
 import compose.project.click.click.data.api.EventBookmarkItemDto // pragma: allowlist secret
 import compose.project.click.click.data.api.PROFILE_BIO_MAX_LENGTH
@@ -110,6 +112,7 @@ import compose.project.click.click.utils.LocationPermissionDisplayState // pragm
 import compose.project.click.click.utils.LocationService // pragma: allowlist secret
 import compose.project.click.click.utils.readLocationPermissionDisplayState // pragma: allowlist secret
 import compose.project.click.click.viewmodel.AvailabilityViewModel // pragma: allowlist secret
+import compose.project.click.click.viewmodel.DevicesSettingsViewModel // pragma: allowlist secret
 import compose.project.click.click.viewmodel.MapViewModel // pragma: allowlist secret
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -125,6 +128,7 @@ internal enum class SettingsPage {
     Interests,
     Personality,
     Saved,
+    Devices,
 }
 
 internal fun SettingsPage.title(): String =
@@ -139,6 +143,7 @@ internal fun SettingsPage.title(): String =
         SettingsPage.Interests -> "Interests"
         SettingsPage.Personality -> "Personality"
         SettingsPage.Saved -> "Saved events"
+        SettingsPage.Devices -> "Devices"
     }
 
 /** Pages pushed from Privacy go back to Privacy; everything else goes back to Me. */
@@ -148,7 +153,7 @@ internal fun SettingsPage.parent(): SettingsPage =
         else -> SettingsPage.Hub
     }
 
-/** Account deletion finishes on the web, signed in there (iOS `MeView.openAccountDeletion`, spec §65.14). */
+/** Fallback when in-app deletion fails: finish on the web, signed in there (spec §65.14). */
 internal const val ACCOUNT_DELETION_URL = "https://joinclick.co/?tab=settings"
 internal const val WEB_DASHBOARD_URL = "https://joinclick.co"
 
@@ -161,6 +166,8 @@ fun SettingsScreen(
     onSubpageOpenChanged: (Boolean) -> Unit = {},
     availabilityViewModel: AvailabilityViewModel =
         viewModel(key = "settings-availability") { AvailabilityViewModel() },
+    devicesViewModel: DevicesSettingsViewModel =
+        viewModel(key = "settings-devices") { DevicesSettingsViewModel() },
     mapViewModel: MapViewModel,
     onShareBeaconToChats: ((MapBeacon, List<String>, String?) -> Unit)? = null,
 ) {
@@ -286,6 +293,8 @@ fun SettingsScreen(
     var confirmSignOut by remember { mutableStateOf(false) }
     var signingOut by remember { mutableStateOf(false) }
     var confirmDeleteAccount by remember { mutableStateOf(false) }
+    var deletingAccount by remember { mutableStateOf(false) }
+    var deleteAccountError by remember { mutableStateOf<String?>(null) }
     var pendingAlertKey by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(notificationPreferencesSaving) {
         if (!notificationPreferencesSaving) pendingAlertKey = null
@@ -360,6 +369,9 @@ fun SettingsScreen(
         calendarConnected = !tokenStorage.getCalendarDisconnected()
         deviceCalendars =
             if (permissionStates[AppPermission.Calendar] == AppPermissionState.Granted) calendarProvider.listCalendars() else emptyList()
+    }
+    LaunchedEffect(settingsPage) {
+        if (settingsPage == SettingsPage.Devices) devicesViewModel.load()
     }
     LaunchedEffect(settingsPage, savedEpoch) {
         if (settingsPage != SettingsPage.Saved) return@LaunchedEffect
@@ -512,6 +524,8 @@ fun SettingsScreen(
                             SettingsDivider()
                             MeNavRow(Icons.Default.Shield, "Permissions", onClick = { settingsPage = SettingsPage.Permissions })
                             SettingsDivider()
+                            MeNavRow(Icons.Default.Devices, "Devices", onClick = { settingsPage = SettingsPage.Devices })
+                            SettingsDivider()
                             MeNavRow(
                                 icon = Icons.Default.Star,
                                 title = "Interests",
@@ -545,6 +559,9 @@ fun SettingsScreen(
                                 onClick = { openInAppBrowser(WEB_DASHBOARD_URL) },
                             )
                         }
+                    }
+                    item {
+                        LegalLinkRows()
                     }
                     item {
                         MeAccountRows(
@@ -981,6 +998,9 @@ fun SettingsScreen(
                                     }
                             }
                         }
+                        item {
+                            LegalLinkRows()
+                        }
                     }
 
                     SettingsPage.Interests -> {
@@ -1005,6 +1025,12 @@ fun SettingsScreen(
                                     onFeedback = { msg -> toastState.show(settingsScope, msg) },
                                 )
                             }
+                        }
+                    }
+
+                    SettingsPage.Devices -> {
+                        item {
+                            SettingsDevicesSection(viewModel = devicesViewModel)
                         }
                     }
 
@@ -1269,27 +1295,62 @@ fun SettingsScreen(
 
         if (confirmDeleteAccount) {
             GlassAlertDialog(
-                onDismissRequest = { confirmDeleteAccount = false },
+                onDismissRequest = { if (!deletingAccount) confirmDeleteAccount = false },
                 title = { Text("Delete your Click account?") },
-                text = {
-                    Text(
-                        "Deleting your account permanently removes your profile, connections, and messages. For your " +
-                            "security, you'll confirm deletion on joinclick.co while signed in there.",
-                    )
-                },
+                text = { Text("This permanently removes your profile, connections, and messages. It can't be undone.") },
                 confirmButton = {
                     TextButton(
+                        enabled = !deletingAccount,
                         onClick = {
-                            confirmDeleteAccount = false
-                            if (!openInAppBrowser(ACCOUNT_DELETION_URL)) {
-                                toastState.show(settingsScope, "Open joinclick.co in your browser to delete your account.")
+                            // In-app deletion (Play account-deletion policy), then the sign-out wipe.
+                            deletingAccount = true
+                            settingsScope.launch {
+                                relationshipApi.deleteAccountImpl().fold(
+                                    onSuccess = {
+                                        confirmDeleteAccount = false
+                                        signingOut = true
+                                        onSignOut()
+                                    },
+                                    onFailure = { e ->
+                                        confirmDeleteAccount = false
+                                        deleteAccountError =
+                                            e.message
+                                                ?.lines()
+                                                ?.firstOrNull()
+                                                ?.take(180)
+                                                ?.let { "$it." }
+                                                ?: "Try again in a moment."
+                                    },
+                                )
+                                deletingAccount = false
                             }
                         },
                         colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                    ) { Text("Continue on joinclick.co") }
+                    ) { Text(if (deletingAccount) "Deleting…" else "Delete Account") }
                 },
                 dismissButton = {
-                    TextButton(onClick = { confirmDeleteAccount = false }) { Text("Cancel", color = GlassSheetTokens.OnOledMuted()) }
+                    TextButton(enabled = !deletingAccount, onClick = { confirmDeleteAccount = false }) {
+                        Text("Keep Account", color = GlassSheetTokens.OnOledMuted())
+                    }
+                },
+            )
+        }
+
+        deleteAccountError?.let { message ->
+            GlassAlertDialog(
+                onDismissRequest = { deleteAccountError = null },
+                title = { Text("Your account wasn't deleted") },
+                text = { Text("$message You can also delete it on joinclick.co while signed in there.") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        deleteAccountError = null
+                        if (!openInAppBrowser(ACCOUNT_DELETION_URL)) {
+                            toastState.show(settingsScope, "Open joinclick.co in your browser to delete your account.")
+                        }
+                    }) { Text("Delete on joinclick.co") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { deleteAccountError = null }) { Text("OK", color = GlassSheetTokens.OnOledMuted()) }
                 },
             )
         }

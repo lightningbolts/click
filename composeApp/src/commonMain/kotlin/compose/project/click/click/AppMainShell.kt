@@ -41,6 +41,7 @@ import compose.project.click.click.data.storage.TokenStorage // pragma: allowlis
 import compose.project.click.click.data.storage.createTokenStorage
 import compose.project.click.click.deeplink.AppDeepLink // pragma: allowlist secret
 import compose.project.click.click.deeplink.AppDeepLinkRouter // pragma: allowlist secret
+import compose.project.click.click.ui.components.DeviceApprovalHost // pragma: allowlist secret
 import compose.project.click.click.deeplink.ConnectionDeepLinkRouter // pragma: allowlist secret
 import compose.project.click.click.deeplink.EventDeepLinkRouter // pragma: allowlist secret
 import compose.project.click.click.encounter.EncounterTetherManager // pragma: allowlist secret
@@ -913,6 +914,9 @@ internal fun AppMainShell(
                         showConnectionDisposableRollState = showConnectionDisposableRollState,
                         disposableRollExitWithScaleState = disposableRollExitWithScaleState,
                     )
+
+                    // "Approve new sign-in?" (device_approval push, or a request seen on refresh).
+                    DeviceApprovalHost(currentUserId = currentUser.id)
 
                     if (homeRevealAlpha > 0.01f) {
                         Box(
