@@ -355,6 +355,15 @@ data class ProximityBindOkResponseDto(
     @SerialName("awaiting_selection") val awaitingSelection: Boolean? = null,
     @SerialName("pending_handshake_id") val pendingHandshakeId: String? = null,
     @SerialName("expires_at") val expiresAt: String? = null,
+    /** Set on `awaiting_selection` when this exact member set already has a group (confirm saves an encounter). */
+    @SerialName("existing_connection_id") val existingConnectionId: String? = null,
+)
+
+/** JSON body for `POST /api/connections/proximity/selection` (who the caller removed while reviewing). */
+@Serializable
+data class ProximitySelectionPostBody(
+    @SerialName("pending_handshake_id") val pendingHandshakeId: String,
+    @SerialName("excluded_member_ids") val excludedMemberIds: List<String>,
 )
 
 /** JSON body for `POST /api/connections/proximity/confirm`. */

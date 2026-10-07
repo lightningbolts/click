@@ -1049,6 +1049,7 @@ object AppDataManager {
                     groupCliqueCandidateMemberIds = proximity.groupCliqueCandidateMemberIds,
                     pendingHandshakeId = proximity.pendingHandshakeId,
                     isAggregateNewConnection = proximity.isAggregateNewConnection,
+                    existingConnectionId = proximity.existingConnectionId,
                 ),
             )
         }

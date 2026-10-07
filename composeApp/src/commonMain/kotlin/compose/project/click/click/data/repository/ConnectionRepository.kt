@@ -112,6 +112,8 @@ data class PendingProximityHandshakeSyncResult(
      */
     val pendingHandshakeId: String? = null,
     val isAggregateNewConnection: Boolean = true,
+    /** `existing_connection_id` when recovery landed on `awaiting_selection` for an existing group. */
+    val existingConnectionId: String? = null,
 )
 
 data class ProximityHandshakeRecoveryPayload(
@@ -121,6 +123,8 @@ data class ProximityHandshakeRecoveryPayload(
     /** Present when recovery landed on `awaiting_selection` (host confirm still required). */
     val pendingHandshakeId: String? = null,
     val isAggregateNewConnection: Boolean = true,
+    /** `existing_connection_id` when recovery landed on `awaiting_selection` for an existing group. */
+    val existingConnectionId: String? = null,
 )
 
 data class BindProximityHandshakeOutcome(
@@ -163,6 +167,8 @@ sealed class BindProximityHandshakeResult {
         val candidates: List<User>,
         val isAggregateNewConnection: Boolean = true,
         val groupCliqueCandidateMemberIds: List<String>? = null,
+        /** This exact member set already has a group; confirming saves an encounter ("Save this Click"). */
+        val existingConnectionId: String? = null,
     ) : BindProximityHandshakeResult()
 
     data class PendingServerMatch(
@@ -214,6 +220,7 @@ internal fun ProximityBindOkResponseDto.toAwaitingHostSelectionOrNull(): BindPro
         candidates = rows,
         isAggregateNewConnection = aggregateNewConnection,
         groupCliqueCandidateMemberIds = groupCliqueCandidate?.memberUserIds?.takeIf { it.isNotEmpty() },
+        existingConnectionId = existingConnectionId?.trim()?.takeIf { it.isNotEmpty() },
     )
 }
 
@@ -622,6 +629,18 @@ class ConnectionRepository(
             contextTags = contextTags,
             bearerJwt = bearerJwt,
         )
+
+    /** The viewer's 1:1 connection with each peer (`user_ids=cs.{viewer,peer}`, two members). Throws on failure. */
+    suspend fun fetchPairConnectionIds(
+        viewerId: String,
+        peerIds: List<String>,
+    ): Map<String, String> = fetchPairConnectionIdsImpl(viewerId = viewerId, peerIds = peerIds)
+
+    /** POST `/api/connections/proximity/selection` with the full set of removed member ids. */
+    suspend fun saveProximitySelectionExclusions(
+        pendingHandshakeId: String,
+        excludedMemberIds: Set<String>,
+    ): Result<Unit> = apiClient.postProximitySelectionExclusions(pendingHandshakeId, excludedMemberIds)
 
     suspend fun enqueuePendingProximityHandshake(
         myToken: String,

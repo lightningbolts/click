@@ -170,6 +170,42 @@ internal suspend fun ApiClient.postProximityConfirmSelectionImpl(
     }
 }
 
+/**
+ * POST `/api/connections/proximity/selection` — saves who the caller removed while reviewing a
+ * group tap, so whichever phone confirms leaves them out. The body carries the full set each time.
+ */
+internal suspend fun ApiClient.postProximitySelectionExclusionsImpl(
+    pendingHandshakeId: String,
+    excludedMemberIds: Collection<String>,
+): Result<Unit> {
+    val pendingId = pendingHandshakeId.trim()
+    if (pendingId.isEmpty()) {
+        return Result.failure(IllegalArgumentException("pendingHandshakeId required"))
+    }
+    val excluded =
+        excludedMemberIds
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .distinct()
+            .sorted()
+            // Server schema caps the array at 32.
+            .take(32)
+    return try {
+        val response: HttpResponse =
+            clickWebClient.post(
+                "${ApiClient.clickWebAuthOrigin}/api/connections/proximity/selection",
+            ) {
+                contentType(ContentType.Application.Json)
+                setBody(ProximitySelectionPostBody(pendingHandshakeId = pendingId, excludedMemberIds = excluded))
+            }
+        if (response.status.value in 200..299) Result.success(Unit) else clickWebFailure(response)
+    } catch (e: ClientRequestException) {
+        clickWebFailure(e.response)
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
+}
+
 /** GET `/api/connections/proximity` — recover a previously accepted pending handshake. */
 internal suspend fun ApiClient.getPendingProximityHandshakeImpl(
     pendingHandshakeId: String,

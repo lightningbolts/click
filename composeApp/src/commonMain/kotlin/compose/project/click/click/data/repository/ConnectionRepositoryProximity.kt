@@ -336,6 +336,7 @@ internal suspend fun ConnectionRepository.syncPendingProximityHandshakesImpl(bea
                         groupCliqueCandidateMemberIds = bindResult.groupCliqueCandidateMemberIds,
                         pendingHandshakeId = bindResult.pendingHandshakeId,
                         isAggregateNewConnection = bindResult.isAggregateNewConnection,
+                        existingConnectionId = bindResult.existingConnectionId,
                     )
                 }
                 is BindProximityHandshakeResult.InstantMatch -> {

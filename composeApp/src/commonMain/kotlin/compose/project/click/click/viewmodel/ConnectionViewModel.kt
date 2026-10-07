@@ -123,6 +123,11 @@ sealed class ConnectionState {
         val requiresSelection: Boolean = false,
         /** Currently selected peer ids when [requiresSelection] is true. */
         val selectedPeerIds: Set<String> = emptySet(),
+        /**
+         * `existing_connection_id` from `awaiting_selection`: this exact member set already has a
+         * group, so confirming saves an encounter on it ("Save this Click").
+         */
+        val existingConnectionId: String? = null,
     ) : ConnectionState()
 
     /** QR parsed locally; user fills context before any redeem/create network work. */
@@ -164,9 +169,13 @@ class ConnectionViewModel : ViewModel() {
     internal val _transientNotice = MutableSharedFlow<String>(extraBufferCapacity = 1)
     val transientNotice: SharedFlow<String> = _transientNotice.asSharedFlow()
 
-    internal val _verifiedCliqueFromProximity = MutableSharedFlow<VerifiedCliqueProximityIntent>(extraBufferCapacity = 1)
-    val verifiedCliqueFromProximity: SharedFlow<VerifiedCliqueProximityIntent> =
-        _verifiedCliqueFromProximity.asSharedFlow()
+    internal val _groupAfterTap = MutableStateFlow<GroupAfterTapUiState>(GroupAfterTapUiState.Idle)
+
+    /** The group chat a group Click finds or creates ([GroupAfterTap]), for the result screen. */
+    val groupAfterTap: StateFlow<GroupAfterTapUiState> = _groupAfterTap.asStateFlow()
+
+    /** Member sets whose [GroupAfterTap] run is in flight. */
+    internal val groupAfterTapKeys: MutableSet<String> = mutableSetOf()
 
     /**
      * Aggregate from the last proximity bind response (or deferred sync recovery).
@@ -180,6 +189,9 @@ class ConnectionViewModel : ViewModel() {
     internal var lastProximityHardwareVibe: HardwareVibeSnapshot? = null
     internal var lastTapProximityStartedAtMs: Long = 0L
     internal var activeTapProximityJob: Job? = null
+
+    /** Serial chain of `/proximity/selection` saves; the latest exclusion set always lands last. */
+    internal var proximityExclusionsJob: Job? = null
 
     fun lastProximityCoordinates(): Pair<Double?, Double?> = lastProximityLat to lastProximityLng
 
@@ -394,6 +406,13 @@ class ConnectionViewModel : ViewModel() {
                         ?: tagging.targetUsers.size,
                 reason = "dismissed",
             )
+            // Leaving the review means not joining: nobody else's confirm adds this person (iOS cancel()).
+            tagging.pendingHandshakeId?.let { pendingId ->
+                saveProximityExclusions(
+                    pendingHandshakeId = pendingId,
+                    excludedIds = tagging.selectableUsers.ifEmpty { tagging.targetUsers }.map { it.id }.toSet(),
+                )
+            }
         }
         activeTapProximityJob?.cancel()
         activeTapProximityJob = null
@@ -457,6 +476,12 @@ class ConnectionViewModel : ViewModel() {
     )
 
     fun toggleHostSelectionPeer(peerId: String) = toggleHostSelectionPeerImpl(peerId = peerId)
+
+    /**
+     * The review sheet's Remove / Add back: saves the removals right away. The sheet owns the
+     * live selection (re-keying its state on every toggle would reset an emptied selection).
+     */
+    fun updateHostSelection(selectedPeerIds: Set<String>) = updateHostSelectionImpl(selectedPeerIds = selectedPeerIds)
 
     fun promotePendingConfirmationToHostSelection(currentUserId: String) =
         promotePendingConfirmationToHostSelectionImpl(currentUserId = currentUserId)
