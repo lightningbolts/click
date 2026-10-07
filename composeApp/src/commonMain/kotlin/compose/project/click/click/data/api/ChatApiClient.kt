@@ -9,6 +9,8 @@ import compose.project.click.click.data.models.* // pragma: allowlist secret
 import compose.project.click.click.data.repository.AuthRepository // pragma: allowlist secret
 import compose.project.click.click.data.storage.TokenStorage // pragma: allowlist secret
 import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
+import compose.project.click.click.platform.DEVICE_LABEL_MAX_LENGTH // pragma: allowlist secret
+import compose.project.click.click.platform.thisDeviceLabel // pragma: allowlist secret
 import compose.project.click.click.qr.CLICK_WEB_BASE_URL // pragma: allowlist secret
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
 import io.ktor.client.*
@@ -348,11 +350,16 @@ class ChatApiClient(
         authToken: String,
     ): Result<List<Message>> = Result.failure(Exception("getChatMessages is no longer served; use click-web /api/chat/messages"))
 
-    /** Register the public half of the locally persisted v2 device identity. */
+    /**
+     * Register the public half of the locally persisted v2 device identity. Posted on every launch
+     * and sign-in: a repeat answers 409, which marks the device active (`last_seen_at`) and fills in
+     * a missing [deviceLabel].
+     */
     internal suspend fun registerE2eeV2Device(
         deviceId: String,
         identityPublicKey: String,
         authToken: String,
+        deviceLabel: String? = thisDeviceLabel(),
     ): Result<ClickWebChatDeviceDto> =
         try {
             require(deviceId.isNotBlank() && identityPublicKey.isNotBlank()) { "device identity is required" }
@@ -360,7 +367,7 @@ class ChatApiClient(
                 client.post("$clickWebBaseUrl/api/chat/devices") {
                     header(HttpHeaders.Authorization, bearerAuthHeader(authToken))
                     contentType(ContentType.Application.Json)
-                    setBody(ClickWebRegisterChatDeviceBody(deviceId, identityPublicKey))
+                    setBody(ClickWebRegisterChatDeviceBody(deviceId, identityPublicKey, deviceLabel?.trim()?.take(DEVICE_LABEL_MAX_LENGTH)?.takeIf { it.isNotEmpty() }))
                 }
             if (response.status.value in 200..299) {
                 Result.success(response.body<ClickWebChatDeviceEnvelope>().device)
