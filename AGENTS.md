@@ -33,6 +33,7 @@ Requires `local.properties` with `sdk.dir=/opt/android-sdk` and `MAPS_API_KEY=<k
 - **All Kotlin tests:** `./gradlew :composeApp:allTests`
 - **Maestro E2E (device/emulator + CLI):** `bash scripts/maestro-smoke-android.sh` (assembleDebug, uninstall snapshot APK, install, then `maestro test .maestro --include-tags smoke`). Do not run Maestro against an emulator that already has an old Click install. Smoke flows: `launch_login`, `login_signup_toggle`. Auth (onboarded user **with avatar**): `maestro test .maestro/auth --include-tags auth -e TEST_EMAIL=... -e TEST_PASSWORD=...` (`tabs.yaml` asserts no `onboarding-avatar` and map chrome). Do not add Maestro Cloud to PR CI.
 - **Supabase drift (when `../click-web` is present):** `bash scripts/check-supabase-drift.sh`
+- **Pinned click-web ref (D9):** CI checks out click-web at the SHA in `.click-web-ref`, not `main`, so a new web migration cannot turn Android red on its own. Bump it weekly with the drift report: `git -C ../click-web fetch && git -C ../click-web rev-parse origin/main > .click-web-ref`, check out that SHA in `../click-web`, run `bash scripts/sync-supabase-from-click-web.sh` and `bash scripts/check-supabase-drift.sh`, and commit the pin with the synced files in one PR. For a one-off run against another ref, set `CLICK_WEB_REF` (or the checkout action's `ref` input).
 - Shared prefs/personality migration lives in click-web (`20260813180000_notification_prefs_personality.sql`) and is mirrored here.
 
 CI: Android job runs on Linux (`testDebugUnitTest` + `assembleDebug`).
