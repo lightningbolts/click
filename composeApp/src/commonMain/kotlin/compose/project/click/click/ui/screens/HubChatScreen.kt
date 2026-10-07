@@ -34,6 +34,9 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.NotificationsOff
 import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -67,10 +70,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
+import compose.project.click.click.data.ChatMuteStore
 import compose.project.click.click.data.models.ChatMessageType // pragma: allowlist secret
 import compose.project.click.click.data.models.MessageWithUser // pragma: allowlist secret
-import compose.project.click.click.platform.KeyboardHeightProvider // pragma: allowlist secret
-import compose.project.click.click.platform.rememberKeyboardHeightProvider // pragma: allowlist secret
 import compose.project.click.click.ui.camera.DisposableCameraView // pragma: allowlist secret
 import compose.project.click.click.ui.chat.CHAT_SEARCH_FOCUS_HOLD_MS // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatAmbientMeshBackground // pragma: allowlist secret
@@ -92,8 +94,11 @@ import compose.project.click.click.ui.chat.ChatThreadAutoFollowEffects // pragma
 import compose.project.click.click.ui.chat.MessageActionCapabilities // pragma: allowlist secret
 import compose.project.click.click.ui.chat.MessageActionHandlers // pragma: allowlist secret
 import compose.project.click.click.ui.chat.MessageActionSheet // pragma: allowlist secret
+import compose.project.click.click.ui.chat.MuteDurationDialog
 import compose.project.click.click.ui.chat.applyTimestampPeekDragStep // pragma: allowlist secret
 import compose.project.click.click.ui.chat.buildChatTimelineEntriesNewestFirst // pragma: allowlist secret
+import compose.project.click.click.ui.chat.canEditMessage // pragma: allowlist secret
+import compose.project.click.click.ui.chat.canExportMessageMedia // pragma: allowlist secret
 import compose.project.click.click.ui.chat.chatComposerKeyboardMotion // pragma: allowlist secret
 import compose.project.click.click.ui.chat.chatTimelineKeyboardViewport // pragma: allowlist secret
 import compose.project.click.click.ui.chat.chatTimelineShouldFollowKeyboard // pragma: allowlist secret
@@ -109,20 +114,16 @@ import compose.project.click.click.ui.chat.rememberTimestampPeekSoftKneePx // pr
 import compose.project.click.click.ui.chat.restoreTimestampPeekRawFromDisplay // pragma: allowlist secret
 import compose.project.click.click.ui.chat.scrollChatTimelineToMessage // pragma: allowlist secret
 import compose.project.click.click.ui.components.BentoGlassOptionRow // pragma: allowlist secret
-import compose.project.click.click.ui.components.BindPlatformNativeNavigationBar // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickActionBottomSheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickOutlinedTextField // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassAlertDialog // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeftPeek // pragma: allowlist secret
 import compose.project.click.click.ui.components.LocalGlassAlertAnimatedDismiss // pragma: allowlist secret
-import compose.project.click.click.ui.components.NativeChromeAction // pragma: allowlist secret
-import compose.project.click.click.ui.components.NativeHeaderMetrics // pragma: allowlist secret
 import compose.project.click.click.ui.components.TabbedUserProfileSheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.UnifiedPopupFormDialog // pragma: allowlist secret
-import compose.project.click.click.ui.components.platformNativeHeaderClearance // pragma: allowlist secret
+import compose.project.click.click.ui.components.rememberIdentityNames // pragma: allowlist secret
 import compose.project.click.click.ui.components.sheetPageBackground // pragma: allowlist secret
-import compose.project.click.click.ui.theme.LocalPlatformStyle // pragma: allowlist secret
 import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
 import compose.project.click.click.utils.LocationResult // pragma: allowlist secret
 import compose.project.click.click.viewmodel.HubChatNavigationEvent // pragma: allowlist secret
@@ -130,6 +131,8 @@ import compose.project.click.click.viewmodel.HubChatViewModel // pragma: allowli
 import compose.project.click.click.viewmodel.HubRealtimeState // pragma: allowlist secret
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.datetime.Clock
 
 data class HubChatNavArgs(
     val hubId: String,
@@ -155,14 +158,8 @@ fun HubChatScreen(
     integrateTimestampPeekWithSwipeBackContainer: Boolean = false,
     onRegisterSwipeBackRightToLeftPeek: (InteractiveSwipeBackRightToLeftPeek?) -> Unit = {},
     parentInteractiveBackSwipePx: androidx.compose.runtime.MutableFloatState? = null,
-    /**
-     * Sheet-origin event chats keep platform identity/keyboard behavior but render their own local
-     * header instead of binding the root app UINavigationBar/UITabBar chrome.
-     */
+    /** Sheet-origin event chats render inside a sheet, so no status-bar top inset is applied. */
     embeddedInSheet: Boolean = false,
-    /** Use the persistent native X control for modal full-screen presentations. */
-    nativeLeadingClose: Boolean = false,
-    keyboardHeightProvider: KeyboardHeightProvider = rememberKeyboardHeightProvider(),
 ) {
     val viewModel: HubChatViewModel =
         viewModel(key = args.realtimeChannel) {
@@ -200,24 +197,10 @@ fun HubChatScreen(
     val resolvedCreatorId by viewModel.resolvedCreatorId.collectAsState()
     val hubDetails by viewModel.hubDetails.collectAsState()
     var settingsMenuExpanded by remember { mutableStateOf(false) }
-    val nativeNavChrome = LocalPlatformStyle.current.isIOS && !embeddedInSheet
-    if (nativeNavChrome) {
-        BindPlatformNativeNavigationBar(
-            title = hubDetails.name.ifBlank { args.hubTitle },
-            subtitle = "$occupantCount people in this hub",
-            onNavigateBack = onNavigateBack,
-            nativeTrailingActions =
-                listOf(
-                    NativeChromeAction(
-                        sfSymbol = "ellipsis",
-                        contentDescription = "Hub settings",
-                        onClick = { settingsMenuExpanded = true },
-                    ),
-                ),
-            collapseFraction = 1f,
-            leadingClose = nativeLeadingClose,
-        )
-    }
+    val hubMutes by ChatMuteStore.mutes.collectAsState()
+    var showHubInfo by remember { mutableStateOf(false) }
+    var showHubMuteDialog by remember { mutableStateOf(false) }
+    val hubMuteScope = rememberCoroutineScope()
     var showEditDialog by remember { mutableStateOf(false) }
     var showLeaveConfirm by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
@@ -236,11 +219,9 @@ fun HubChatScreen(
     val threadRuntime =
         rememberChatThreadRuntime(
             threadKey = args.realtimeChannel,
-            keyboardHeightProvider = keyboardHeightProvider,
             parentInteractiveBackSwipePx = parentInteractiveBackSwipePx,
         )
     val hubListState = threadRuntime.listState
-    val nativeKeyboardInsets = threadRuntime.nativeKeyboardInsets
     val suppressKeyboardDismissWhileProgrammaticTimelineScroll =
         threadRuntime.suppressKeyboardDismissWhileProgrammaticTimelineScroll
     val dismissKeyboardOnUserMessageScroll = threadRuntime.dismissKeyboardOnUserMessageScroll
@@ -249,7 +230,6 @@ fun HubChatScreen(
     var focusedSearchMessageId by focusedSearchMessageIdState
     val hubTimelineFollowsKeyboardState =
         rememberChatTimelineKeyboardFollow(
-            nativeKeyboardLiftPxState = nativeKeyboardInsets.liftPxState,
             shouldFollowOnKeyboardOpen = {
                 chatTimelineShouldFollowKeyboard(
                     firstVisibleItemIndex = hubListState.firstVisibleItemIndex,
@@ -298,14 +278,6 @@ fun HubChatScreen(
         } else {
             WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
         }
-    val hubHasSubtitle = true
-    val hubNativeClearance =
-        platformNativeHeaderClearance(
-            statusBarTop = topInset,
-            collapseFraction = 1f,
-            hasSubtitle = hubHasSubtitle,
-            growCompactSubtitle = true,
-        ) + NativeHeaderMetrics.GlassFadeExtensionPt.dp
     val realtimeState by viewModel.realtimeState.collectAsState()
     val channelReady = realtimeState is HubRealtimeState.Ready
     val channelError = (realtimeState as? HubRealtimeState.Error)?.message
@@ -322,17 +294,14 @@ fun HubChatScreen(
         if (channelError != null && messages.isEmpty()) {
             HubRealtimeErrorView(
                 topInset = topInset,
-                nativeClearance = hubNativeClearance,
                 message = channelError,
                 onBackPressed = onNavigateBack,
                 onRetry = { viewModel.retryRealtime() },
-                composeHeader = !nativeNavChrome,
             )
         } else if (!channelReady && messages.isEmpty()) {
             ChatChannelLoadingView(
                 topInset = topInset,
                 onBackPressed = onNavigateBack,
-                composeHeader = !nativeNavChrome,
             )
         }
 
@@ -343,67 +312,57 @@ fun HubChatScreen(
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
                 Column(modifier = Modifier.fillMaxSize()) {
-                    if (nativeNavChrome) {
-                        Spacer(
-                            modifier =
-                                Modifier
-                                    .fillMaxWidth()
-                                    .height(hubNativeClearance)
-                                    .testTag(ChatGlassHeaderPlateTestTag),
+                    Box(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(top = topInset)
+                                .height(56.dp)
+                                .testTag(ChatGlassHeaderPlateTestTag),
+                    ) {
+                        ChatLiquidGlassPlate(
+                            modifier = Modifier.matchParentSize(),
+                            testTag = ChatGlassHeaderPlateTestTag,
                         )
-                    } else {
-                        Box(
+                        Row(
                             modifier =
                                 Modifier
-                                    .fillMaxWidth()
-                                    .padding(top = topInset)
-                                    .height(56.dp)
-                                    .testTag(ChatGlassHeaderPlateTestTag),
+                                    .fillMaxSize()
+                                    .padding(horizontal = ChatChromeHorizontalPadding),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            ChatLiquidGlassPlate(
-                                modifier = Modifier.matchParentSize(),
-                                testTag = ChatGlassHeaderPlateTestTag,
+                            ChatHeaderIconButton(
+                                icon = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Back",
+                                onClick = onNavigateBack,
+                                showBorder = true,
                             )
-                            Row(
-                                modifier =
-                                    Modifier
-                                        .fillMaxSize()
-                                        .padding(horizontal = ChatChromeHorizontalPadding),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                ChatHeaderIconButton(
-                                    icon = Icons.AutoMirrored.Filled.ArrowBack,
-                                    contentDescription = "Back",
-                                    onClick = onNavigateBack,
-                                    showBorder = true,
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = hubDetails.name,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface,
                                 )
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = hubDetails.name,
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                    )
-                                    Text(
-                                        text =
-                                            if (inLobby) {
-                                                "$occupantCount ${if (occupantCount == 1) "person" else "people"} here"
-                                            } else {
-                                                "$occupantCount people in this hub"
-                                            },
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                                ChatHeaderIconButton(
-                                    icon = Icons.Filled.MoreVert,
-                                    contentDescription = "Hub settings",
-                                    onClick = { settingsMenuExpanded = true },
-                                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                                    modifier = Modifier.testTag("hub_settings_menu"),
+                                Text(
+                                    text =
+                                        if (inLobby) {
+                                            "$occupantCount ${if (occupantCount == 1) "person" else "people"} here"
+                                        } else {
+                                            "$occupantCount people in this hub"
+                                        },
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
+                            ChatHeaderIconButton(
+                                icon = Icons.Filled.MoreVert,
+                                contentDescription = "Hub settings",
+                                onClick = { settingsMenuExpanded = true },
+                                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                                modifier = Modifier.testTag("hub_settings_menu"),
+                            )
                         }
                     }
 
@@ -545,7 +504,6 @@ fun HubChatScreen(
                                         .weight(1f)
                                         .fillMaxWidth()
                                         .chatTimelineKeyboardViewport(
-                                            nativeKeyboardLiftPxState = nativeKeyboardInsets.liftPxState,
                                             followKeyboard = { hubTimelineFollowsKeyboardState.value },
                                         ),
                             ) {
@@ -572,7 +530,6 @@ fun HubChatScreen(
                                     secureMediaHost = viewModel,
                                     activeChatId = hubIdForSecureMedia,
                                     onToggleReaction = viewModel::toggleReaction,
-                                    onForward = {},
                                     onLongPress = { contextMenuMessage = it },
                                     onSwipeReply = viewModel::startReplyTo,
                                     onPeerAvatarClick = { userId ->
@@ -611,10 +568,7 @@ fun HubChatScreen(
                                 modifier =
                                     Modifier
                                         .fillMaxWidth()
-                                        .chatComposerKeyboardMotion(
-                                            nativeKeyboardLiftPxState = nativeKeyboardInsets.liftPxState,
-                                            clearNativeTabBar = !embeddedInSheet,
-                                        ),
+                                        .chatComposerKeyboardMotion(),
                             ) {
                                 HubChatInputBar(
                                     viewModel = viewModel,
@@ -668,12 +622,13 @@ fun HubChatScreen(
                             selected.message.messageType.lowercase() != "call_log",
                     canReact = canWriteHub,
                     canCopy = true,
-                    canSaveMedia = selected.message.messageType.lowercase() == ChatMessageType.IMAGE,
-                    canShareMedia = selected.message.messageType.lowercase() == ChatMessageType.IMAGE,
-                    canEdit =
-                        canWriteHub &&
-                            selected.isSent &&
-                            selected.message.messageType.lowercase() == ChatMessageType.TEXT,
+                    canSaveMedia =
+                        selected.message.messageType.lowercase() == ChatMessageType.IMAGE &&
+                            canExportMessageMedia(selected.message),
+                    canShareMedia =
+                        selected.message.messageType.lowercase() == ChatMessageType.IMAGE &&
+                            canExportMessageMedia(selected.message),
+                    canEdit = canWriteHub && canEditMessage(selected),
                     canDelete = canWriteHub && selected.isSent,
                 ),
             handlers =
@@ -685,6 +640,35 @@ fun HubChatScreen(
                     onDelete = { message -> viewModel.deleteMessage(message.message.id) },
                 ),
             onDismiss = { contextMenuMessage = null },
+        )
+    }
+
+    if (showHubInfo) {
+        val occupants by viewModel.occupantCount.collectAsState()
+        val members by viewModel.participantIds.collectAsState()
+        val eventHub by viewModel.isEventHubFlow.collectAsState()
+        val memberIdentities = rememberIdentityNames(members.filter { viewModel.participantName(it) == null })
+        HubInfoSheet(
+            name = hubDetails.name,
+            category = hubDetails.category,
+            isEventHub = eventHub,
+            isOwner = hubDetails.isCreator,
+            occupantCount = occupants,
+            memberIds = members,
+            viewerUserId = currentUserId,
+            memberName = { id -> viewModel.participantName(id) ?: memberIdentities[id]?.name ?: "Click user" },
+            onCategoryChange = { next -> viewModel.editHubDetails(hubDetails.name, next) },
+            onDismiss = { showHubInfo = false },
+        )
+    }
+
+    if (showHubMuteDialog) {
+        MuteDurationDialog(
+            onPick = { duration ->
+                showHubMuteDialog = false
+                hubMuteScope.launch { ChatMuteStore.setMuted(args.hubId, duration) }
+            },
+            onDismiss = { showHubMuteDialog = false },
         )
     }
 
@@ -715,6 +699,45 @@ fun HubChatScreen(
                             .align(Alignment.CenterHorizontally),
                 )
                 HorizontalDivider(color = GlassSheetTokens.GlassBorder())
+
+                BentoGlassOptionRow(
+                    showBorder = false,
+                    title = "Hub info",
+                    subtitle = "Category, who's here, and members",
+                    onClick = {
+                        settingsMenuExpanded = false
+                        showHubInfo = true
+                    },
+                    leading = {
+                        Icon(
+                            Icons.Outlined.Info,
+                            contentDescription = null,
+                            tint = GlassSheetTokens.OnOledMuted(),
+                        )
+                    },
+                )
+
+                val hubMuted = ChatMuteStore.isMuted(hubMutes, args.hubId, Clock.System.now().toEpochMilliseconds())
+                BentoGlassOptionRow(
+                    showBorder = false,
+                    title = if (hubMuted) "Unmute notifications" else "Mute notifications",
+                    subtitle = if (hubMuted) "Turn this hub's notifications back on" else "Silence notifications from this hub",
+                    onClick = {
+                        settingsMenuExpanded = false
+                        if (hubMuted) {
+                            hubMuteScope.launch { ChatMuteStore.setMuted(args.hubId, null) }
+                        } else {
+                            showHubMuteDialog = true
+                        }
+                    },
+                    leading = {
+                        Icon(
+                            if (hubMuted) Icons.Outlined.Notifications else Icons.Outlined.NotificationsOff,
+                            contentDescription = null,
+                            tint = GlassSheetTokens.OnOledMuted(),
+                        )
+                    },
+                )
 
                 if (HubSettingsMenuItem.Leave in menuItems) {
                     BentoGlassOptionRow(
@@ -899,8 +922,7 @@ private fun HubChatInputBar(
     val replyingTo by viewModel.replyingTo.collectAsState()
     val editingMessageId by viewModel.editingMessageId.collectAsState()
 
-    val composerStyle = LocalPlatformStyle.current
-    val composerRowVPad = if (composerStyle.isIOS) 6.dp else 8.dp
+    val composerRowVPad = 8.dp
     val composerRowHPad = ChatChromeHorizontalPadding
 
     val focusManager = LocalFocusManager.current
@@ -1027,39 +1049,33 @@ private fun HubChatInputBar(
 @Suppress("ktlint:standard:function-naming")
 private fun HubRealtimeErrorView(
     topInset: androidx.compose.ui.unit.Dp,
-    nativeClearance: androidx.compose.ui.unit.Dp,
     message: String,
     onBackPressed: () -> Unit,
     onRetry: () -> Unit,
-    composeHeader: Boolean = true,
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
-        if (composeHeader) {
-            Box(modifier = Modifier.padding(start = 20.dp, top = topInset, end = 20.dp)) {
-                Row(
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .height(56.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    ChatHeaderIconButton(
-                        icon = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Back",
-                        onClick = onBackPressed,
-                        showBorder = true,
-                    )
-                }
+        Box(modifier = Modifier.padding(start = 20.dp, top = topInset, end = 20.dp)) {
+            Row(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(56.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                ChatHeaderIconButton(
+                    icon = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Back",
+                    onClick = onBackPressed,
+                    showBorder = true,
+                )
             }
-        } else {
-            Spacer(modifier = Modifier.fillMaxWidth().height(nativeClearance))
         }
         Column(
             modifier =
                 Modifier
                     .fillMaxSize()
                     .padding(horizontal = 32.dp)
-                    .padding(top = if (composeHeader) topInset + 56.dp else nativeClearance),
+                    .padding(top = topInset + 56.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {

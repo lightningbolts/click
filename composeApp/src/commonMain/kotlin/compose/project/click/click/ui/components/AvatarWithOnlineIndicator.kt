@@ -118,8 +118,7 @@ fun stableAvatarPlaceholderColor(seed: String): Color {
 }
 
 /**
- * Initials, seed color, and photo URL used by [ConnectionListUserAvatarFace] and the iOS
- * native header. Keep both call sites on this function so faces stay identical.
+ * Initials, seed color, and photo URL used by [ConnectionListUserAvatarFace].
  */
 data class AvatarFaceSpec(
     val initials: String,

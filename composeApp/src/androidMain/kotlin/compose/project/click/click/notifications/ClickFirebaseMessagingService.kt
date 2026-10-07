@@ -11,10 +11,14 @@ import android.os.Build
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.app.Person
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import compose.project.click.click.MainActivity // pragma: allowlist secret
 import compose.project.click.click.crypto.MessageCrypto // pragma: allowlist secret
+import compose.project.click.click.crypto.PushPreviewKeyStore
+import compose.project.click.click.data.ChatMuteStore
+import compose.project.click.click.data.storage.createTokenStorage
 
 private const val CLICK_MESSAGES_CHANNEL_ID = "click_messages"
 private const val CLICK_MESSAGES_CHANNEL_NAME = "Click messages"
@@ -38,19 +42,22 @@ class ClickFirebaseMessagingService : FirebaseMessagingService() {
 
         val type = message.data["type"]
         val prefs = NotificationRuntimeState.getNotificationPreferences()
-        if (type == "incoming_call") {
+        // Calls and Seed-a-Room teasers (spec §56.2.2) are retired; an older server may still send them.
+        if (type == "incoming_call" || type == "event_teaser") {
             return
         }
+        val momentType = type?.takeIf(RelationshipMomentPush::isMoment)
         val allowed =
-            when (type) {
-                "event_reminder" -> prefs.eventReminderNotificationsEnabled
-                "event_teaser" -> prefs.eventTeaserNotificationsEnabled
-                "reconnect_nudge", "shared_upcoming_event" -> prefs.reconnectNudgeNotificationsEnabled
-                "availability_match" -> prefs.availabilityMatchNotificationsEnabled
-                "hub_message" -> prefs.hubMessageNotificationsEnabled
+            when {
+                momentType == null -> allowedForLegacyType(type, prefs)
+                RelationshipMomentPush.usesRelationshipMomentsPreference(momentType) -> prefs.reconnectNudgeNotificationsEnabled
                 else -> prefs.messageNotificationsEnabled
             }
         if (!allowed) {
+            return
+        }
+        if (momentType != null) {
+            showRelationshipMomentPush(momentType, message)
             return
         }
         if (type == "disposable_reveal") {
@@ -61,18 +68,7 @@ class ClickFirebaseMessagingService : FirebaseMessagingService() {
             val body =
                 message.notification?.body
                     ?: "📸 Your Click Drop has been revealed!"
-            val launchIntent =
-                if (deepLinkId.isNotBlank()) {
-                    MainActivity.createChatDeepLinkIntent(
-                        context = this,
-                        chatId = chatId,
-                        connectionId = connectionId,
-                    )
-                } else {
-                    packageManager.getLaunchIntentForPackage(packageName)?.apply {
-                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                    } ?: return
-                }
+            val launchIntent = launchIntentFor(PushRoutes.route(message.data)) ?: return
             val pendingIntent =
                 PendingIntent.getActivity(
                     this,
@@ -105,52 +101,22 @@ class ClickFirebaseMessagingService : FirebaseMessagingService() {
             return
         }
 
-        if (type == "event_teaser" || type == "event_reminder") {
-            val beaconId = message.data["beacon_id"].orEmpty()
-            val title = message.data["title"] ?: message.notification?.title ?: "Click event"
-            val body = message.data["body"] ?: message.notification?.body ?: "Open Click to view this event"
-            val launchIntent =
-                if (beaconId.isNotBlank()) {
-                    MainActivity.createEventDeepLinkIntent(this, beaconId)
-                } else {
-                    packageManager.getLaunchIntentForPackage(packageName)?.apply {
-                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                    } ?: return
-                }
-            showSimplePush(
-                tag = beaconId.ifBlank { type ?: "event" },
-                title = title,
-                body = body,
-                launchIntent = launchIntent,
-            )
+        // Event reminders, nudges, archive warnings and availability matches carry server text.
+        if (type != null && type in PushRoutes.serverTextTypes) {
+            val title = message.data["title"] ?: message.notification?.title ?: "Click"
+            val body = message.data["body"] ?: message.notification?.body ?: "Open Click"
+            val launchIntent = launchIntentFor(PushRoutes.route(message.data)) ?: return
+            val tag =
+                listOf("beacon_id", "connection_id", "peer_user_id")
+                    .firstNotNullOfOrNull { key -> message.data[key]?.takeIf { it.isNotBlank() } }
+                    ?: type
+            showSimplePush(tag = "$type:$tag", title = title, body = body, launchIntent = launchIntent)
             return
         }
 
-        if (type == "reconnect_nudge" || type == "shared_upcoming_event") {
-            val connectionId = message.data["connection_id"].orEmpty()
-            val beaconId = message.data["beacon_id"].orEmpty()
-            val title = message.data["title"] ?: message.notification?.title ?: "Click"
-            val body = message.data["body"] ?: message.notification?.body ?: "Open Click"
-            val launchIntent =
-                if (type == "shared_upcoming_event" && beaconId.isNotBlank()) {
-                    MainActivity.createEventDeepLinkIntent(this, beaconId)
-                } else if (connectionId.isNotBlank()) {
-                    MainActivity.createChatDeepLinkIntent(
-                        context = this,
-                        chatId = "",
-                        connectionId = connectionId,
-                    )
-                } else {
-                    packageManager.getLaunchIntentForPackage(packageName)?.apply {
-                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                    } ?: return
-                }
-            showSimplePush(
-                tag = connectionId.ifBlank { beaconId.ifBlank { type ?: "nudge" } },
-                title = title,
-                body = body,
-                launchIntent = launchIntent,
-            )
+        // Defense in depth: the push function enforces mutes, but drop a muted chat here too.
+        val pushChatId = message.data["chat_id"] ?: message.data["hub_id"]
+        if (pushChatId != null && isChatMutedLocally(pushChatId)) {
             return
         }
 
@@ -162,17 +128,18 @@ class ClickFirebaseMessagingService : FirebaseMessagingService() {
         val chatId = message.data["chat_id"] ?: ""
         val senderName = message.data["sender_name"] ?: "Someone"
         val connectionId = message.data["connection_id"] ?: ""
-        val previewFromServer = message.data["preview_text"]?.trim()?.takeIf { it.isNotEmpty() }
-        val decrypted =
-            decryptMessagePreview(
-                encryptedContent = message.data["encrypted_content"] ?: "",
-                connectionId = connectionId,
-                senderUserId = message.data["sender_user_id"] ?: "",
-                recipientUserId = message.data["recipient_user_id"] ?: "",
-                fallback = "Open Click to view it",
+        // Never fall back to server `preview_text`: see chatPushBody.
+        val body =
+            chatPushBody(
+                decryptedPreview =
+                    decryptMessagePreview(
+                        encryptedContent = message.data["encrypted_content"] ?: "",
+                        connectionId = connectionId,
+                        senderUserId = message.data["sender_user_id"] ?: "",
+                        recipientUserId = message.data["recipient_user_id"] ?: "",
+                    ),
+                messageType = message.data["message_type"],
             )
-        val fallbackPreview = "Open Click to view it"
-        val body = if (decrypted != fallbackPreview) decrypted else previewFromServer ?: decrypted
 
         if (connectionId.isNotBlank() || chatId.isNotBlank()) {
             ChatPushInboxBridge.applyChatMessagePush(
@@ -185,18 +152,7 @@ class ClickFirebaseMessagingService : FirebaseMessagingService() {
         }
 
         val deepLinkId = chatId.ifBlank { connectionId }
-        val launchIntent =
-            if (deepLinkId.isNotBlank()) {
-                MainActivity.createChatDeepLinkIntent(
-                    context = this,
-                    chatId = chatId,
-                    connectionId = connectionId,
-                )
-            } else {
-                packageManager.getLaunchIntentForPackage(packageName)?.apply {
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                } ?: return
-            }
+        val launchIntent = launchIntentFor(PushRoutes.route(message.data)) ?: return
 
         val pendingIntent =
             PendingIntent.getActivity(
@@ -206,13 +162,30 @@ class ClickFirebaseMessagingService : FirebaseMessagingService() {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
 
+        val notifyTag =
+            if (deepLinkId.isNotBlank()) {
+                chatNotificationTag(deepLinkId)
+            } else {
+                message.messageId?.let { chatNotificationTag(it) }
+            }
+
+        // One conversation-style notification per chat: new messages append (iOS threads by
+        // chat_id); group pushes are titled with the group name.
+        val groupName = message.data["group_name"]?.trim()?.takeIf { it.isNotEmpty() }
+        val style =
+            (notifyTag?.let { existingMessagingStyle(it) } ?: NotificationCompat.MessagingStyle(Person.Builder().setName("You").build()))
+                .setConversationTitle(groupName)
+                .setGroupConversation(groupName != null)
+                .addMessage(body, System.currentTimeMillis(), Person.Builder().setName(senderName).build())
+
         val notification =
             NotificationCompat
                 .Builder(this, CLICK_MESSAGES_CHANNEL_ID)
                 .setSmallIcon(android.R.drawable.ic_dialog_info)
-                .setContentTitle(senderName)
+                .setContentTitle(groupName ?: senderName)
                 .setContentText(body)
-                .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+                .setStyle(style)
+                .setCategory(NotificationCompat.CATEGORY_MESSAGE)
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setAutoCancel(true)
                 .setContentIntent(pendingIntent)
@@ -224,13 +197,6 @@ class ClickFirebaseMessagingService : FirebaseMessagingService() {
         ) {
             return
         }
-
-        val notifyTag =
-            if (deepLinkId.isNotBlank()) {
-                chatNotificationTag(deepLinkId)
-            } else {
-                message.messageId?.let { chatNotificationTag(it) }
-            }
         if (notifyTag != null) {
             NotificationManagerCompat.from(this).notify(notifyTag, 0, notification)
         } else {
@@ -238,29 +204,92 @@ class ClickFirebaseMessagingService : FirebaseMessagingService() {
         }
     }
 
+    /** The messaging style of this chat's notification that is still showing, so we can append. */
+    private fun existingMessagingStyle(tag: String): NotificationCompat.MessagingStyle? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return null
+        val manager = getSystemService(NotificationManager::class.java) ?: return null
+        val active = runCatching { manager.activeNotifications }.getOrNull() ?: return null
+        val existing = active.firstOrNull { it.tag == tag && it.id == 0 }?.notification ?: return null
+        return NotificationCompat.MessagingStyle.extractMessagingStyleFromNotification(existing)
+    }
+
+    private fun isChatMutedLocally(chatId: String): Boolean =
+        ChatMuteStore.isMuted(chatId) ||
+            runCatching {
+                kotlinx.coroutines.runBlocking {
+                    val persisted =
+                        ChatMuteStore.loadPersisted(
+                            compose.project.click.click.data.storage
+                                .createTokenStorage(),
+                        )
+                    ChatMuteStore.isMuted(persisted, chatId, System.currentTimeMillis())
+                }
+            }.getOrDefault(false)
+
+    private fun allowedForLegacyType(
+        type: String?,
+        prefs: LocalNotificationPreferences,
+    ): Boolean =
+        when (type) {
+            "event_reminder" -> prefs.eventReminderNotificationsEnabled
+            "reconnect_nudge", "shared_upcoming_event" -> prefs.reconnectNudgeNotificationsEnabled
+            "availability_match" -> prefs.availabilityMatchNotificationsEnabled
+            "hub_message" -> prefs.hubMessageNotificationsEnabled
+            else -> prefs.messageNotificationsEnabled
+        }
+
+    /** Server-written title/body; tap opens the peer profile, the chat, or the group chat. */
+    private fun showRelationshipMomentPush(
+        type: String,
+        message: RemoteMessage,
+    ) {
+        val title = message.data["title"] ?: message.notification?.title ?: "Click"
+        val body = message.data["body"] ?: message.notification?.body ?: "Open Click"
+        val launchIntent = launchIntentFor(PushRoutes.route(message.data + ("type" to type))) ?: return
+        val tag = message.data["nudge_id"]?.takeIf { it.isNotBlank() } ?: "$type:${message.data["connection_id"].orEmpty()}"
+        showSimplePush(tag = tag, title = title, body = body, launchIntent = launchIntent)
+    }
+
+    /** The activity intent for a [PushRoute]; null only when the app can't be launched at all. */
+    private fun launchIntentFor(route: PushRoute): Intent? =
+        when (route) {
+            is PushRoute.DirectChat ->
+                MainActivity.createChatDeepLinkIntent(this, chatId = route.chatId, connectionId = route.connectionId)
+            is PushRoute.GroupChat -> MainActivity.createChatDeepLinkIntent(this, chatId = route.chatId)
+            is PushRoute.Event -> MainActivity.createEventDeepLinkIntent(this, route.beaconId)
+            is PushRoute.Hub -> MainActivity.createHubDeepLinkIntent(this, route.hubId)
+            is PushRoute.Profile -> MainActivity.createProfileDeepLinkIntent(this, route.userId)
+            PushRoute.Connections -> MainActivity.createConnectionsIntent(this)
+            PushRoute.OpenApp ->
+                packageManager.getLaunchIntentForPackage(packageName)?.apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                }
+        }
+
+    /** Local v1 decrypt only; returns null when the preview can't be produced on-device. */
     private fun decryptMessagePreview(
         encryptedContent: String,
         connectionId: String,
         senderUserId: String,
         recipientUserId: String,
-        fallback: String,
-    ): String {
-        if (encryptedContent.isBlank()) return fallback
-
-        if (!MessageCrypto.isEncrypted(encryptedContent)) {
-            return encryptedContent.take(120)
+    ): String? {
+        if (encryptedContent.isBlank()) return null
+        if (!MessageCrypto.isAnyE2eeWireContent(encryptedContent)) return encryptedContent
+        if (MessageCrypto.isV2Encrypted(encryptedContent)) {
+            return runCatching {
+                kotlinx.coroutines.runBlocking {
+                    PushPreviewKeyStore.decryptPreview(createTokenStorage(), encryptedContent)
+                }
+            }.getOrNull()
         }
-
-        if (connectionId.isBlank() || senderUserId.isBlank() || recipientUserId.isBlank()) {
-            return fallback
-        }
+        if (!MessageCrypto.isEncrypted(encryptedContent)) return null
+        if (connectionId.isBlank() || senderUserId.isBlank() || recipientUserId.isBlank()) return null
 
         return try {
             val keys = MessageCrypto.deriveKeysForConnection(connectionId, listOf(senderUserId, recipientUserId))
-            val decrypted = MessageCrypto.decryptContent(encryptedContent, keys)
-            if (MessageCrypto.isEncrypted(decrypted)) fallback else decrypted.take(120)
+            MessageCrypto.decryptContent(encryptedContent, keys)
         } catch (_: Exception) {
-            fallback
+            null
         }
     }
 

@@ -54,8 +54,8 @@ ViewModels are the **orchestration layer** between `ui/` and `data/`.
 |-----------|-----------------|----------------------|
 | `ConnectionViewModel` | Add Click, NFC, proximity | Tri-Factor handshake, QR redemption, Multi-Tap cliques, sensor capture, offline proximity queue |
 | `ChatViewModel` | Connections tab, ChatView | E2EE encrypt/decrypt, message send queue, reactions, typing, read receipts, media vault, archive |
-| `GlobalSearchViewModel` | GlobalSearchScreen | Unified haystack search across connections, messages, beacons, intents |
-| `MapViewModel` | MapScreen | Beacon/hub discovery, layer filters, ghost mode, telemetry pan events |
+| `GlobalSearchViewModel` | UnifiedSearchSheet | Unified haystack search across connections, messages, beacons, intents |
+| `MapViewModel` | MapScreen | Beacon/hub discovery, layer filters, telemetry pan events |
 | `HubChatViewModel` | HubChatScreen | Ephemeral hub messages (non-E2EE venue chat) |
 | `HomeViewModel` | HomeScreen | Dashboard aggregation, event reminders, availability |
 | `AuthViewModel` | Login/SignUp | Supabase auth, session boot, onboarding gate |
@@ -66,11 +66,11 @@ ViewModels are the **orchestration layer** between `ui/` and `data/`.
 
 ### AppDataManager integration pattern
 
-`AppDataManager` is a **singleton object** holding hot `StateFlow`s for connections, chats, messages, beacons, hubs, ghost mode, archives, and core pins. ViewModels follow this contract:
+`AppDataManager` is a **singleton object** holding hot `StateFlow`s for connections, chats, messages, beacons, hubs, archives, and core pins. ViewModels follow this contract:
 
 1. **Read** — `AppDataManager.connections.collect { … }` or one-shot `.value` for synchronous decisions.
 2. **Write** — prefer repository success → `AppDataManager` optimistic/local update helpers (`markConnectionArchivedLocally`, `upsertConnection`, etc.).
-3. **Refresh** — `AppDataManager.refreshAll(userId)` on foreground/network regain; **skipped when ghost mode is on**.
+3. **Refresh** — `AppDataManager.refreshAll(userId)` on foreground/network regain.
 4. **Boot** — `AppDataManager.hydrateFromCache(tokenStorage)` for offline-first cold start before network.
 
 `ChatViewModel` is the deepest integrator: it mirrors realtime message streams into per-chat caches while respecting `AppDataManager` connection and archive sets.
@@ -163,10 +163,9 @@ First-time multi-peer (≥3) returns server `awaiting_selection` → host picks 
 
 1. **ViewModels must not import Compose UI** (except `@Composable` helpers like `SecureChatMediaHost` where unavoidable).
 2. **Never clear SSOT on transient network errors** — use `util/isOfflineNetworkFailure()` to preserve local state.
-3. **Ghost mode** — do not trigger `AppDataManager.refreshAll` or location/beacon uploads when ghost mode is enabled.
-4. **Token access** — outbound Bearer must come from `EnsureFreshAccessToken.get` (never raw `tokenStorage.getJwt()` or an expired SDK access token). `EnsureFreshAccessToken` never returns a JWT with `exp <= now`; failed refresh returns null. After idle/offline boot, `SessionResumeGate` stays closed until the first `refreshSession(forceRefresh = true)` finishes so writes are not “logged in” with a dead token. Dual-store: persist SDK + TokenStorage together after refresh; never `importStoredSessionWithoutRefresh` over a live SDK session (`SessionHydrationPolicy`). After a refresh, `rebindRealtimeSocket()` so hub/chat sockets pick up the new bearer. Never log raw JWTs (`util/redactedRestMessage`).
-5. **Threading** — heavy crypto and media on `Dispatchers.Default` / `chatMediaDispatcher`; UI state updates on Main via `StateFlow`.
-6. **Testability** — repositories are constructor-injectable in tests (see `androidUnitTest/.../ChatViewModelTest.kt`).
+3. **Token access** — outbound Bearer must come from `EnsureFreshAccessToken.get` (never raw `tokenStorage.getJwt()` or an expired SDK access token). `EnsureFreshAccessToken` never returns a JWT with `exp <= now`; failed refresh returns null. After idle/offline boot, `SessionResumeGate` stays closed until the first `refreshSession(forceRefresh = true)` finishes so writes are not “logged in” with a dead token. Dual-store: persist SDK + TokenStorage together after refresh; never `importStoredSessionWithoutRefresh` over a live SDK session (`SessionHydrationPolicy`). After a refresh, `rebindRealtimeSocket()` so hub/chat sockets pick up the new bearer. Never log raw JWTs (`util/redactedRestMessage`).
+4. **Threading** — heavy crypto and media on `Dispatchers.Default` / `chatMediaDispatcher`; UI state updates on Main via `StateFlow`.
+5. **Testability** — repositories are constructor-injectable in tests (see `androidUnitTest/.../ChatViewModelTest.kt`).
 
 ---
 
@@ -174,7 +173,7 @@ First-time multi-peer (≥3) returns server `awaiting_selection` → host picks 
 
 | Path | Relationship |
 |------|--------------|
-| `data/AppDataManager.kt` | App-wide SSOT; ghost mode, archives, cores |
+| `data/AppDataManager.kt` | App-wide SSOT; archives, cores |
 | `data/repository/SupabaseChatRepository.kt` | Chat CRUD + Realtime |
 | `data/repository/ConnectionRepository.kt` | Proximity bind, QR, connections |
 | `data/repository/SupabaseRepository.kt` | User profiles, unified search |
@@ -258,9 +257,6 @@ Auth session provides user id for QR URL generation (UI renders; ViewModel suppl
 ### Collaboration sessions & disposable rolls
 `ConnectionViewModel` activates `CollaborationSessionManager` on re-encounter bumps; `ChatViewModel` exposes roll window for camera entry.
 
-### Ghost mode
-`AppDataManager.toggleGhostMode()` — all ViewModels respect ghost gate on refresh/location.
-
 ### Block & report
 `ChatViewModel` / repository calls hide connections and insert `user_blocks` rows.
 
@@ -289,4 +285,4 @@ B2B venue flows use `ApiClient` hub/beacon endpoints from `MapViewModel`.
 `HomeViewModel` reads `EventReminderCoordinator.homeReminders` for dashboard cards.
 
 ### Achievements & stats
-`HomeViewModel` / testing surfaces expose connection counts; `ClicktivitiesScreen` is mostly static UI today.
+`HomeViewModel` / testing surfaces expose connection counts for Home "Your Stats".

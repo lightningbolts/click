@@ -6,7 +6,7 @@ import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * Bridges notification tap intents and OS URLs to Compose navigation.
- * [MainActivity] / iOS write pending IDs; [App] observes and navigates.
+ * [MainActivity] writes pending IDs; [App] observes and navigates.
  */
 object ChatDeepLinkManager {
     private val _pendingConnectionId = MutableStateFlow<String?>(null)
@@ -24,8 +24,39 @@ object ChatDeepLinkManager {
     private val _pendingEventHub = MutableStateFlow<PendingEventHub?>(null)
     val pendingEventHub: StateFlow<PendingEventHub?> = _pendingEventHub.asStateFlow()
 
+    private val _pendingProfileUserId = MutableStateFlow<String?>(null)
+
+    /** Peer profile to open (relationship-moment pushes: anniversary, memory prompt, hangout confirm). */
+    val pendingProfileUserId: StateFlow<String?> = _pendingProfileUserId.asStateFlow()
+
+    fun setPendingProfile(userId: String) {
+        val trimmed = userId.trim()
+        if (trimmed.isNotEmpty()) {
+            _pendingProfileUserId.value = trimmed
+        }
+    }
+
+    fun consumeProfile(): String? {
+        val value = _pendingProfileUserId.value
+        _pendingProfileUserId.value = null
+        return value
+    }
+
     fun setPendingChat(connectionId: String) {
         _pendingConnectionId.value = connectionId
+    }
+
+    private var pendingTargetMessageId: String? = null
+
+    /** Message to scroll to once the pending chat opens (`click://chat/{id}?m=`). */
+    fun setPendingTargetMessage(messageId: String) {
+        pendingTargetMessageId = messageId.trim().takeIf { it.isNotEmpty() }
+    }
+
+    fun consumeTargetMessage(): String? {
+        val value = pendingTargetMessageId
+        pendingTargetMessageId = null
+        return value
     }
 
     fun consume(): String? {

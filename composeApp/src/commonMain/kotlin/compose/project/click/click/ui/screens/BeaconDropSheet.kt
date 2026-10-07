@@ -65,11 +65,12 @@ import coil3.compose.AsyncImage
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.models.BeaconVisibilityAudience // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
-import compose.project.click.click.events.EVENT_CATEGORY_OPTIONS // pragma: allowlist secret
 import compose.project.click.click.events.EventListingOptions // pragma: allowlist secret
+import compose.project.click.click.events.EventRecurrence // pragma: allowlist secret
 import compose.project.click.click.events.EventVenueScale // pragma: allowlist secret
 import compose.project.click.click.events.EventVisibility // pragma: allowlist secret
 import compose.project.click.click.events.GuestListVisibility // pragma: allowlist secret
+import compose.project.click.click.events.eventRecurrenceValidationError // pragma: allowlist secret
 import compose.project.click.click.events.validateEventSchedule // pragma: allowlist secret
 import compose.project.click.click.ui.chat.rememberChatMediaPickers // pragma: allowlist secret
 import compose.project.click.click.ui.components.ActionChipButton // pragma: allowlist secret
@@ -177,6 +178,7 @@ fun BeaconDropSheetContent(
         venueScale: compose.project.click.click.events.EventVenueScale, // pragma: allowlist secret
         eventLocation: GeocodedPlace?,
         eventListingOptions: EventListingOptions?,
+        eventRecurrence: EventRecurrence?,
         imageBytes: ByteArray?,
         imageMime: String?,
         onRejectedEarly: () -> Unit,
@@ -378,33 +380,19 @@ fun BeaconDropSheetContent(
                             uiState = schedulePickerUi,
                             includeDialogs = false,
                         )
-                        Text(
-                            text = "Categories",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface,
+                        EventRepeatPicker(
+                            frequency = form.repeatFrequency,
+                            occurrences = form.occurrences,
+                            onFrequency = {
+                                viewModel.setRepeatFrequency(it)
+                                viewModel.setSubmitValidationError(null)
+                            },
+                            onOccurrences = viewModel::setOccurrences,
                         )
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            EVENT_CATEGORY_OPTIONS.forEach { option ->
-                                ClickChip(
-                                    label = option,
-                                    selected = option in form.eventCategories,
-                                    onClick = {
-                                        val next =
-                                            if (option in form.eventCategories) {
-                                                form.eventCategories - option
-                                            } else {
-                                                form.eventCategories + option
-                                            }
-                                        viewModel.setEventCategories(next)
-                                    },
-                                    compact = true,
-                                )
-                            }
-                        }
+                        EventCategoryPicker(
+                            selected = form.eventCategories.toList(),
+                            onChange = { viewModel.setEventCategories(it.toCollection(LinkedHashSet())) },
+                        )
                         Text(
                             text = "Check-in area",
                             style = MaterialTheme.typography.titleSmall,
@@ -897,7 +885,12 @@ fun BeaconDropSheetContent(
                                 title = title,
                                 soundtrackUrl = url,
                                 hasEventLocation = form.selectedEventLocation != null,
-                            )
+                            ) ?: if (isEvent) {
+                                // The drop closes optimistically, so catch what the server would reject.
+                                eventRecurrenceValidationError(form.eventSchedule, form.repeatFrequency)
+                            } else {
+                                null
+                            }
                         if (fieldError != null) {
                             viewModel.setSubmitValidationError(fieldError)
                             viewModel.setSubmitting(false)
@@ -944,6 +937,7 @@ fun BeaconDropSheetContent(
                                     } else {
                                         null
                                     },
+                                    if (isEvent) form.eventRecurrence else null,
                                     form.stagedPhotoBytes,
                                     form.stagedPhotoMime,
                                 ) {

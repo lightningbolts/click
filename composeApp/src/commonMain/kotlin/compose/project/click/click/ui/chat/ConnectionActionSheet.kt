@@ -1,3 +1,5 @@
+@file:Suppress("ktlint:standard:function-naming")
+
 package compose.project.click.click.ui.chat // pragma: allowlist secret
 
 import androidx.compose.foundation.background
@@ -10,14 +12,20 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.PersonRemove
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.Unarchive
+import androidx.compose.material.icons.filled.WavingHand
+import androidx.compose.material.icons.outlined.Event
 import androidx.compose.material.icons.outlined.MarkEmailUnread
-import androidx.compose.material.icons.outlined.NotificationsActive
+import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.NotificationsOff
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -41,16 +49,37 @@ import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist sec
  */
 internal sealed class ConnectionMenuAction {
     data object Nudge : ConnectionMenuAction()
+
     data object Archive : ConnectionMenuAction()
+
     data object Unarchive : ConnectionMenuAction()
+
     data object AddToCore : ConnectionMenuAction()
+
     data object RemoveFromCore : ConnectionMenuAction()
+
     data object RequestRemove : ConnectionMenuAction()
+
     data object RequestReport : ConnectionMenuAction()
+
     data object RequestBlock : ConnectionMenuAction()
+
     data object RequestLeaveGroup : ConnectionMenuAction()
+
     data object RequestDeleteGroup : ConnectionMenuAction()
+
     data object MarkUnread : ConnectionMenuAction()
+
+    data object PlanHangout : ConnectionMenuAction()
+
+    /** Mute when unmuted (the parent shows the duration picker), unmute when muted. */
+    data object ToggleMute : ConnectionMenuAction()
+
+    data object SearchInChat : ConnectionMenuAction()
+
+    data object AcceptPrior : ConnectionMenuAction()
+
+    data object DeclinePrior : ConnectionMenuAction()
 }
 
 /**
@@ -65,14 +94,19 @@ internal fun ConnectionActionSheet(
     isArchived: Boolean = false,
     isServerLifecycleArchived: Boolean = false,
     isCore: Boolean = false,
+    /** Inside an open chat: offer "Plan a hangout" (not in the inbox or hubs). */
+    showPlanAction: Boolean = false,
+    /** Null hides the mute row (e.g. no chat row yet). */
+    isMuted: Boolean? = null,
     onDismiss: () -> Unit,
     onMenuAction: (ConnectionMenuAction) -> Unit,
 ) {
     val isGroup = chatDetails?.groupClique != null
     val uid = currentUserId.orEmpty()
     val isGroupCreator = isGroup && uid.isNotBlank() && chatDetails?.groupClique?.createdByUserId == uid
-    val hasConversationActivity = chatDetails?.lastMessage != null ||
-        chatDetails?.connection?.last_message_at != null
+    val hasConversationActivity =
+        chatDetails?.lastMessage != null ||
+            chatDetails?.connection?.last_message_at != null
     val canMarkUnread = hasConversationActivity && (chatDetails?.unreadCount ?: 0) == 0
 
     fun pick(action: ConnectionMenuAction) {
@@ -84,39 +118,114 @@ internal fun ConnectionActionSheet(
         onDismissRequest = onDismiss,
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .fillMaxHeight()
-                .background(sheetPageBackground())
-                .padding(bottom = 32.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight()
+                    .background(sheetPageBackground())
+                    .padding(bottom = 32.dp),
         ) {
             chatDetails?.let { details ->
-                val title = if (isGroup) {
-                    details.groupClique?.name?.trim()?.ifBlank { null } ?: "Verified click"
-                } else {
-                    details.otherUser.name ?: "Connection"
-                }
+                val title =
+                    if (isGroup) {
+                        details.groupClique
+                            ?.name
+                            ?.trim()
+                            ?.ifBlank { null } ?: "Verified click"
+                    } else {
+                        details.otherUser.name ?: "Connection"
+                    }
                 Text(
                     text = title,
                     style = MaterialTheme.typography.titleMedium,
                     color = GlassSheetTokens.OnOled(),
-                    modifier = Modifier
-                        .padding(horizontal = 20.dp, vertical = 12.dp)
-                        .align(Alignment.CenterHorizontally),
+                    modifier =
+                        Modifier
+                            .padding(horizontal = 20.dp, vertical = 12.dp)
+                            .align(Alignment.CenterHorizontally),
                 )
                 HorizontalDivider(color = GlassSheetTokens.GlassBorder().copy(alpha = 0.5f))
             }
 
-            if (!isGroup) {
+            if (chatDetails?.connection?.awaitsPriorResponseFrom(currentUserId) == true) {
                 BentoGlassOptionRow(
                     showBorder = false,
-                    title = "Nudge",
-                    subtitle = "Send a quick ping",
+                    title = "Accept",
+                    subtitle = "${chatDetails.otherUser.name ?: "They"} says you already know each other",
+                    onClick = { pick(ConnectionMenuAction.AcceptPrior) },
+                    leading = { Icon(Icons.Default.Check, contentDescription = null, tint = PrimaryBlue) },
+                )
+                BentoGlassOptionRow(
+                    title = "Decline",
+                    destructive = true,
+                    onClick = { pick(ConnectionMenuAction.DeclinePrior) },
+                    leading = { Icon(Icons.Default.Close, contentDescription = null, tint = Color(0xFFFF6B6B)) },
+                )
+            }
+
+            if (showPlanAction) {
+                BentoGlassOptionRow(
+                    showBorder = false,
+                    title = "Plan a hangout",
+                    subtitle = if (isGroup) "Pick a time for the group" else "Pick a time to meet up",
+                    cornerRadius = GlassSheetTokens.BentoExteriorCorner,
+                    onClick = { pick(ConnectionMenuAction.PlanHangout) },
+                    leading = {
+                        Icon(
+                            Icons.Outlined.Event,
+                            contentDescription = null,
+                            tint = PrimaryBlue,
+                        )
+                    },
+                )
+            }
+
+            if (showPlanAction) {
+                BentoGlassOptionRow(
+                    title = "Search in conversation",
+                    subtitle = "Find a message in this chat",
+                    onClick = { pick(ConnectionMenuAction.SearchInChat) },
+                    leading = {
+                        Icon(
+                            Icons.Outlined.Search,
+                            contentDescription = null,
+                            tint = GlassSheetTokens.OnOledMuted(),
+                        )
+                    },
+                )
+            }
+
+            if (isMuted != null) {
+                BentoGlassOptionRow(
+                    showBorder = showPlanAction,
+                    title = if (isMuted) "Unmute notifications" else "Mute notifications",
+                    subtitle =
+                        if (isMuted) {
+                            "Turn this conversation's notifications back on"
+                        } else {
+                            "Silence notifications from this conversation"
+                        },
+                    onClick = { pick(ConnectionMenuAction.ToggleMute) },
+                    leading = {
+                        Icon(
+                            if (isMuted) Icons.Outlined.Notifications else Icons.Outlined.NotificationsOff,
+                            contentDescription = null,
+                            tint = GlassSheetTokens.OnOledMuted(),
+                        )
+                    },
+                )
+            }
+
+            if (!isGroup) {
+                BentoGlassOptionRow(
+                    showBorder = !showPlanAction && isMuted == null,
+                    title = "Wave",
+                    subtitle = "Let them know you're thinking of them",
                     cornerRadius = GlassSheetTokens.BentoExteriorCorner,
                     onClick = { pick(ConnectionMenuAction.Nudge) },
                     leading = {
                         Icon(
-                            Icons.Outlined.NotificationsActive,
+                            Icons.Filled.WavingHand,
                             contentDescription = null,
                             tint = GlassSheetTokens.OnOledMuted(),
                         )
@@ -154,11 +263,12 @@ internal fun ConnectionActionSheet(
                 if (isArchived) {
                     BentoGlassOptionRow(
                         title = "Unarchive",
-                        subtitle = if (isServerLifecycleArchived) {
-                            "Remove from your Archived tab (server-archived connections stay read-only)"
-                        } else {
-                            "Move this connection back to Active"
-                        },
+                        subtitle =
+                            if (isServerLifecycleArchived) {
+                                "Remove from your Archived tab (server-archived connections stay read-only)"
+                            } else {
+                                "Move this connection back to Active"
+                            },
                         onClick = { pick(ConnectionMenuAction.Unarchive) },
                         leading = {
                             Icon(
@@ -295,9 +405,10 @@ internal fun ConnectionActionSheet(
             }
 
             Spacer(
-                modifier = Modifier
-                    .weight(1f, fill = true)
-                    .fillMaxWidth(),
+                modifier =
+                    Modifier
+                        .weight(1f, fill = true)
+                        .fillMaxWidth(),
             )
         }
     }

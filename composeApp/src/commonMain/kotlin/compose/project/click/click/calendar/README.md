@@ -97,7 +97,6 @@ Event reminders (`events/EventReminderCoordinator`) do not read the device calen
 3. **7-day default window** — balances usefulness vs battery; extending requires platform audit.
 4. **Epoch milliseconds UTC** — `BusyBlock` uses UTC ms; overlap math must not mix time zones incorrectly.
 5. **No raw calendar titles on wire** — only busy intervals leave the provider; event titles stay on-device.
-6. **Ghost mode** — calendar reads are local-only and unaffected, but broadcasting intents may be paused upstream.
 
 ---
 
@@ -152,7 +151,7 @@ Event beacons use `events/` schedules, not device calendar reads.
 ### Global search
 Intent matches appear in search; calendar overlap is behind the scenes.
 
-### Core connections / Collaboration / Ghost mode / Block & report
+### Core connections / Collaboration / Block & report
 Unrelated or gated upstream.
 
 ### Profile & interests

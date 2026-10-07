@@ -33,6 +33,22 @@ fun Message.replyRef(): MessageReplyRef? {
     return MessageReplyRef(replyToId = id, replyToContent = maskAttachmentEnvelope(snippet))
 }
 
+/**
+ * Quote text for a reply bubble. Outbound replies carry only `reply_to_id` (a plaintext excerpt in
+ * metadata would leak E2EE content to the server), so the quote is rebuilt from the locally
+ * decrypted [localTarget]. Legacy rows may still carry `reply_to_content`, used only as a fallback.
+ */
+fun replyQuoteText(
+    ref: MessageReplyRef,
+    localTarget: Message?,
+): String {
+    if (localTarget != null) {
+        val local = replySnippetForMessage(localTarget)
+        if (local.isNotBlank()) return local
+    }
+    return ref.replyToContent.ifBlank { "Original message" }
+}
+
 fun replySnippetForMetadata(
     content: String,
     maxLen: Int = 140,

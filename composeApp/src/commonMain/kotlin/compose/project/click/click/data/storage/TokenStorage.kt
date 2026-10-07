@@ -1,7 +1,7 @@
 package compose.project.click.click.data.storage // pragma: allowlist secret
 
 /**
- * Encrypted / platform-backed session + lightweight prefs shared by Android and iOS.
+ * Encrypted / platform-backed session + lightweight prefs.
  */
 interface TokenStorage {
     suspend fun saveTokens(
@@ -31,21 +31,29 @@ interface TokenStorage {
 
     suspend fun getTagsInitialized(): Boolean?
 
-    suspend fun saveDarkModeEnabled(isDarkMode: Boolean)
+    /** Null clears the pref, which means "follow the system theme". */
+    suspend fun saveDarkModeEnabled(isDarkMode: Boolean?)
 
     suspend fun getDarkModeEnabled(): Boolean?
-
-    suspend fun saveHomeLayoutMode(mode: String)
-
-    suspend fun getHomeLayoutMode(): String?
 
     suspend fun saveMessageNotificationsEnabled(enabled: Boolean)
 
     suspend fun getMessageNotificationsEnabled(): Boolean?
 
-    suspend fun saveCallNotificationsEnabled(enabled: Boolean)
+    /** Me → Calendar → Disconnect: Click stops reading the calendar even with permission granted. */
+    suspend fun saveCalendarDisconnected(disconnected: Boolean)
 
-    suspend fun getCallNotificationsEnabled(): Boolean?
+    suspend fun getCalendarDisconnected(): Boolean
+
+    /** Unconfirmed text sends (JSON array, per user, bounded); wiped at sign-out. */
+    suspend fun savePendingSends(json: String?)
+
+    suspend fun getPendingSends(): String?
+
+    /** Pending connection-flow telemetry (JSON array, bounded); survives restarts until sent. */
+    suspend fun saveTelemetryQueue(json: String?)
+
+    suspend fun getTelemetryQueue(): String?
 
     suspend fun saveAmbientNoiseOptIn(enabled: Boolean)
 
@@ -54,6 +62,36 @@ interface TokenStorage {
     suspend fun saveBarometricContextOptIn(enabled: Boolean)
 
     suspend fun getBarometricContextOptIn(): Boolean?
+
+    /** Custom plan ideas (JSON string array), shown first in the planner. Device-local. */
+    suspend fun savePlanCustomIdeas(json: String?) {}
+
+    suspend fun getPlanCustomIdeas(): String? = null
+
+    /** Opt-in "Hanging out?" detection; there is no server column (iOS keeps it local too). */
+    suspend fun saveHangoutDetectionOptIn(enabled: Boolean) {}
+
+    suspend fun getHangoutDetectionOptIn(): Boolean? = null
+
+    /** Home recap cache (JSON, one user at a time); cleared with the session. */
+    suspend fun saveHomeRecapCache(json: String?) {}
+
+    suspend fun getHomeRecapCache(): String? = null
+
+    /** Per-chat push mutes (JSON map chatId -> muted-until ms); cleared with the session. */
+    suspend fun saveChatMutesCache(json: String?) {}
+
+    suspend fun getChatMutesCache(): String? = null
+
+    /** Recent E2EE v2 epoch keys for on-device push previews (encrypted prefs); cleared with the session. */
+    suspend fun savePushPreviewKeys(json: String?) {}
+
+    suspend fun getPushPreviewKeys(): String? = null
+
+    /** Recently used reaction emoji (JSON list, newest first). Device-local. */
+    suspend fun saveRecentEmoji(json: String?) {}
+
+    suspend fun getRecentEmoji(): String? = null
 
     suspend fun saveLocationExplainerSeen(seen: Boolean)
 

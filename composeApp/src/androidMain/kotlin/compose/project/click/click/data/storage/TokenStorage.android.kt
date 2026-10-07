@@ -61,11 +61,21 @@ class AndroidTokenStorage(
         private const val KEY_FREE_THIS_WEEK = "free_this_week"
         private const val KEY_TAGS_INITIALIZED = "tags_initialized"
         private const val KEY_DARK_MODE_ENABLED = "dark_mode_enabled"
-        private const val KEY_HOME_LAYOUT_MODE = "home_layout_mode"
         private const val KEY_MESSAGE_NOTIFICATIONS_ENABLED = "message_notifications_enabled"
+
+        /** Retired (calls were removed); kept only so sign-out wipes a value older builds wrote. */
         private const val KEY_CALL_NOTIFICATIONS_ENABLED = "call_notifications_enabled"
         private const val KEY_AMBIENT_NOISE_OPT_IN = "ambient_noise_opt_in"
+        private const val KEY_CALENDAR_DISCONNECTED = "calendar_disconnected"
+        private const val KEY_TELEMETRY_QUEUE = "telemetry_connection_flow_queue"
+        private const val KEY_PENDING_SENDS = "chat_pending_sends"
         private const val KEY_BAROMETRIC_CONTEXT_OPT_IN = "barometric_context_opt_in"
+        private const val KEY_PLAN_CUSTOM_IDEAS = "plan_custom_ideas"
+        private const val KEY_HANGOUT_DETECTION_OPT_IN = "hangout_detection_opt_in"
+        private const val KEY_HOME_RECAP_CACHE = "home_recap_cache"
+        private const val KEY_CHAT_MUTES_CACHE = "chat_mutes_cache"
+        private const val KEY_PUSH_PREVIEW_KEYS = "push_preview_epoch_keys"
+        private const val KEY_RECENT_EMOJI = "recent_emoji"
         private const val KEY_LOCATION_EXPLAINER_SEEN = "location_explainer_seen"
         private const val KEY_ONBOARDING_STATE = "onboarding_state"
         private const val KEY_HAS_COMPLETED_ONBOARDING = "has_completed_onboarding"
@@ -105,9 +115,9 @@ class AndroidTokenStorage(
             null
         }
 
-    override suspend fun saveDarkModeEnabled(isDarkMode: Boolean) {
+    override suspend fun saveDarkModeEnabled(isDarkMode: Boolean?) {
         sharedPreferences.edit().apply {
-            putBoolean(KEY_DARK_MODE_ENABLED, isDarkMode)
+            if (isDarkMode == null) remove(KEY_DARK_MODE_ENABLED) else putBoolean(KEY_DARK_MODE_ENABLED, isDarkMode)
             apply()
         }
     }
@@ -118,15 +128,6 @@ class AndroidTokenStorage(
         } else {
             null
         }
-
-    override suspend fun saveHomeLayoutMode(mode: String) {
-        sharedPreferences.edit().apply {
-            putString(KEY_HOME_LAYOUT_MODE, mode)
-            apply()
-        }
-    }
-
-    override suspend fun getHomeLayoutMode(): String? = sharedPreferences.getString(KEY_HOME_LAYOUT_MODE, null)
 
     override suspend fun saveMessageNotificationsEnabled(enabled: Boolean) {
         sharedPreferences.edit().apply {
@@ -142,19 +143,29 @@ class AndroidTokenStorage(
             null
         }
 
-    override suspend fun saveCallNotificationsEnabled(enabled: Boolean) {
+    override suspend fun savePendingSends(json: String?) {
         sharedPreferences.edit().apply {
-            putBoolean(KEY_CALL_NOTIFICATIONS_ENABLED, enabled)
+            if (json == null) remove(KEY_PENDING_SENDS) else putString(KEY_PENDING_SENDS, json)
             apply()
         }
     }
 
-    override suspend fun getCallNotificationsEnabled(): Boolean? =
-        if (sharedPreferences.contains(KEY_CALL_NOTIFICATIONS_ENABLED)) {
-            sharedPreferences.getBoolean(KEY_CALL_NOTIFICATIONS_ENABLED, true)
-        } else {
-            null
+    override suspend fun getPendingSends(): String? = sharedPreferences.getString(KEY_PENDING_SENDS, null)
+
+    override suspend fun saveTelemetryQueue(json: String?) {
+        sharedPreferences.edit().apply {
+            if (json == null) remove(KEY_TELEMETRY_QUEUE) else putString(KEY_TELEMETRY_QUEUE, json)
+            apply()
         }
+    }
+
+    override suspend fun getTelemetryQueue(): String? = sharedPreferences.getString(KEY_TELEMETRY_QUEUE, null)
+
+    override suspend fun saveCalendarDisconnected(disconnected: Boolean) {
+        sharedPreferences.edit().putBoolean(KEY_CALENDAR_DISCONNECTED, disconnected).apply()
+    }
+
+    override suspend fun getCalendarDisconnected(): Boolean = sharedPreferences.getBoolean(KEY_CALENDAR_DISCONNECTED, false)
 
     override suspend fun saveAmbientNoiseOptIn(enabled: Boolean) {
         sharedPreferences.edit().apply {
@@ -183,6 +194,65 @@ class AndroidTokenStorage(
         } else {
             null
         }
+
+    override suspend fun savePlanCustomIdeas(json: String?) {
+        sharedPreferences.edit().apply {
+            if (json == null) remove(KEY_PLAN_CUSTOM_IDEAS) else putString(KEY_PLAN_CUSTOM_IDEAS, json)
+            apply()
+        }
+    }
+
+    override suspend fun getPlanCustomIdeas(): String? = sharedPreferences.getString(KEY_PLAN_CUSTOM_IDEAS, null)
+
+    override suspend fun saveHangoutDetectionOptIn(enabled: Boolean) {
+        sharedPreferences.edit().apply {
+            putBoolean(KEY_HANGOUT_DETECTION_OPT_IN, enabled)
+            apply()
+        }
+    }
+
+    override suspend fun getHangoutDetectionOptIn(): Boolean? =
+        if (sharedPreferences.contains(KEY_HANGOUT_DETECTION_OPT_IN)) {
+            sharedPreferences.getBoolean(KEY_HANGOUT_DETECTION_OPT_IN, false)
+        } else {
+            null
+        }
+
+    override suspend fun saveHomeRecapCache(json: String?) {
+        sharedPreferences.edit().apply {
+            if (json == null) remove(KEY_HOME_RECAP_CACHE) else putString(KEY_HOME_RECAP_CACHE, json)
+            apply()
+        }
+    }
+
+    override suspend fun getHomeRecapCache(): String? = sharedPreferences.getString(KEY_HOME_RECAP_CACHE, null)
+
+    override suspend fun saveChatMutesCache(json: String?) {
+        sharedPreferences.edit().apply {
+            if (json == null) remove(KEY_CHAT_MUTES_CACHE) else putString(KEY_CHAT_MUTES_CACHE, json)
+            apply()
+        }
+    }
+
+    override suspend fun getChatMutesCache(): String? = sharedPreferences.getString(KEY_CHAT_MUTES_CACHE, null)
+
+    override suspend fun savePushPreviewKeys(json: String?) {
+        sharedPreferences.edit().apply {
+            if (json == null) remove(KEY_PUSH_PREVIEW_KEYS) else putString(KEY_PUSH_PREVIEW_KEYS, json)
+            apply()
+        }
+    }
+
+    override suspend fun getPushPreviewKeys(): String? = sharedPreferences.getString(KEY_PUSH_PREVIEW_KEYS, null)
+
+    override suspend fun saveRecentEmoji(json: String?) {
+        sharedPreferences.edit().apply {
+            if (json == null) remove(KEY_RECENT_EMOJI) else putString(KEY_RECENT_EMOJI, json)
+            apply()
+        }
+    }
+
+    override suspend fun getRecentEmoji(): String? = sharedPreferences.getString(KEY_RECENT_EMOJI, null)
 
     override suspend fun saveLocationExplainerSeen(seen: Boolean) {
         sharedPreferences.edit().apply {
@@ -298,7 +368,14 @@ class AndroidTokenStorage(
                     KEY_MESSAGE_NOTIFICATIONS_ENABLED,
                     KEY_CALL_NOTIFICATIONS_ENABLED,
                     KEY_AMBIENT_NOISE_OPT_IN,
+                    KEY_CALENDAR_DISCONNECTED,
+                    KEY_PENDING_SENDS,
                     KEY_BAROMETRIC_CONTEXT_OPT_IN,
+                    // Presence pings must never follow the device to another account.
+                    KEY_HANGOUT_DETECTION_OPT_IN,
+                    KEY_HOME_RECAP_CACHE,
+                    KEY_CHAT_MUTES_CACHE,
+                    KEY_PUSH_PREVIEW_KEYS,
                     KEY_LOCATION_EXPLAINER_SEEN,
                     KEY_ONBOARDING_STATE,
                     KEY_HAS_COMPLETED_ONBOARDING,

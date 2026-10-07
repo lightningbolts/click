@@ -72,7 +72,7 @@ internal fun AppDataManager.applyInboxFeedChatActivity(
 }
 
 internal fun AppDataManager.startSilentChatPrefetch(userId: String) {
-    if (_ghostModeEnabled.value || userId.isBlank()) return
+    if (userId.isBlank()) return
     if (!networkConnectivityMonitor.isOnline.value) return
     chatPrefetchJob?.cancel()
     chatPrefetchJob =
@@ -161,7 +161,7 @@ internal fun AppDataManager.startBackgroundProfilePrefetch(
     viewerUserId: String,
     peerUserIds: List<String>,
 ) {
-    if (_ghostModeEnabled.value || viewerUserId.isBlank()) return
+    if (viewerUserId.isBlank()) return
     val knownProfileIds =
         peerUserIds +
             _connections.value.flatMap { it.user_ids } +
@@ -209,7 +209,7 @@ internal fun AppDataManager.startBackgroundProfilePrefetch(
 }
 
 internal fun AppDataManager.startRealtimeCoordinatorSync(userId: String) {
-    if (_ghostModeEnabled.value || userId.isBlank()) return
+    if (userId.isBlank()) return
     aggressiveBackgroundChatSyncJob?.cancel()
     realtimeCoordinatorJob?.cancel()
     realtimeCoordinatorJob =
@@ -261,7 +261,6 @@ internal fun AppDataManager.startRealtimeCoordinatorSync(userId: String) {
 
 /** Lightweight inbox refresh after Realtime junction change (avoids full loadAllData). */
 internal fun AppDataManager.refreshInboxFromCoordinator(force: Boolean) {
-    if (_ghostModeEnabled.value) return
     val userId = _currentUser.value?.id ?: return
     scope.launch {
         runCatching {
@@ -287,7 +286,6 @@ internal fun AppDataManager.startAggressiveBackgroundChatSync(userId: String) {
  * startup path. Runs concurrently with the connections snapshot fetch (see [loadAllData]).
  */
 internal fun AppDataManager.startBeaconPrefetch() {
-    if (_ghostModeEnabled.value) return
     if (beaconPrefetchJob?.isActive == true) return
     _discoveryMapPrefetchComplete.value = false
     beaconPrefetchJob =

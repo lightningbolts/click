@@ -7,6 +7,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -30,6 +31,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -46,6 +50,7 @@ import compose.project.click.click.data.models.ConnectionEncounter // pragma: al
 import compose.project.click.click.data.models.HeightCategory // pragma: allowlist secret
 import compose.project.click.click.data.models.NoiseLevelCategory // pragma: allowlist secret
 import compose.project.click.click.data.models.ProfileAvailabilityIntentBubble // pragma: allowlist secret
+import compose.project.click.click.data.repository.ConnectionRepository
 import compose.project.click.click.deeplink.EventDeepLinkRouter // pragma: allowlist secret
 import compose.project.click.click.events.EventSchedule // pragma: allowlist secret
 import compose.project.click.click.events.formatEventScheduleRange // pragma: allowlist secret
@@ -57,6 +62,7 @@ import compose.project.click.click.ui.components.rememberSheetScrollAtTop // pra
 import compose.project.click.click.ui.components.sheetBodyScroll // pragma: allowlist secret
 import compose.project.click.click.ui.theme.LightBlue // pragma: allowlist secret
 import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
+import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.Instant
@@ -251,6 +257,24 @@ internal fun TimelineMetricPill(
     }
 }
 
+/** Server tag for a same-place, same-12-hour reconnect folded into the previous row (F71). */
+internal const val EXTENDED_HANGOUT_TAG = "Extended Hangout"
+
+/** iOS `ProfileView.title`: "First Clicked at X", "Reconnected at X", or "Extended Hangout at X". */
+internal fun encounterTimelineTitle(
+    place: String?,
+    isFirst: Boolean,
+    tags: List<String>,
+): String {
+    val lead =
+        when {
+            isFirst -> "First Clicked"
+            tags.any { it.trim().equals(EXTENDED_HANGOUT_TAG, ignoreCase = true) } -> EXTENDED_HANGOUT_TAG
+            else -> "Reconnected"
+        }
+    return place?.trim()?.takeIf { it.isNotEmpty() }?.let { "$lead at $it" } ?: lead
+}
+
 @Composable
 internal fun OurTimelineSection(
     encounters: List<ConnectionEncounter>,
@@ -270,6 +294,11 @@ internal fun OurTimelineSection(
                 .thenByDescending { it.id },
         )
     val oldestId = sorted.lastOrNull()?.id
+    // Saved tag edits apply immediately, before the next profile refresh.
+    var tagOverrides by remember(encounters) { mutableStateOf<Map<String, List<String>>>(emptyMap()) }
+    var editingEncounter by remember { mutableStateOf<ConnectionEncounter?>(null) }
+    val tagScope = rememberCoroutineScope()
+    val connectionRepository = remember { ConnectionRepository() }
     val lineColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
     val dotBorder = MaterialTheme.colorScheme.surface
     val cardBorder = MaterialTheme.colorScheme.outline.copy(alpha = 0.22f)
@@ -318,15 +347,6 @@ internal fun OurTimelineSection(
                     )
                 }
                 Column(modifier = Modifier.weight(1f)) {
-                    if (isOldest) {
-                        Text(
-                            text = "Where it started",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = LightBlue.copy(alpha = 0.95f),
-                            modifier = Modifier.padding(bottom = 4.dp),
-                        )
-                    }
                     Text(
                         text =
                             formatEncounterTimelineWhenLine(enc.encounteredAt)
@@ -336,11 +356,16 @@ internal fun OurTimelineSection(
                     )
                     Text(
                         text =
-                            formatEncounterPlaceLine(
-                                locationName = enc.locationName,
-                                displayLocation = enc.displayLocation,
-                                semanticLocationJson = enc.semanticLocation,
-                            ) ?: "Unknown place",
+                            encounterTimelineTitle(
+                                place =
+                                    formatEncounterPlaceLine(
+                                        locationName = enc.locationName,
+                                        displayLocation = enc.displayLocation,
+                                        semanticLocationJson = enc.semanticLocation,
+                                    ),
+                                isFirst = isOldest,
+                                tags = tagOverrides[enc.id] ?: enc.contextTags,
+                            ),
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.SemiBold,
                         color = body,
@@ -379,9 +404,12 @@ internal fun OurTimelineSection(
                         }
                     }
                     val momentTags =
-                        enc.contextTags
+                        (tagOverrides[enc.id] ?: enc.contextTags)
                             .mapNotNull { it.trim().takeIf { s -> s.isNotEmpty() } }
                             .distinct()
+                    TextButton(onClick = { editingEncounter = enc }, modifier = Modifier.padding(top = 2.dp)) {
+                        Text(if (momentTags.isEmpty()) "Add tags" else "Edit tags", style = MaterialTheme.typography.labelMedium)
+                    }
                     if (momentTags.isNotEmpty()) {
                         FlowRow(
                             modifier = Modifier.padding(top = 6.dp),
@@ -424,4 +452,63 @@ internal fun OurTimelineSection(
             }
         }
     }
+    editingEncounter?.let { enc ->
+        val existing = tagOverrides[enc.id] ?: enc.contextTags
+        EncounterTagEditorDialog(
+            initial = existing.filter { it != "at_event" },
+            onDismiss = { editingEncounter = null },
+            onSave = { picked ->
+                editingEncounter = null
+                tagScope.launch {
+                    connectionRepository
+                        .setEncounterContextTags(enc.id, picked, existing)
+                        .onSuccess { saved -> tagOverrides = tagOverrides + (enc.id to saved) }
+                }
+            },
+        )
+    }
+}
+
+/** Pick context tags for one encounter (suggested set plus a custom label). */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun EncounterTagEditorDialog(
+    initial: List<String>,
+    onDismiss: () -> Unit,
+    onSave: (List<String>) -> Unit,
+) {
+    val choices = remember { ContextTagTaxonomy.all.filter { it.id != "at_event" && it.id != "custom" } }
+    var selected by remember { mutableStateOf(initial.toSet()) }
+    var custom by remember { mutableStateOf("") }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Tags for this hangout") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    (choices.map { it.id } + selected.filter { id -> choices.none { it.id == id } }).distinct().forEach { id ->
+                        val tag = choices.firstOrNull { it.id == id }
+                        androidx.compose.material3.FilterChip(
+                            selected = id in selected,
+                            onClick = { selected = if (id in selected) selected - id else selected + id },
+                            label = { Text(tag?.let { "${it.emoji} ${it.label}" } ?: ContextTagTaxonomy.displayLabel(id)) },
+                        )
+                    }
+                }
+                androidx.compose.material3.OutlinedTextField(
+                    value = custom,
+                    onValueChange = { custom = it.take(32) },
+                    placeholder = { Text("Add your own") },
+                    singleLine = true,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                val extra = custom.trim().takeIf { it.isNotEmpty() }
+                onSave((selected + listOfNotNull(extra)).toList())
+            }) { Text("Save") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }

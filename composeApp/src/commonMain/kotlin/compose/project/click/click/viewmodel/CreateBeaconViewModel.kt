@@ -2,6 +2,10 @@ package compose.project.click.click.viewmodel // pragma: allowlist secret
 
 import androidx.lifecycle.ViewModel
 import compose.project.click.click.data.models.BeaconVisibilityAudience // pragma: allowlist secret
+import compose.project.click.click.events.DEFAULT_EVENT_OCCURRENCES // pragma: allowlist secret
+import compose.project.click.click.events.EVENT_OCCURRENCE_RANGE // pragma: allowlist secret
+import compose.project.click.click.events.EventRecurrence // pragma: allowlist secret
+import compose.project.click.click.events.EventRecurrenceFrequency // pragma: allowlist secret
 import compose.project.click.click.events.EventSchedule // pragma: allowlist secret
 import compose.project.click.click.events.EventScheduleValidationError // pragma: allowlist secret
 import compose.project.click.click.events.EventVenueScale // pragma: allowlist secret
@@ -29,6 +33,9 @@ data class CreateBeaconUiState(
     val eventSchedule: EventSchedule = defaultEventSchedule(),
     val eventScheduleError: EventScheduleValidationError? = null,
     val eventCategories: Set<String> = emptySet(),
+    /** Null = a one-off event. */
+    val repeatFrequency: EventRecurrenceFrequency? = null,
+    val occurrences: Int = DEFAULT_EVENT_OCCURRENCES,
     val venueScale: EventVenueScale = EventVenueScale.DEFAULT,
     val submitValidationError: String? = null,
     val addressQuery: String = "",
@@ -48,6 +55,9 @@ data class CreateBeaconUiState(
 ) {
     val hasStagedPhoto: Boolean get() = stagedPhotoBytes != null
 
+    val eventRecurrence: EventRecurrence?
+        get() = repeatFrequency?.let { EventRecurrence(frequency = it.apiValue, count = occurrences) }
+
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other !is CreateBeaconUiState) return false
@@ -59,6 +69,8 @@ data class CreateBeaconUiState(
             eventSchedule == other.eventSchedule &&
             eventScheduleError == other.eventScheduleError &&
             eventCategories == other.eventCategories &&
+            repeatFrequency == other.repeatFrequency &&
+            occurrences == other.occurrences &&
             venueScale == other.venueScale &&
             submitValidationError == other.submitValidationError &&
             addressQuery == other.addressQuery &&
@@ -86,6 +98,8 @@ data class CreateBeaconUiState(
         result = 31 * result + eventSchedule.hashCode()
         result = 31 * result + (eventScheduleError?.hashCode() ?: 0)
         result = 31 * result + eventCategories.hashCode()
+        result = 31 * result + (repeatFrequency?.hashCode() ?: 0)
+        result = 31 * result + occurrences
         result = 31 * result + venueScale.hashCode()
         result = 31 * result + (submitValidationError?.hashCode() ?: 0)
         result = 31 * result + addressQuery.hashCode()
@@ -139,6 +153,14 @@ class CreateBeaconViewModel : ViewModel() {
 
     fun setEventCategories(categories: Set<String>) {
         _uiState.update { it.copy(eventCategories = categories) }
+    }
+
+    fun setRepeatFrequency(frequency: EventRecurrenceFrequency?) {
+        _uiState.update { it.copy(repeatFrequency = frequency) }
+    }
+
+    fun setOccurrences(count: Int) {
+        _uiState.update { it.copy(occurrences = count.coerceIn(EVENT_OCCURRENCE_RANGE)) }
     }
 
     fun setVenueScale(scale: EventVenueScale) {
@@ -229,7 +251,21 @@ class CreateBeaconViewModel : ViewModel() {
         _uiState.update { it.copy(isSubmitting = submitting) }
     }
 
-    /** Call when the drop sheet is dismissed so the next open starts blank. */
+    /**
+     * The sheet closed without posting (swipe, back, scrim): keep the draft so reopening picks
+     * up where the user left off, but clear in-flight UI whose coroutines died with the sheet.
+     */
+    fun onSheetDismissed() {
+        _uiState.update {
+            it.copy(
+                addressSearching = false,
+                resolvingCurrentLocation = false,
+                submitValidationError = null,
+            )
+        }
+    }
+
+    /** Call once the beacon is posted so the next open starts blank. */
     fun reset() {
         _uiState.value = CreateBeaconUiState()
     }

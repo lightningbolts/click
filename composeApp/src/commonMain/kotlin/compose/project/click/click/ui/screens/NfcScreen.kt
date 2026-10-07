@@ -46,7 +46,6 @@ import compose.project.click.click.ui.components.ConnectionContextPresentation /
 import compose.project.click.click.ui.components.ConnectionContextSheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.HeaderBackIconButton // pragma: allowlist secret
 import compose.project.click.click.ui.components.HeaderChromeIconButton // pragma: allowlist secret
-import compose.project.click.click.ui.components.NativeChromeAction // pragma: allowlist secret
 import compose.project.click.click.ui.components.PageHeader // pragma: allowlist secret
 import compose.project.click.click.ui.components.bottomChromePadding // pragma: allowlist secret
 import compose.project.click.click.ui.theme.* // pragma: allowlist secret
@@ -192,15 +191,6 @@ fun NfcScreen(
                     PageHeader(
                         title = "Tap to Connect",
                         subtitle = "BLE + ultrasonic handshake",
-                        onNavigateBack = onBackPressed,
-                        nativeTrailingActions =
-                            listOf(
-                                NativeChromeAction(
-                                    sfSymbol = "gearshape",
-                                    contentDescription = "Bluetooth and audio settings",
-                                    onClick = { proximityManager.openRadiosSettings() },
-                                ),
-                            ),
                         navigationIcon = {
                             HeaderBackIconButton(onClick = onBackPressed)
                         },

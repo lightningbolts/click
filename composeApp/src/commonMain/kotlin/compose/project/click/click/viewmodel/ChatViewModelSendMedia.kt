@@ -16,7 +16,6 @@ import compose.project.click.click.data.models.ChatMessageType // pragma: allowl
 import compose.project.click.click.data.models.Message // pragma: allowlist secret
 import compose.project.click.click.data.models.MessageDeliveryState // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
-import compose.project.click.click.data.models.replySnippetForMessage // pragma: allowlist secret
 import compose.project.click.click.data.repository.ChatRepository // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatAttachmentDownloadOutcome // pragma: allowlist secret
 import compose.project.click.click.ui.chat.saveDecryptedAttachmentToDownloads // pragma: allowlist secret
@@ -180,7 +179,6 @@ internal fun ChatViewModel.sendChatAudioImpl(
                         if (durationSeconds != null) put("duration_seconds", durationSeconds)
                         if (replyTarget != null) {
                             put("reply_to_id", replyTarget.message.id)
-                            put("reply_to_content", replySnippetForMessage(replyTarget.message))
                         }
                     }
                 val currentUser =
@@ -229,7 +227,6 @@ internal fun ChatViewModel.sendChatAudioImpl(
                             put("is_encrypted_media", true)
                             if (durationSeconds != null) put("duration_seconds", durationSeconds)
                             put("reply_to_id", replyTarget.message.id)
-                            put("reply_to_content", replySnippetForMessage(replyTarget.message))
                         }
                     } else {
                         buildJsonObject {
@@ -328,7 +325,6 @@ internal fun ChatViewModel.sendChatFileImpl(
                                 put("attachment_size", bytes.size.toLong())
                                 if (replyTarget != null) {
                                     put("reply_to_id", replyTarget.message.id)
-                                    put("reply_to_content", replySnippetForMessage(replyTarget.message))
                                 }
                             },
                         localSentAt = localMs,
@@ -370,7 +366,6 @@ internal fun ChatViewModel.sendChatFileImpl(
                         put("attachment_size", uploaded.sizeBytes)
                         if (replyTarget != null) {
                             put("reply_to_id", replyTarget.message.id)
-                            put("reply_to_content", replySnippetForMessage(replyTarget.message))
                         }
                     }
 
@@ -402,21 +397,16 @@ internal fun ChatViewModel.sendChatFileImpl(
     }
 }
 
-/**
- * Download + decrypt a chat attachment (Phase 2 — C6). Mints a fresh signed URL, pulls the
- * ciphertext, decrypts with the per-file master key from the envelope, re-verifies SHA-256
- * on the plaintext, then writes the bytes to the platform Downloads surface. All failures
- * are surfaced as a user-visible [ChatAttachmentDownloadOutcome.Failure].
- */
-internal suspend fun ChatViewModel.downloadChatAttachmentImpl(
+/** Decrypted file bytes for [envelope] (vault first, then download); a failure explains why. */
+internal suspend fun ChatViewModel.decryptChatAttachmentBytes(
     messageId: String,
     envelope: AttachmentCrypto.Envelope,
     v2Metadata: MessageCryptoV2.MediaMetadata? = null,
     v2StoragePath: String? = null,
-): ChatAttachmentDownloadOutcome {
+): Result<ByteArray> {
     val isV2 = v2Metadata != null || envelope.v == 2
     if (envelope.path.isBlank() || envelope.sha256.isBlank() || (!isV2 && envelope.key.isBlank())) {
-        return ChatAttachmentDownloadOutcome.Failure("Attachment envelope is invalid.")
+        return Result.failure(IllegalStateException("Attachment envelope is invalid."))
     }
     val extension = envelope.vaultCacheExtension()
     val vaultedBytes =
@@ -426,11 +416,11 @@ internal suspend fun ChatViewModel.downloadChatAttachmentImpl(
             ?.takeIf { it.isNotEmpty() }
     val plaintext =
         vaultedBytes ?: if (isV2) {
-            val metadata = v2Metadata ?: return ChatAttachmentDownloadOutcome.Failure("Attachment metadata is unavailable.")
+            val metadata = v2Metadata ?: return Result.failure(IllegalStateException("Attachment metadata is unavailable."))
             val chatId = (currentApiChatId ?: metadata.chatId).trim()
             val viewerUserId = _currentUserId.value?.trim().orEmpty()
             if (chatId.isBlank() || viewerUserId.isBlank()) {
-                return ChatAttachmentDownloadOutcome.Failure("Attachment chat context is unavailable.")
+                return Result.failure(IllegalStateException("Attachment chat context is unavailable."))
             }
             chatRepository.downloadAndDecryptChatAttachment(
                 chatId = chatId,
@@ -444,12 +434,29 @@ internal suspend fun ChatViewModel.downloadChatAttachmentImpl(
                 fileMasterKeyBase64 = envelope.key,
                 expectedSha256Base64 = envelope.sha256,
             )
-        } ?: return ChatAttachmentDownloadOutcome.Failure(
-            "Download failed — integrity check did not pass.",
-        )
+        } ?: return Result.failure(IllegalStateException("Download failed — integrity check did not pass."))
     if (vaultedBytes == null && messageId.isNotBlank()) {
         writeChatMediaVaultFile(messageId, plaintext, extension)
     }
+    return Result.success(plaintext)
+}
+
+/**
+ * Download + decrypt a chat attachment (Phase 2 — C6). Mints a fresh signed URL, pulls the
+ * ciphertext, decrypts with the per-file master key from the envelope, re-verifies SHA-256
+ * on the plaintext, then writes the bytes to the platform Downloads surface. All failures
+ * are surfaced as a user-visible [ChatAttachmentDownloadOutcome.Failure].
+ */
+internal suspend fun ChatViewModel.downloadChatAttachmentImpl(
+    messageId: String,
+    envelope: AttachmentCrypto.Envelope,
+    v2Metadata: MessageCryptoV2.MediaMetadata? = null,
+    v2StoragePath: String? = null,
+): ChatAttachmentDownloadOutcome {
+    val plaintext =
+        decryptChatAttachmentBytes(messageId, envelope, v2Metadata, v2StoragePath).getOrElse {
+            return ChatAttachmentDownloadOutcome.Failure(it.message ?: "Download failed.")
+        }
     val savedPath =
         saveDecryptedAttachmentToDownloads(
             bytes = plaintext,

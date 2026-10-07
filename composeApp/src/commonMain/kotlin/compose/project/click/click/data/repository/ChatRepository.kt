@@ -6,6 +6,7 @@ import compose.project.click.click.data.models.ChatWithDetails
 import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.Message
 import compose.project.click.click.data.models.MessageReaction
+import compose.project.click.click.data.models.ScheduledMessage
 import compose.project.click.click.data.models.User
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
@@ -134,7 +135,55 @@ interface ChatRepository {
         clientLocalSentAtMs: Long? = null,
         /** Fallback for gatekeeper when [chatId] is missing/invalid. */
         connectionId: String? = null,
+        /** v2 client message id to reuse (outbox retries); null generates a fresh one. */
+        clientMessageId: String? = null,
     ): Message?
+
+    /**
+     * Send Later: encrypts [content] now; click-web delivers it at [sendAtEpochMs] (direct and
+     * group chats, text only). Fails with the server's message when out of range.
+     */
+    suspend fun scheduleMessage(
+        chatId: String,
+        userId: String,
+        content: String,
+        replyToId: String? = null,
+        sendAtEpochMs: Long,
+        connectionId: String? = null,
+    ): Result<ScheduledMessage> = Result.failure(UnsupportedOperationException("Scheduling unavailable"))
+
+    /** Where recently deleted messages in [chatId]'s latest window were ("Message deleted"). */
+    suspend fun fetchTombstones(
+        chatId: String,
+        windowSize: Int,
+    ): List<compose.project.click.click.data.models.MessageTombstone> = emptyList()
+
+    /**
+     * Rotates the group's E2EE v2 epoch to the current membership right away (iOS
+     * `reconcileMembershipEpoch`) instead of on the next send. Fails when the rotation couldn't run.
+     */
+    suspend fun secureGroupAfterMembershipChange(
+        chatId: String,
+        userId: String,
+    ): Result<Unit> = Result.success(Unit)
+
+    /** Every member's read cursor for [chatId] (group "seen by"). */
+    suspend fun fetchReadCursors(chatId: String): List<compose.project.click.click.data.models.ReadCursor> = emptyList()
+
+    /** Plans in [chatId] that haven't ended, soonest first, with going counts. */
+    suspend fun fetchUpcomingPlans(
+        chatId: String,
+        nowEpochMs: Long,
+    ): List<compose.project.click.click.data.models.UpcomingPlan> = emptyList()
+
+    /** The viewer's pending scheduled messages for [chatId], soonest first. */
+    suspend fun fetchScheduledMessages(
+        chatId: String,
+        userId: String,
+    ): Result<List<ScheduledMessage>> = Result.success(emptyList())
+
+    /** Fails with [compose.project.click.click.data.api.ScheduledMessageGoneException] once delivered. */
+    suspend fun cancelScheduledMessage(id: String): Result<Unit> = Result.failure(UnsupportedOperationException("Scheduling unavailable"))
 
     suspend fun ensureChatForConnection(connectionId: String): Chat?
 
@@ -326,12 +375,6 @@ interface ChatRepository {
         messageId: String,
         status: String,
     ): Boolean
-
-    suspend fun forwardMessage(
-        messageId: String,
-        targetChatId: String,
-        userId: String,
-    ): Message?
 
     suspend fun searchMessages(
         chatId: String,

@@ -84,16 +84,6 @@ internal fun ChatViewModel.removeReactionImpl(
     }
 }
 
-internal fun ChatViewModel.forwardMessageImpl(
-    messageId: String,
-    targetChatId: String,
-) {
-    val userId = _currentUserId.value ?: return
-    viewModelScope.launch {
-        chatRepository.forwardMessage(messageId, targetChatId, userId)
-    }
-}
-
 /**
  * Sends a plaintext [ChatMessageType.BEACON] card into the active 1:1 or group chat.
  * Public map metadata — not E2EE. Records share telemetry when possible.

@@ -26,7 +26,6 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import compose.project.click.click.ui.theme.LocalPlatformStyle // pragma: allowlist secret
 import compose.project.click.click.ui.theme.MotionTokens // pragma: allowlist secret
 import compose.project.click.click.ui.theme.clickBorderColor // pragma: allowlist secret
 import compose.project.click.click.ui.theme.clickBorderWidth // pragma: allowlist secret
@@ -114,7 +113,7 @@ fun ClickCircularGlassIconButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     size: Dp = 56.dp,
-    glassStrength: Float = if (LocalPlatformStyle.current.isIOS) 0.64f else 0.4f,
+    glassStrength: Float = 0.4f,
     tint: Color = MaterialTheme.colorScheme.onSurface,
 ) {
     ClickCircularIconButton(

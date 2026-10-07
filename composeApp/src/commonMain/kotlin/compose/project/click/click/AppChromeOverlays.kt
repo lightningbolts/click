@@ -12,18 +12,17 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusManager
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import compose.project.click.click.deeplink.AppDeepLinkRouter // pragma: allowlist secret
 import compose.project.click.click.events.isEventLinkedHubCategory // pragma: allowlist secret
 import compose.project.click.click.navigation.NavigationItem // pragma: allowlist secret
 import compose.project.click.click.navigation.bottomNavItems // pragma: allowlist secret
-import compose.project.click.click.ui.components.AppScreenChromeState // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlobalTetherOverlay // pragma: allowlist secret
-import compose.project.click.click.ui.components.NativeChromeMenuItem // pragma: allowlist secret
-import compose.project.click.click.ui.components.NativeRootMenuRegistry // pragma: allowlist secret
 import compose.project.click.click.ui.components.PlatformBottomBar // pragma: allowlist secret
 import compose.project.click.click.ui.components.UnifiedToastHost // pragma: allowlist secret
 import compose.project.click.click.ui.components.UnifiedToastState // pragma: allowlist secret
@@ -116,78 +115,6 @@ internal fun BoxScope.AppBottomChrome(
     var pendingTargetMessageId by pendingTargetMessageIdState
     var pendingBeaconId by pendingBeaconIdState
 
-    // Search already owns its dedicated trailing magnifier. The leading ellipsis is a true
-    // overflow menu with stable app destinations, matching the role users expect from iOS chrome.
-    SideEffect {
-        NativeRootMenuRegistry.replace(
-            buildList {
-                if (currentRoute != NavigationItem.Home.route) {
-                    add(
-                        NativeChromeMenuItem(
-                            title = "Home",
-                            sfSymbol = "house",
-                            onClick = {
-                                focusManager.clearFocus()
-                                navigateTo(NavigationItem.Home.route)
-                            },
-                        ),
-                    )
-                }
-                if (currentRoute != NavigationItem.AddClick.route) {
-                    add(
-                        NativeChromeMenuItem(
-                            title = "Add Click",
-                            sfSymbol = "plus.circle",
-                            onClick = {
-                                focusManager.clearFocus()
-                                navigateTo(NavigationItem.AddClick.route)
-                            },
-                        ),
-                    )
-                }
-                if (currentRoute != NavigationItem.Connections.route) {
-                    add(
-                        NativeChromeMenuItem(
-                            title = "Clicks",
-                            sfSymbol = "person.2",
-                            onClick = {
-                                focusManager.clearFocus()
-                                navigateTo(NavigationItem.Connections.route)
-                            },
-                        ),
-                    )
-                }
-                if (currentRoute != NavigationItem.Map.route) {
-                    add(
-                        NativeChromeMenuItem(
-                            title = "Map",
-                            sfSymbol = "location",
-                            onClick = {
-                                focusManager.clearFocus()
-                                navigateTo(NavigationItem.Map.route)
-                            },
-                        ),
-                    )
-                }
-                if (currentRoute != NavigationItem.Settings.route) {
-                    add(
-                        NativeChromeMenuItem(
-                            title = "Settings",
-                            sfSymbol = "gearshape",
-                            onClick = {
-                                focusManager.clearFocus()
-                                navigateTo(NavigationItem.Settings.route)
-                            },
-                        ),
-                    )
-                }
-            },
-        )
-    }
-    DisposableEffect(Unit) {
-        onDispose { NativeRootMenuRegistry.clear() }
-    }
-
     Box(
         modifier =
             Modifier
@@ -198,7 +125,7 @@ internal fun BoxScope.AppBottomChrome(
         PlatformBottomBar(
             items = bottomNavItems,
             currentRoute = currentRoute,
-            visible = !hideMainBottomBar && !AppScreenChromeState.nativeTabBarCovered,
+            visible = !hideMainBottomBar,
             onItemSelected = { item ->
                 navigateTo(item.route)
                 hubChatCloseJob?.cancel()
@@ -229,9 +156,11 @@ internal fun BoxScope.AppBottomChrome(
                 else -> ""
             }
         if (searchUserId.isNotEmpty()) {
+            val initialSearchQuery = remember { AppDeepLinkRouter.takeSearchQuery() }
             UnifiedSearchSheet(
                 onDismissRequest = { showUnifiedSearchSheet = false },
                 userId = searchUserId,
+                initialQuery = initialSearchQuery,
                 onNavigateToChat = { target ->
                     showUnifiedSearchSheet = false
                     if (target.isHub && !target.hubId.isNullOrBlank()) {

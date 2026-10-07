@@ -189,15 +189,24 @@ internal suspend fun ApiClient.getActivityRecapImpl(window: String = "week"): Re
  * GET `/api/connections/{connectionId}/tabs` on click-web — fetches Media + Files
  * listings for the profile sheet. Links remain client-side because message
  * [content] is E2EE on the wire; callers filter locally-decrypted state.
+ * Groups pass [chatId]; the shared-media grid pages with [limit] and [beforeEpochMs]
+ * (attachments older than that `time_created`) and reads `hasMore`.
  */
-internal suspend fun ApiClient.getConnectionTabsImpl(connectionId: String): Result<ConnectionTabsGetResponse> {
+internal suspend fun ApiClient.getConnectionTabsImpl(
+    connectionId: String,
+    chatId: String? = null,
+    limit: Int? = null,
+    beforeEpochMs: Long? = null,
+): Result<ConnectionTabsGetResponse> {
     val id = connectionId.trim()
     if (id.isEmpty()) return Result.failure(IllegalArgumentException("connectionId required"))
     return try {
         val response: HttpResponse =
-            clickWebClient.get(
-                "${ApiClient.clickWebAuthOrigin}/api/connections/$id/tabs",
-            )
+            clickWebClient.get("${ApiClient.clickWebAuthOrigin}/api/connections/$id/tabs") {
+                chatId?.trim()?.takeIf { it.isNotEmpty() }?.let { parameter("chatId", it) }
+                limit?.let { parameter("limit", it) }
+                beforeEpochMs?.let { parameter("before", it) }
+            }
         if (response.status.value in 200..299) {
             Result.success(response.body<ConnectionTabsGetResponse>())
         } else {
@@ -208,6 +217,9 @@ internal suspend fun ApiClient.getConnectionTabsImpl(connectionId: String): Resu
     }
 }
 
+/** `users.bio` limit enforced by click-web (migration 20260924120000). */
+const val PROFILE_BIO_MAX_LENGTH: Int = 160
+
 internal suspend fun ApiClient.patchUserProfileImpl(
     userId: String,
     firstName: String? = null,
@@ -216,6 +228,8 @@ internal suspend fun ApiClient.patchUserProfileImpl(
     tags: List<String>? = null,
     birthday: String? = null,
     personalityTags: List<String>? = null,
+    /** Empty string clears the bio (server stores null). */
+    bio: String? = null,
 ): Result<User> {
     if (
         firstName == null &&
@@ -223,7 +237,8 @@ internal suspend fun ApiClient.patchUserProfileImpl(
         image == null &&
         tags == null &&
         birthday == null &&
-        personalityTags == null
+        personalityTags == null &&
+        bio == null
     ) {
         return Result.failure(IllegalArgumentException("No profile fields to update"))
     }
@@ -239,6 +254,7 @@ internal suspend fun ApiClient.patchUserProfileImpl(
             personalityTags?.let { list ->
                 put("personality_tags", JsonArray(list.map { JsonPrimitive(it) }))
             }
+            bio?.let { put("bio", it.trim().take(PROFILE_BIO_MAX_LENGTH)) }
         }
     if (body.isEmpty()) {
         return Result.failure(IllegalArgumentException("No profile fields to update"))

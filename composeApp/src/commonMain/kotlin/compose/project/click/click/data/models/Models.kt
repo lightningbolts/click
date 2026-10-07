@@ -26,7 +26,7 @@ data class GeoLocationInsert(
 /**
  * Insert DTO for the `connections` table.
  * Using a typed data class instead of Map<String, Any> so that
- * kotlinx.serialization can handle it on Kotlin/Native (iOS).
+ * kotlinx.serialization can handle it.
  */
 @Serializable
 data class ConnectionInsert(
@@ -79,6 +79,8 @@ data class User(
     val lastName: String? = null,
     /** ISO calendar date string from DB (yyyy-MM-dd) when present. */
     val birthday: String? = null,
+    /** Short self-description (`users.bio`, at most 160 characters). */
+    val bio: String? = null,
     val connections: List<String> = emptyList(),
     val paired_with: List<String> = emptyList(),
     val connection_today: Int = -1,
@@ -173,6 +175,7 @@ data class UserCore(
     val lastPolled: Long? = null,
     @SerialName("personality_tags")
     val personalityTags: List<String> = emptyList(),
+    val bio: String? = null,
 ) {
     /**
      * Convert to full User model with defaults for missing fields.
@@ -197,6 +200,7 @@ data class UserCore(
             firstName = firstName,
             lastName = lastName,
             birthday = birthday,
+            bio = bio?.trim()?.takeIf { it.isNotEmpty() },
             connections = emptyList(),
             paired_with = emptyList(),
             connection_today = -1,
@@ -239,7 +243,6 @@ fun isResolvedDisplayName(value: String?): Boolean =
 
 /**
  * Location privacy preferences stored on the user's Supabase profile row.
- * Ghost mode (AppDataManager.ghostModeEnabled) overrides all when active.
  */
 @Serializable
 data class LocationPreferences(
@@ -476,6 +479,14 @@ data class Connection(
                 .thenBy { it.id },
         )
 
+    /** Map person callout (iOS `ClickMapView`): "Met at Blue Bottle", or "First met here" without a place. */
+    fun firstMetLabel(): String {
+        val place =
+            originEncounter?.locationName?.trim()?.takeIf { it.isNotEmpty() }
+                ?: originEncounter?.displayLocation?.trim()?.takeIf { it.isNotEmpty() }
+        return place?.let { "Met at $it" } ?: "First met here"
+    }
+
     /** Origin story (oldest crossing) for profile / first-meet copy. */
     fun originMemoryCapsule(): MemoryCapsule? = originEncounter?.toMemoryCapsule() ?: memoryCapsule
 
@@ -587,6 +598,13 @@ data class Connection(
     fun isKept(): Boolean = normalizedConnectionStatus() == "kept"
 
     fun isPriorConnection(): Boolean = source.equals("prior", ignoreCase = true)
+
+    /** A pending "we already know each other" request that [viewerId] still has to answer. */
+    fun awaitsPriorResponseFrom(viewerId: String?): Boolean =
+        isPriorConnection() &&
+            isPending() &&
+            !viewerId.isNullOrBlank() &&
+            (responderId == viewerId || (initiatorId != viewerId && viewerId in user_ids))
 
     fun isPriorConfirmedByBoth(): Boolean = confirmedByA && confirmedByB
 

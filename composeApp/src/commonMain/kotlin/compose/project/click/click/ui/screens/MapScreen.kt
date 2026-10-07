@@ -62,8 +62,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel as composeViewModel
  *    side padding. The map itself _is_ the screen.
  *  * [LiquidGlassPill] top-left overlay that surfaces the memories / live count in Material 3
  *    "Liquid Glass" styling. Replaces the old [PageHeader] + top-right stats chip.
- *  * GhostMode FAB is gone — the toggle now lives in Settings (per directive Q5). Ghost mode
- *    state itself still flows from the view model so tinting/snackbars remain correct.
  *  * Nearby is the persistent root sheet. Beacon/event/hub/profile details are composed from
  *    inside that root so native sheets push above it instead of replacing it.
  */
@@ -100,7 +98,6 @@ fun MapScreen(
     val mapBindingZoom by viewModel.mapBindingZoom.collectAsState()
     val renderData by viewModel.renderData.collectAsState()
     val selection by viewModel.selection.collectAsState()
-    val ghostModeEnabled by viewModel.ghostModeEnabled.collectAsState()
     val mapFabAboveNav = rememberFabAboveNavPadding()
     val cameraTarget by viewModel.cameraTarget.collectAsState()
     val layerFilters by viewModel.selectedLayerFilters.collectAsState()
@@ -223,12 +220,6 @@ fun MapScreen(
 
     val toastState = rememberUnifiedToastState()
     val mapScope = rememberCoroutineScope()
-
-    LaunchedEffect(ghostModeEnabled) {
-        if (ghostModeEnabled) {
-            toastState.show(mapScope, "You are off the grid")
-        }
-    }
 
     val nudgeResult by viewModel.nudgeResult.collectAsState()
     LaunchedEffect(nudgeResult) {
@@ -453,11 +444,12 @@ fun MapScreen(
                     ?: connectionSelection.point.connection.user_ids.firstOrNull { id ->
                         id.isNotBlank() && id != viewerUserId
                     }
+            val metLabel = connectionSelection.point.connection.firstMetLabel()
             val statusBadge =
                 when (connectionSelection.point.timeState) {
-                    TimeState.LIVE -> ProfileSheetBadge("Live now", PrimaryBlue)
-                    TimeState.RECENT -> ProfileSheetBadge("Recent", LightBlue)
-                    TimeState.ARCHIVE -> ProfileSheetBadge("Memory", Color.Gray)
+                    TimeState.LIVE -> ProfileSheetBadge("Live now · $metLabel", PrimaryBlue)
+                    TimeState.RECENT -> ProfileSheetBadge(metLabel, LightBlue)
+                    TimeState.ARCHIVE -> ProfileSheetBadge(metLabel, Color.Gray)
                 }
             TabbedUserProfileSheet(
                 userId = peerUserId,
@@ -489,21 +481,13 @@ fun MapScreen(
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
     ) {
-        val grayscaleModifier = if (ghostModeEnabled) Modifier.alpha(0.7f) else Modifier
-
         AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
             Box(
                 modifier =
                     Modifier
                         .fillMaxSize()
-                        .then(grayscaleModifier)
-                        .background(
-                            if (ghostModeEnabled) {
-                                Color.DarkGray.copy(alpha = 0.3f)
-                            } else {
-                                GlassSheetTokens.OledBlack()
-                            },
-                        ).testTag("map-screen"),
+                        .background(GlassSheetTokens.OledBlack())
+                        .testTag("map-screen"),
             ) {
                 when (val state = mapState) {
                     is MapState.Loading -> LoadingState()
@@ -537,7 +521,6 @@ fun MapScreen(
                                 renderData = renderData,
                                 communityHubs = communityHubs,
                                 zoom = cameraTarget?.zoom ?: mapBindingZoom,
-                                ghostMode = ghostModeEnabled,
                                 mapGesturesEnabled = true,
                                 showCompass = true,
                                 cameraTarget = cameraTarget,
@@ -569,8 +552,7 @@ fun MapScreen(
                                     },
                             )
 
-                            // Keep host map controls mounted under the sheet. Toggling UIKit host
-                            // controls on sheet presentation rematerializes glass and looks like a flash.
+                            // Keep host map controls mounted under the sheet.
                             MapAlwaysOnChrome(
                                 dockBottomPadding = fabBottomPadding,
                                 layerFilters = layerFilters,
@@ -581,7 +563,6 @@ fun MapScreen(
                                 },
                                 onZoomIn = { viewModel.zoomIn() },
                                 onZoomOut = { viewModel.zoomOut() },
-                                chromeVisible = true,
                                 modifier =
                                     Modifier
                                         .fillMaxSize()
@@ -670,14 +651,14 @@ fun MapScreen(
 
     if (showBeaconDropSheet) {
         ClickFormBottomSheet(
+            // Swipe-down, back, and scrim taps keep the draft; it resets only once posted.
             onDismissRequest = {
                 showBeaconDropSheet = false
-                createBeaconViewModel.reset()
+                createBeaconViewModel.onSheetDismissed()
             },
             contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
             expandable = true,
-            useUiKitScrollHost = true,
-            uiKitFillViewport = true,
+            fillBody = true,
         ) {
             BeaconDropSheetContent(
                 modifier =
@@ -729,6 +710,7 @@ fun MapScreen(
                     venueScale,
                     eventLocation,
                     eventListingOptions,
+                    eventRecurrence,
                     imageBytes,
                     imageMime,
                     onRejectedEarly,
@@ -746,6 +728,7 @@ fun MapScreen(
                         venueScale = venueScale,
                         eventLocation = eventLocation,
                         eventListingOptions = eventListingOptions,
+                        eventRecurrence = eventRecurrence,
                         imageBytes = imageBytes,
                         imageMime = imageMime,
                         onAcceptedLocally = {
@@ -758,7 +741,7 @@ fun MapScreen(
                 },
                 onCreateHub = {
                     showBeaconDropSheet = false
-                    createBeaconViewModel.reset()
+                    createBeaconViewModel.onSheetDismissed()
                     showCreateHubModal = true
                 },
             )

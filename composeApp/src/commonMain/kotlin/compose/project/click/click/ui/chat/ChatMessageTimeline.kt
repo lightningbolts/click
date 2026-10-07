@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -14,7 +15,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableFloatState
 import androidx.compose.runtime.MutableState
@@ -28,16 +31,24 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.data.models.ChatMessageType
 import compose.project.click.click.data.models.Connection
+import compose.project.click.click.data.models.HangoutPlan
 import compose.project.click.click.data.models.Message
 import compose.project.click.click.data.models.MessageReaction
 import compose.project.click.click.data.models.MessageWithUser
+import compose.project.click.click.data.models.PlanRsvp
 import compose.project.click.click.data.models.isBeaconChatMessage
+import compose.project.click.click.data.models.isForwarded
+import compose.project.click.click.data.models.replyRef
 import compose.project.click.click.ui.components.DraggableLazyListScrollbar
+import compose.project.click.click.ui.theme.PrimaryBlue
 import compose.project.click.click.viewmodel.SecureChatMediaHost
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
@@ -171,7 +182,6 @@ internal fun ChatMessageTimeline(
     secureMediaHost: SecureChatMediaHost,
     activeChatId: String?,
     onToggleReaction: (messageId: String, reaction: String) -> Unit,
-    onForward: (messageId: String) -> Unit,
     onLongPress: (MessageWithUser) -> Unit,
     onSwipeReply: (MessageWithUser) -> Unit,
     onPeerAvatarClick: (String) -> Unit = {},
@@ -185,16 +195,29 @@ internal fun ChatMessageTimeline(
     highlightedMessageId: String? = null,
     interMessageBaseCompact: Dp = ChatInterMessageListBaseCompact,
     enableMessageContextMenu: Boolean = true,
+    onPlanRsvp: (messageId: String, rsvp: PlanRsvp?) -> Unit = { _, _ -> },
+    onShowPlanResponses: (MessageWithUser, HangoutPlan) -> Unit = { _, _ -> },
+    onOpenReactions: ((MessageWithUser) -> Unit)? = null,
+    /** Group "seen by": message id → readers to show under it. */
+    seenBy: Map<String, List<compose.project.click.click.data.models.User>> = emptyMap(),
     modifier: Modifier = Modifier,
 ) {
     val onToggleReactionState = rememberUpdatedState(onToggleReaction)
-    val onForwardState = rememberUpdatedState(onForward)
     val onLongPressState = rememberUpdatedState(onLongPress)
     val onSwipeReplyState = rememberUpdatedState(onSwipeReply)
     val onPeerAvatarClickState = rememberUpdatedState(onPeerAvatarClick)
     val onDownloadAttachmentState = rememberUpdatedState(onDownloadAttachment)
     val onExpandPhotoState = rememberUpdatedState(onExpandPhoto)
     val onOpenBeaconState = rememberUpdatedState(onOpenBeacon)
+    val onPlanRsvpState = rememberUpdatedState(onPlanRsvp)
+    val onShowPlanResponsesState = rememberUpdatedState(onShowPlanResponses)
+    val onOpenReactionsState = rememberUpdatedState(onOpenReactions)
+    val messagesById =
+        remember(timelineEntries) {
+            timelineEntries
+                .filterIsInstance<ChatTimelineEntry.MessageEntry>()
+                .associate { it.messageWithUser.message.id to it.messageWithUser.message }
+        }
 
     Box(
         modifier = modifier.fillMaxSize(),
@@ -246,6 +269,21 @@ internal fun ChatMessageTimeline(
                         baseCompact = interMessageBaseCompact,
                     )
                 when (entry) {
+                    is ChatTimelineEntry.UnreadDivider -> {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            HorizontalDivider(Modifier.weight(1f), color = PrimaryBlue.copy(alpha = 0.4f))
+                            Text(
+                                "New messages",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = PrimaryBlue,
+                                modifier = Modifier.padding(horizontal = 8.dp),
+                            )
+                            HorizontalDivider(Modifier.weight(1f), color = PrimaryBlue.copy(alpha = 0.4f))
+                        }
+                    }
                     is ChatTimelineEntry.DaySeparator -> {
                         Column(Modifier.padding(top = listGapTop)) {
                             ConversationDaySeparator(entry.label)
@@ -285,8 +323,22 @@ internal fun ChatMessageTimeline(
                                 useHubNeutralMesh = useHubNeutralMesh,
                             ) {
                                 val bubble: @Composable () -> Unit = {
+                                    if (messageWithUser.message.isForwarded()) {
+                                        Text(
+                                            text = "Forwarded",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            textAlign = if (messageWithUser.isSent) TextAlign.End else TextAlign.Start,
+                                            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp),
+                                        )
+                                    }
                                     ChatSearchFocusFrame(
                                         active = highlightedMessageId == messageWithUser.message.id,
+                                        // Long-press lifts a copy of the bubble exactly where it sits.
+                                        modifier =
+                                            Modifier.onGloballyPositioned { coords ->
+                                                MessageBubbleBounds.put(messageWithUser.message.id, coords.boundsInWindow())
+                                            },
                                     ) {
                                         ChatMessageBubble(
                                             messageWithUser = messageWithUser,
@@ -298,7 +350,6 @@ internal fun ChatMessageTimeline(
                                                     reaction,
                                                 )
                                             },
-                                            onForward = { msgId -> onForwardState.value(msgId) },
                                             onLongPress = { onLongPressState.value(it) },
                                             onSwipeReply = { onSwipeReplyState.value(it) },
                                             showPeerAvatarInGroup = isGroupChat,
@@ -311,7 +362,18 @@ internal fun ChatMessageTimeline(
                                             },
                                             onExpandPhoto = { onExpandPhotoState.value(it) },
                                             onOpenBeacon = { onOpenBeaconState.value(it) },
+                                            replyTarget =
+                                                messageWithUser.message.replyRef()?.let {
+                                                    messagesById[it.replyToId]
+                                                },
+                                            onPlanRsvp = { id, rsvp -> onPlanRsvpState.value(id, rsvp) },
+                                            onShowPlanResponses = { mwu, plan -> onShowPlanResponsesState.value(mwu, plan) },
+                                            onOpenReactions = onOpenReactionsState.value?.let { open -> { mwu -> open(mwu) } },
                                         )
+                                    }
+                                    val readers = seenBy[messageWithUser.message.id].orEmpty()
+                                    if (readers.isNotEmpty()) {
+                                        SeenByAvatars(readers, alignEnd = messageWithUser.isSent)
                                     }
                                 }
                                 if (isCallLog) {

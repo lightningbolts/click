@@ -5,6 +5,7 @@ import kotlin.math.cos
 import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.math.sqrt
+import kotlin.random.Random
 
 /** Base tone for the mandatory 18.5 kHz proximity chirp. Audible development carriers must never ship. */
 const val HANDSHAKE_CARRIER_HZ: Double = 18_500.0
@@ -15,28 +16,28 @@ private const val TONE_MS = 55
 private const val GAP_MS = 22
 private const val CHIRP_MS = 140
 
-private fun goertzelMagnitudeSq(
+/**
+ * Normalized power of one frequency over `samples[offset until offset + len]` (standard Goertzel:
+ * `s0 = x + coeff*s1 - s2; s2 = s1; s1 = s0`). Matches iOS `ProximityCodec.goertzel`.
+ */
+private fun goertzelPower(
     samples: ShortArray,
     offset: Int,
     len: Int,
     targetHz: Double,
 ): Double {
     if (len < 8) return 0.0
-    val k = ((0.5 + (len * targetHz) / SAMPLE_RATE).toInt()).coerceAtLeast(1)
-    val omega = (2.0 * PI * k) / len
-    val sinW = sin(omega)
-    val cosW = cos(omega)
-    var coeff = 2.0 * cosW
-    var s = 0.0
+    val omega = 2.0 * PI * targetHz / SAMPLE_RATE
+    val coeff = 2.0 * cos(omega)
+    var s1 = 0.0
     var s2 = 0.0
     for (i in 0 until len) {
-        val x = samples[offset + i] / 32768.0
-        s = x + coeff * s - s2
-        s2 = s
+        val s0 = samples[offset + i] / 32768.0 + coeff * s1 - s2
+        s2 = s1
+        s1 = s0
     }
-    val real = s - s2 * cosW
-    val imag = s2 * sinW
-    return real * real + imag * imag
+    val power = s1 * s1 + s2 * s2 - coeff * s1 * s2
+    return power / (len.toDouble() * len.toDouble())
 }
 
 private fun digitFrequency(digit: Int): Double = HANDSHAKE_CARRIER_HZ + digit.coerceIn(0, 9) * DIGIT_STEP_HZ
@@ -79,75 +80,112 @@ private fun appendSilence(
     repeat(samples) { dst.add(0) }
 }
 
+// The emitted audio above is the wire contract shared with iOS. Decoding is chirp-synchronized
+// (ported from iOS `ProximityCodec.decodeAllTokens`): find each >=110 ms carrier run, then read the
+// four digit slots at their fixed offsets. The previous sliding-window decoder had a broken Goertzel
+// recurrence, merged repeated adjacent digits ("1122" -> "12"), and merged a leading 0 into the chirp.
+
+/** Normalized power floor (about amplitude 0.0006); spectral dominance checks, not loudness, reject noise. */
+private const val MIN_TONE_POWER = 1e-7
+
+private fun sampleCount(ms: Int): Int = (SAMPLE_RATE * ms / 1000.0).roundToInt()
+
+/** The carrier dominates its neighbourhood, so broadband noise or speech does not count. */
+private fun isCarrierDominant(
+    samples: ShortArray,
+    offset: Int,
+    len: Int,
+): Boolean {
+    val carrier = goertzelPower(samples, offset, len, HANDSHAKE_CARRIER_HZ)
+    if (carrier <= MIN_TONE_POWER) return false
+    val neighbours =
+        doubleArrayOf(
+            HANDSHAKE_CARRIER_HZ - 400.0,
+            HANDSHAKE_CARRIER_HZ + DIGIT_STEP_HZ * 2,
+            HANDSHAKE_CARRIER_HZ + DIGIT_STEP_HZ * 5,
+            12_000.0,
+        ).maxOf { goertzelPower(samples, offset, len, it) }
+    return carrier > neighbours * 6.0
+}
+
+private fun readDigits(
+    samples: ShortArray,
+    chirpStart: Int,
+): String? {
+    val slot = sampleCount(TONE_MS + GAP_MS)
+    val firstDigit = chirpStart + sampleCount(CHIRP_MS + GAP_MS)
+    // Chirp-edge timing is known to within one 10 ms frame; a 30 ms window starting 12 ms into
+    // each 55 ms tone tolerates -12..+13 ms of error.
+    val margin = sampleCount(12)
+    val window = sampleCount(30)
+    val digits = StringBuilder(4)
+    for (position in 0 until 4) {
+        val start = firstDigit + position * slot + margin
+        if (start + window > samples.size) return null
+        val powers = DoubleArray(10) { goertzelPower(samples, start, window, digitFrequency(it)) }
+        val ranked = powers.indices.sortedByDescending { powers[it] }
+        val best = powers[ranked[0]]
+        if (best <= MIN_TONE_POWER || best <= powers[ranked[1]] * 4.0) return null
+        digits.append(ranked[0])
+    }
+    return digits.toString()
+}
+
 /**
- * Decodes every distinct 4-digit handshake token found in a longer recording by sliding a decode
- * window. Used when several peers play ultrasonic tokens back-to-back in one capture window.
+ * Decodes every distinct 4-digit handshake token in a capture (several peers may chirp
+ * back-to-back in one listen window). Sorted, de-duplicated.
  */
 internal fun decodeAllHandshakeTokensFromPcmMono(samples: ShortArray): List<String> {
     if (samples.size < SAMPLE_RATE / 4) return emptyList()
-    val chunkSamples = (SAMPLE_RATE * 0.55).roundToInt().coerceIn(8000, samples.size)
-    val hop = (chunkSamples / 2).coerceAtLeast(SAMPLE_RATE / 20)
-    val found = linkedSetOf<String>()
-    var start = 0
-    while (start + chunkSamples <= samples.size) {
-        val chunk = samples.copyOfRange(start, start + chunkSamples)
-        decodeTokenFromPcmMono(chunk)?.let { found.add(it) }
-        start += hop
+    val hop = SAMPLE_RATE / 100 // 10 ms analysis frames
+    val frameCount = samples.size / hop
+    val carrierFrames = BooleanArray(frameCount) { isCarrierDominant(samples, it * hop, hop) }
+    val tokens = sortedSetOf<String>()
+    var index = 0
+    while (index < frameCount) {
+        if (!carrierFrames[index]) {
+            index++
+            continue
+        }
+        var end = index
+        while (end < frameCount && carrierFrames[end]) end++
+        // A digit-0 tone is 55 ms; only the 140 ms chirp produces a run this long.
+        if (end - index >= 11) {
+            // The first carrier frame may be partial; the run end is the chirp's sharp edge.
+            val chirpEnd = end * hop
+            val chirpStart = (chirpEnd - sampleCount(CHIRP_MS)).coerceAtLeast(0)
+            readDigits(samples, chirpStart)?.let { tokens.add(it) }
+        }
+        index = end
     }
-    decodeTokenFromPcmMono(samples)?.let { found.add(it) }
-    return found.sorted()
+    return tokens.toList()
 }
 
-internal fun decodeTokenFromPcmMono(samples: ShortArray): String? {
-    if (samples.size < SAMPLE_RATE / 4) return null
-    val window = (SAMPLE_RATE * 0.09).roundToInt().coerceIn(256, 4096)
-    val step = window / 3
-    val digits = ArrayList<Int>(8)
-    var lastDigit: Int? = null
-    var repeat = 0
-    var i = 0
-    while (i + window <= samples.size) {
-        var bestD = 0
-        var bestMag = 0.0
-        for (d in 0..9) {
-            val mag = goertzelMagnitudeSq(samples, i, window, digitFrequency(d))
-            if (mag > bestMag) {
-                bestMag = mag
-                bestD = d
-            }
-        }
-        val noise =
-            (0..9)
-                .map { goertzelMagnitudeSq(samples, i, window, HANDSHAKE_CARRIER_HZ + it * DIGIT_STEP_HZ + 60.0) }
-                .sortedDescending()
-                .getOrNull(2) ?: 0.0
-        val threshold = noise * 6.0 + 1e-6
-        if (bestMag > threshold && bestMag > 5e-5) {
-            if (bestD == lastDigit) {
-                repeat++
-            } else {
-                if (lastDigit != null && repeat >= 2) {
-                    digits.add(lastDigit!!)
-                }
-                lastDigit = bestD
-                repeat = 1
-            }
-        } else {
-            if (lastDigit != null && repeat >= 2) {
-                digits.add(lastDigit!!)
-            }
-            lastDigit = null
-            repeat = 0
-        }
-        i += step
+/** First token in a capture, or null. */
+internal fun decodeTokenFromPcmMono(samples: ShortArray): String? = decodeAllHandshakeTokensFromPcmMono(samples).firstOrNull()
+
+/**
+ * A random token every decoder hears unambiguously: no leading 0 (digit 0 shares the carrier
+ * frequency) and no adjacent repeats. 9^4 = 6561 tokens; the server matches on overlapping
+ * evidence, not the token alone. Mirrors iOS `ProximityCodec.randomToken`.
+ */
+internal fun randomHandshakeToken(random: Random = Random.Default): String {
+    val digits = IntArray(4)
+    digits[0] = random.nextInt(1, 10)
+    for (i in 1 until 4) {
+        var next = random.nextInt(0, 9)
+        if (next >= digits[i - 1]) next += 1
+        digits[i] = next
     }
-    if (lastDigit != null && repeat >= 2) {
-        digits.add(lastDigit!!)
-    }
-    if (digits.size < 4) return null
-    val tail = digits.takeLast(4).joinToString("") { it.toString() }
-    return normalizeHandshakeToken(tail)
+    return digits.joinToString("")
 }
+
+/** True when [token] avoids a leading 0 and adjacent repeated digits. */
+internal fun isCrossPlatformSafeHandshakeToken(token: String): Boolean =
+    token.length == 4 &&
+        token.all(Char::isDigit) &&
+        token[0] != '0' &&
+        token.zipWithNext().none { (a, b) -> a == b }
 
 internal fun pcmRms(samples: ShortArray): Double {
     if (samples.isEmpty()) return 0.0

@@ -35,15 +35,18 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
 import compose.project.click.click.data.ActiveHubEntry // pragma: allowlist secret
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
+import compose.project.click.click.data.ChatMuteStore
 import compose.project.click.click.data.api.ApiClient // pragma: allowlist secret
-import compose.project.click.click.data.api.InboxNudgeDto // pragma: allowlist secret
 import compose.project.click.click.data.models.ChatWithDetails // pragma: allowlist secret
+import compose.project.click.click.data.models.InboxNudge // pragma: allowlist secret
+import compose.project.click.click.data.models.NudgeAction // pragma: allowlist secret
 import compose.project.click.click.data.models.ProfileAvailabilityIntentBubble // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.models.collapseOneToOneChatsByPeer // pragma: allowlist secret
 import compose.project.click.click.data.models.isActiveForUser // pragma: allowlist secret
 import compose.project.click.click.data.models.isArchivedChannelForUser // pragma: allowlist secret
 import compose.project.click.click.data.models.previewLabel // pragma: allowlist secret
+import compose.project.click.click.data.models.typed // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
 import compose.project.click.click.deeplink.EventDeepLinkRouter // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ConnectionActionSheet // pragma: allowlist secret
@@ -53,8 +56,10 @@ import compose.project.click.click.ui.chat.ConnectionMenuAction // pragma: allow
 import compose.project.click.click.ui.chat.ConnectionSheetDialog // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ConnectionSheetDialogs // pragma: allowlist secret
 import compose.project.click.click.ui.chat.GroupMembersPickerContext // pragma: allowlist secret
+import compose.project.click.click.ui.chat.MuteDurationDialog
 import compose.project.click.click.ui.chat.RememberMeStrip // pragma: allowlist secret
 import compose.project.click.click.ui.chat.connectionListActivityTs // pragma: allowlist secret
+import compose.project.click.click.ui.chat.muteResultMessage
 import compose.project.click.click.ui.components.AdaptiveBackground // pragma: allowlist secret
 import compose.project.click.click.ui.components.AppEmptyState // pragma: allowlist secret
 import compose.project.click.click.ui.components.AppScreenScaffold // pragma: allowlist secret
@@ -80,6 +85,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext // pragma: allowlist secret
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.datetime.Clock
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -148,7 +154,19 @@ fun ConnectionsListView(
     var selectedCliqueFriendIds by remember { mutableStateOf(setOf<String>()) }
     val listScope = rememberCoroutineScope()
     val inboxNudgeApi = remember { ApiClient() }
-    var inboxNudges by remember { mutableStateOf<List<InboxNudgeDto>>(emptyList()) }
+    var inboxNudges by remember { mutableStateOf<List<InboxNudge>>(emptyList()) }
+    val chatMutes by ChatMuteStore.mutes.collectAsState()
+    val muteNowMs = remember(chatMutes) { Clock.System.now().toEpochMilliseconds() }
+    var muteDialogChatId by remember { mutableStateOf<String?>(null) }
+    muteDialogChatId?.let { chat ->
+        MuteDurationDialog(
+            onPick = { duration ->
+                muteDialogChatId = null
+                listScope.launch { toastState.show(listScope, muteResultMessage(duration, ChatMuteStore.setMuted(chat, duration))) }
+            },
+            onDismiss = { muteDialogChatId = null },
+        )
+    }
     var proximityCliqueHintUsers by remember { mutableStateOf<List<User>>(emptyList()) }
     var cliqueProximityAutofillLoading by remember { mutableStateOf(false) }
 
@@ -269,6 +287,7 @@ fun ConnectionsListView(
                 .getOrNull()
                 ?.nudges
                 .orEmpty()
+                .mapNotNull { it.typed() }
                 .take(2)
     }
 
@@ -397,6 +416,7 @@ fun ConnectionsListView(
     }
 
     var cliqueAddableMask by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
+    var cliqueIneligibleReasons by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var cliqueCreateGraphOk by remember { mutableStateOf(false) }
 
     /** False while edge RPCs run — blocks taps so users cannot pick ineligible friends during load. */
@@ -436,6 +456,7 @@ fun ConnectionsListView(
             cliqueAddableMask = mask
             cliqueCreateGraphOk = fullOk
             cliqueSheetEligibilityReady = true
+            cliqueIneligibleReasons = viewModel.cliqueIneligibleReasons(uidNonNull, selectedCliqueFriendIds, mask)
         }
     }
 
@@ -641,25 +662,77 @@ fun ConnectionsListView(
                                 InboxNudgeBanner(
                                     nudge = nudge,
                                     onOpen = {
-                                        listScope.launch { inboxNudgeApi.markInboxNudgeActed(nudge.id) }
+                                        val action = nudge.primaryAction()
+                                        if (action == null) {
+                                            // Payload can't drive its action; drop it locally, never mark acted.
+                                            inboxNudges = inboxNudges.filterNot { it.id == nudge.id }
+                                            return@InboxNudgeBanner
+                                        }
                                         inboxNudges = inboxNudges.filterNot { it.id == nudge.id }
-                                        val eventId = nudge.beaconId?.trim().orEmpty()
-                                        if (nudge.nudgeType == "shared_upcoming_event" && eventId.isNotEmpty()) {
-                                            EventDeepLinkRouter.setPendingBeaconId(eventId)
-                                        } else {
-                                            val connectionId = nudge.connectionId?.trim().orEmpty()
-                                            val chatId =
-                                                displayedChats
-                                                    .firstOrNull { it.connection.id == connectionId }
-                                                    ?.chat
-                                                    ?.id
-                                                    ?: connectionId
-                                            if (chatId.isNotBlank()) onChatSelected(chatId)
+                                        // Confirm resolves server-side; a wave is marked acted only once it lands.
+                                        if (action !is NudgeAction.ConfirmHangout && action !is NudgeAction.WaveBack) {
+                                            listScope.launch { inboxNudgeApi.markInboxNudgeActed(nudge.id) }
+                                        }
+                                        when (action) {
+                                            is NudgeAction.OpenEvent -> EventDeepLinkRouter.setPendingBeaconId(action.beaconId)
+                                            is NudgeAction.OpenChat -> {
+                                                val chatId =
+                                                    displayedChats
+                                                        .firstOrNull { it.connection.id == action.connectionId }
+                                                        ?.chat
+                                                        ?.id
+                                                        ?: action.connectionId
+                                                onChatSelected(chatId)
+                                            }
+                                            is NudgeAction.OpenGroupChat -> onChatSelected(action.chatId)
+                                            is NudgeAction.OpenProfile -> onUserProfileClick(action.userId)
+                                            is NudgeAction.ConfirmHangout ->
+                                                listScope.launch {
+                                                    val result = inboxNudgeApi.confirmHangout(action.confirmationId)
+                                                    val message =
+                                                        result.fold(
+                                                            onSuccess = {
+                                                                when {
+                                                                    it.alreadyLogged -> "Already logged. You two are on the map."
+                                                                    it.status == "confirmed" -> "Hangout confirmed"
+                                                                    else -> "Confirmed. Waiting on them."
+                                                                }
+                                                            },
+                                                            onFailure = { "Couldn't confirm that hangout" },
+                                                        )
+                                                    if (result.isFailure) inboxNudges = listOf(nudge) + inboxNudges
+                                                    toastState.show(listScope, message)
+                                                }
+                                            is NudgeAction.WaveBack ->
+                                                listScope.launch {
+                                                    val result = inboxNudgeApi.wave(action.connectionId)
+                                                    if (result.isSuccess) {
+                                                        inboxNudgeApi.markInboxNudgeActed(nudge.id)
+                                                    } else {
+                                                        inboxNudges = listOf(nudge) + inboxNudges
+                                                    }
+                                                    val message =
+                                                        result.fold(
+                                                            onSuccess = {
+                                                                if (it.alreadyWavedToday) "You already waved today" else "Waved back 👋"
+                                                            },
+                                                            onFailure = { "Couldn't wave right now" },
+                                                        )
+                                                    toastState.show(listScope, message)
+                                                }
                                         }
                                     },
                                     onDismiss = {
-                                        listScope.launch { inboxNudgeApi.dismissInboxNudge(nudge.id) }
                                         inboxNudges = inboxNudges.filterNot { it.id == nudge.id }
+                                        val hangoutId = nudge.confirmationId
+                                        listScope.launch {
+                                            if (nudge.resolvedByHangoutEndpoints && hangoutId != null) {
+                                                // "Not us": declining resolves the nudge server-side.
+                                                inboxNudgeApi.declineHangout(hangoutId)
+                                            } else {
+                                                inboxNudgeApi.dismissInboxNudge(nudge.id)
+                                            }
+                                        }
                                     },
                                     modifier = Modifier.padding(bottom = 4.dp),
                                 )
@@ -698,6 +771,7 @@ fun ConnectionsListView(
                                     chatDetails.groupClique == null &&
                                         chatDetails.otherUser.id in onlineUsers,
                                 decryptedPreview = decryptedPreviews[connectionId] ?: cachedPreviewLabel,
+                                isMuted = ChatMuteStore.isMuted(chatMutes, chatDetails.chat.id, muteNowMs),
                                 hasCachedThreadPreview = !cachedThread?.messages.isNullOrEmpty(),
                                 onAvatarClick = {
                                     if (chatDetails.groupClique == null) {
@@ -775,6 +849,7 @@ fun ConnectionsListView(
                 selectedIds = selectedCliqueFriendIds,
                 onSelectedIdsChange = { selectedCliqueFriendIds = it },
                 eligibilityMask = cliqueAddableMask,
+                ineligibleReasons = cliqueIneligibleReasons,
                 eligibilityReady = cliqueSheetEligibilityReady,
                 eligibilityCheckingLabel = "Checking who can join…",
                 errorMessage =
@@ -887,16 +962,12 @@ fun ConnectionsListView(
                 isArchived = isUserArchived,
                 isServerLifecycleArchived = isServerArchived,
                 isCore = selected.connection.id in coreConnectionIds,
+                isMuted = selected.chat.id?.let { ChatMuteStore.isMuted(chatMutes, it, muteNowMs) },
                 onDismiss = { pendingMenuChat = null },
                 onMenuAction = { action ->
                     val connId = selected.connection.id
                     when (action) {
-                        ConnectionMenuAction.Nudge -> {
-                            val chatId = selected.chat.id
-                            if (chatId != null) {
-                                viewModel.sendNudgeToChat(chatId, selected.otherUser.name ?: "them")
-                            }
-                        }
+                        ConnectionMenuAction.Nudge -> viewModel.waveAt(connId, selected.otherUser.name ?: "them")
                         ConnectionMenuAction.Archive -> {
                             viewModel.archiveConnectionById(connId) { }
                         }
@@ -911,6 +982,33 @@ fun ConnectionsListView(
                         }
                         ConnectionMenuAction.MarkUnread -> {
                             viewModel.markConversationUnread(connId)
+                        }
+                        ConnectionMenuAction.PlanHangout, ConnectionMenuAction.SearchInChat -> Unit
+                        ConnectionMenuAction.AcceptPrior, ConnectionMenuAction.DeclinePrior -> {
+                            val accept = action == ConnectionMenuAction.AcceptPrior
+                            listScope.launch {
+                                ApiClient()
+                                    .respondPriorConnection(selected.connection.id, if (accept) "accept" else "decline")
+                                    .fold(
+                                        onSuccess = { AppDataManager.refresh(force = true) },
+                                        onFailure = { toastState.show(listScope, "Couldn't respond. Try again.") },
+                                    )
+                            }
+                        }
+                        ConnectionMenuAction.ToggleMute -> {
+                            val chat = selected.chat.id
+                            if (chat != null) {
+                                if (ChatMuteStore.isMuted(chatMutes, chat, muteNowMs)) {
+                                    listScope.launch {
+                                        toastState.show(
+                                            listScope,
+                                            muteResultMessage(null, ChatMuteStore.setMuted(chat, null)),
+                                        )
+                                    }
+                                } else {
+                                    muteDialogChatId = chat
+                                }
+                            }
                         }
                         ConnectionMenuAction.RequestRemove -> {
                             dialogConnectionId = connId

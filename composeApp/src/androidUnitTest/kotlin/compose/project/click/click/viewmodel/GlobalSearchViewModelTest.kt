@@ -503,6 +503,7 @@ class GlobalSearchViewModelTest {
                         fetchOwnAvailabilityIntents = { emptyList() },
                         fetchBeaconsForSearch = { _, _ -> emptyList() },
                         resolveSearchLocation = { null },
+                        searchLocalMessages = { _, _ -> emptyList() },
                     )
                 vm.search("al", VIEWER)
                 assertTrue(vm.isSearching.value)
@@ -590,6 +591,7 @@ class GlobalSearchViewModelTest {
                 resolveSearchLocation = resolveSearchLocation,
                 activeHubs = activeHubs,
                 searchHubMessages = searchHubMessages,
+                searchLocalMessages = { _, _ -> emptyList() },
             )
 
         fun directChat(

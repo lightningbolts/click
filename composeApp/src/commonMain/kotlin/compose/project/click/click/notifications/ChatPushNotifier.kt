@@ -24,47 +24,51 @@ class ChatPushNotifier(
     private val tokenStorage: TokenStorage = createTokenStorage(),
     httpClient: HttpClient? = null,
 ) {
-    private val client = httpClient ?: HttpClient {
-        install(ContentNegotiation) {
-            json(Json {
-                ignoreUnknownKeys = true
-                isLenient = true
-            })
+    private val client =
+        httpClient ?: HttpClient {
+            install(ContentNegotiation) {
+                json(
+                    Json {
+                        ignoreUnknownKeys = true
+                        isLenient = true
+                    },
+                )
+            }
         }
-    }
 
     suspend fun notifyNewMessage(
         chatId: String,
         messageId: String,
         senderUserId: String,
-        messagePreviewPlaintext: String? = null,
+        /**
+         * Only the (non-secret) message type is sent so the receiver can show a generic label.
+         * Never send message text here: the push function and FCM would see E2EE plaintext.
+         */
+        messageType: String? = null,
     ): Result<Unit> {
-        val jwt = tokenStorage.getJwt()
-            ?: return Result.failure(IllegalStateException("Missing auth token"))
+        val jwt =
+            tokenStorage.getJwt()
+                ?: return Result.failure(IllegalStateException("Missing auth token"))
 
         repeat(3) { attempt ->
             try {
-                val response = client.post(SupabaseConfig.functionUrl("send-push-notification")) {
-                    contentType(ContentType.Application.Json)
-                    header(HttpHeaders.Authorization, "Bearer $jwt")
-                    setBody(
-                        PushRequestBody(
-                            data = buildJsonObject {
-                                put("type", "chat_message")
-                                put("chat_id", chatId)
-                                put("message_id", messageId)
-                                put("sender_user_id", senderUserId)
-                                val preview = messagePreviewPlaintext?.trim().orEmpty()
-                                if (preview.isNotEmpty()) {
-                                    put(
-                                        "message_preview",
-                                        preview.replace(Regex("\\s+"), " ").take(160),
-                                    )
-                                }
-                            }
+                val response =
+                    client.post(SupabaseConfig.functionUrl("send-push-notification")) {
+                        contentType(ContentType.Application.Json)
+                        header(HttpHeaders.Authorization, "Bearer $jwt")
+                        setBody(
+                            PushRequestBody(
+                                data =
+                                    buildJsonObject {
+                                        put("type", "chat_message")
+                                        put("chat_id", chatId)
+                                        put("message_id", messageId)
+                                        put("sender_user_id", senderUserId)
+                                        messageType?.takeIf { it.isNotBlank() }?.let { put("message_type", it) }
+                                    },
+                            ),
                         )
-                    )
-                }
+                    }
 
                 if (response.status.isSuccess()) {
                     return Result.success(Unit)

@@ -7,10 +7,6 @@ import kotlinx.serialization.json.Json
 /** Base URL for the Click web app — used when generating profile QR codes. */
 const val CLICK_WEB_BASE_URL = "https://joinclick.co"
 
-/** App Store listing for the full Click iOS app (App Clip CTA). */
-const val CLICK_IOS_APP_STORE_ID = "6757996346"
-const val CLICK_IOS_APP_STORE_URL = "https://apps.apple.com/app/id$CLICK_IOS_APP_STORE_ID"
-
 /** Universal Link path segment for connection routing (`/c/{userId}`). */
 const val CONNECTION_PATH_SEGMENT = "c"
 
@@ -29,7 +25,7 @@ fun buildConnectionUniversalLink(userId: String): String {
 data class QrPayload(
     val userId: String,
     val shareKey: String? = null,
-    val name: String? = null
+    val name: String? = null,
 )
 
 /**
@@ -55,8 +51,10 @@ private val json = Json { ignoreUnknownKeys = true }
 fun QrPayload.toJson(): String = json.encodeToString(QrPayload.serializer(), this)
 
 /** Offline / immediate QR payload — always a Universal Link, never raw JSON. */
-fun buildOfflineQrPayload(userId: String, name: String?): String =
-    buildConnectionUniversalLink(userId)
+fun buildOfflineQrPayload(
+    userId: String,
+    name: String?,
+): String = buildConnectionUniversalLink(userId)
 
 fun String.toQrPayloadOrNull(): QrPayload? =
     try {
@@ -99,36 +97,73 @@ private val HTTP_HUB_PATTERN = Regex("""https?://[^/]+/hub/$HUB_ID_SEGMENT""")
 private val DEEP_LINK_HUB_PATTERN = Regex("""click://hub/$HUB_ID_SEGMENT""")
 
 fun String.toHubIdFromClickHubUrl(): String? {
-    DEEP_LINK_HUB_PATTERN.find(this)?.groupValues?.getOrNull(1)?.let { return it }
-    HTTP_HUB_PATTERN.find(this)?.groupValues?.getOrNull(1)?.let { return it }
+    DEEP_LINK_HUB_PATTERN
+        .find(this)
+        ?.groupValues
+        ?.getOrNull(1)
+        ?.let { return it }
+    HTTP_HUB_PATTERN
+        .find(this)
+        ?.groupValues
+        ?.getOrNull(1)
+        ?.let { return it }
     return null
 }
 
 fun String.toBeaconIdFromClickEventUrl(): String? {
-    DEEP_LINK_E_PATTERN.find(this)?.groupValues?.getOrNull(1)?.let { return it }
-    HTTP_E_PATTERN.find(this)?.groupValues?.getOrNull(1)?.let { return it }
+    DEEP_LINK_E_PATTERN
+        .find(this)
+        ?.groupValues
+        ?.getOrNull(1)
+        ?.let { return it }
+    HTTP_E_PATTERN
+        .find(this)
+        ?.groupValues
+        ?.getOrNull(1)
+        ?.let { return it }
     return null
 }
 
 fun String.toUserIdFromClickUrl(): String? {
-    HTTP_C_PATTERN.find(this)?.groupValues?.getOrNull(1)?.let { return it }
-    DEEP_LINK_C_PATTERN.find(this)?.groupValues?.getOrNull(1)?.let { return it }
-    HTTP_CONNECT_PATTERN.find(this)?.groupValues?.getOrNull(1)?.let { return it }
-    DEEP_LINK_PATTERN.find(this)?.groupValues?.getOrNull(1)?.let { return it }
+    HTTP_C_PATTERN
+        .find(this)
+        ?.groupValues
+        ?.getOrNull(1)
+        ?.let { return it }
+    DEEP_LINK_C_PATTERN
+        .find(this)
+        ?.groupValues
+        ?.getOrNull(1)
+        ?.let { return it }
+    HTTP_CONNECT_PATTERN
+        .find(this)
+        ?.groupValues
+        ?.getOrNull(1)
+        ?.let { return it }
+    DEEP_LINK_PATTERN
+        .find(this)
+        ?.groupValues
+        ?.getOrNull(1)
+        ?.let { return it }
     return null
 }
 
-private val UNIVERSAL_LINK_C_UUID = Regex(
-    """/c/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})""",
-    RegexOption.IGNORE_CASE,
-)
+private val UNIVERSAL_LINK_C_UUID =
+    Regex(
+        """/c/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})""",
+        RegexOption.IGNORE_CASE,
+    )
 private val TOKEN_QUERY_PARAM = Regex("""(?:[?&])(?:token|qr_token|qt)=([^&#]+)""", RegexOption.IGNORE_CASE)
 private val EXP_QUERY_PARAM = Regex("""(?:[?&])(?:exp|expires_at)=([0-9]+)""", RegexOption.IGNORE_CASE)
 private val ISSUED_AT_QUERY_PARAM = Regex("""(?:[?&])(?:iat|issued_at)=([0-9]+)""", RegexOption.IGNORE_CASE)
 private val VENUE_QUERY_PARAM = Regex("""(?:[?&])venue_id=([^&#]+)""", RegexOption.IGNORE_CASE)
 
 private fun String.queryValue(pattern: Regex): String? =
-    pattern.find(this)?.groupValues?.getOrNull(1)?.takeIf { it.isNotBlank() }
+    pattern
+        .find(this)
+        ?.groupValues
+        ?.getOrNull(1)
+        ?.takeIf { it.isNotBlank() }
 
 private fun String.hasTokenQueryParam(): Boolean = queryValue(TOKEN_QUERY_PARAM) != null
 
@@ -166,13 +201,21 @@ fun parseQrPayload(rawPayload: String): String? {
 
     if (trimmed.startsWith("http", ignoreCase = true) && trimmed.contains("/c/")) {
         if (trimmed.hasTokenQueryParam()) return null
-        UNIVERSAL_LINK_C_UUID.find(trimmed)?.groupValues?.getOrNull(1)?.let { return it }
+        UNIVERSAL_LINK_C_UUID
+            .find(trimmed)
+            ?.groupValues
+            ?.getOrNull(1)
+            ?.let { return it }
         trimmed.toUserIdFromClickUrl()?.let { return it }
     }
 
     if (trimmed.startsWith("{") && !trimmed.contains("\"token\"")) {
         try {
-            trimmed.toQrPayloadOrNull()?.userId?.takeIf { it.isNotBlank() }?.let { return it }
+            trimmed
+                .toQrPayloadOrNull()
+                ?.userId
+                ?.takeIf { it.isNotBlank() }
+                ?.let { return it }
         } catch (_: Exception) {
             // Legacy JSON branch failed — fall through to null.
         }
@@ -187,11 +230,20 @@ fun parseQrPayload(rawPayload: String): String? {
  */
 sealed class QrParseResult {
     /** New token-based format — requires server-side redemption. */
-    data class TokenBased(val payload: TokenQrPayload) : QrParseResult()
+    data class TokenBased(
+        val payload: TokenQrPayload,
+    ) : QrParseResult()
+
     /** Legacy format — userId extracted directly, no token validation. */
-    data class Legacy(val userId: String) : QrParseResult()
+    data class Legacy(
+        val userId: String,
+    ) : QrParseResult()
+
     /** Ephemeral community hub deep link — proximity check then hub chat. */
-    data class CommunityHub(val hubId: String) : QrParseResult()
+    data class CommunityHub(
+        val hubId: String,
+    ) : QrParseResult()
+
     /** Unrecognized format — not a Click QR code. */
     object Invalid : QrParseResult()
 }
@@ -209,7 +261,7 @@ sealed class QrParseResult {
 fun parseQrCode(rawData: String): QrParseResult {
     val trimmed = rawData.trim()
 
-    // 1. Try token-based JSON  
+    // 1. Try token-based JSON
     trimmed.toTokenQrPayloadOrNull()?.let {
         return QrParseResult.TokenBased(it)
     }

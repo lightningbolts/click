@@ -13,6 +13,7 @@ import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.ClientRequestException
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.parameter
 import io.ktor.client.request.patch
@@ -204,6 +205,18 @@ class ApiClient {
     }
 
     @OptIn(ExperimentalEncodingApi::class)
+    /** DELETE `/api/groups/{groupId}/avatar` — removes the group photo. */
+    suspend fun deleteGroupAvatar(groupId: String): Result<Unit> {
+        val gid = groupId.trim()
+        if (gid.isEmpty()) return Result.failure(IllegalArgumentException("groupId required"))
+        return try {
+            val response = clickWebClient.delete("${ApiClient.clickWebAuthOrigin}/api/groups/$gid/avatar")
+            if (response.status.value in 200..299) Result.success(Unit) else clickWebFailure(response)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     suspend fun uploadGroupAvatar(
         groupId: String,
         imageBytes: ByteArray,
@@ -268,8 +281,13 @@ class ApiClient {
 
     suspend fun getActivityRecap(window: String = "week"): Result<ActivityRecapDto> = getActivityRecapImpl(window = window)
 
-    suspend fun getConnectionTabs(connectionId: String): Result<ConnectionTabsGetResponse> =
-        getConnectionTabsImpl(connectionId = connectionId)
+    suspend fun getConnectionTabs(
+        connectionId: String,
+        chatId: String? = null,
+        limit: Int? = null,
+        beforeEpochMs: Long? = null,
+    ): Result<ConnectionTabsGetResponse> =
+        getConnectionTabsImpl(connectionId = connectionId, chatId = chatId, limit = limit, beforeEpochMs = beforeEpochMs)
 
     suspend fun patchUserProfile(
         userId: String,
@@ -279,6 +297,7 @@ class ApiClient {
         tags: List<String>? = null,
         birthday: String? = null,
         personalityTags: List<String>? = null,
+        bio: String? = null,
     ): Result<User> =
         patchUserProfileImpl(
             userId = userId,
@@ -288,6 +307,7 @@ class ApiClient {
             tags = tags,
             birthday = birthday,
             personalityTags = personalityTags,
+            bio = bio,
         )
 
     /**
@@ -699,8 +719,6 @@ class ApiClient {
         cursor: String? = null,
     ): Result<EventBookmarksResponseDto> = getMyEventBookmarksImpl(limit = limit, cursor = cursor)
 
-    suspend fun getEventTeaser(beaconId: String): Result<EventTeaserResponseDto> = getEventTeaserImpl(beaconId)
-
     suspend fun getBeaconGuestList(beaconId: String): Result<GuestListStatusDto> = getBeaconGuestListImpl(beaconId)
 
     suspend fun postBeaconGuestList(
@@ -722,6 +740,36 @@ class ApiClient {
 
     suspend fun markInboxNudgeActed(nudgeId: String): Result<Unit> = postInboxNudgeActionImpl(nudgeId, "acted")
 
+    suspend fun getPendingHangouts(): Result<List<PendingHangoutDto>> = getPendingHangoutsImpl()
+
+    /** Fails with [HangoutPendingExistsException] when the pair already has an open request. */
+    suspend fun logHangout(body: LogHangoutBody): Result<PendingHangoutDto> = logHangoutImpl(body)
+
+    suspend fun confirmHangout(hangoutId: String): Result<HangoutConfirmResponseDto> = confirmHangoutImpl(hangoutId)
+
+    suspend fun declineHangout(hangoutId: String): Result<Unit> = declineHangoutImpl(hangoutId)
+
+    suspend fun wave(connectionId: String): Result<WaveResponseDto> = waveImpl(connectionId)
+
+    suspend fun reportPresence(
+        lat: Double,
+        lon: Double,
+    ): Result<PresencePingResponseDto> = reportPresenceImpl(lat, lon)
+
+    suspend fun clearPresence(): Result<Unit> = clearPresenceImpl()
+
+    suspend fun clearLegacyGhostMode(): Result<Unit> = clearLegacyGhostModeImpl()
+
+    suspend fun getBlockedUsers(): Result<List<BlockedUserDto>> = getBlockedUsersImpl()
+
+    suspend fun unblockUser(userId: String): Result<Unit> = unblockUserImpl(userId)
+
+    suspend fun deleteAvatar(): Result<Unit> = deleteAvatarImpl()
+
+    suspend fun getDisplayNames(userIds: List<String>): Result<DisplayNamesResponseDto> = getDisplayNamesImpl(userIds)
+
+    suspend fun isClickWebReachable(): Boolean = isClickWebReachableImpl()
+
     fun close() {
         if (clickWebClientLazy.isInitialized()) clickWebClientLazy.value.close()
         if (clickWebPlainClientLazy.isInitialized()) clickWebPlainClientLazy.value.close()
@@ -733,6 +781,9 @@ data class MapBeaconPatchBody(
     val metadata: JsonObject? = null,
     @SerialName("show_creator_name") val showCreatorName: Boolean? = null,
     @SerialName("ttl_ms") val ttlMs: Long? = null,
+    /** Event pin move (both or neither); omitted when null because defaults aren't encoded. */
+    val lat: Double? = null,
+    val lon: Double? = null,
 )
 
 @Serializable

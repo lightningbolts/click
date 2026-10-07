@@ -30,6 +30,13 @@ data class AvailabilityOverlapGap(
     val durationMs: Long get() = endEpochMs - startEpochMs
 }
 
+/** A calendar synced to this device, for the Me → Calendar page. Never leaves the device. */
+data class DeviceCalendar(
+    val id: Long,
+    val name: String,
+    val accountName: String?,
+)
+
 enum class CalendarAccessStatus {
     Granted,
     Denied,

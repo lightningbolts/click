@@ -8,7 +8,7 @@ import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * Routes Universal Links and custom URL schemes for `/c/{userId}` into the connection handshake flow.
- * Platform entry points (iOS AppDelegate, Android MainActivity) call [handleIncomingUrl]; [App] observes
+ * Platform entry points (Android MainActivity) call [handleIncomingUrl]; [App] observes
  * [pendingConnectionUserId] for both cold and warm starts.
  */
 object ConnectionDeepLinkRouter {
@@ -33,13 +33,6 @@ object ConnectionDeepLinkRouter {
         val userId = parseConnectionUserId(url) ?: return false
         _pendingConnectionUserId.value = userId
         return true
-    }
-
-    fun setPendingConnectionUserId(userId: String) {
-        val trimmed = userId.trim()
-        if (trimmed.isNotEmpty()) {
-            _pendingConnectionUserId.value = trimmed
-        }
     }
 
     fun consume(): String? {

@@ -3,6 +3,8 @@
 package compose.project.click.click.data // pragma: allowlist secret
 
 import compose.project.click.click.data.api.CommunityHubNearbyDto // pragma: allowlist secret
+import compose.project.click.click.data.chat.LocalMessageStore // pragma: allowlist secret
+import compose.project.click.click.data.chat.PendingSendStore // pragma: allowlist secret
 import compose.project.click.click.data.models.CachedAppSnapshot // pragma: allowlist secret
 import compose.project.click.click.data.models.Connection // pragma: allowlist secret
 import compose.project.click.click.data.models.LocationPreferences // pragma: allowlist secret
@@ -13,7 +15,7 @@ import compose.project.click.click.data.models.isResolvedDisplayName // pragma: 
 import compose.project.click.click.data.realtime.RealtimeCoordinator // pragma: allowlist secret
 import compose.project.click.click.data.repository.NotificationPreferences // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
-import compose.project.click.click.notifications.NotificationRuntimeState // pragma: allowlist secret
+import compose.project.click.click.events.EventReminders // pragma: allowlist secret
 import compose.project.click.click.ui.utils.CommunityHubPin // pragma: allowlist secret
 import compose.project.click.click.ui.utils.mergeCommunityHubLists // pragma: allowlist secret
 import compose.project.click.click.util.ViewerAvailabilityBubblesCache // pragma: allowlist secret
@@ -69,6 +71,13 @@ internal fun AppDataManager.mergeCachedCommunityHubsFromDtoImpl(incoming: List<C
  * Clear all data (on logout)
  */
 internal suspend fun AppDataManager.clearDataImpl() {
+    ChatMuteStore.clear()
+    IdentityCache.clear()
+    EventReminders.cancelAll()
+    resetDeviceHistorySyncThrottle()
+    // Unsent drafts and on-device history never carry over to another account.
+    runCatching { PendingSendStore.clear(tokenStorage) }
+    runCatching { LocalMessageStore.wipeAll() }
     loadAllDataJob?.cancel()
     loadAllDataJob = null
     chatPrefetchJob?.cancel()
@@ -125,15 +134,7 @@ internal suspend fun AppDataManager.clearDataImpl() {
     _notificationPreferences.value = NotificationPreferences()
     _locationPreferences.value = LocationPreferences()
     _pendingConnectionsCount.value = 0
-    NotificationRuntimeState.setNotificationPreferences(
-        messageEnabled = true,
-        callEnabled = true,
-        eventReminderEnabled = true,
-        availabilityMatchEnabled = true,
-        hubMessageEnabled = true,
-        eventTeaserEnabled = true,
-        reconnectNudgeEnabled = true,
-    )
+    syncRuntimeNotificationPreferences(NotificationPreferences())
 }
 
 /**

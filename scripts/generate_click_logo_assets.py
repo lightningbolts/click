@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Render the circle/square SVG logo into Android mipmaps, iOS AppIcon, and KMP loading drawable."""
+"""Render the circle/square SVG logo into Android mipmaps and the Compose loading drawable."""
 from __future__ import annotations
 
-import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 
 from PIL import Image
@@ -17,13 +17,6 @@ ROOT = Path(__file__).resolve().parents[1]
 DESIGN_DIR = ROOT / "docs" / "design-assets"
 ICON_SVG = DESIGN_DIR / "circle-square-logo-icon.svg"
 MARK_SVG = DESIGN_DIR / "circle-square-logo-mark.svg"
-
-IOS_APPICON_DIR = ROOT / "iosApp" / "iosApp" / "Assets.xcassets" / "AppIcon.appiconset"
-IOS_EXTRA_APPICON_DIRS = [
-    ROOT / "iosApp" / "ClickClip" / "Assets.xcassets" / "AppIcon.appiconset",
-    ROOT / "iosApp" / "NotificationService" / "Assets.xcassets" / "AppIcon.appiconset",
-]
-SOURCE_LOGO_PATH = IOS_APPICON_DIR / "ClickLogo2.png"
 
 ANDROID_SIZES = {
     "mipmap-mdpi": 48,
@@ -104,23 +97,12 @@ def export_compose_loading_logo() -> None:
 
 
 def main() -> None:
-    # Canonical 1024 source for iOS + script consumers
-    IOS_APPICON_DIR.mkdir(parents=True, exist_ok=True)
-    render_svg(ICON_SVG, 1024, SOURCE_LOGO_PATH)
-    print("Wrote", SOURCE_LOGO_PATH)
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        source_logo_path = Path(tmp_dir) / "click-logo-1024.png"
+        render_svg(ICON_SVG, 1024, source_logo_path)
+        logo = Image.open(source_logo_path).convert("RGBA")
+        logo.load()
 
-    out_1024 = IOS_APPICON_DIR / "app-icon-1024.png"
-    shutil.copy2(SOURCE_LOGO_PATH, out_1024)
-    print("Wrote", out_1024)
-
-    for extra in IOS_EXTRA_APPICON_DIRS:
-        if not extra.is_dir():
-            continue
-        dest = extra / "app-icon-1024.png"
-        shutil.copy2(SOURCE_LOGO_PATH, dest)
-        print("Wrote", dest)
-
-    logo = Image.open(SOURCE_LOGO_PATH).convert("RGBA")
     res = ROOT / "composeApp" / "src" / "androidMain" / "res"
     for folder, dim in ANDROID_SIZES.items():
         im = resize_square(logo, dim)

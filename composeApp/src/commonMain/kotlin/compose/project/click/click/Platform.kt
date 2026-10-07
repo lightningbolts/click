@@ -11,3 +11,9 @@ expect fun getPlatform(): Platform
  * Call only after [compose.project.click.click.util.isBeaconOriginalSongDeepLinkUrl] passes.
  */
 expect fun openBeaconOriginalMediaUrl(url: String): Boolean
+
+/** Opens an https page in an in-app browser tab (Custom Tab on Android). */
+expect fun openInAppBrowser(url: String): Boolean
+
+/** "1.4.2 (87)" for the Me footer; empty when unknown. */
+expect fun appVersionLabel(): String

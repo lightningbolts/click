@@ -5,9 +5,10 @@
 
 package compose.project.click.click.ui.chat // pragma: allowlist secret
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -22,9 +23,13 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -48,8 +53,8 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
 import compose.project.click.click.hapticSendMessage
-import compose.project.click.click.ui.theme.LocalPlatformStyle // pragma: allowlist secret
 import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
 import compose.project.click.click.ui.theme.clickBorderColor // pragma: allowlist secret
 import compose.project.click.click.ui.theme.clickBorderWidth // pragma: allowlist secret
@@ -62,11 +67,8 @@ internal fun chatComposerCanSubmit(
 
 /**
  * Shared text/attach/send row for connection and hub chat.
- *
- * The iOS treatment intentionally follows a messenger hierarchy: neutral attachment/input chrome,
- * then one brand-filled send control only while sending is actionable. The field does not become a
- * purple form outline on focus.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun ChatComposerStrip(
     value: String,
@@ -83,15 +85,16 @@ internal fun ChatComposerStrip(
     modifier: Modifier = Modifier,
     attachBackground: Color = MaterialTheme.colorScheme.surfaceVariant,
     attachTint: Color = MaterialTheme.colorScheme.onSurfaceVariant,
+    /** Long-press on send offers "Send Later" (text only). Null where scheduling isn't supported. */
+    onScheduleSend: (() -> Unit)? = null,
 ) {
-    val composerStyle = LocalPlatformStyle.current
-    val auxButtonSize = if (composerStyle.isIOS) 42.dp else 48.dp
+    val auxButtonSize = 48.dp
     val attachIconSize = 21.dp
     val sendIconSize = 21.dp
-    val fieldCorner = if (composerStyle.isIOS) 22.dp else 12.dp
-    val composerGap = if (composerStyle.isIOS) 7.dp else 8.dp
+    val fieldCorner = 12.dp
+    val composerGap = 8.dp
     val fieldSideInset = auxButtonSize + composerGap
-    val sendShape = if (composerStyle.isIOS) CircleShape else RoundedCornerShape(fieldCorner)
+    val sendShape = RoundedCornerShape(fieldCorner)
     val fieldShape = RoundedCornerShape(fieldCorner)
 
     val attachInteraction = remember { MutableInteractionSource() }
@@ -99,6 +102,7 @@ internal fun ChatComposerStrip(
     val fieldInteraction = remember { MutableInteractionSource() }
     val focusRequester = remember { FocusRequester() }
     var submitGuarded by remember { mutableStateOf(false) }
+    var sendMenuExpanded by remember { mutableStateOf(false) }
 
     LaunchedEffect(value, submitGuarded) {
         if (submitGuarded && value.isBlank()) {
@@ -208,14 +212,9 @@ internal fun ChatComposerStrip(
                         Modifier
                             .fillMaxSize()
                             .clip(CircleShape)
-                            .background(attachBackground.copy(alpha = if (composerStyle.isIOS) 0.84f else 1f))
-                            .then(
-                                if (composerStyle.isIOS) {
-                                    Modifier
-                                } else {
-                                    Modifier.border(clickBorderWidth(), clickBorderColor(), CircleShape)
-                                },
-                            ).chatSpringPressScale(attachInteraction),
+                            .background(attachBackground.copy(alpha = 1f))
+                            .border(clickBorderWidth(), clickBorderColor(), CircleShape)
+                            .chatSpringPressScale(attachInteraction),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
@@ -239,13 +238,8 @@ internal fun ChatComposerStrip(
                     .chatSpringPressScale(sendInteraction)
                     .clip(sendShape)
                     .background(if (canSend) PrimaryBlue else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.84f))
-                    .then(
-                        if (composerStyle.isIOS) {
-                            Modifier
-                        } else {
-                            Modifier.border(clickBorderWidth(), clickBorderColor(), sendShape)
-                        },
-                    ).clickable(
+                    .border(clickBorderWidth(), clickBorderColor(), sendShape)
+                    .combinedClickable(
                         interactionSource = sendInteraction,
                         indication = null,
                         enabled = canSend,
@@ -254,9 +248,28 @@ internal fun ChatComposerStrip(
                             hapticSendMessage()
                             onSend()
                         },
+                        onLongClick =
+                            onScheduleSend?.let {
+                                {
+                                    PlatformHapticsPolicy.lightImpact()
+                                    sendMenuExpanded = true
+                                }
+                            },
                     ),
             contentAlignment = Alignment.Center,
         ) {
+            if (onScheduleSend != null) {
+                DropdownMenu(expanded = sendMenuExpanded, onDismissRequest = { sendMenuExpanded = false }) {
+                    DropdownMenuItem(
+                        text = { Text("Send Later") },
+                        leadingIcon = { Icon(Icons.Filled.Schedule, contentDescription = null) },
+                        onClick = {
+                            sendMenuExpanded = false
+                            onScheduleSend()
+                        },
+                    )
+                }
+            }
             Icon(
                 sendIcon,
                 contentDescription = sendContentDescription,

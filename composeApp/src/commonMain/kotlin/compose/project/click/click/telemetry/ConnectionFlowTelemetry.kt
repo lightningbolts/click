@@ -2,6 +2,7 @@ package compose.project.click.click.telemetry
 
 import compose.project.click.click.data.SupabaseConfig
 import compose.project.click.click.data.api.ApiConfig
+import compose.project.click.click.data.storage.createTokenStorage
 import compose.project.click.click.util.chatMediaDispatcher
 import compose.project.click.click.util.redactedRestMessage
 import io.github.jan.supabase.auth.auth
@@ -19,63 +20,81 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlin.random.Random
 
 /**
  * First-party proximity handshake / connection-flow telemetry.
  *
- * Fire-and-forget POSTs to click-web BFF. No user ids, no raw GPS.
+ * Queued on disk (at most [QUEUE_MAX] events, oldest dropped) and flushed in order on record, on
+ * foreground and when the network returns (iOS `TelemetryQueue`). No user ids, no raw GPS.
  * Success-path events are sampled (~10%); failures, awaiting selection, and
  * abandoned flows always emit.
  */
 object ConnectionFlowTelemetry {
-
     private const val SUCCESS_SAMPLE_RATE = 0.10
 
-    /** Events that always leave the device (funnel failures / selection / abandon). */
-    private val ALWAYS_EMIT = setOf(
-        "proximity_handshake_started",
-        "proximity_handshake_awaiting_selection",
-        "proximity_handshake_failed",
-        "proximity_host_selection_abandoned",
-        "proximity_reconnect_rate_limited",
-        "proximity_recovery_poll_timeout",
-        "proximity_recovery_incomplete",
-        "verified_clique_from_proximity_blocked",
-        "proximity_at_event_skipped",
-    )
+    const val QUEUE_MAX = 200
 
-    private val ALLOWED_EVENTS = setOf(
-        "proximity_handshake_started",
-        "proximity_handshake_matched",
-        "proximity_handshake_awaiting_selection",
-        "proximity_handshake_pending",
-        "proximity_handshake_offline_queued",
-        "proximity_handshake_failed",
-        "proximity_host_selection_confirmed",
-        "proximity_host_selection_abandoned",
-        "proximity_reconnect_encounter_saved",
-        "proximity_reconnect_rate_limited",
-        "proximity_recovery_poll_success",
-        "proximity_recovery_poll_timeout",
-        "proximity_recovery_incomplete",
-        "verified_clique_from_proximity_created",
-        "verified_clique_from_proximity_blocked",
-        "proximity_at_event_attached",
-        "proximity_at_event_skipped",
-    )
+    /** Appends [item], keeping the newest [max] (a pure helper for the persisted queue). */
+    fun <T> enqueueBounded(
+        queue: List<T>,
+        item: T,
+        max: Int = QUEUE_MAX,
+    ): List<T> = (queue + item).takeLast(max)
+
+    private val queueMutex = Mutex()
+    private val tokenStorage by lazy { createTokenStorage() }
+
+    /** Events that always leave the device (funnel failures / selection / abandon). */
+    private val ALWAYS_EMIT =
+        setOf(
+            "proximity_handshake_started",
+            "proximity_handshake_awaiting_selection",
+            "proximity_handshake_failed",
+            "proximity_host_selection_abandoned",
+            "proximity_reconnect_rate_limited",
+            "proximity_recovery_poll_timeout",
+            "proximity_recovery_incomplete",
+            "verified_clique_from_proximity_blocked",
+            "proximity_at_event_skipped",
+        )
+
+    private val ALLOWED_EVENTS =
+        setOf(
+            "proximity_handshake_started",
+            "proximity_handshake_matched",
+            "proximity_handshake_awaiting_selection",
+            "proximity_handshake_pending",
+            "proximity_handshake_offline_queued",
+            "proximity_handshake_failed",
+            "proximity_host_selection_confirmed",
+            "proximity_host_selection_abandoned",
+            "proximity_reconnect_encounter_saved",
+            "proximity_reconnect_rate_limited",
+            "proximity_recovery_poll_success",
+            "proximity_recovery_poll_timeout",
+            "proximity_recovery_incomplete",
+            "verified_clique_from_proximity_created",
+            "verified_clique_from_proximity_blocked",
+            "proximity_at_event_attached",
+            "proximity_at_event_skipped",
+        )
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
-    private val json = Json {
-        ignoreUnknownKeys = true
-        isLenient = true
-        explicitNulls = true
-    }
+    private val json =
+        Json {
+            ignoreUnknownKeys = true
+            isLenient = true
+            explicitNulls = true
+        }
 
     private val httpClient by lazy {
         HttpClient {
@@ -86,7 +105,7 @@ object ConnectionFlowTelemetry {
     }
 
     @Serializable
-    private data class ConnectionFlowPayload(
+    internal data class ConnectionFlowPayload(
         val event: String,
         @SerialName("peer_count") val peerCount: Int? = null,
         @SerialName("is_group") val isGroup: Boolean? = null,
@@ -149,10 +168,11 @@ object ConnectionFlowTelemetry {
         reason = reason,
     )
 
-    fun recordFailed(reason: String? = null) = record(
-        event = "proximity_handshake_failed",
-        reason = reason,
-    )
+    fun recordFailed(reason: String? = null) =
+        record(
+            event = "proximity_handshake_failed",
+            reason = reason,
+        )
 
     fun recordHostSelectionConfirmed(
         selectedCount: Int,
@@ -208,15 +228,17 @@ object ConnectionFlowTelemetry {
         isReconnect = isReconnect,
     )
 
-    fun recordRecoveryPollTimeout(reason: String? = null) = record(
-        event = "proximity_recovery_poll_timeout",
-        reason = reason,
-    )
+    fun recordRecoveryPollTimeout(reason: String? = null) =
+        record(
+            event = "proximity_recovery_poll_timeout",
+            reason = reason,
+        )
 
-    fun recordRecoveryIncomplete(reason: String? = null) = record(
-        event = "proximity_recovery_incomplete",
-        reason = reason,
-    )
+    fun recordRecoveryIncomplete(reason: String? = null) =
+        record(
+            event = "proximity_recovery_incomplete",
+            reason = reason,
+        )
 
     fun recordVerifiedCliqueCreated(
         peerCount: Int,
@@ -279,42 +301,81 @@ object ConnectionFlowTelemetry {
         if (trimmed !in ALLOWED_EVENTS) return
         if (trimmed !in ALWAYS_EMIT && Random.nextDouble() >= SUCCESS_SAMPLE_RATE) return
 
-        val payload = ConnectionFlowPayload(
-            event = trimmed,
-            peerCount = peerCount?.coerceAtLeast(0),
-            isGroup = isGroup,
-            isReconnect = isReconnect,
-            selectedCount = selectedCount?.coerceAtLeast(0),
-            candidateCount = candidateCount?.coerceAtLeast(0),
-            reason = reason?.trim()?.take(128)?.takeIf { it.isNotEmpty() },
-        )
+        val payload =
+            ConnectionFlowPayload(
+                event = trimmed,
+                peerCount = peerCount?.coerceAtLeast(0),
+                isGroup = isGroup,
+                isReconnect = isReconnect,
+                selectedCount = selectedCount?.coerceAtLeast(0),
+                candidateCount = candidateCount?.coerceAtLeast(0),
+                reason = reason?.trim()?.take(128)?.takeIf { it.isNotEmpty() },
+            )
         scope.launch {
-            postEvent(payload)
+            queueMutex.withLock {
+                saveQueue(enqueueBounded(loadQueue(), payload))
+            }
+            flush()
         }
     }
 
-    private suspend fun postEvent(body: ConnectionFlowPayload) {
-        val token = runCatching {
-            SupabaseConfig.client.auth.currentSessionOrNull()?.accessToken
-        }.getOrNull()?.takeIf { it.isNotBlank() } ?: return
+    private suspend fun loadQueue(): List<ConnectionFlowPayload> =
+        tokenStorage
+            .getTelemetryQueue()
+            ?.let { raw -> runCatching { json.decodeFromString<List<ConnectionFlowPayload>>(raw) }.getOrNull() }
+            .orEmpty()
+
+    private suspend fun saveQueue(queue: List<ConnectionFlowPayload>) {
+        tokenStorage.saveTelemetryQueue(if (queue.isEmpty()) null else json.encodeToString<List<ConnectionFlowPayload>>(queue))
+    }
+
+    private enum class PostResult { Sent, Rejected, Retry }
+
+    /** Sends queued events in order; stops at the first network failure so order is kept. */
+    fun flush() {
+        scope.launch {
+            queueMutex.withLock {
+                var queue = loadQueue()
+                while (queue.isNotEmpty()) {
+                    when (postEvent(queue.first())) {
+                        PostResult.Retry -> break
+                        // Sent, or rejected as malformed (4xx): either way it leaves the queue.
+                        PostResult.Sent, PostResult.Rejected -> queue = queue.drop(1)
+                    }
+                }
+                saveQueue(queue)
+            }
+        }
+    }
+
+    private suspend fun postEvent(body: ConnectionFlowPayload): PostResult {
+        val token =
+            runCatching {
+                SupabaseConfig.client.auth
+                    .currentSessionOrNull()
+                    ?.accessToken
+            }.getOrNull()?.takeIf { it.isNotBlank() } ?: return PostResult.Retry
 
         val url = "${ApiConfig.CLICK_WEB_BASE_URL.trimEnd('/')}/api/telemetry/connection-flow"
 
-        runCatching {
+        return runCatching {
             withContext(chatMediaDispatcher) {
-                val response = httpClient.post(url) {
-                    contentType(ContentType.Application.Json)
-                    header(HttpHeaders.Authorization, "Bearer $token")
-                    setBody(body)
-                }
-                if (response.status.isSuccess()) {
-                    println("ConnectionFlowTelemetry: POST ok event=${body.event}")
-                } else {
-                    println("ConnectionFlowTelemetry: POST failed status=${response.status.value}")
+                val response =
+                    httpClient.post(url) {
+                        contentType(ContentType.Application.Json)
+                        header(HttpHeaders.Authorization, "Bearer $token")
+                        setBody(body)
+                    }
+                val status = response.status.value
+                when {
+                    response.status.isSuccess() -> PostResult.Sent
+                    status == 401 || status == 408 || status == 429 || status >= 500 -> PostResult.Retry
+                    else -> PostResult.Rejected
                 }
             }
-        }.onFailure { e ->
+        }.getOrElse { e ->
             println("ConnectionFlowTelemetry: POST error: ${e.redactedRestMessage()}")
+            PostResult.Retry
         }
     }
 }

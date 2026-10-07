@@ -43,7 +43,6 @@ import androidx.compose.ui.unit.dp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-@Suppress("UNUSED_PARAMETER")
 actual fun NativeCollapsingScaffold(
     title: String,
     modifier: Modifier,
@@ -52,8 +51,6 @@ actual fun NativeCollapsingScaffold(
     navigationIcon: @Composable (() -> Unit)?,
     actions: @Composable (RowScope.() -> Unit)?,
     onOpenSearch: (() -> Unit)?,
-    onNavigateBack: (() -> Unit)?,
-    nativeTrailingActions: List<NativeChromeAction>,
     collapseSearchIntoBar: Boolean,
     showHeader: Boolean,
     belowHeaderSpacing: Dp,
@@ -146,7 +143,6 @@ actual fun NativeCollapsingScaffold(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-@Suppress("UNUSED_PARAMETER")
 actual fun NativeCollapsingScrollScaffold(
     title: String,
     modifier: Modifier,
@@ -154,9 +150,6 @@ actual fun NativeCollapsingScrollScaffold(
     presenceOnline: Boolean?,
     navigationIcon: @Composable (() -> Unit)?,
     actions: @Composable (RowScope.() -> Unit)?,
-    onOpenSearch: (() -> Unit)?,
-    onNavigateBack: (() -> Unit)?,
-    nativeTrailingActions: List<NativeChromeAction>,
     horizontalPadding: Dp,
     scrollEnabled: Boolean,
     content: @Composable (Modifier) -> Unit,
@@ -265,48 +258,3 @@ private fun NativeCollapsingTitle(
         }
     }
 }
-
-@Composable
-actual fun HidePlatformNativeNavigationBar() = Unit
-
-@Composable
-actual fun CoverPlatformOverlayNavigationBar() = Unit
-
-@Composable
-@Suppress("UNUSED_PARAMETER")
-actual fun PlatformNativeNavigationBarSwipeReveal(revealPx: androidx.compose.runtime.MutableFloatState) = Unit
-
-@Composable
-@Suppress("UNUSED_PARAMETER")
-actual fun BindPlatformNativeNavigationBar(
-    title: String,
-    subtitle: String?,
-    presenceOnline: Boolean?,
-    identity: NativeChromeIdentity?,
-    onNavigateBack: (() -> Unit)?,
-    onOpenSearch: (() -> Unit)?,
-    nativeTrailingActions: List<NativeChromeAction>,
-    collapseFraction: Float,
-    leadingClose: Boolean,
-) = Unit
-
-@Composable
-@Suppress("UNUSED_PARAMETER")
-actual fun ApplyOverlayMediaChrome(
-    active: Boolean,
-    onClose: () -> Unit,
-    trailing: List<NativeChromeAction>,
-) = Unit
-
-@Composable
-@Suppress("UNUSED_PARAMETER")
-actual fun PlatformNativeMapFloatingChrome(
-    visible: Boolean,
-    layerLabel: String,
-    layerOptions: List<NativeMapLayerOption>,
-    onToggleLayerId: (String) -> Unit,
-    onDropBeacon: () -> Unit,
-    onZoomIn: () -> Unit,
-    onZoomOut: () -> Unit,
-    bottomPadding: Dp,
-) = Unit

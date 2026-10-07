@@ -189,7 +189,7 @@ internal fun ChatViewModel.loadChatsImpl(isForced: Boolean = true) {
     if (!isForced && _chatListState.value is ChatListState.Success) return
 
     viewModelScope.launch {
-        // Clearing junction caches during an in-session refresh (e.g. iOS tap-back from a
+        // Clearing junction caches during an in-session refresh (e.g. tap-back from a
         // thread) can yield transient empty/stale combine steps and make Archived tab counts
         // flash to zero. Keep caches while we already have a painted inbox; cold paths still clear.
         if (isForced && _chatListState.value !is ChatListState.Success) {

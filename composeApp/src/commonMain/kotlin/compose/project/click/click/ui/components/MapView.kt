@@ -301,7 +301,6 @@ expect fun PlatformMap(
     zoom: Double,
     centerLat: Double? = null,
     centerLon: Double? = null,
-    ghostMode: Boolean = false,
     mapGesturesEnabled: Boolean = true,
     /** When false, hides the platform compass so map chrome dropdowns are not obscured. */
     showCompass: Boolean = true,
@@ -333,7 +332,7 @@ fun MapCluster.toClusterPin(): MapClusterPin {
 }
 
 /**
- * Google Maps default-marker hue (0–360°) — keep in sync with iOS tint in MapView.ios.kt.
+ * Google Maps default-marker hue (0–360°).
  */
 fun MapPin.markerHueDegrees(): Float =
     when {

@@ -46,7 +46,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
-import compose.project.click.click.ui.theme.LocalPlatformStyle // pragma: allowlist secret
 
 enum class HeaderDisplayMode {
     Large,
@@ -276,7 +275,7 @@ fun HeaderChromeIconButton(
         size = 40.dp,
         iconSize = 22.dp,
         tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
-        glassStrength = if (LocalPlatformStyle.current.isIOS) 0.64f else 0.4f,
+        glassStrength = 0.4f,
     )
 }
 
@@ -304,54 +303,10 @@ fun PageHeader(
     presenceOnline: Boolean? = null,
     navigationIcon: @Composable (() -> Unit)? = null,
     actions: @Composable (RowScope.() -> Unit)? = null,
-    onNavigateBack: (() -> Unit)? = null,
-    nativeTrailingActions: List<NativeChromeAction> = emptyList(),
     @Suppress("UNUSED_PARAMETER") displayMode: HeaderDisplayMode =
         if (navigationIcon != null) HeaderDisplayMode.Inline else HeaderDisplayMode.Large,
     collapseFraction: Float = 0f,
 ) {
-    if (LocalPlatformStyle.current.isIOS) {
-        BindPlatformNativeNavigationBar(
-            title = title,
-            subtitle = subtitle,
-            presenceOnline = presenceOnline,
-            onNavigateBack = onNavigateBack,
-            nativeTrailingActions = nativeTrailingActions,
-            collapseFraction = 1f,
-        )
-        val hasSub = !subtitle.isNullOrBlank() || presenceOnline != null
-        val hasBack = onNavigateBack != null
-        val stackSubtitle =
-            NativeHeaderMetrics.shouldStackCompactSubtitle(
-                hasBack = hasBack,
-                hasIdentity = false,
-                hasSubtitle = hasSub,
-                collapseFraction = 1f,
-            )
-        val growCompactSubtitle =
-            NativeHeaderMetrics.shouldGrowCompactBarForStackedSubtitle(
-                hasBack = hasBack,
-                hasIdentity = false,
-                hasSubtitle = hasSub,
-                collapseFraction = 1f,
-            )
-        Column(modifier = Modifier.fillMaxWidth()) {
-            Spacer(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .height(
-                            NativeHeaderMetrics.barHeightDp(
-                                collapseFraction = 1f,
-                                hasSubtitle = hasSub,
-                                stackSubtitle = stackSubtitle,
-                                growCompactSubtitle = growCompactSubtitle,
-                            ),
-                        ),
-            )
-        }
-        return
-    }
     LiquidGlassPageHeader(
         title = title,
         subtitle = subtitle,

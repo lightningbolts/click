@@ -14,7 +14,7 @@ data class LocationResult(
 
 /**
  * Expected platform-specific location service.
- * Implementations should use CLLocationManager (iOS) or FusedLocationProvider (Android).
+ * Implementations should use FusedLocationProvider (Android).
  */
 expect class LocationService() {
     /**

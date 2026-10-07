@@ -35,6 +35,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
@@ -43,13 +44,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.chat.attachments.AttachmentCrypto // pragma: allowlist secret
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
+import compose.project.click.click.data.models.HangoutHighlights
 import compose.project.click.click.data.models.ProfileTimelineJournalEntry // pragma: allowlist secret
 import compose.project.click.click.data.models.ProfileTimelinePayload // pragma: allowlist secret
 import compose.project.click.click.data.models.UserPublicProfile // pragma: allowlist secret
+import compose.project.click.click.data.models.toFriendshipEncounter
 import compose.project.click.click.data.repository.ConnectionRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
+import compose.project.click.click.deeplink.AppDeepLink // pragma: allowlist secret
+import compose.project.click.click.deeplink.AppDeepLinkRouter // pragma: allowlist secret
 import compose.project.click.click.deeplink.EventDeepLinkRouter // pragma: allowlist secret
 import compose.project.click.click.ui.chat.fetchImageBytesFromUrl // pragma: allowlist secret
 import compose.project.click.click.ui.chat.saveDecryptedAttachmentToDownloads // pragma: allowlist secret
@@ -62,13 +68,14 @@ import compose.project.click.click.util.profileMediaVaultLocalPath // pragma: al
 import compose.project.click.click.util.readProfileMediaVaultBytes // pragma: allowlist secret
 import compose.project.click.click.util.writeProfileMediaVaultBytes // pragma: allowlist secret
 import compose.project.click.click.utils.toImageBitmap // pragma: allowlist secret
+import compose.project.click.click.viewmodel.GroupTogetherViewModel
+import compose.project.click.click.viewmodel.PeerFriendshipViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-
-// Bounded pager height under UIKit scroll-host (Metal texture max 16384px @3x).
-private val ProfileSheetPagerHeight = 560.dp // fallback when not fill-viewport
+import kotlinx.datetime.Clock
 
 /**
  * Phase 2 — C13: shared profile bottom sheet displayed when a map pin is tapped.
@@ -94,6 +101,8 @@ fun ProfileBottomSheet(
     onAvatarClick: (() -> Unit)? = null,
     avatarUploading: Boolean = false,
     onOpenBeacon: ((beaconId: String) -> Unit)? = null,
+    /** Opens the chat with the planner showing (the "Plan" pill / "Plan next"). */
+    onPlan: (() -> Unit)? = null,
 ) {
     val visibleTabs =
         remember(state.isGroup) {
@@ -197,6 +206,9 @@ fun ProfileBottomSheet(
         mutableStateOf<Map<String, String>>(emptyMap())
     }
     var profileTabsHydrating by remember { mutableStateOf(false) }
+    // Group shared media pages (04 §11): 60 at a time, older pages as the grid scrolls to its end.
+    var groupMediaHasMore by remember(state.connectionId) { mutableStateOf(false) }
+    var groupMediaLoadingMore by remember(state.connectionId) { mutableStateOf(false) }
     var resolvingMediaIds by remember(state.connectionId, selectedUserId, effectiveViewerUserId) {
         mutableStateOf<Set<String>>(emptySet())
     }
@@ -216,19 +228,16 @@ fun ProfileBottomSheet(
             }
 
             val fetched =
-                if (!effectiveViewerUserId.isNullOrBlank()) {
+                if (state.isGroup) {
+                    // Never decrypt a whole group's history here: media decrypts per row as it is
+                    // shown, and links come from the open chat's loaded messages.
+                    emptyList()
+                } else if (!effectiveViewerUserId.isNullOrBlank()) {
                     runCatching {
-                        if (state.isGroup) {
-                            connectionRepository.fetchDecryptedMessagesForChat(
-                                chatId = connectionId,
-                                viewerUserId = effectiveViewerUserId,
-                            )
-                        } else {
-                            connectionRepository.fetchDecryptedMessagesForProfileConnection(
-                                connectionId = connectionId,
-                                viewerUserId = effectiveViewerUserId,
-                            )
-                        }
+                        connectionRepository.fetchDecryptedMessagesForProfileConnection(
+                            connectionId = connectionId,
+                            viewerUserId = effectiveViewerUserId,
+                        )
                     }.getOrDefault(emptyList())
                 } else {
                     emptyList()
@@ -250,9 +259,16 @@ fun ProfileBottomSheet(
 
             val tabsPayload =
                 runCatching {
-                    connectionRepository.fetchConnectionTabs(connectionId).getOrNull()
+                    if (state.isGroup) {
+                        connectionRepository
+                            .fetchConnectionTabs(connectionId, chatId = connectionId, limit = GROUP_MEDIA_PAGE_SIZE)
+                            .getOrNull()
+                    } else {
+                        connectionRepository.fetchConnectionTabs(connectionId).getOrNull()
+                    }
                 }.getOrNull()
             connectionChatId = tabsPayload?.chatId
+            groupMediaHasMore = state.isGroup && tabsPayload?.hasMore == true
 
             connectionTabMedia =
                 tabsPayload
@@ -282,6 +298,39 @@ fun ProfileBottomSheet(
         } finally {
             profileTabsHydrating = false
         }
+    }
+
+    // Next group media page when the Media grid nears its end.
+    LaunchedEffect(mediaScroll, groupMediaHasMore, state.connectionId) {
+        if (!state.isGroup || !groupMediaHasMore) return@LaunchedEffect
+        snapshotFlow { mediaScroll.maxValue > 0 && mediaScroll.value >= mediaScroll.maxValue - 600 }
+            .filter { it }
+            .collect {
+                if (groupMediaLoadingMore || !groupMediaHasMore) return@collect
+                val chatId = state.connectionId?.trim().orEmpty()
+                val oldest = connectionTabMedia.map { it.sortEpochMs }.filter { it > 0 }.minOrNull() ?: return@collect
+                groupMediaLoadingMore = true
+                val page =
+                    runCatching {
+                        connectionRepository
+                            .fetchConnectionTabs(chatId, chatId = chatId, limit = GROUP_MEDIA_PAGE_SIZE, beforeEpochMs = oldest)
+                            .getOrNull()
+                    }.getOrNull()
+                if (page != null) {
+                    val known = connectionTabMedia.mapTo(HashSet()) { it.id }
+                    connectionTabMedia =
+                        (connectionTabMedia + page.media.mapNotNull { it.toProfileSheetMediaFromTab() }.filterNot { it.id in known })
+                            .sortedByDescending { profileMediaSortEpoch(it) }
+                    val knownFiles = connectionTabFiles.mapTo(HashSet()) { it.id }
+                    connectionTabFiles =
+                        connectionTabFiles +
+                        page.files
+                            .mapNotNull { it.toProfileSheetFileFromTab().takeIf { f -> f.canOpenProfileFile() } }
+                            .filterNot { it.id in knownFiles }
+                    groupMediaHasMore = page.hasMore
+                }
+                groupMediaLoadingMore = false
+            }
     }
 
     val profileLocalMessages =
@@ -335,6 +384,54 @@ fun ProfileBottomSheet(
         }
         legacyLoading = false
     }
+
+    // Together: friendship stats, pending hangouts, plans.
+    val friendshipConnectionId = state.connectionId?.trim()?.takeIf { it.isNotEmpty() && !state.isGroup }
+    val peerFirstName =
+        state.displayName
+            .trim()
+            .substringBefore(' ')
+            .ifBlank { "them" }
+    val friendshipVm: PeerFriendshipViewModel? =
+        friendshipConnectionId?.let { cid ->
+            viewModel(key = "friendship-$cid") { PeerFriendshipViewModel(cid, peerFirstName) }
+        }
+    val friendshipEncounters =
+        remember(legacyProfile) {
+            legacyProfile
+                ?.sharedConnection
+                ?.connectionEncounters
+                .orEmpty()
+                .mapNotNull { it.toFriendshipEncounter() }
+        }
+    val friendshipChatId =
+        remember(legacyProfile, friendshipConnectionId) {
+            legacyProfile?.sharedConnection?.chat?.id
+                ?: AppDataManager.connections.value
+                    .firstOrNull { it.id == friendshipConnectionId }
+                    ?.chat
+                    ?.id
+        }
+    LaunchedEffect(friendshipVm, friendshipChatId) { friendshipVm?.refresh(friendshipChatId) }
+    val friendshipEncountersChanged = friendshipVm?.encountersChanged?.collectAsState()?.value ?: 0
+    LaunchedEffect(friendshipEncountersChanged) {
+        if (friendshipEncountersChanged == 0) return@LaunchedEffect
+        val uid = state.userId?.trim() ?: return@LaunchedEffect
+        runCatching { withContext(Dispatchers.Default) { repository.refreshUserPublicProfile(effectiveViewerUserId, uid) } }
+            .getOrNull()
+            ?.let { legacyProfile = it }
+    }
+    val groupTogetherVm: GroupTogetherViewModel? =
+        state.connectionId?.trim()?.takeIf { it.isNotEmpty() && state.isGroup }?.let { chatId ->
+            viewModel(key = "group-together-$chatId") { GroupTogetherViewModel(chatId) }
+        }
+    LaunchedEffect(groupTogetherVm, state.groupMembers, effectiveViewerUserId) {
+        val viewer = effectiveViewerUserId ?: return@LaunchedEffect
+        groupTogetherVm?.load(viewer, state.groupMembers.map { it.id })
+    }
+    var showLogHangout by remember(friendshipConnectionId) { mutableStateOf(false) }
+    var showStory by remember(friendshipConnectionId) { mutableStateOf(false) }
+    var showEncounterMap by remember(friendshipConnectionId) { mutableStateOf(false) }
 
     val proximityEncounterEpoch by AppDataManager.proximityEncounterEpoch.collectAsState()
     LaunchedEffect(proximityEncounterEpoch, state.userId, effectiveViewerUserId) {
@@ -734,7 +831,6 @@ fun ProfileBottomSheet(
         onDismissRequest = sheetOnDismiss,
         scrollAtTop = profileScrollAtTop,
     ) {
-        val scrollOwnedByHost = LocalSheetScrollOwnedByHost.current
         Box(modifier = Modifier.fillMaxWidth().fillMaxSize()) {
             Column(
                 modifier =
@@ -767,15 +863,123 @@ fun ProfileBottomSheet(
                     avatarUploading = avatarUploading,
                 )
 
+                legacyProfile?.user?.bio?.takeIf { it.isNotBlank() && !state.isGroup }?.let { bio ->
+                    Text(
+                        text = bio,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = GlassSheetTokens.OnOled(),
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    )
+                }
+                relationshipLine(friendshipEncounters)?.let { line ->
+                    Text(
+                        text = line,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = GlassSheetTokens.OnOledMuted(),
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    )
+                }
+
                 Spacer(Modifier.height(12.dp))
 
                 ProfileActionGrid(
                     showNudge = state.canNudge,
                     showDisposableRoll = onOpenDisposableRoll != null && !state.connectionId.isNullOrBlank(),
                     onMessage = onMessage,
-                    onNudge = onNudge,
+                    // Wave (a one-per-day relationship moment) replaces the old chat-message nudge.
+                    onNudge = friendshipVm?.let { vm -> { vm.wave() } } ?: onNudge,
+                    nudgeLabel = if (friendshipVm != null) "Wave" else "Nudge",
                     onOpenDisposableRoll = onOpenDisposableRoll,
                 )
+
+                if (groupTogetherVm != null) {
+                    val groupHangouts by groupTogetherVm.hangouts.collectAsState()
+                    val groupPlans by groupTogetherVm.upcomingPlans.collectAsState()
+                    Spacer(Modifier.height(12.dp))
+                    GroupTogetherSection(
+                        groupName = state.displayName,
+                        hangouts = groupHangouts,
+                        memberName = { id ->
+                            state.groupMembers
+                                .firstOrNull { it.id == id }
+                                ?.name
+                                ?.substringBefore(' ')
+                                ?.ifBlank { null } ?: "Someone"
+                        },
+                        upcomingPlans = groupPlans,
+                        onPlan = onPlan,
+                        onOpenPlan = { upcoming -> openPlanInChat(upcoming, sheetOnDismiss) },
+                    )
+                }
+
+                if (friendshipVm != null) {
+                    val pendingHangouts by friendshipVm.pendingHangouts.collectAsState()
+                    val upcomingPlans by friendshipVm.upcomingPlans.collectAsState()
+                    val notice by friendshipVm.notice.collectAsState()
+                    Spacer(Modifier.height(12.dp))
+                    FriendshipSection(
+                        peerFirstName = peerFirstName,
+                        peerSeed = state.userId.orEmpty(),
+                        encounters = friendshipEncounters,
+                        pending = pendingHangouts,
+                        upcomingPlans = upcomingPlans,
+                        onConfirm = friendshipVm::confirm,
+                        onDecline = friendshipVm::decline,
+                        onLogHangout = { showLogHangout = true },
+                        onPlan = onPlan,
+                        onOpenStory = { showStory = true },
+                        onOpenMap = { showEncounterMap = true },
+                        onOpenPlan = { upcoming -> openPlanInChat(upcoming, sheetOnDismiss) },
+                    )
+                    notice?.let { text ->
+                        LaunchedEffect(text) {
+                            delay(3_000)
+                            friendshipVm.clearNotice()
+                        }
+                        Text(
+                            text,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = GlassSheetTokens.OnOled(),
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                            textAlign = TextAlign.Center,
+                        )
+                    }
+                    if (showLogHangout) {
+                        val busy by friendshipVm.busy.collectAsState()
+                        LogHangoutSheet(
+                            peerFirstName = peerFirstName,
+                            busy = busy,
+                            onDismiss = { showLogHangout = false },
+                            onLog = { at, place, lat, lon ->
+                                friendshipVm.logHangout(at, place, lat, lon) { ok -> if (ok) showLogHangout = false }
+                            },
+                        )
+                    }
+                    if (showStory) {
+                        FriendshipStorySheet(
+                            peerFirstName = peerFirstName,
+                            peerSeed = state.userId.orEmpty(),
+                            encounters = friendshipEncounters,
+                            onPlanNext =
+                                onPlan?.let { plan ->
+                                    {
+                                        showStory = false
+                                        plan()
+                                    }
+                                },
+                            onDismiss = { showStory = false },
+                        )
+                    }
+                    if (showEncounterMap) {
+                        EncounterMapDialog(
+                            encounters = friendshipEncounters,
+                            newestIsNewSpot = HangoutHighlights.of(friendshipEncounters, Clock.System.now())?.isNewSpot == true,
+                            onDismiss = { showEncounterMap = false },
+                        )
+                    }
+                }
 
                 Spacer(Modifier.height(12.dp))
 
@@ -946,3 +1150,15 @@ fun ProfileBottomSheet(
         }
     }
 }
+
+/** Opens the plan's chat scrolled to the plan message (the same path as `click://chat/{id}?m=`). */
+private fun openPlanInChat(
+    upcoming: compose.project.click.click.data.models.UpcomingPlan, // pragma: allowlist secret
+    dismissSheet: () -> Unit,
+) {
+    dismissSheet()
+    AppDeepLinkRouter.open(AppDeepLink.Chat(upcoming.chatId, upcoming.messageId))
+}
+
+/** Group shared-media page size (`/api/connections/{chatId}/tabs?limit=`), as on iOS. */
+private const val GROUP_MEDIA_PAGE_SIZE = 60

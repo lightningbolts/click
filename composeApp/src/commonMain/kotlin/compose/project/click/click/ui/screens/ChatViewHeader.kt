@@ -47,22 +47,16 @@ import compose.project.click.click.ui.chat.GroupMembersPickerContext // pragma: 
 import compose.project.click.click.ui.chat.groupMembersPickerContextFrom // pragma: allowlist secret
 import compose.project.click.click.ui.chat.rememberChatPresenceSubtitle // pragma: allowlist secret
 import compose.project.click.click.ui.components.AvatarWithOnlineIndicator // pragma: allowlist secret
-import compose.project.click.click.ui.components.BindPlatformNativeNavigationBar // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionListUserAvatarFace // pragma: allowlist secret
 import compose.project.click.click.ui.components.CoreConnectionAvatarFrame // pragma: allowlist secret
 import compose.project.click.click.ui.components.GroupAvatar // pragma: allowlist secret
-import compose.project.click.click.ui.components.NativeChromeAction // pragma: allowlist secret
-import compose.project.click.click.ui.components.NativeChromeIdentity // pragma: allowlist secret
 import compose.project.click.click.ui.components.groupAvatarClusterWidth // pragma: allowlist secret
-import compose.project.click.click.viewmodel.ChatMessagesState // pragma: allowlist secret
 import compose.project.click.click.viewmodel.ChatViewModel // pragma: allowlist secret
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun ChatViewSuccessHeader(
     viewModel: ChatViewModel,
-    nativeNavChrome: Boolean,
-    chatNativeClearance: Dp,
     topInset: Dp,
     chatDetails: ChatWithDetails,
     isGroupChat: Boolean,
@@ -85,313 +79,198 @@ internal fun ChatViewSuccessHeader(
     var showConnectionSheet by showConnectionSheetState
     var showRenameGroupDialog by showRenameGroupDialogState
     var renameGroupDraft by renameGroupDraftState
-    if (nativeNavChrome) {
-        Spacer(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .height(chatNativeClearance)
-                    .testTag(ChatGlassHeaderPlateTestTag),
-        )
-    } else {
-        Column(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .padding(top = topInset)
-                    .heightIn(min = 56.dp)
-                    .padding(horizontal = ChatChromeHorizontalPadding, vertical = 6.dp)
-                    .testTag(ChatGlassHeaderPlateTestTag),
+    Column(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(top = topInset)
+                .heightIn(min = 56.dp)
+                .padding(horizontal = ChatChromeHorizontalPadding, vertical = 6.dp)
+                .testTag(ChatGlassHeaderPlateTestTag),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                ChatHeaderIconButton(
-                    icon = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Back",
-                    onClick = onBackPressed,
-                    showBorder = true,
-                )
+            ChatHeaderIconButton(
+                icon = Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = "Back",
+                onClick = onBackPressed,
+                showBorder = true,
+            )
 
-                if (isGroupChat) {
-                    val chatHeaderGroupAvatarSize = 34.dp
-                    val groupAvatarUrl =
-                        chatDetails.groupClique
-                            ?.avatarUrl
-                            ?.trim()
-                            ?.takeIf { it.isNotEmpty() }
-                    val groupClusterWidth =
-                        if (groupAvatarUrl != null) {
-                            chatHeaderGroupAvatarSize
-                        } else {
-                            groupAvatarClusterWidth(
-                                chatDetails.groupMemberUsers.size,
-                                chatHeaderGroupAvatarSize,
-                            )
-                        }
-                    Box(
-                        modifier =
-                            Modifier
-                                .width(groupClusterWidth)
-                                .heightIn(min = 40.dp)
-                                .clickable(
-                                    interactionSource = remember { MutableInteractionSource() },
-                                    indication = ripple(bounded = false, radius = 22.dp),
-                                    onClick = {
-                                        groupMembersPickerContextFrom(chatDetails)
-                                            ?.let(onOpenGroupMembersPicker)
-                                    },
-                                ),
-                        contentAlignment = Alignment.CenterStart,
-                    ) {
-                        GroupAvatar(
-                            members = chatDetails.groupMemberUsers,
-                            avatarSize = chatHeaderGroupAvatarSize,
-                            avatarUrl = groupAvatarUrl,
+            if (isGroupChat) {
+                val chatHeaderGroupAvatarSize = 34.dp
+                val groupAvatarUrl =
+                    chatDetails.groupClique
+                        ?.avatarUrl
+                        ?.trim()
+                        ?.takeIf { it.isNotEmpty() }
+                val groupClusterWidth =
+                    if (groupAvatarUrl != null) {
+                        chatHeaderGroupAvatarSize
+                    } else {
+                        groupAvatarClusterWidth(
+                            chatDetails.groupMemberUsers.size,
+                            chatHeaderGroupAvatarSize,
                         )
                     }
-                } else {
-                    val isPeerCore = chatDetails.connection.id in coreConnectionIds
-                    val peerOnline =
-                        chatDetails.otherUser.id in onlineUsers || isPeerOnline
-                    AvatarWithOnlineIndicator(
-                        isOnline = peerOnline,
-                        indicatorSize = 9.dp,
-                        indicatorBorder = 1.25.dp,
+                Box(
+                    modifier =
+                        Modifier
+                            .width(groupClusterWidth)
+                            .heightIn(min = 40.dp)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = ripple(bounded = false, radius = 22.dp),
+                                onClick = {
+                                    groupMembersPickerContextFrom(chatDetails)
+                                        ?.let(onOpenGroupMembersPicker)
+                                },
+                            ),
+                    contentAlignment = Alignment.CenterStart,
+                ) {
+                    GroupAvatar(
+                        members = chatDetails.groupMemberUsers,
+                        avatarSize = chatHeaderGroupAvatarSize,
+                        avatarUrl = groupAvatarUrl,
+                    )
+                }
+            } else {
+                val isPeerCore = chatDetails.connection.id in coreConnectionIds
+                val peerOnline =
+                    chatDetails.otherUser.id in onlineUsers || isPeerOnline
+                AvatarWithOnlineIndicator(
+                    isOnline = peerOnline,
+                    indicatorSize = 9.dp,
+                    indicatorBorder = 1.25.dp,
+                ) {
+                    CoreConnectionAvatarFrame(
+                        isCore = isPeerCore,
+                        avatarSize = 36.dp,
+                        onClick = { onOpenUserProfile(chatDetails.otherUser.id) },
                     ) {
-                        CoreConnectionAvatarFrame(
-                            isCore = isPeerCore,
-                            avatarSize = 36.dp,
-                            onClick = { onOpenUserProfile(chatDetails.otherUser.id) },
-                        ) {
-                            ConnectionListUserAvatarFace(
-                                displayName = chatDetails.otherUser.name,
-                                email = chatDetails.otherUser.email,
-                                avatarUrl = chatDetails.otherUser.image,
-                                userId = chatDetails.otherUser.id,
-                                modifier = Modifier.fillMaxSize(),
-                                useCompactTypography = true,
-                            )
-                        }
+                        ConnectionListUserAvatarFace(
+                            displayName = chatDetails.otherUser.name,
+                            email = chatDetails.otherUser.email,
+                            avatarUrl = chatDetails.otherUser.image,
+                            userId = chatDetails.otherUser.id,
+                            modifier = Modifier.fillMaxSize(),
+                            useCompactTypography = true,
+                        )
                     }
                 }
+            }
 
-                Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(12.dp))
 
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement =
-                        Arrangement.spacedBy(3.dp, Alignment.CenterVertically),
-                ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement =
+                    Arrangement.spacedBy(3.dp, Alignment.CenterVertically),
+            ) {
+                Text(
+                    text = if (isGroupChat) groupTitle else (chatDetails.otherUser.name ?: "Unknown"),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (isGroupChat && (memberSummaryLine != null || groupPresenceSubtitle != null)) {
                     Text(
-                        text = if (isGroupChat) groupTitle else (chatDetails.otherUser.name ?: "Unknown"),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
+                        text = listOfNotNull(memberSummaryLine, groupPresenceSubtitle).joinToString(" · "),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    if (isGroupChat && (memberSummaryLine != null || groupPresenceSubtitle != null)) {
-                        Text(
-                            text = listOfNotNull(memberSummaryLine, groupPresenceSubtitle).joinToString(" · "),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    } else if (!isGroupChat) {
-                        val subtitleOnline =
-                            chatDetails.otherUser.id in onlineUsers || isPeerOnline
-                        val statusText = presenceSubtitle.orEmpty()
-                        val showOnlineDot = subtitleOnline && !isPeerTyping
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                } else if (!isGroupChat) {
+                    val subtitleOnline =
+                        chatDetails.otherUser.id in onlineUsers || isPeerOnline
+                    val statusText = presenceSubtitle.orEmpty()
+                    val showOnlineDot = subtitleOnline && !isPeerTyping
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        AnimatedVisibility(
+                            visible = showOnlineDot,
+                            enter = fadeIn() + expandVertically(),
+                            exit = fadeOut() + shrinkVertically(),
                         ) {
-                            AnimatedVisibility(
-                                visible = showOnlineDot,
-                                enter = fadeIn() + expandVertically(),
-                                exit = fadeOut() + shrinkVertically(),
-                            ) {
-                                Box(
-                                    modifier =
-                                        Modifier
-                                            .size(8.dp)
-                                            .clip(CircleShape)
-                                            .background(Color(0xFF22C55E)),
-                                )
-                            }
-                            AnimatedContent(
-                                targetState = statusText,
-                                transitionSpec = {
-                                    fadeIn(
+                            Box(
+                                modifier =
+                                    Modifier
+                                        .size(8.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFF22C55E)),
+                            )
+                        }
+                        AnimatedContent(
+                            targetState = statusText,
+                            transitionSpec = {
+                                fadeIn(
+                                    animationSpec =
+                                        spring(
+                                            dampingRatio = Spring.DampingRatioNoBouncy,
+                                            stiffness = Spring.StiffnessMedium,
+                                        ),
+                                ) togetherWith
+                                    fadeOut(
                                         animationSpec =
                                             spring(
                                                 dampingRatio = Spring.DampingRatioNoBouncy,
                                                 stiffness = Spring.StiffnessMedium,
                                             ),
-                                    ) togetherWith
-                                        fadeOut(
-                                            animationSpec =
-                                                spring(
-                                                    dampingRatio = Spring.DampingRatioNoBouncy,
-                                                    stiffness = Spring.StiffnessMedium,
-                                                ),
-                                        )
-                                },
-                                label = "peer_presence_subtitle",
-                            ) { label ->
-                                Text(
-                                    text = label,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color =
-                                        if (label == "Online") {
-                                            Color(0xFF16A34A)
-                                        } else {
-                                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
-                                        },
-                                )
-                            }
+                                    )
+                            },
+                            label = "peer_presence_subtitle",
+                        ) { label ->
+                            Text(
+                                text = label,
+                                style = MaterialTheme.typography.labelSmall,
+                                color =
+                                    if (label == "Online") {
+                                        Color(0xFF16A34A)
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
+                                    },
+                            )
                         }
                     }
                 }
+            }
 
-                if (!isGroupChat && chatHasIntentOverlap) {
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Icon(
-                        Icons.Filled.Bolt,
-                        contentDescription = "Shared availability",
-                        tint = Color(0xFFFBBF24),
-                        modifier = Modifier.size(22.dp),
-                    )
-                }
-
-                if (isGroupChat) {
-                    ChatHeaderIconButton(
-                        icon = Icons.Outlined.Edit,
-                        contentDescription = "Rename group",
-                        onClick = {
-                            renameGroupDraft = groupTitle
-                            showRenameGroupDialog = true
-                        },
-                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
-                    )
-                }
-
-                ChatHeaderIconButton(
-                    icon = Icons.Filled.MoreVert,
-                    contentDescription = "More options",
-                    onClick = { showConnectionSheet = true },
-                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+            if (!isGroupChat && chatHasIntentOverlap) {
+                Spacer(modifier = Modifier.width(4.dp))
+                Icon(
+                    Icons.Filled.Bolt,
+                    contentDescription = "Shared availability",
+                    tint = Color(0xFFFBBF24),
+                    modifier = Modifier.size(22.dp),
                 )
             }
-        }
-    }
-}
 
-@Composable
-internal fun ChatViewNativeNavBinding(
-    viewModel: ChatViewModel,
-    nativeNavChrome: Boolean,
-    chatId: String,
-    bindTitle: String,
-    bindIsGroup: Boolean,
-    bindAvatarUrl: String?,
-    successChat: ChatMessagesState.Success?,
-    hintedChatRow: ChatWithDetails?,
-    onOpenUserProfile: (String) -> Unit,
-    onOpenGroupMembersPicker: (GroupMembersPickerContext) -> Unit,
-    onBackPressed: () -> Unit,
-    showConnectionSheetState: MutableState<Boolean>,
-    showRenameGroupDialogState: MutableState<Boolean>,
-    renameGroupDraftState: MutableState<String>,
-) {
-    var showConnectionSheet by showConnectionSheetState
-    var showRenameGroupDialog by showRenameGroupDialogState
-    var renameGroupDraft by renameGroupDraftState
-    if (nativeNavChrome) {
-        val isPeerTyping by viewModel.isPeerTyping.collectAsState()
-        val isPeerOnline by viewModel.isPeerOnline.collectAsState()
-        val onlineUsers by AppDataManager.onlineUsers.collectAsState()
-        val peerId = successChat?.chatDetails?.otherUser?.id ?: hintedChatRow?.otherUser?.id
-        val bindOnline = if (bindIsGroup) null else peerId?.let { it in onlineUsers || isPeerOnline }
-        val boundDetails = successChat?.chatDetails ?: hintedChatRow
-        val bindStatusSubtitle = rememberChatPresenceSubtitle(boundDetails, bindIsGroup, isPeerTyping, isPeerOnline)
-
-        BindPlatformNativeNavigationBar(
-            title = bindTitle,
-            subtitle = bindStatusSubtitle,
-            presenceOnline = bindOnline,
-            identity =
-                NativeChromeIdentity(
-                    displayName = bindTitle,
-                    email =
-                        successChat
-                            ?.chatDetails
-                            ?.otherUser
-                            ?.email
-                            ?: hintedChatRow?.otherUser?.email,
-                    avatarUrl = bindAvatarUrl,
-                    userId =
-                        successChat
-                            ?.chatDetails
-                            ?.groupClique
-                            ?.groupId
-                            ?: successChat
-                                ?.chatDetails
-                                ?.otherUser
-                                ?.id
-                            ?: hintedChatRow?.groupClique?.groupId
-                            ?: hintedChatRow?.otherUser?.id
-                            ?: chatId,
+            if (isGroupChat) {
+                ChatHeaderIconButton(
+                    icon = Icons.Outlined.Edit,
+                    contentDescription = "Rename group",
                     onClick = {
-                        if (bindIsGroup) {
-                            successChat?.chatDetails?.let { details ->
-                                groupMembersPickerContextFrom(details)?.let(onOpenGroupMembersPicker)
-                            }
-                        } else {
-                            val peerId =
-                                successChat
-                                    ?.chatDetails
-                                    ?.otherUser
-                                    ?.id
-                                    ?: hintedChatRow?.otherUser?.id
-                            if (peerId != null) onOpenUserProfile(peerId)
-                        }
+                        renameGroupDraft = groupTitle
+                        showRenameGroupDialog = true
                     },
-                ),
-            onNavigateBack = onBackPressed,
-            nativeTrailingActions =
-                buildList {
-                    if (bindIsGroup) {
-                        add(
-                            NativeChromeAction(
-                                sfSymbol = "pencil",
-                                contentDescription = "Rename group",
-                                onClick = {
-                                    renameGroupDraft =
-                                        successChat
-                                            ?.chatDetails
-                                            ?.groupClique
-                                            ?.name
-                                            .orEmpty()
-                                            .ifBlank { bindTitle }
-                                    showRenameGroupDialog = true
-                                },
-                            ),
-                        )
-                    }
-                    add(
-                        NativeChromeAction(
-                            sfSymbol = "ellipsis",
-                            contentDescription = "More options",
-                            onClick = { showConnectionSheet = true },
-                        ),
-                    )
-                },
-            collapseFraction = 1f,
-        )
+                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
+                )
+            }
+
+            ChatHeaderIconButton(
+                icon = Icons.Filled.MoreVert,
+                contentDescription = "More options",
+                onClick = { showConnectionSheet = true },
+                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+            )
+        }
     }
 }

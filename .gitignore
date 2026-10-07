@@ -47,7 +47,6 @@ local.properties
 .env
 .env.*
 *.pycache/
-iosApp/ci_scripts/.java_home
 
 ### Python ###
 .DS_Store

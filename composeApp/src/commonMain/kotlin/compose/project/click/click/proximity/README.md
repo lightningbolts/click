@@ -88,7 +88,7 @@ sequenceDiagram
 
 ### GPS warm-up
 
-`NfcScreen` warms GPS with `getHighAccuracyLocation(4000L)` while the sheet is visible. Tap bind uses **`getTelemetryLocation(6500L)`** (≤100 m accepted immediately; coarse fallback at timeout) and **awaits that job before POST** — it does not truncate GPS with `proximityBindLocationWaitMs()` (that helper only remains for tests / sensor-side waits). Handshake BLE/audio still runs concurrently (~5 s hold). When GPS exists, the client also attaches Open-Meteo `weather_snapshot` so weather is not solely server-side. Ghost Mode / connection-snap off still skips GPS via `shouldCaptureLocationAtTap()`.
+`NfcScreen` warms GPS with `getHighAccuracyLocation(4000L)` while the sheet is visible. Tap bind uses **`getTelemetryLocation(6500L)`** (≤100 m accepted immediately; coarse fallback at timeout) and **awaits that job before POST** — it does not truncate GPS with `proximityBindLocationWaitMs()` (that helper only remains for tests / sensor-side waits). Handshake BLE/audio still runs concurrently (~5 s hold). When GPS exists, the client also attaches Open-Meteo `weather_snapshot` so weather is not solely server-side. Connection-snap off still skips GPS via `shouldCaptureLocationAtTap()`.
 
 ### Server: `bind-proximity-connection` Edge Function
 
@@ -166,7 +166,6 @@ Full distance/BSSID scoring is server-side when using the web API.
 - **Send photos, files & voice notes:** Share media in chat; files are encrypted before upload.
 - **Emoji reactions:** React to messages with emoji.
 - **Typing indicators & read receipts:** See when someone is typing and when they've read your message.
-- **Voice & video calls:** Call any connection with high-quality audio/video.
 - **Memory Capsules:** Optionally save the "feel" of how you met—noise level, elevation, tags like "after class."
 - **48-hour gentle archive:** New connections you don't act on move to archive after 48 hours (not deleted).
 - **Connection map & timeline:** See where and when you met people on a map and journal timeline.
@@ -179,7 +178,6 @@ Full distance/BSSID scoring is server-side when using the web API.
 - **Global search:** Find connections, chats, and hubs across the app.
 - **Core connections:** Pin your most important people.
 - **Collaboration sessions & disposable rolls:** Fun timed photo reveals with friends after connecting.
-- **Ghost mode:** Browse with reduced presence visibility when enabled.
 - **Block & report:** Safety tools to block or report users.
 - **Profile & interests:** Set your display name, avatar, and interest tags.
 - **Onboarding:** Welcome flow with interest tagging after sign-up.

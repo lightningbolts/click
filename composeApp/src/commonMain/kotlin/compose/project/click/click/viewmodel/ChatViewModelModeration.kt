@@ -89,6 +89,11 @@ internal fun ChatViewModel.confirmEditMessage(messageId: String) {
  */
 internal fun ChatViewModel.deleteMessageImpl(messageId: String) {
     val connectionId = currentConnectionId ?: return
+    // Deleting a plan cancels it: drop its local reminder too.
+    compose.project.click.click.notifications.LocalReminderScheduler.cancel(
+        compose.project.click.click.notifications.PlanReminderTiming
+            .reminderId(messageId),
+    )
 
     // Optimistic: remove from local state immediately
     val currentState = _chatMessagesState.value
@@ -203,7 +208,7 @@ internal fun ChatViewModel.deleteConnectionPermanentlyImpl(onComplete: (Boolean)
 /**
  * Hide a connection for the current user via [connection_hidden].
  * Saves the connection object before the optimistic hide so it can be
- * restored on failure — even when Ghost Mode blocks [AppDataManager.refresh].
+ * restored on failure.
  */
 internal fun ChatViewModel.deleteConnectionPermanentlyByIdImpl(
     connectionId: String,
@@ -211,8 +216,7 @@ internal fun ChatViewModel.deleteConnectionPermanentlyByIdImpl(
 ) {
     val userId = _currentUserId.value ?: return
     viewModelScope.launch {
-        // Save the connection before optimistic hide so we can restore it on failure
-        // (AppDataManager.refresh no-ops when Ghost Mode is active).
+        // Save the connection before optimistic hide so we can restore it on failure.
         val savedConnection = AppDataManager.getConnection(connectionId)
         val pair =
             savedConnection
@@ -238,8 +242,7 @@ internal fun ChatViewModel.deleteConnectionPermanentlyByIdImpl(
             _nudgeResult.value = "Connection removed"
             onComplete(true)
         } else {
-            // Explicitly revert the optimistic hide instead of relying on refresh()
-            // which no-ops when Ghost Mode is active.
+            // Explicitly revert the optimistic hide instead of relying on refresh().
             if (savedConnection != null) {
                 AppDataManager.revertHideConnectionLocally(connectionId, savedConnection)
             } else {

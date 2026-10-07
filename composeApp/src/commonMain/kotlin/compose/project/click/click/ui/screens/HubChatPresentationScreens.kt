@@ -32,31 +32,10 @@ internal fun ConnectionsHubChatScreen(
         onRegisterSwipeBackRightToLeftPeek = onRegisterSwipeBackRightToLeftPeek,
         parentInteractiveBackSwipePx = parentInteractiveBackSwipePx,
         embeddedInSheet = false,
-        nativeLeadingClose = false,
     )
 }
 
-/**
- * Event/Nearby on iOS is a modal full-screen destination, not a pushed Connections route. It owns
- * an X control and deliberately has no interactive Back gesture; closing returns to the exact native
- * Event/Nearby sheet that remains mounted underneath the portal.
- */
-@Composable
-internal fun EventHubModalChatScreen(
-    args: HubChatNavArgs,
-    currentUserId: String,
-    onClose: () -> Unit,
-) {
-    HubChatScreen(
-        args = args,
-        currentUserId = currentUserId,
-        onNavigateBack = onClose,
-        embeddedInSheet = false,
-        nativeLeadingClose = true,
-    )
-}
-
-/** Android keeps the existing sheet-local Event Hub presentation and Compose header. */
+/** Event Hub chats use a sheet-local presentation and Compose header. */
 @Composable
 internal fun EventHubBottomSheetChatScreen(
     args: HubChatNavArgs,
@@ -68,6 +47,5 @@ internal fun EventHubBottomSheetChatScreen(
         currentUserId = currentUserId,
         onNavigateBack = onClose,
         embeddedInSheet = true,
-        nativeLeadingClose = false,
     )
 }

@@ -52,17 +52,22 @@ import androidx.compose.ui.zIndex
 import compose.project.click.click.PlatformHapticsPolicy
 import compose.project.click.click.chat.attachments.AttachmentCrypto
 import compose.project.click.click.data.models.ChatMessageType
+import compose.project.click.click.data.models.HangoutPlan
 import compose.project.click.click.data.models.Message
 import compose.project.click.click.data.models.MessageDeliveryState
 import compose.project.click.click.data.models.MessageReaction
 import compose.project.click.click.data.models.MessageWithUser
+import compose.project.click.click.data.models.PlanResponses
+import compose.project.click.click.data.models.PlanRsvp
 import compose.project.click.click.data.models.hasLocalMediaUri
 import compose.project.click.click.data.models.hubMediaPathOrNull
 import compose.project.click.click.data.models.isBeaconChatMessage
+import compose.project.click.click.data.models.isDeletedPlaceholder
 import compose.project.click.click.data.models.isEncryptedMedia
 import compose.project.click.click.data.models.mediaUrlOrNull
-import compose.project.click.click.data.models.originalMimeTypeOrNull
 import compose.project.click.click.data.models.parsedMediaMetadata
+import compose.project.click.click.data.models.planOrNull
+import compose.project.click.click.data.models.replyQuoteText
 import compose.project.click.click.data.models.replyRef
 import compose.project.click.click.ui.components.ConnectionListUserAvatarFace
 import compose.project.click.click.ui.theme.PrimaryBlue
@@ -70,6 +75,9 @@ import compose.project.click.click.viewmodel.SecureChatMediaHost
 import compose.project.click.click.viewmodel.SecureChatMediaLoadState
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+
+/** The reaction a double-tap toggles. */
+internal const val DOUBLE_TAP_REACTION: String = "❤️"
 
 internal data class ChatAudioPlaybackSource(
     /** A public/legacy media URL. Private hub object paths must never be used here. */
@@ -102,7 +110,6 @@ fun ChatMessageBubble(
     currentUserId: String?,
     reactions: List<MessageReaction> = emptyList(),
     onToggleReaction: (String) -> Unit = {},
-    onForward: (String) -> Unit,
     onLongPress: (MessageWithUser) -> Unit = {},
     /** Horizontal swipe toward the center of the screen starts a reply (same idea as drag L→R on incoming). */
     onSwipeReply: (MessageWithUser) -> Unit = {},
@@ -131,8 +138,20 @@ fun ChatMessageBubble(
     onExpandPhoto: (MessageWithUser) -> Unit = {},
     /** Opens the full map beacon detail sheet for a shared beacon card. */
     onOpenBeacon: (Message) -> Unit = {},
+    /** Locally loaded message this row replies to; the quote is rebuilt from it on-device. */
+    replyTarget: Message? = null,
+    /** Plan cards: Going / Can't (null clears). */
+    onPlanRsvp: (messageId: String, rsvp: PlanRsvp?) -> Unit = { _, _ -> },
+    /** Plan cards: "N going · M can't" opens the responses sheet. */
+    onShowPlanResponses: (MessageWithUser, HangoutPlan) -> Unit = { _, _ -> },
+    /** Tapping a reaction chip opens who-reacted details; null keeps tap-to-toggle. */
+    onOpenReactions: ((MessageWithUser) -> Unit)? = null,
 ) {
     val message = messageWithUser.message
+    if (message.isDeletedPlaceholder()) {
+        DeletedMessageRow(isSent = messageWithUser.isSent)
+        return
+    }
     if (message.messageType == "call_log") {
         CallLogSystemRow(message = message)
         return
@@ -143,6 +162,21 @@ fun ChatMessageBubble(
             onOpenBeacon = onOpenBeacon,
             onLongPress = onLongPress,
             onSwipeReply = onSwipeReply,
+            enableMessageContextMenu = enableMessageContextMenu,
+        )
+        return
+    }
+    val plan = message.planOrNull()
+    if (plan != null) {
+        PlanChatMessageBubble(
+            messageWithUser = messageWithUser,
+            plan = plan,
+            reactions = reactions,
+            currentUserId = currentUserId,
+            onToggleReaction = onToggleReaction,
+            onPlanRsvp = onPlanRsvp,
+            onShowPlanResponses = onShowPlanResponses,
+            onLongPress = onLongPress,
             enableMessageContextMenu = enableMessageContextMenu,
         )
         return
@@ -353,6 +387,11 @@ fun ChatMessageBubble(
                         PlatformHapticsPolicy.heavyImpact()
                         onLongPress(messageWithUser)
                     },
+                    // Double-tap hearts a message (iOS); a second double-tap removes it.
+                    onDoubleTap = {
+                        PlatformHapticsPolicy.lightImpact()
+                        onToggleReaction(DOUBLE_TAP_REACTION)
+                    },
                 )
             }
         } else {
@@ -470,7 +509,7 @@ fun ChatMessageBubble(
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
                                             )
                                             Text(
-                                                text = r.replyToContent.ifBlank { "Message" },
+                                                text = replyQuoteText(r, replyTarget),
                                                 style = chatBubbleReplySnippetStyle(),
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                                 maxLines = 3,
@@ -548,7 +587,7 @@ fun ChatMessageBubble(
                                                     color = Color.White.copy(alpha = 0.55f),
                                                 )
                                                 Text(
-                                                    text = r.replyToContent.ifBlank { "Message" },
+                                                    text = replyQuoteText(r, replyTarget),
                                                     style = chatBubbleReplySnippetStyle(),
                                                     color = Color.White.copy(alpha = 0.78f),
                                                     maxLines = 3,
@@ -568,7 +607,6 @@ fun ChatMessageBubble(
                                                     secureLoading = encryptedMedia && secureSt?.loading == true,
                                                     secureError = if (encryptedMedia) secureSt?.error else null,
                                                     onRequestDecrypt = onRequestSecureAudio,
-                                                    mimeTypeHint = message.originalMimeTypeOrNull(),
                                                     chromeKind = ChatAudioChromeKind.SentBubble,
                                                     messageBubbleMaxWidth = bubbleContentMaxWidth,
                                                 )
@@ -657,7 +695,7 @@ fun ChatMessageBubble(
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                                             )
                                             Text(
-                                                text = r.replyToContent.ifBlank { "Message" },
+                                                text = replyQuoteText(r, replyTarget),
                                                 style = chatBubbleReplySnippetStyle(),
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                                 maxLines = 3,
@@ -738,7 +776,7 @@ fun ChatMessageBubble(
                                                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                                                 )
                                                 Text(
-                                                    text = r.replyToContent.ifBlank { "Message" },
+                                                    text = replyQuoteText(r, replyTarget),
                                                     style = chatBubbleReplySnippetStyle(),
                                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                                     maxLines = 3,
@@ -760,7 +798,6 @@ fun ChatMessageBubble(
                                                     secureLoading = encryptedMedia && secureSt?.loading == true,
                                                     secureError = if (encryptedMedia) secureSt?.error else null,
                                                     onRequestDecrypt = onRequestSecureAudio,
-                                                    mimeTypeHint = message.originalMimeTypeOrNull(),
                                                     chromeKind = ChatAudioChromeKind.ReceivedBubble,
                                                     messageBubbleMaxWidth = bubbleContentMaxWidth,
                                                 )
@@ -868,7 +905,7 @@ fun ChatMessageBubble(
                                                         shape = RoundedCornerShape(ChatBubbleTokens.reactionChipCorner),
                                                     ).clickable {
                                                         PlatformHapticsPolicy.lightImpact()
-                                                        onToggleReaction(emoji)
+                                                        onOpenReactions?.invoke(messageWithUser) ?: onToggleReaction(emoji)
                                                     }.padding(
                                                         horizontal = ChatBubbleTokens.reactionChipPadH,
                                                         vertical = ChatBubbleTokens.reactionChipPadV,
@@ -897,6 +934,94 @@ fun ChatMessageBubble(
                             Modifier
                                 .align(Alignment.CenterEnd)
                                 .zIndex(0f),
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** "Message deleted" in place of a deleted message; no actions. */
+@Composable
+private fun DeletedMessageRow(isSent: Boolean) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = if (isSent) Arrangement.End else Arrangement.Start,
+    ) {
+        Text(
+            text = "Message deleted",
+            style = MaterialTheme.typography.bodyMedium,
+            fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+            modifier =
+                Modifier
+                    .clip(RoundedCornerShape(ChatBubbleTokens.cornerMain))
+                    .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f), RoundedCornerShape(ChatBubbleTokens.cornerMain))
+                    .padding(horizontal = 14.dp, vertical = 8.dp),
+        )
+    }
+}
+
+/** A plan card plus any non-RSVP reactions (the card itself shows ✅ / ❌ as Going / Can't). */
+@Composable
+private fun PlanChatMessageBubble(
+    messageWithUser: MessageWithUser,
+    plan: HangoutPlan,
+    reactions: List<MessageReaction>,
+    currentUserId: String?,
+    onToggleReaction: (String) -> Unit,
+    onPlanRsvp: (String, PlanRsvp?) -> Unit,
+    onShowPlanResponses: (MessageWithUser, HangoutPlan) -> Unit,
+    onLongPress: (MessageWithUser) -> Unit,
+    enableMessageContextMenu: Boolean,
+) {
+    val message = messageWithUser.message
+    val isSent = messageWithUser.isSent
+    val interactive =
+        !message.id.startsWith("temp-") &&
+            message.deliveryState != MessageDeliveryState.PENDING &&
+            message.deliveryState != MessageDeliveryState.ERROR
+    val others =
+        nonRsvpReactions(reactions)
+            .groupBy { it.reactionType }
+            .mapValues { it.value.size }
+            .entries
+            .sortedByDescending { it.value }
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = if (isSent) Alignment.End else Alignment.Start,
+    ) {
+        PlanChatCard(
+            plan = plan,
+            isSent = isSent,
+            responses = PlanResponses.from(reactions),
+            currentUserId = currentUserId,
+            nowEpochMs =
+                kotlinx.datetime.Clock.System
+                    .now()
+                    .toEpochMilliseconds(),
+            interactive = interactive,
+            onRsvp = { rsvp -> onPlanRsvp(message.id, rsvp) },
+            onShowResponses = { onShowPlanResponses(messageWithUser, plan) },
+            onLongPress = { onLongPress(messageWithUser) },
+            enableContextMenu = enableMessageContextMenu,
+        )
+        if (others.isNotEmpty()) {
+            Row(
+                modifier = Modifier.padding(top = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(ChatBubbleTokens.reactionChipGap),
+            ) {
+                others.forEach { (emoji, count) ->
+                    val own = reactions.any { it.reactionType == emoji && it.userId == currentUserId }
+                    Text(
+                        text = if (count > 1) "$emoji $count" else emoji,
+                        style = MaterialTheme.typography.labelMedium,
+                        modifier =
+                            Modifier
+                                .clip(RoundedCornerShape(ChatBubbleTokens.reactionChipCorner))
+                                .background(if (own) PrimaryBlue.copy(alpha = 0.25f) else Color.White.copy(alpha = 0.08f))
+                                .clickable { onToggleReaction(emoji) }
+                                .padding(horizontal = ChatBubbleTokens.reactionChipPadH, vertical = ChatBubbleTokens.reactionChipPadV),
                     )
                 }
             }

@@ -1,0 +1,444 @@
+@file:Suppress(
+    "ktlint:standard:function-naming",
+)
+
+package compose.project.click.click.ui.screens
+
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.EventAvailable
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Place
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import compose.project.click.click.data.models.ChatWithDetails
+import compose.project.click.click.data.models.MapBeacon
+import compose.project.click.click.ui.components.AppEmptyState
+import compose.project.click.click.ui.components.ClickListRow
+import compose.project.click.click.ui.components.ConnectionListUserAvatarFace
+import compose.project.click.click.ui.components.GlassSheetTokens
+import compose.project.click.click.ui.components.cardVisualBackground
+import compose.project.click.click.ui.components.rememberCardVisual
+import compose.project.click.click.ui.theme.PrimaryBlue
+import compose.project.click.click.ui.theme.SoftBlue
+import compose.project.click.click.ui.theme.clickBorderColor
+import compose.project.click.click.ui.theme.clickCardSurface
+import compose.project.click.click.viewmodel.SearchChatOpenTarget // pragma: allowlist secret
+import compose.project.click.click.viewmodel.SearchResult
+import compose.project.click.click.viewmodel.SearchResultCategory
+import compose.project.click.click.viewmodel.beaconDisplaySubtitle
+import compose.project.click.click.viewmodel.beaconDisplayTitle
+import compose.project.click.click.viewmodel.toChatOpenTarget // pragma: allowlist secret
+import kotlinx.datetime.Instant
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
+
+@Composable
+internal fun categoryLabel(cat: SearchResultCategory): String =
+    when (cat) {
+        SearchResultCategory.Active -> "Active"
+        SearchResultCategory.Archived -> "Archived"
+        SearchResultCategory.Cliques -> "Cliques"
+        SearchResultCategory.Nearby -> "Nearby"
+        SearchResultCategory.Beacons -> "Beacons"
+        SearchResultCategory.Intents -> "Intents"
+    }
+
+@Composable
+internal fun EmptySearchHint(
+    modifier: Modifier = Modifier,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    body: String,
+    dimmed: Boolean = true,
+) {
+    AppEmptyState(
+        icon = icon,
+        body = body,
+        modifier = modifier,
+        emphasized = !dimmed,
+    )
+}
+
+@Composable
+internal fun UnifiedSearchResultsList(
+    results: List<SearchResult>,
+    bottomPadding: Dp,
+    onNavigateToChat: (SearchChatOpenTarget) -> Unit,
+    onNavigateToMap: () -> Unit,
+    onNavigateToBeacon: (String) -> Unit = {},
+    onNavigateToSettings: () -> Unit = {},
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(start = 0.dp, top = 8.dp, end = 0.dp, bottom = bottomPadding),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        item {
+            SearchSectionHeader(label = "Results")
+        }
+        items(
+            results,
+            key = { searchResultStableKey(it) },
+            contentType = { "search_result" },
+        ) { row ->
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                color = clickCardSurface(),
+                border = BorderStroke(1.dp, clickBorderColor()),
+            ) {
+                SearchResultRow(
+                    result = row,
+                    onNavigateToChat = onNavigateToChat,
+                    onNavigateToMap = onNavigateToMap,
+                    onNavigateToBeacon = onNavigateToBeacon,
+                    onNavigateToSettings = onNavigateToSettings,
+                )
+            }
+        }
+    }
+}
+
+internal fun searchResultStableKey(r: SearchResult): String =
+    when (r) {
+        is SearchResult.ActiveConnection -> "a:${r.details.connection.id}"
+        is SearchResult.ArchivedConnection -> "ar:${r.details.connection.id}"
+        is SearchResult.Clique -> "g:${r.details.connection.id}"
+        is SearchResult.IntentMatch -> "i:${r.details.connection.id}:${r.intentLabel}"
+        is SearchResult.InterestMatch -> "t:${r.details.connection.id}:${r.matchedTags.joinToString()}"
+        is SearchResult.MemoryContextMatch -> "m:${r.details.connection.id}"
+        is SearchResult.MessageHit -> "msg:${r.result.message.id}"
+        is SearchResult.LocationBucket -> "loc:${r.result.location}"
+        is SearchResult.BeaconMatch -> "beacon:${r.beacon.id}"
+        is SearchResult.OwnAvailabilityIntentMatch -> "own-intent:${r.intent.intentTag}:${r.intent.timeframe}"
+    }
+
+@Composable
+internal fun SearchSectionHeader(label: String) {
+    Box(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp),
+    ) {
+        Text(
+            text = label,
+            style =
+                MaterialTheme.typography.titleSmall.copy(
+                    fontWeight = FontWeight.Bold,
+                ),
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+    }
+}
+
+@Composable
+internal fun SearchResultRow(
+    result: SearchResult,
+    onNavigateToChat: (SearchChatOpenTarget) -> Unit,
+    onNavigateToMap: () -> Unit,
+    onNavigateToBeacon: (String) -> Unit = {},
+    onNavigateToSettings: () -> Unit = {},
+) {
+    val archivedLook =
+        when (result) {
+            is SearchResult.ArchivedConnection -> true
+            is SearchResult.IntentMatch -> result.isArchivedChannel
+            is SearchResult.InterestMatch -> result.isArchivedChannel
+            is SearchResult.MemoryContextMatch -> result.isArchivedChannel
+            else -> false
+        }
+    val alpha = if (archivedLook) 0.7f else 1f
+    ClickListRow(
+        modifier = Modifier.alpha(alpha),
+        onClick = {
+            when (result) {
+                is SearchResult.LocationBucket -> onNavigateToMap()
+                is SearchResult.BeaconMatch -> onNavigateToBeacon(result.beacon.id)
+                is SearchResult.OwnAvailabilityIntentMatch -> onNavigateToSettings()
+                else -> result.toChatOpenTarget()?.let(onNavigateToChat)
+            }
+        },
+        leading = {
+            when (result) {
+                is SearchResult.MessageHit -> MessageLeadingIcon()
+                is SearchResult.LocationBucket -> LocationLeadingIcon()
+                is SearchResult.BeaconMatch -> BeaconLeadingIcon(result.beacon)
+                is SearchResult.OwnAvailabilityIntentMatch -> IntentLeadingIcon()
+                is SearchResult.ActiveConnection -> PersonLeadingAvatar(result.details)
+                is SearchResult.ArchivedConnection -> PersonLeadingAvatar(result.details)
+                is SearchResult.Clique -> PersonLeadingAvatar(result.details)
+                is SearchResult.IntentMatch -> PersonLeadingAvatar(result.details)
+                is SearchResult.InterestMatch -> PersonLeadingAvatar(result.details)
+                is SearchResult.MemoryContextMatch -> PersonLeadingAvatar(result.details)
+            }
+        },
+        trailing = {
+            Icon(
+                imageVector = Icons.Default.ChevronRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
+                modifier = Modifier.size(20.dp),
+            )
+        },
+    ) {
+        BadgeRow(result)
+        Spacer(Modifier.height(2.dp))
+        TitleAndSubtitle(result)
+    }
+}
+
+@Composable
+internal fun BadgeRow(result: SearchResult) {
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        when (result) {
+            is SearchResult.ArchivedConnection -> TinyBadge("Archived")
+            is SearchResult.Clique -> TinyBadge("Clique")
+            is SearchResult.IntentMatch -> TinyBadge("Intent")
+            is SearchResult.InterestMatch -> TinyBadge("Interest")
+            is SearchResult.MemoryContextMatch -> TinyBadge("Context")
+            is SearchResult.MessageHit ->
+                TinyBadge(if (result.result.isHub) "Hub" else "Message")
+            is SearchResult.LocationBucket -> TinyBadge("Place")
+            is SearchResult.BeaconMatch -> TinyBadge("Beacon")
+            is SearchResult.OwnAvailabilityIntentMatch -> TinyBadge("Your intent")
+            is SearchResult.ActiveConnection -> {}
+        }
+    }
+}
+
+@Composable
+internal fun TinyBadge(text: String) {
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = clickCardSurface(),
+        border = BorderStroke(1.dp, clickBorderColor()),
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+            style = MaterialTheme.typography.labelSmall,
+            color = GlassSheetTokens.OnOled(),
+            fontWeight = FontWeight.SemiBold,
+        )
+    }
+}
+
+@Composable
+internal fun TitleAndSubtitle(result: SearchResult) {
+    val titleStyle =
+        MaterialTheme.typography.bodyLarge.copy(
+            color = MaterialTheme.colorScheme.onSurface,
+            fontWeight = FontWeight.SemiBold,
+        )
+    val subtitleStyle =
+        MaterialTheme.typography.bodySmall.copy(
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+        )
+    when (result) {
+        is SearchResult.ActiveConnection -> {
+            Text(result.details.otherUser.name ?: "Unknown", style = titleStyle)
+            result.subtitle?.let { Text(it, style = subtitleStyle) }
+        }
+        is SearchResult.ArchivedConnection -> {
+            Text(result.details.otherUser.name ?: "Unknown", style = titleStyle)
+            result.subtitle?.let { Text(it, style = subtitleStyle) }
+        }
+        is SearchResult.Clique -> {
+            Text(result.details.groupClique?.name ?: "Clique", style = titleStyle)
+            Text("Group chat", style = subtitleStyle)
+        }
+        is SearchResult.IntentMatch -> {
+            Text(result.details.otherUser.name ?: "Unknown", style = titleStyle)
+            Text(
+                text =
+                    "Looking for ${result.intentLabel}" +
+                        (result.intentTimeframe?.let { " · $it" } ?: ""),
+                style = subtitleStyle,
+            )
+        }
+        is SearchResult.InterestMatch -> {
+            Text(result.details.otherUser.name ?: "Unknown", style = titleStyle)
+            Text("Shared: ${result.matchedTags.joinToString(", ")}", style = subtitleStyle)
+        }
+        is SearchResult.MemoryContextMatch -> {
+            Text(result.details.otherUser.name ?: "Unknown", style = titleStyle)
+            Text(result.matchLabel, style = subtitleStyle)
+        }
+        is SearchResult.MessageHit -> {
+            Text(result.result.chatName, style = titleStyle)
+            Text(
+                text = result.result.snippet.ifBlank { result.result.message.content },
+                style = subtitleStyle,
+                maxLines = 2,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            )
+            Text(
+                text = formatSearchTime(result.result.message.timeCreated),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f),
+            )
+        }
+        is SearchResult.LocationBucket -> {
+            Text(result.result.location, style = titleStyle)
+            val countLabel =
+                if (result.result.connectionCount == 1) {
+                    "1 connection"
+                } else {
+                    "${result.result.connectionCount} connections"
+                }
+            Text(countLabel, style = subtitleStyle)
+        }
+        is SearchResult.BeaconMatch -> {
+            Text(beaconDisplayTitle(result.beacon), style = titleStyle)
+            Text(
+                beaconDisplaySubtitle(result.beacon, result.distanceMeters),
+                style = subtitleStyle,
+            )
+        }
+        is SearchResult.OwnAvailabilityIntentMatch -> {
+            val label =
+                result.intent.intentTag
+                    ?.trim()
+                    .orEmpty()
+                    .ifEmpty { "Availability" }
+            Text(label, style = titleStyle)
+            Text(
+                text =
+                    "Your availability" +
+                        (
+                            result.intent.timeframe
+                                ?.trim()
+                                ?.takeIf { it.isNotEmpty() }
+                                ?.let { " · $it" } ?: ""
+                        ),
+                style = subtitleStyle,
+            )
+        }
+    }
+}
+
+@Composable
+internal fun PersonLeadingAvatar(details: ChatWithDetails) {
+    ConnectionListUserAvatarFace(
+        displayName = details.otherUser.name,
+        email = details.otherUser.email,
+        avatarUrl = details.otherUser.image,
+        userId = details.otherUser.id,
+        modifier = Modifier.size(42.dp),
+    )
+}
+
+@Composable
+internal fun MessageLeadingIcon() {
+    SearchLeadingIconBox {
+        Icon(
+            imageVector = Icons.Default.Chat,
+            contentDescription = null,
+            tint = PrimaryBlue,
+            modifier = Modifier.size(22.dp),
+        )
+    }
+}
+
+@Composable
+internal fun LocationLeadingIcon() {
+    SearchLeadingIconBox {
+        Icon(
+            imageVector = Icons.Default.LocationOn,
+            contentDescription = null,
+            tint = PrimaryBlue,
+            modifier = Modifier.size(22.dp),
+        )
+    }
+}
+
+/**
+ * Beacon rows show the beacon's own generated visual instead of the generic blue tile, so a search
+ * hit is recognisable as the same item the user saw on the map or in a list.
+ */
+@Composable
+internal fun BeaconLeadingIcon(beacon: MapBeacon) {
+    val visual = rememberCardVisual(beacon.id, beacon.kind, beacon.sourceBeaconType)
+    SearchLeadingIconBox(background = Modifier.cardVisualBackground(visual)) {
+        Icon(
+            imageVector = Icons.Filled.Place,
+            contentDescription = null,
+            tint = visual.onContent,
+            modifier = Modifier.size(22.dp),
+        )
+    }
+}
+
+@Composable
+internal fun IntentLeadingIcon() {
+    SearchLeadingIconBox {
+        Icon(
+            imageVector = Icons.Filled.EventAvailable,
+            contentDescription = null,
+            tint = PrimaryBlue,
+            modifier = Modifier.size(22.dp),
+        )
+    }
+}
+
+@Composable
+private fun SearchLeadingIconBox(
+    background: Modifier = Modifier.background(SoftBlue),
+    content: @Composable () -> Unit,
+) {
+    Box(
+        modifier =
+            Modifier
+                .size(42.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .then(background)
+                .border(1.dp, clickBorderColor(), RoundedCornerShape(12.dp)),
+        contentAlignment = Alignment.Center,
+    ) {
+        content()
+    }
+}
+
+internal fun formatSearchTime(timestamp: Long): String {
+    val instant = Instant.fromEpochMilliseconds(timestamp)
+    val dateTime = instant.toLocalDateTime(TimeZone.currentSystemDefault())
+    val hour = dateTime.hour
+    val minute = dateTime.minute.toString().padStart(2, '0')
+    val amPm = if (hour < 12) "AM" else "PM"
+    val displayHour =
+        when {
+            hour == 0 -> 12
+            hour > 12 -> hour - 12
+            else -> hour
+        }
+    return "$displayHour:$minute $amPm"
+}

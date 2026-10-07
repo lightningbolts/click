@@ -6,14 +6,16 @@
 package compose.project.click.click.viewmodel
 
 import androidx.lifecycle.viewModelScope
+import compose.project.click.click.crypto.MessageCryptoV2 // pragma: allowlist secret
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
+import compose.project.click.click.data.chat.PendingSend // pragma: allowlist secret
+import compose.project.click.click.data.chat.PendingSendStore // pragma: allowlist secret
 import compose.project.click.click.data.models.ChatMessageType // pragma: allowlist secret
 import compose.project.click.click.data.models.ChatWithDetails // pragma: allowlist secret
 import compose.project.click.click.data.models.Message // pragma: allowlist secret
 import compose.project.click.click.data.models.MessageDeliveryState // pragma: allowlist secret
 import compose.project.click.click.data.models.MessageWithUser // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
-import compose.project.click.click.data.models.replySnippetForMessage // pragma: allowlist secret
 import compose.project.click.click.util.isOfflineNetworkFailure
 import compose.project.click.click.util.isPersistedApiChatId
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
@@ -132,7 +134,6 @@ internal fun ChatViewModel.sendMessageImpl() {
         if (replyTargetCaptured != null) {
             buildJsonObject {
                 put("reply_to_id", replyTargetCaptured.message.id)
-                put("reply_to_content", replySnippetForMessage(replyTargetCaptured.message))
             }
         } else {
             null
@@ -235,6 +236,22 @@ internal fun ChatViewModel.sendMessageImpl() {
             appendOutgoingOptimistic(optimistic, currentUser)
         }
 
+        // Persist before sending: if the app dies mid-send the row comes back and resends.
+        val outboxItem =
+            PendingSend(
+                tempId = tempId,
+                userId = userId,
+                threadKey = connectionId,
+                apiChatId = apiChatId,
+                content = content,
+                metadataJson = metadataCaptured.toOutboxJson(),
+                localSentAtMs = localMs,
+                clientMessageId = MessageCryptoV2.generateClientMessageId(),
+                sendConnectionId = sendConnectionId,
+            )
+        inFlightOutboxIds += tempId
+        PendingSendStore.upsert(tokenStorage, outboxItem)
+
         outboundChatMessageMutex.withLock {
             _isMessageSubmitInProgress.value = true
             try {
@@ -246,8 +263,11 @@ internal fun ChatViewModel.sendMessageImpl() {
                         metadata = metadataCaptured,
                         clientLocalSentAtMs = localMs,
                         connectionId = sendConnectionId,
+                        clientMessageId = outboxItem.clientMessageId,
                     )
                 if (message != null) {
+                    // Drop the outbox row first so the restore collector never re-adds the temp row.
+                    PendingSendStore.remove(tokenStorage, tempId)
                     _replyingTo.value = null
                     applyInsertedMessage(message, currentUser, userId, optimisticTempId = tempId)
                     activateConnectionIfPending(connectionId)
@@ -275,6 +295,7 @@ internal fun ChatViewModel.sendMessageImpl() {
                 }
             } finally {
                 _isMessageSubmitInProgress.value = false
+                inFlightOutboxIds -= tempId
             }
         }
     }
@@ -427,7 +448,6 @@ internal fun ChatViewModel.commitStagedMediaToUploadImpl() {
                                         put("original_mime_type", item.mimeType)
                                         put("is_encrypted_media", true)
                                         put("reply_to_id", replyTarget.message.id)
-                                        put("reply_to_content", replySnippetForMessage(replyTarget.message))
                                     }
                                 }
                                 else -> {
@@ -534,7 +554,7 @@ internal fun ChatViewModel.updateMessageInputImpl(text: String) {
 
 /**
  * @param clearMessageSurface When false, skips forcing [ChatMessagesState.Loading] after teardown.
- * Use when the chat composable may still be attached for a frame (e.g. iOS interactive back)
+ * Use when the chat composable may still be attached for a frame (e.g. interactive back)
  * so the UI does not flash a full-screen loading state over the list.
  */
 internal fun ChatViewModel.leaveChatRoomImpl(clearMessageSurface: Boolean = true) {
@@ -595,6 +615,14 @@ internal fun ChatViewModel.leaveChatRoomImpl(clearMessageSurface: Boolean = true
     }
     currentConnectionId = null
     currentApiChatId = null
+    _scheduledMessages.value = emptyList()
+    _readCursors.value = emptyMap()
+    _tombstones.value = emptyMap()
+    _plannerOpen.value = false
+    _chatSearchOpen.value = false
+    typingExpiryJobs.values.forEach { it.cancel() }
+    typingExpiryJobs.clear()
+    _typingUserIds.value = emptySet()
     _stagedChatImages.value = emptyList()
     _stagedBeacon.value = null
     _messageSendError.value = null

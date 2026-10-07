@@ -9,7 +9,7 @@ import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.realtime.realtime
 
 /**
- * Drops the Realtime WebSocket and re-authenticates after iOS/Android resume so Ktor does not sit
+ * Drops the Realtime WebSocket and re-authenticates after resume so Ktor does not sit
  * on stale TLS/TCP state until the app-level startup timeout fires.
  *
  * Prefer live GoTrue session on resume; only import TokenStorage when SDK has no session.

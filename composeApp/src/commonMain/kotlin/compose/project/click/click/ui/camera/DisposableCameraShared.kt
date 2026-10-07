@@ -57,7 +57,6 @@ import compose.project.click.click.PlatformHapticsPolicy
 import compose.project.click.click.ui.components.ClickCircularGlassIconButton // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassCard
 import compose.project.click.click.ui.theme.BorderHardDark
-import compose.project.click.click.ui.theme.LocalPlatformStyle // pragma: allowlist secret
 import compose.project.click.click.ui.theme.PrimaryBlue
 
 /**
@@ -98,7 +97,6 @@ internal fun DisposableCameraChrome(
         animationSpec = spring(dampingRatio = 0.65f, stiffness = Spring.StiffnessMediumLow),
         label = "roll_glow",
     )
-    val isIOS = LocalPlatformStyle.current.isIOS
 
     Box(
         modifier =
@@ -145,29 +143,26 @@ internal fun DisposableCameraChrome(
             contentDescription = if (hasCapture) "Retake photo" else "Close camera",
         )
 
-        // iOS: native overlay UINavigationBar title is the only "Click Drops" chrome.
-        if (!isIOS) {
-            Surface(
-                modifier =
-                    Modifier
-                        .align(Alignment.TopCenter)
-                        .statusBarsPadding()
-                        .padding(top = 18.dp),
-                shape = RoundedCornerShape(999.dp),
-                color = Color.Black,
-                border =
-                    androidx.compose.foundation.BorderStroke(
-                        width = 1.dp,
-                        color = BorderHardDark,
-                    ),
-            ) {
-                Text(
-                    text = "Click Drops",
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = Color.White,
-                )
-            }
+        Surface(
+            modifier =
+                Modifier
+                    .align(Alignment.TopCenter)
+                    .statusBarsPadding()
+                    .padding(top = 18.dp),
+            shape = RoundedCornerShape(999.dp),
+            color = Color.Black,
+            border =
+                androidx.compose.foundation.BorderStroke(
+                    width = 1.dp,
+                    color = BorderHardDark,
+                ),
+        ) {
+            Text(
+                text = "Click Drops",
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                style = MaterialTheme.typography.labelLarge,
+                color = Color.White,
+            )
         }
 
         Column(
@@ -474,8 +469,6 @@ private fun GlassIconButton(
     modifier: Modifier,
     contentDescription: String,
 ) {
-    // iOS: native overlay UINavigationBar leading xmark is the only hit target.
-    if (LocalPlatformStyle.current.isIOS) return
     ClickCircularGlassIconButton(
         icon = Icons.Filled.Close,
         contentDescription = contentDescription,

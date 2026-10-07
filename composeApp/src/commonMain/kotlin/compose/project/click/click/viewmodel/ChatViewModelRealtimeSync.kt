@@ -7,9 +7,11 @@ package compose.project.click.click.viewmodel
 
 import androidx.lifecycle.viewModelScope
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
+import compose.project.click.click.data.chat.PendingSendStore // pragma: allowlist secret
 import compose.project.click.click.data.models.Message // pragma: allowlist secret
 import compose.project.click.click.data.models.MessageDeliveryState // pragma: allowlist secret
 import compose.project.click.click.data.models.MessageReaction // pragma: allowlist secret
+import compose.project.click.click.data.models.MessageTombstone
 import compose.project.click.click.data.models.MessageWithUser // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.models.previewLabel // pragma: allowlist secret
@@ -98,6 +100,7 @@ internal fun ChatViewModel.subscribeToNewMessages(
                                             // Never block message visibility on a profile lookup. The row is
                                             // committed immediately, then an unknown sender is hydrated in place.
                                             applyInsertedMessage(vaulted, user, userId)
+                                            if (vaulted.user_id == userId) pruneDeliveredScheduledMessages()
                                             if (cachedUser == null) {
                                                 hydrateInsertedMessageUser(
                                                     messageId = vaulted.id,
@@ -148,6 +151,15 @@ internal fun ChatViewModel.subscribeToNewMessages(
                                         is MessageChangeEvent.Delete -> {
                                             val currentState = _chatMessagesState.value
                                             if (currentState is ChatMessagesState.Success) {
+                                                // Leave a "Message deleted" placeholder where it was (iOS tombstones).
+                                                currentState.messages
+                                                    .firstOrNull { it.message.id == event.messageId }
+                                                    ?.message
+                                                    ?.let { gone ->
+                                                        _tombstones.value =
+                                                            _tombstones.value +
+                                                            (gone.id to MessageTombstone(gone.id, gone.user_id, gone.timeCreated))
+                                                    }
                                                 val filtered = currentState.messages.filter { it.message.id != event.messageId }
                                                 _chatMessagesState.value = currentState.copy(messages = filtered)
                                             }
@@ -156,7 +168,18 @@ internal fun ChatViewModel.subscribeToNewMessages(
                                 is ChatRealtimeEvent.Reaction -> {
                                     applyReactionChangeEvent(envelope.event)
                                 }
+                                is ChatRealtimeEvent.ReadCursorMoved -> {
+                                    val cursor = envelope.cursor
+                                    val current = _readCursors.value[cursor.userId] ?: 0L
+                                    if (cursor.readThrough > current) {
+                                        _readCursors.value = _readCursors.value + (cursor.userId to cursor.readThrough)
+                                    }
+                                }
                             }
+                        }.catch { e ->
+                            // Decrypt failures already degrade to "New message"; anything else must not crash the app.
+                            if (e is CancellationException) throw e
+                            println("ChatViewModel: message stream failed: ${e.redactedRestMessage()}")
                         }.launchIn(this)
 
                     subscription.attach()
@@ -275,6 +298,7 @@ internal suspend fun ChatViewModel.syncActiveChatReactions(chatId: String) {
     val merged = mergeReactionMapsPreserveOptimistic(_messageReactions.value, server)
     if (merged != _messageReactions.value) {
         _messageReactions.value = merged
+        syncAllPlanRemindersImpl()
     }
 }
 
@@ -306,6 +330,11 @@ internal suspend fun ChatViewModel.syncActiveChatMessages(
                 m.id.startsWith("temp-") && m.deliveryState == MessageDeliveryState.PENDING
             }.map { it.message }
     if (latestMessages == currentSansPending && pendingOptimistic.isEmpty()) return
+    // Rows that vanished were deleted (possibly while we were away): pick up their tombstones.
+    val latestIds = latestMessages.mapTo(HashSet()) { it.id }
+    if (currentSansPending.any { it.id !in latestIds }) {
+        refreshTombstonesImpl(chatId, windowSize = latestMessages.size + 20)
+    }
 
     val knownUsers =
         buildMap {
@@ -556,6 +585,9 @@ internal fun ChatViewModel.appendOutgoingOptimistic(
 }
 
 internal fun ChatViewModel.markOptimisticSendFailed(tempId: String) {
+    if (PendingSendStore.byTempId(tempId) != null) {
+        viewModelScope.launch { PendingSendStore.markFailed(tokenStorage, tempId) }
+    }
     val currentState = _chatMessagesState.value as? ChatMessagesState.Success ?: return
     _chatMessagesState.value =
         currentState.copy(
@@ -736,6 +768,14 @@ internal fun ChatViewModel.startTypingMonitoringImpl(chatId: String) {
                 val currentUser = _currentUserId.value
                 if (status.userId != currentUser && status.isTyping) {
                     _isPeerTyping.value = true
+                    _typingUserIds.value = _typingUserIds.value + status.userId
+                    typingExpiryJobs.remove(status.userId)?.cancel()
+                    typingExpiryJobs[status.userId] =
+                        launch {
+                            delay(3000)
+                            _typingUserIds.value = _typingUserIds.value - status.userId
+                            typingExpiryJobs.remove(status.userId)
+                        }
                     peerTypingTimeoutJob?.cancel()
                     peerTypingTimeoutJob =
                         launch {

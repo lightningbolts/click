@@ -37,7 +37,6 @@ import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
 import compose.project.click.click.ui.chat.ChatAmbientMeshBackground // pragma: allowlist secret
 import compose.project.click.click.ui.components.InteractiveSwipeBackContainer // pragma: allowlist secret
 import compose.project.click.click.ui.components.InteractiveSwipeBackRightToLeftPeek // pragma: allowlist secret
-import compose.project.click.click.ui.components.PlatformNativeNavigationBarSwipeReveal // pragma: allowlist secret
 import compose.project.click.click.ui.screens.* // pragma: allowlist secret
 import compose.project.click.click.ui.theme.* // pragma: allowlist secret
 import compose.project.click.click.utils.LocationResult // pragma: allowlist secret
@@ -46,7 +45,6 @@ import compose.project.click.click.viewmodel.AuthViewModel // pragma: allowlist 
 
 @Composable
 internal fun AppHubChatHost(
-    isIOS: Boolean,
     reduceMotion: Boolean,
     authViewModel: AuthViewModel,
     hubChatTransitionMode: NavigationTransitionMode,
@@ -64,7 +62,6 @@ internal fun AppHubChatHost(
     }
     val hubBackHost = HubChatInteractiveBackBridge.state
     val hubSwipeDragPx = hubBackHost.dragOffsetPx
-    PlatformNativeNavigationBarSwipeReveal(hubSwipeDragPx)
 
     LaunchedEffect(hubChatArgs) {
         if (hubChatArgs != null) {
@@ -133,9 +130,7 @@ internal fun AppHubChatHost(
                 },
                 onBack = {
                     hubFocusManager.clearFocus()
-                    if (!isIOS) {
-                        hubKeyboardController?.hide()
-                    }
+                    hubKeyboardController?.hide()
                     closeHubChat(NavigationTransitionMode.GestureBack)
                 },
                 rightToLeftPeek = hubChatRightToLeftPeek,

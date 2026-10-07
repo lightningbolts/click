@@ -1,4 +1,0 @@
-language = Objective-C
-headers = ClickDisposableRollFilter.h
-headerFilter = ClickDisposableRollFilter.h
-package = click.disposableroll.filter

@@ -20,7 +20,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -40,6 +39,8 @@ import compose.project.click.click.ui.theme.* // pragma: allowlist secret
 import compose.project.click.click.ui.utils.* // pragma: allowlist secret
 import compose.project.click.click.ui.utils.CommunityHubPin // pragma: allowlist secret
 import compose.project.click.click.ui.utils.displayDynamicTitle // pragma: allowlist secret
+import compose.project.click.click.util.SoundtrackMatch // pragma: allowlist secret
+import compose.project.click.click.util.SoundtrackResolver // pragma: allowlist secret
 import compose.project.click.click.viewmodel.MapViewModel // pragma: allowlist secret
 import kotlinx.coroutines.delay
 import kotlinx.datetime.Instant
@@ -270,18 +271,26 @@ internal fun SoundtrackBeaconDetail(
         remember(beacon, mapBeacons) {
             mapBeacons.firstOrNull { it.id == beacon.id } ?: beacon
         }
+    val original =
+        (displayBeacon.metadata.originalUrl ?: displayBeacon.metadata.musicUrl)
+            ?.takeIf { it.isNotBlank() }
+    val serverPreview = displayBeacon.metadata.previewUrl?.takeIf { it.isNotBlank() }
+    // No server preview (its lookup can be throttled): resolve on the device, as iOS does (05 §C6).
+    var resolved by remember(original) { mutableStateOf<SoundtrackMatch?>(null) }
+    LaunchedEffect(original, serverPreview) {
+        if (serverPreview == null && original != null) resolved = SoundtrackResolver.resolve(original)
+    }
     val trackTitle =
         displayBeacon.metadata.trackName?.takeIf { it.isNotBlank() }
+            ?: resolved?.trackName
             ?: displayBeacon.metadata.title?.takeIf { it.isNotBlank() }
             ?: displayBeacon.displayDynamicTitle()
     val artistLine =
         displayBeacon.metadata.artistName?.takeIf { it.isNotBlank() }
             ?: displayBeacon.metadata.artist?.takeIf { it.isNotBlank() }
-    val art = displayBeacon.metadata.albumArtUrl?.takeIf { it.isNotBlank() }
-    val preview = displayBeacon.metadata.previewUrl?.takeIf { it.isNotBlank() }
-    val original =
-        (displayBeacon.metadata.originalUrl ?: displayBeacon.metadata.musicUrl)
-            ?.takeIf { it.isNotBlank() }
+            ?: resolved?.artistName
+    val art = displayBeacon.metadata.albumArtUrl?.takeIf { it.isNotBlank() } ?: resolved?.artworkUrl
+    val preview = serverPreview ?: resolved?.previewUrl
     val distanceLabel = distanceMeters?.let { formatBeaconDistance(it) }
     val border = clickBorderColor()
     val cardSurface = clickCardSurface()
@@ -437,7 +446,7 @@ internal fun SoundtrackBeaconDetail(
         }
 
         if (preview != null) {
-            val player = rememberChatAudioPlayer(mediaUrl = preview, durationHintMs = 30_000L)
+            val player = rememberChatAudioPlayer(mediaUrl = preview)
             var tick by remember(preview) { mutableIntStateOf(0) }
             var isDragging by remember(preview) { mutableStateOf(false) }
             var sliderPosition by remember(preview) { mutableFloatStateOf(0f) }
@@ -636,37 +645,6 @@ internal fun formatBeaconDistance(meters: Double): String {
         val whole = tenths / 10
         val frac = tenths % 10
         "$whole.$frac km away"
-    }
-}
-
-@Composable
-internal fun MemoriesPillContent(
-    memories: Int,
-    liveCount: Int,
-    ghostMode: Boolean,
-) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(
-            imageVector = if (ghostMode) Icons.Filled.LocationOff else Icons.Filled.LocationOn,
-            contentDescription = null,
-            modifier = Modifier.size(18.dp),
-            tint = if (ghostMode) Color.Gray else PrimaryBlue,
-        )
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(
-            if (ghostMode) {
-                "Ghost Mode"
-            } else {
-                "$memories ${if (memories == 1) "memory" else "memories"}"
-            },
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
-        if (!ghostMode && liveCount > 0) {
-            Spacer(modifier = Modifier.width(10.dp))
-            LiveIndicator(count = liveCount)
-        }
     }
 }
 

@@ -120,7 +120,7 @@ Group threads decrypt with the master key returned by `VerifiedCliqueCreateResul
 ### Send photos / files / voice notes
 Group attachments encrypt with the group master key cached after domain create.
 
-### Emoji reactions / Typing & read receipts / Voice & video calls
+### Emoji reactions / Typing & read receipts
 Not domain concerns — handled in chat ViewModel + repository.
 
 ### Memory Capsules
@@ -147,7 +147,7 @@ Pinning is a user preference layer, not a graph invariant.
 ### Collaboration sessions & disposable rolls
 `CollaborationSession` TTL logic lives in `collaboration/` — candidate for domain extraction.
 
-### Ghost mode / Block & report
+### Block & report
 Privacy and safety policies — repository + AppDataManager.
 
 ### Profile & interests / Onboarding / Google-email auth

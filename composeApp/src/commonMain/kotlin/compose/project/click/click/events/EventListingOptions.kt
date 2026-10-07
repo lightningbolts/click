@@ -184,3 +184,21 @@ fun normalizeEventRsvpErrorMessage(raw: String?): String? {
         else -> text
     }
 }
+
+/** Join-request watcher cadence while the event detail is on screen (iOS `watchPendingRequest`). */
+const val JOIN_REQUEST_POLL_MS: Long = 30_000L
+
+/** The banner once a pending join request is decided; null while nothing changed. */
+fun joinRequestDecisionMessage(
+    previous: EventRsvpRequestStatus?,
+    current: EventRsvpRequestStatus?,
+    signedUp: Boolean,
+): String? {
+    if (previous != EventRsvpRequestStatus.PENDING || current == EventRsvpRequestStatus.PENDING) return null
+    return when {
+        current == EventRsvpRequestStatus.APPROVED || signedUp -> "You're in. The host approved your request."
+        current == EventRsvpRequestStatus.DENIED -> "The host declined your request."
+        current == EventRsvpRequestStatus.WAITLISTED -> "You're on the waitlist."
+        else -> null
+    }
+}

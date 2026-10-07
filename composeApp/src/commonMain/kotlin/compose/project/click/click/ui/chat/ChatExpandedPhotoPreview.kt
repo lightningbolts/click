@@ -31,8 +31,6 @@ import compose.project.click.click.ui.components.GlassFullscreenMediaOverlay // 
 import compose.project.click.click.ui.components.MediaLightboxSaveShareTrailing // pragma: allowlist secret
 import compose.project.click.click.ui.components.MediaLightboxTopChrome // pragma: allowlist secret
 import compose.project.click.click.ui.components.UnifiedPopupTokens // pragma: allowlist secret
-import compose.project.click.click.ui.components.mediaLightboxShareActions // pragma: allowlist secret
-import compose.project.click.click.ui.theme.LocalPlatformStyle // pragma: allowlist secret
 import compose.project.click.click.utils.toChatDisplayImageBitmap // pragma: allowlist secret
 import compose.project.click.click.viewmodel.SecureChatMediaHost // pragma: allowlist secret
 import kotlinx.coroutines.Dispatchers
@@ -106,30 +104,15 @@ fun ChatExpandedPhotoPreview(
         bitmap = decoded
     }
 
-    val isIOS = LocalPlatformStyle.current.isIOS
     val scope = rememberCoroutineScope()
     val decryptedBytes = secureState?.imageBytes
     val mimeHint = message.originalMimeTypeOrNull()
-    val saveShareActions =
-        mediaLightboxShareActions(
-            onSave = {
-                scope.launch {
-                    persistLightboxImageToGallery(mediaUrl, decryptedBytes, mimeHint)
-                }
-            },
-            onShare = {
-                scope.launch {
-                    shareLightboxImage(mediaUrl, decryptedBytes, mimeHint)
-                }
-            },
-        )
 
     GlassFullscreenMediaOverlay(
         visible = visible,
         onDismissRequest = onDismiss,
         modifier = Modifier.fillMaxSize(),
         scrimAlpha = 1f,
-        nativeTrailingActions = saveShareActions,
     ) {
         Box(
             modifier =
@@ -179,22 +162,19 @@ fun ChatExpandedPhotoPreview(
             }
             MediaLightboxTopChrome(
                 onClose = onDismiss,
-                showClose = !isIOS,
                 trailing = {
-                    if (!isIOS) {
-                        MediaLightboxSaveShareTrailing(
-                            onSave = {
-                                scope.launch {
-                                    persistLightboxImageToGallery(mediaUrl, decryptedBytes, mimeHint)
-                                }
-                            },
-                            onShare = {
-                                scope.launch {
-                                    shareLightboxImage(mediaUrl, decryptedBytes, mimeHint)
-                                }
-                            },
-                        )
-                    }
+                    MediaLightboxSaveShareTrailing(
+                        onSave = {
+                            scope.launch {
+                                persistLightboxImageToGallery(mediaUrl, decryptedBytes, mimeHint)
+                            }
+                        },
+                        onShare = {
+                            scope.launch {
+                                shareLightboxImage(mediaUrl, decryptedBytes, mimeHint)
+                            }
+                        },
+                    )
                 },
             )
         }

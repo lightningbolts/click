@@ -86,6 +86,61 @@ internal suspend fun ChatViewModel.computeVerifiedCliqueAddableMaskImpl(
             .toMap()
     }
 
+/**
+ * "Hasn't Clicked with Lena" / "Hasn't Clicked with Lena and 2 more" (iOS `CliqueEligibility.reason`);
+ * null when nothing is missing.
+ */
+fun cliqueIneligibleReason(missingFirstNames: List<String>): String? {
+    val sorted = missingFirstNames.sorted()
+    val first = sorted.firstOrNull() ?: return null
+    return if (sorted.size == 1) "Hasn't Clicked with $first" else "Hasn't Clicked with $first and ${sorted.size - 1} more"
+}
+
+/**
+ * For each candidate [mask] marks ineligible, which members of [memberUserIds] (the group plus the
+ * current selection) they haven't Clicked with. Asks `verified_clique_edges_exist [viewer, candidate,
+ * member]` per pair, a pair at a time only for ineligible candidates.
+ */
+internal suspend fun ChatViewModel.cliqueMissingMembersImpl(
+    viewerUserId: String,
+    memberUserIds: Collection<String>,
+    mask: Map<String, Boolean>,
+): Map<String, List<String>> =
+    coroutineScope {
+        val members = memberUserIds.filter { it.isNotBlank() && it != viewerUserId }.distinct()
+        mask
+            .filterValues { !it }
+            .keys
+            .map { candidate ->
+                async {
+                    val missing =
+                        members
+                            .filter { it != candidate }
+                            .map { member ->
+                                async { member to memberSetSatisfiesVerifiedCliqueGraph(listOf(viewerUserId, candidate, member).sorted()) }
+                            }.map { it.await() }
+                            .filterNot { it.second }
+                            .map { it.first }
+                    candidate to missing
+                }
+            }.map { it.await() }
+            .filter { it.second.isNotEmpty() }
+            .toMap()
+    }
+
+/** First name for eligibility copy; falls back to "someone you picked" like iOS. */
+internal fun cliqueMemberFirstName(userId: String): String =
+    AppDataManager
+        .getConnectedUser(userId)
+        ?.let {
+            it.firstName?.trim()?.takeIf { f -> f.isNotEmpty() }
+                ?: it.name
+                    ?.trim()
+                    ?.substringBefore(' ')
+                    ?.takeIf { n -> n.isNotEmpty() }
+        }
+        ?: "someone you picked"
+
 internal fun ChatViewModel.buildInitialVerifiedCliqueDisplayName(
     memberUserIds: List<String>,
     currentUserId: String,
@@ -251,6 +306,7 @@ internal fun ChatViewModel.addMembersToVerifiedCliqueImpl(
             }
         }
         if (added > 0) {
+            groupChatIdFor(groupId)?.let { secureGroupChatImpl(it) }
             PlatformHapticsPolicy.successNotification()
             chatRepository.clearChatListLocalCaches()
             loadChats(isForced = true)
@@ -290,6 +346,8 @@ internal fun ChatViewModel.removeMemberFromVerifiedCliqueImpl(
         }
         val ok = chatRepository.removeCliqueMember(groupId, memberUserId).isSuccess
         if (ok) {
+            // The removed member must not read what comes next: rotate the epoch now.
+            groupChatIdFor(groupId)?.let { secureGroupChatImpl(it) }
             chatRepository.clearChatListLocalCaches()
             loadChats(isForced = true)
             val state = _chatMessagesState.value as? ChatMessagesState.Success
@@ -449,4 +507,27 @@ internal fun ChatViewModel.deleteActiveHubImpl(
         }
         onComplete(result.isSuccess)
     }
+}
+
+/** Rotates [chatId]'s group epoch now; on failure remembers it so the profile can offer a retry. */
+internal fun ChatViewModel.secureGroupChatImpl(chatId: String) {
+    val userId = _currentUserId.value ?: return
+    if (chatId.isBlank()) return
+    viewModelScope.launch {
+        val ok = chatRepository.secureGroupAfterMembershipChange(chatId, userId).isSuccess
+        _groupsNeedingSecuring.value =
+            if (ok) _groupsNeedingSecuring.value - chatId else _groupsNeedingSecuring.value + chatId
+        if (!ok) _nudgeResult.value = "Couldn't finish securing the group. Try again from the group profile."
+    }
+}
+
+/** The group chat id for [groupId] when it's the open chat or in the inbox. */
+internal fun ChatViewModel.groupChatIdFor(groupId: String): String? {
+    val open = (_chatMessagesState.value as? ChatMessagesState.Success)?.chatDetails
+    if (open?.groupClique?.groupId == groupId) open.chat.id?.let { return it }
+    return (_chatListState.value as? ChatListState.Success)
+        ?.chats
+        ?.firstOrNull { it.groupClique?.groupId == groupId }
+        ?.chat
+        ?.id
 }

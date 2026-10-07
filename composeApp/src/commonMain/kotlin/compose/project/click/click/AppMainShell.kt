@@ -26,14 +26,21 @@ import compose.project.click.click.collaboration.CollaborationSession // pragma:
 import compose.project.click.click.collaboration.CollaborationSessionManager // pragma: allowlist secret
 import compose.project.click.click.data.ActiveHubEntry // pragma: allowlist secret
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
+import compose.project.click.click.data.ChatMuteStore
 import compose.project.click.click.data.OpenMeteoWeatherService // pragma: allowlist secret
+import compose.project.click.click.data.api.ApiClient
 import compose.project.click.click.data.auth.EnsureFreshAccessToken // pragma: allowlist secret
 import compose.project.click.click.data.hub.HubConnectionManager // pragma: allowlist secret
 import compose.project.click.click.data.hub.HubVerifyResult // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.models.isPendingSync // pragma: allowlist secret
+import compose.project.click.click.data.repository.HangoutPresence
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
+import compose.project.click.click.data.runEventReminderSync // pragma: allowlist secret
 import compose.project.click.click.data.storage.TokenStorage // pragma: allowlist secret
+import compose.project.click.click.data.storage.createTokenStorage
+import compose.project.click.click.deeplink.AppDeepLink // pragma: allowlist secret
+import compose.project.click.click.deeplink.AppDeepLinkRouter // pragma: allowlist secret
 import compose.project.click.click.deeplink.ConnectionDeepLinkRouter // pragma: allowlist secret
 import compose.project.click.click.deeplink.EventDeepLinkRouter // pragma: allowlist secret
 import compose.project.click.click.encounter.EncounterTetherManager // pragma: allowlist secret
@@ -43,6 +50,7 @@ import compose.project.click.click.notifications.ChatDeepLinkManager // pragma: 
 import compose.project.click.click.notifications.ChatNotificationDismisser // pragma: allowlist secret
 import compose.project.click.click.sensors.AmbientNoiseMonitor // pragma: allowlist secret
 import compose.project.click.click.sensors.BarometricHeightMonitor // pragma: allowlist secret
+import compose.project.click.click.telemetry.ConnectionFlowTelemetry // pragma: allowlist secret
 import compose.project.click.click.ui.components.AppShimmerScreen // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionRevealPhase // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionRevealUiState // pragma: allowlist secret
@@ -53,6 +61,7 @@ import compose.project.click.click.ui.components.rememberUnifiedToastState // pr
 import compose.project.click.click.ui.screens.* // pragma: allowlist secret
 import compose.project.click.click.ui.theme.* // pragma: allowlist secret
 import compose.project.click.click.utils.LocationResult // pragma: allowlist secret
+import compose.project.click.click.utils.LocationService
 import compose.project.click.click.viewmodel.AuthViewModel // pragma: allowlist secret
 import compose.project.click.click.viewmodel.ChatViewModel // pragma: allowlist secret
 import compose.project.click.click.viewmodel.ConnectionState // pragma: allowlist secret
@@ -60,6 +69,7 @@ import compose.project.click.click.viewmodel.ConnectionViewModel // pragma: allo
 import compose.project.click.click.viewmodel.HomeViewModel // pragma: allowlist secret
 import compose.project.click.click.viewmodel.MapLayerFilter // pragma: allowlist secret
 import compose.project.click.click.viewmodel.MapViewModel // pragma: allowlist secret
+import compose.project.click.click.viewmodel.SyncBanner // pragma: allowlist secret
 import compose.project.click.click.viewmodel.VerifiedCliqueProximityIntent // pragma: allowlist secret
 import io.ktor.client.*
 import io.ktor.client.plugins.contentnegotiation.*
@@ -73,7 +83,6 @@ import kotlinx.coroutines.launch
 @Composable
 internal fun AppMainShell(
     reduceMotion: Boolean,
-    isIOS: Boolean,
     client: HttpClient,
     tokenStorage: TokenStorage,
     appScope: CoroutineScope,
@@ -87,7 +96,8 @@ internal fun AppMainShell(
     ambientMonitor: AmbientNoiseMonitor,
     baroMonitor: BarometricHeightMonitor,
     openMeteoWeather: OpenMeteoWeatherService,
-    showOfflineBanner: Boolean,
+    syncBanner: SyncBanner,
+    onRetrySync: () -> Unit,
     isInitialLoading: Boolean,
     pendingConnectionsCount: Int,
     appError: String?,
@@ -203,25 +213,6 @@ internal fun AppMainShell(
         return true
     }
 
-    fun navigatePrimaryRouteBackHome(mode: NavigationTransitionMode = NavigationTransitionMode.Tap): Boolean {
-        if (!isPrimaryNavRoute(currentRoute) || currentRoute == NavigationItem.Home.route) {
-            return false
-        }
-
-        transitionMode = mode
-        previousRoute = currentRoute
-        currentRoute = NavigationItem.Home.route
-        routeHistory.resetTo(NavigationItem.Home.route)
-        isConnectionsChatOpen = false
-        connectionsChatSuppressesTabBar = false
-        pendingChatId = null
-        pendingTargetMessageId = null
-        pendingHubTargetMessageId = null
-        pendingBeaconId = null
-        pendingMapLayerFilter = null
-        return true
-    }
-
     val focusManager = LocalFocusManager.current
     val homeViewModel: HomeViewModel = viewModel { HomeViewModel() }
     val mapViewModel: MapViewModel = viewModel { MapViewModel() }
@@ -309,23 +300,6 @@ internal fun AppMainShell(
     // Keep AnimatedContent on the primary tab so Add Click is not destroyed while
     // My Code / Scan / Tap overlays are open (avoids per-card remount flicker on swipe-back).
     val activeScreenKey = currentRoute
-    val canSwipeBackMainRoute =
-        isIOS &&
-            isPrimaryNavRoute(currentRoute) &&
-            currentRoute != NavigationItem.Home.route &&
-            addClickOverlayKey == null &&
-            !isConnectionsChatOpen &&
-            !(currentRoute == NavigationItem.Settings.route && isSettingsSubpageOpen) &&
-            hubChatArgs == null
-    val iOSSwipeOwnsBack =
-        isIOS &&
-            (
-                addClickOverlayKey != null ||
-                    (currentRoute == NavigationItem.Connections.route && isConnectionsChatOpen) ||
-                    (currentRoute == NavigationItem.Settings.route && isSettingsSubpageOpen) ||
-                    hubChatArgs != null ||
-                    canSwipeBackMainRoute
-            )
 
     LaunchedEffect(currentUser.id) {
         if (currentUser.id.isNotEmpty()) {
@@ -342,6 +316,69 @@ internal fun AppMainShell(
         ChatNotificationDismisser.dismissForThread(connId, connId)
         ChatDeepLinkManager.consume()
         pendingChatId = connId
+        pendingTargetMessageId = ChatDeepLinkManager.consumeTargetMessage()
+        navigateTo(NavigationItem.Connections.route)
+    }
+
+    // click://myqr, scan, tap and search?q= (plus Me → My QR, which uses the same path).
+    val pendingAppLink by AppDeepLinkRouter.pending.collectAsState()
+    LaunchedEffect(pendingAppLink, currentUser.id) {
+        val link = pendingAppLink ?: return@LaunchedEffect
+        if (currentUser.id.isBlank()) return@LaunchedEffect
+        AppDeepLinkRouter.consume()
+        when (link) {
+            AppDeepLink.MyQr -> {
+                navigateTo(NavigationItem.AddClick.route)
+                showMyQRCode = true
+            }
+            AppDeepLink.Scan -> {
+                navigateTo(NavigationItem.AddClick.route)
+                showQRScanner = true
+            }
+            AppDeepLink.TapConnect -> {
+                navigateTo(NavigationItem.AddClick.route)
+                showNfcScreen = true
+            }
+            is AppDeepLink.Search -> {
+                AppDeepLinkRouter.setSearchQuery(link.query)
+                showUnifiedSearchSheet = true
+            }
+            AppDeepLink.Clicks -> navigateTo(NavigationItem.Connections.route)
+            AppDeepLink.AddClick -> navigateTo(NavigationItem.AddClick.route)
+            is AppDeepLink.Chat, is AppDeepLink.Profile -> Unit
+        }
+    }
+
+    LaunchedEffect(currentUser.id) {
+        if (currentUser.id.isNotBlank()) ChatMuteStore.refresh()
+    }
+
+    // Event reminders follow RSVPs, saves and Alerts → Event reminders; re-synced on every start.
+    LaunchedEffect(currentUser.id) {
+        if (currentUser.id.isBlank()) return@LaunchedEffect
+        AppDataManager.runEventReminderSync()
+    }
+
+    // Ghost Mode was removed: clear a server flag an older client may have left on (iOS does the same).
+    LaunchedEffect(currentUser.id) {
+        if (currentUser.id.isBlank()) return@LaunchedEffect
+        ApiClient().clearLegacyGhostMode()
+    }
+
+    // Opt-in hangout detection: one precise presence ping per foreground, throttled to 10 minutes.
+    val foregroundTick by platformForegroundTickFlow().collectAsState()
+    val presenceDeps = remember { Triple(createTokenStorage(), LocationService(), ApiClient()) }
+    LaunchedEffect(foregroundTick, currentUser.id) {
+        if (currentUser.id.isBlank()) return@LaunchedEffect
+        ConnectionFlowTelemetry.flush()
+        val (storage, location, api) = presenceDeps
+        HangoutPresence.reportIfEnabled(storage, location, api)
+    }
+
+    // Profile deep links open on the Clicks tab, where ConnectionsScreen owns the profile sheet.
+    val deepLinkProfileUserId by ChatDeepLinkManager.pendingProfileUserId.collectAsState()
+    LaunchedEffect(deepLinkProfileUserId, currentUser.id) {
+        if (deepLinkProfileUserId.isNullOrBlank() || currentUser.id.isBlank()) return@LaunchedEffect
         navigateTo(NavigationItem.Connections.route)
     }
 
@@ -703,19 +740,16 @@ internal fun AppMainShell(
     // Platform back handler — intercepts Android back gesture/button
     compose.project.click.click.ui.components.PlatformBackHandler( // pragma: allowlist secret
         enabled =
-            (
-                eventHubSheetVisible ||
-                    eventsSheetExpanded ||
-                    showUnifiedSearchSheet ||
-                    hubChatArgs != null ||
-                    showMyQRCode ||
-                    showQRScanner ||
-                    showNfcScreen ||
-                    (connectionState is ConnectionState.TaggingContext && !showNfcScreen) ||
-                    (connectionState is ConnectionState.QrAwaitingContext && !showNfcScreen) ||
-                    currentRoute != "home"
-            ) &&
-                !iOSSwipeOwnsBack,
+            eventHubSheetVisible ||
+                eventsSheetExpanded ||
+                showUnifiedSearchSheet ||
+                hubChatArgs != null ||
+                showMyQRCode ||
+                showQRScanner ||
+                showNfcScreen ||
+                (connectionState is ConnectionState.TaggingContext && !showNfcScreen) ||
+                (connectionState is ConnectionState.QrAwaitingContext && !showNfcScreen) ||
+                currentRoute != "home",
     ) {
         when {
             eventHubSheetVisible -> dismissEventHubSheet()
@@ -746,22 +780,21 @@ internal fun AppMainShell(
         }
     }
 
-    // On iOS the native UITabBar cannot be covered by Compose. Hiding/showing it remounts
-    // Liquid Glass after chat back-swipe. Keep it visible for connections chat; chat pads
-    // above it. Disposable-roll camera is a full-screen overlay — never toggle the iOS
-    // tab bar for it (that resize was flashing the whole chat on send/dismiss).
     val hideMainBottomBar =
-        (!isIOS && connectionsChatSuppressesTabBar) ||
-            (!isIOS && hubChatArgs != null) ||
-            (!isIOS && (showConnectionDisposableRoll || disposableRollOpening))
+        connectionsChatSuppressesTabBar ||
+            hubChatArgs != null ||
+            showConnectionDisposableRoll ||
+            disposableRollOpening
 
     // Wrap Scaffold in a Box to allow search overlay to be positioned at true screen bottom
     Box(modifier = Modifier.fillMaxSize()) {
         LaunchedEffect(currentUser.id) {
             EncounterTetherManager.setCurrentUserId(currentUser.id)
         }
-        if (showOfflineBanner) {
+        if (syncBanner != SyncBanner.None) {
             OfflineStatusBanner(
+                message = if (syncBanner == SyncBanner.Offline) "You're offline" else "Couldn't refresh · Retry",
+                onClick = if (syncBanner == SyncBanner.RefreshFailed) onRetrySync else null,
                 modifier =
                     Modifier
                         .align(Alignment.TopCenter)
@@ -774,9 +807,8 @@ internal fun AppMainShell(
             modifier =
                 Modifier
                     .fillMaxSize()
-                    // Android: zIndex puts chat above the Compose tab bar while a thread is open.
-                    // iOS: native bar stays visible for connections chat (never toggled).
-                    .zIndex(if (hideMainBottomBar || (!isIOS && isConnectionsChatOpen)) 6f else 0f),
+                    // zIndex puts chat above the Compose tab bar while a thread is open.
+                    .zIndex(if (hideMainBottomBar || isConnectionsChatOpen) 6f else 0f),
             contentWindowInsets = WindowInsets(0, 0, 0, 0),
         ) { paddingValues ->
             Box(
@@ -794,7 +826,6 @@ internal fun AppMainShell(
                         activeScreenKey = activeScreenKey,
                         currentRoute = currentRoute,
                         addClickOverlayKey = addClickOverlayKey,
-                        isIOS = isIOS,
                         reduceMotion = reduceMotion,
                         currentUser = currentUser,
                         client = client,
@@ -810,7 +841,6 @@ internal fun AppMainShell(
                         toastState = toastState,
                         shareableMapBeacons = shareableMapBeacons,
                         navigateTo = ::navigateTo,
-                        navigatePrimaryRouteBackHome = ::navigatePrimaryRouteBackHome,
                         launchCommunityHubJoin = { hubId, creatorId -> launchCommunityHubJoin(hubId, creatorId) },
                         openConnectionDisposableRoll = openConnectionDisposableRoll,
                         openChatDisposableRoll = openChatDisposableRoll,
@@ -834,7 +864,6 @@ internal fun AppMainShell(
                     )
 
                     AppHubChatHost(
-                        isIOS = isIOS,
                         reduceMotion = reduceMotion,
                         authViewModel = authViewModel,
                         hubChatTransitionMode = hubChatTransitionMode,
@@ -862,11 +891,11 @@ internal fun AppMainShell(
                     )
 
                     AppConnectionOverlays(
+                        openConnectionDisposableRoll = openConnectionDisposableRoll,
                         connectionState = connectionState,
                         showNfcScreen = showNfcScreen,
                         suppressConnectionContextSheet = suppressConnectionContextSheet,
                         currentUser = currentUser,
-                        isIOS = isIOS,
                         connectionViewModel = connectionViewModel,
                         chatViewModel = chatViewModel,
                         connectionScope = connectionScope,

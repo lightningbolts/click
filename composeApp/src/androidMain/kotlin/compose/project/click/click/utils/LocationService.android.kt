@@ -37,7 +37,7 @@ actual class LocationService {
         private const val FRESH_MAX_ACCURACY_METERS = 80f
         private const val LAST_KNOWN_MAX_ACCURACY_METERS = 150f
 
-        /** Discovery / beacon prefetch: match iOS coarse cache tolerance so Android still seeds the feed. */
+        /** Discovery / beacon prefetch: coarse cache tolerance so Android still seeds the feed. */
         private const val DISCOVERY_LAST_KNOWN_MAX_AGE_MS = 60 * 60_000L
         private const val DISCOVERY_LAST_KNOWN_MAX_ACCURACY_METERS = 5_000f
 
@@ -175,7 +175,7 @@ actual class LocationService {
                 return lastLocation
             }
 
-            // Coarse discovery fallback (iOS allows up to ~5km cached accuracy). Without this,
+            // Coarse discovery fallback (up to ~5km cached accuracy). Without this,
             // Android beacon prefetch often exits with zero centers until the map reports bounds.
             val coarse =
                 getLastKnownLocation(

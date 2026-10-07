@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.content.pm.ApplicationInfo
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -18,6 +19,8 @@ import compose.project.click.click.calendar.initCalendarProvider // pragma: allo
 import compose.project.click.click.data.SupabaseConfig // pragma: allowlist secret
 import compose.project.click.click.data.contacts.initContactBook // pragma: allowlist secret
 import compose.project.click.click.data.storage.initTokenStorage // pragma: allowlist secret
+import compose.project.click.click.deeplink.AppDeepLink
+import compose.project.click.click.deeplink.AppDeepLinkRouter
 import compose.project.click.click.deeplink.ConnectionDeepLinkRouter // pragma: allowlist secret
 import compose.project.click.click.deeplink.EventDeepLinkRouter // pragma: allowlist secret
 import compose.project.click.click.encounter.initEncounterTetherWidgetBridge // pragma: allowlist secret
@@ -59,9 +62,11 @@ class MainActivity : ComponentActivity() {
 
         handleChatDeepLinkIntent(intent)
         handleEventPushDeepLinkIntent(intent)
+        handleProfilePushDeepLinkIntent(intent)
         handleCommunityHubViewIntent(intent)
         handleEventUniversalLinkIntent(intent)
         handleConnectionUniversalLinkIntent(intent)
+        handleAppDeepLinkIntent(intent)
 
         setContent {
             App()
@@ -89,9 +94,22 @@ class MainActivity : ComponentActivity() {
         passSupabaseAuthDeepLink(intent)
         handleChatDeepLinkIntent(intent)
         handleEventPushDeepLinkIntent(intent)
+        handleProfilePushDeepLinkIntent(intent)
         handleCommunityHubViewIntent(intent)
         handleEventUniversalLinkIntent(intent)
         handleConnectionUniversalLinkIntent(intent)
+        handleAppDeepLinkIntent(intent)
+    }
+
+    /** click://chat, profile, myqr, scan, tap, search and joinclick.co/search; push taps to the Clicks list. */
+    private fun handleAppDeepLinkIntent(intent: Intent?) {
+        if (intent?.action == ACTION_VIEW_CONNECTIONS) {
+            AppDeepLinkRouter.open(AppDeepLink.Clicks)
+            return
+        }
+        if (intent?.action != Intent.ACTION_VIEW) return
+        val uriString = intent.dataString ?: return
+        AppDeepLinkRouter.handleIncomingUrl(uriString)
     }
 
     private fun handleCommunityHubViewIntent(intent: Intent?) {
@@ -131,6 +149,14 @@ class MainActivity : ComponentActivity() {
         ChatDeepLinkManager.setPendingChat(deepLinkId)
     }
 
+    private fun handleProfilePushDeepLinkIntent(intent: Intent?) {
+        if (intent?.action != ACTION_VIEW_PROFILE) return
+        val userId = intent.getStringExtra(EXTRA_PROFILE_USER_ID)?.trim().orEmpty()
+        if (userId.isNotEmpty()) {
+            ChatDeepLinkManager.setPendingProfile(userId)
+        }
+    }
+
     private fun handleEventPushDeepLinkIntent(intent: Intent?) {
         if (intent?.action != ACTION_VIEW_EVENT) return
         val beaconId = intent.getStringExtra(EXTRA_EVENT_BEACON_ID)?.trim().orEmpty()
@@ -162,10 +188,13 @@ class MainActivity : ComponentActivity() {
     companion object {
         const val ACTION_VIEW_CHAT = "compose.project.click.click.action.VIEW_CHAT" // pragma: allowlist secret
         const val ACTION_VIEW_EVENT = "compose.project.click.click.action.VIEW_EVENT" // pragma: allowlist secret
+        const val ACTION_VIEW_PROFILE = "compose.project.click.click.action.VIEW_PROFILE" // pragma: allowlist secret
+        const val ACTION_VIEW_CONNECTIONS = "compose.project.click.click.action.VIEW_CONNECTIONS" // pragma: allowlist secret
 
         private const val EXTRA_CHAT_ID = "extra_chat_id"
         private const val EXTRA_CHAT_CONNECTION_ID = "extra_chat_connection_id"
         private const val EXTRA_EVENT_BEACON_ID = "extra_event_beacon_id"
+        private const val EXTRA_PROFILE_USER_ID = "extra_profile_user_id"
 
         fun createChatDeepLinkIntent(
             context: Context,
@@ -177,6 +206,32 @@ class MainActivity : ComponentActivity() {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
                 putExtra(EXTRA_CHAT_ID, chatId)
                 putExtra(EXTRA_CHAT_CONNECTION_ID, connectionId)
+            }
+
+        fun createProfileDeepLinkIntent(
+            context: Context,
+            userId: String,
+        ): Intent =
+            Intent(context, MainActivity::class.java).apply {
+                action = ACTION_VIEW_PROFILE
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                putExtra(EXTRA_PROFILE_USER_ID, userId)
+            }
+
+        /** Same path as a `click://hub/{id}` link. */
+        fun createHubDeepLinkIntent(
+            context: Context,
+            hubId: String,
+        ): Intent =
+            Intent(Intent.ACTION_VIEW, Uri.parse("click://hub/$hubId"), context, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            }
+
+        /** Opens the Clicks list (availability matches, moments without a known person). */
+        fun createConnectionsIntent(context: Context): Intent =
+            Intent(context, MainActivity::class.java).apply {
+                action = ACTION_VIEW_CONNECTIONS
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
             }
 
         fun createEventDeepLinkIntent(

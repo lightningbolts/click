@@ -93,6 +93,8 @@ data class ConnectionTabsGetResponse(
     val media: List<ConnectionTabMessage> = emptyList(),
     val files: List<ConnectionTabMessage> = emptyList(),
     val beacons: List<ConnectionTabMessage> = emptyList(),
+    /** More attachments older than the oldest returned (paged requests only). */
+    val hasMore: Boolean = false,
 )
 
 @Serializable
@@ -122,34 +124,14 @@ internal data class AvatarUploadBodyDto(
 data class NotificationPreferencesPatchBody(
     @SerialName("message_push_enabled")
     val messagePushEnabled: Boolean,
-    @SerialName("call_push_enabled")
-    val callPushEnabled: Boolean,
     @SerialName("event_reminder_push_enabled")
     val eventReminderPushEnabled: Boolean = true,
     @SerialName("availability_match_push_enabled")
     val availabilityMatchPushEnabled: Boolean = true,
     @SerialName("hub_message_push_enabled")
     val hubMessagePushEnabled: Boolean = true,
-    @SerialName("event_teaser_push_enabled")
-    val eventTeaserPushEnabled: Boolean = true,
     @SerialName("reconnect_nudge_push_enabled")
     val reconnectNudgePushEnabled: Boolean = true,
-)
-
-@Serializable
-data class EventTeaserDto(
-    val id: String,
-    @SerialName("teaser_type") val teaserType: String,
-    val count: Int,
-    val label: String,
-    @SerialName("shared_tag") val sharedTag: String? = null,
-    val headline: String,
-    @SerialName("generated_at") val generatedAt: String? = null,
-)
-
-@Serializable
-data class EventTeaserResponseDto(
-    val teaser: EventTeaserDto? = null,
 )
 
 @Serializable
@@ -299,7 +281,7 @@ data class PushTokenRegisterResponse(
     val ok: Boolean,
 )
 
-/** GET `/api/users/[userId]/public-profile` — no JWT (App Clip / Instant preview). */
+/** GET `/api/users/[userId]/public-profile` — no JWT. */
 @Serializable
 data class PublicProfileUnauthenticatedResponse(
     @SerialName("display_name") val displayName: String,

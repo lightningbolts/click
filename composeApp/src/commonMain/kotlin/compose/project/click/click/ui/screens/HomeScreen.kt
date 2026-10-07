@@ -19,8 +19,10 @@ import compose.project.click.click.data.AppDataManager // pragma: allowlist secr
 import compose.project.click.click.data.api.CommunityHubNearbyDto // pragma: allowlist secret
 import compose.project.click.click.data.models.AvailabilityIntentRow // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
+import compose.project.click.click.data.models.NudgeAction
 import compose.project.click.click.data.models.isActiveForUser // pragma: allowlist secret
 import compose.project.click.click.data.models.mostUrgentArchiveNotice // pragma: allowlist secret
+import compose.project.click.click.notifications.ChatDeepLinkManager
 import compose.project.click.click.ui.components.ActivityRecapSection // pragma: allowlist secret
 import compose.project.click.click.ui.components.AppScreenScaffold // pragma: allowlist secret
 import compose.project.click.click.ui.components.AppShimmerScreen // pragma: allowlist secret
@@ -33,6 +35,7 @@ import compose.project.click.click.ui.components.FeaturedEventSection // pragma:
 import compose.project.click.click.ui.components.GlassCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.HomeGreetingSubtitle // pragma: allowlist secret
 import compose.project.click.click.ui.components.HomeSearchPill // pragma: allowlist secret
+import compose.project.click.click.ui.components.InboxNudgeBanner
 import compose.project.click.click.ui.components.PollPairCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.SavedEventsSection // pragma: allowlist secret
 import compose.project.click.click.ui.components.SectionHeader // pragma: allowlist secret
@@ -83,7 +86,8 @@ fun HomeScreen(
     val reconnectReminders by homeViewModel.reconnectReminders.collectAsState()
     val homeEventReminders by homeViewModel.homeEventReminders.collectAsState()
     val savedEventBookmarks by homeViewModel.savedEventBookmarks.collectAsState()
-    val activityRecap by homeViewModel.activityRecap.collectAsState()
+    val recapState by homeViewModel.recapState.collectAsState()
+    val homeNudge by homeViewModel.homeNudge.collectAsState()
     val recapWindow by homeViewModel.recapWindow.collectAsState()
     val connectionInsights by homeViewModel.connectionInsights.collectAsState()
     val showInsightsPanel by homeViewModel.showInsightsPanel.collectAsState()
@@ -292,6 +296,23 @@ fun HomeScreen(
                             HomeSearchPill(onClick = onOpenSearch)
                         }
                     }
+                    homeNudge?.let { nudge ->
+                        item(key = "home_opportunity_${nudge.id}") {
+                            InboxNudgeBanner(
+                                nudge = nudge,
+                                onOpen = {
+                                    when (val action = homeViewModel.actOnHomeNudge(nudge)) {
+                                        is NudgeAction.OpenChat -> onNavigateToChat(action.connectionId)
+                                        is NudgeAction.OpenGroupChat -> onNavigateToChat(action.chatId)
+                                        is NudgeAction.OpenEvent -> onNavigateToMap(action.beaconId)
+                                        is NudgeAction.OpenProfile -> ChatDeepLinkManager.setPendingProfile(action.userId)
+                                        else -> Unit
+                                    }
+                                },
+                                onDismiss = { homeViewModel.dismissHomeNudge(nudge) },
+                            )
+                        }
+                    }
                     featuredEvent?.let { reminder ->
                         item(key = "featured_event") {
                             FeaturedEventSection(
@@ -337,15 +358,14 @@ fun HomeScreen(
                         }
                     }
 
-                    activityRecap?.let { recap ->
-                        item(key = "activity_recap") {
-                            ActivityRecapSection( // pragma: allowlist secret
-                                recap = recap,
-                                window = recapWindow,
-                                onWindowChange = { homeViewModel.setRecapWindow(it) },
-                                onMakeFirstClick = onNavigateToAddClick,
-                            )
-                        }
+                    item(key = "activity_recap") {
+                        ActivityRecapSection( // pragma: allowlist secret
+                            state = recapState,
+                            window = recapWindow,
+                            onWindowChange = { homeViewModel.setRecapWindow(it) },
+                            onRetry = { homeViewModel.retryRecap() },
+                            onMakeFirstClick = onNavigateToAddClick,
+                        )
                     }
 
                     item(key = "saved_events") {

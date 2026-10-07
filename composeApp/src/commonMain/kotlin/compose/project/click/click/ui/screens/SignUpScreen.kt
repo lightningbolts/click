@@ -52,7 +52,6 @@ import compose.project.click.click.ui.components.formatBirthdayDigitsInput // pr
 import compose.project.click.click.ui.components.parseBirthdayIsoLocalDate // pragma: allowlist secret
 import compose.project.click.click.ui.components.utcMidnightMillisToBirthdayIso // pragma: allowlist secret
 import compose.project.click.click.ui.theme.* // pragma: allowlist secret
-import compose.project.click.click.ui.theme.LocalPlatformStyle // pragma: allowlist secret
 import compose.project.click.click.utils.toImageBitmap // pragma: allowlist secret
 import kotlinx.datetime.Clock
 import kotlinx.datetime.DateTimeUnit
@@ -564,7 +563,6 @@ fun SignUpScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            val signupStyle = LocalPlatformStyle.current
             Button(
                 onClick = {
                     focusManager.clearFocus()
@@ -584,21 +582,12 @@ fun SignUpScreen(
                     Modifier
                         .fillMaxWidth()
                         .height(56.dp),
-                shape = RoundedCornerShape(if (signupStyle.isIOS) 14.dp else 12.dp),
+                shape = RoundedCornerShape(12.dp),
                 colors =
                     ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.primary,
                     ),
-                elevation =
-                    if (signupStyle.isIOS) {
-                        ButtonDefaults.buttonElevation(
-                            0.dp,
-                            0.dp,
-                            0.dp,
-                        )
-                    } else {
-                        ButtonDefaults.buttonElevation()
-                    },
+                elevation = ButtonDefaults.buttonElevation(),
                 enabled = !isLoading && canSignUp,
             ) {
                 if (isLoading) {

@@ -7,9 +7,7 @@ import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import kotlin.math.max
 
-actual fun ByteArray.toImageBitmap(): ImageBitmap {
-    return BitmapFactory.decodeByteArray(this, 0, size).asImageBitmap()
-}
+actual fun ByteArray.toImageBitmap(): ImageBitmap = BitmapFactory.decodeByteArray(this, 0, size).asImageBitmap()
 
 actual fun ByteArray.toChatDisplayImageBitmap(maxEdgePx: Int): ImageBitmap {
     val edge = maxEdgePx.coerceAtLeast(64)
@@ -30,13 +28,23 @@ actual fun ImageBitmap.softBlurredForLockedDrop(): ImageBitmap {
     // /128 keeps cold-start and warm-cache appearance equally blocky (old soft paths looked too clear).
     val tw = (src.width / 128).coerceAtLeast(1)
     val th = (src.height / 128).coerceAtLeast(1)
-    val tiny = Bitmap.createScaledBitmap(src, tw, th, /* filter= */ false)
-    val up = Bitmap.createScaledBitmap(
-        tiny,
-        src.width.coerceAtLeast(1),
-        src.height.coerceAtLeast(1),
-        /* filter= */ false,
-    )
+    val tiny = Bitmap.createScaledBitmap(src, tw, th, false) // no filtering: hard pixels
+    val up =
+        Bitmap.createScaledBitmap(
+            tiny,
+            src.width.coerceAtLeast(1),
+            src.height.coerceAtLeast(1),
+            // filter=
+            false,
+        )
     if (tiny !== src && !tiny.isRecycled) tiny.recycle()
     return up.asImageBitmap()
 }
+
+actual fun ImageBitmap.toPngBytes(): ByteArray? =
+    runCatching {
+        java.io.ByteArrayOutputStream().use { out ->
+            asAndroidBitmap().compress(Bitmap.CompressFormat.PNG, 100, out)
+            out.toByteArray()
+        }
+    }.getOrNull()

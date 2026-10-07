@@ -35,24 +35,31 @@ internal sealed interface ChatTimelineEntry {
         override val key: String,
         val messageWithUser: MessageWithUser,
     ) : ChatTimelineEntry
+
+    /** "New messages" marker above the first message that was unread when the chat opened. */
+    data class UnreadDivider(
+        override val key: String,
+    ) : ChatTimelineEntry
 }
 
 /** LazyColumn [contentType] so keyboard resize reuses row nodes instead of remounting bubbles. */
-internal fun ChatTimelineEntry.timelineContentType(): Any = when (this) {
-    is ChatTimelineEntry.DaySeparator -> "day_separator"
-    is ChatTimelineEntry.MessageEntry -> {
-        val mt = messageWithUser.message.messageType?.takeIf { it.isNotBlank() } ?: ChatMessageType.TEXT
-        // Subtype keeps heavy attachment rows from recycling into text bubbles mid-fling
-        // (height mismatch = visible jump).
-        when (mt.lowercase()) {
-            ChatMessageType.IMAGE -> "image"
-            ChatMessageType.AUDIO -> "audio"
-            ChatMessageType.BEACON -> "beacon"
-            ChatMessageType.CALL_LOG -> "call_log"
-            else -> mt
+internal fun ChatTimelineEntry.timelineContentType(): Any =
+    when (this) {
+        is ChatTimelineEntry.DaySeparator -> "day_separator"
+        is ChatTimelineEntry.UnreadDivider -> "unread_divider"
+        is ChatTimelineEntry.MessageEntry -> {
+            val mt = messageWithUser.message.messageType?.takeIf { it.isNotBlank() } ?: ChatMessageType.TEXT
+            // Subtype keeps heavy attachment rows from recycling into text bubbles mid-fling
+            // (height mismatch = visible jump).
+            when (mt.lowercase()) {
+                ChatMessageType.IMAGE -> "image"
+                ChatMessageType.AUDIO -> "audio"
+                ChatMessageType.BEACON -> "beacon"
+                ChatMessageType.CALL_LOG -> "call_log"
+                else -> mt
+            }
         }
     }
-}
 
 /**
  * Classic oldest-first timeline with a day separator prepended whenever
@@ -71,19 +78,21 @@ internal fun buildChatTimelineEntries(messages: List<MessageWithUser>): List<Cha
     messages
         .sortedWith(compareBy({ it.message.timeCreated }, { it.message.id }))
         .forEach { messageWithUser ->
-        val dayKey = messageDayKey(messageWithUser.message.timeCreated)
-        if (dayKey != previousDayKey) {
-            timeline += ChatTimelineEntry.DaySeparator(
-                key = "separator-$dayKey-${messageWithUser.message.id}",
-                label = formatConversationDayLabel(messageWithUser.message.timeCreated),
-            )
-            previousDayKey = dayKey
+            val dayKey = messageDayKey(messageWithUser.message.timeCreated)
+            if (dayKey != previousDayKey) {
+                timeline +=
+                    ChatTimelineEntry.DaySeparator(
+                        key = "separator-$dayKey-${messageWithUser.message.id}",
+                        label = formatConversationDayLabel(messageWithUser.message.timeCreated),
+                    )
+                previousDayKey = dayKey
+            }
+            timeline +=
+                ChatTimelineEntry.MessageEntry(
+                    key = chatBubbleStableRowKey(messageWithUser),
+                    messageWithUser = messageWithUser,
+                )
         }
-        timeline += ChatTimelineEntry.MessageEntry(
-            key = chatBubbleStableRowKey(messageWithUser),
-            messageWithUser = messageWithUser,
-        )
-    }
     return ensureUniqueTimelineKeys(timeline)
 }
 
@@ -97,9 +106,10 @@ internal fun buildChatTimelineEntriesNewestFirst(messages: List<MessageWithUser>
     if (messages.isEmpty()) return emptyList()
     // Sort first — callers sometimes feed unsorted hot-cache / merge output.
     // Walking unsorted list order makes day separators oscillate (Apr 22 → Mar 6 → Apr 22).
-    val newestFirst = messages
-        .sortedWith(compareBy({ it.message.timeCreated }, { it.message.id }))
-        .asReversed()
+    val newestFirst =
+        messages
+            .sortedWith(compareBy({ it.message.timeCreated }, { it.message.id }))
+            .asReversed()
     val out = mutableListOf<ChatTimelineEntry>()
     var currentDayKey: String? = null
     var currentDayTimestamp = 0L
@@ -109,26 +119,29 @@ internal fun buildChatTimelineEntriesNewestFirst(messages: List<MessageWithUser>
         val dayKey = messageDayKey(messageWithUser.message.timeCreated)
         if (currentDayKey != null && dayKey != currentDayKey) {
             // Include a monotonic seq so residual day revisits cannot collide keys.
-            out += ChatTimelineEntry.DaySeparator(
-                key = "separator-nf-${separatorSeq++}-$currentDayKey",
-                label = formatConversationDayLabel(currentDayTimestamp),
-            )
+            out +=
+                ChatTimelineEntry.DaySeparator(
+                    key = "separator-nf-${separatorSeq++}-$currentDayKey",
+                    label = formatConversationDayLabel(currentDayTimestamp),
+                )
         }
         if (dayKey != currentDayKey) {
             currentDayTimestamp = messageWithUser.message.timeCreated
         }
-        out += ChatTimelineEntry.MessageEntry(
-            key = chatBubbleStableRowKey(messageWithUser),
-            messageWithUser = messageWithUser,
-        )
+        out +=
+            ChatTimelineEntry.MessageEntry(
+                key = chatBubbleStableRowKey(messageWithUser),
+                messageWithUser = messageWithUser,
+            )
         currentDayKey = dayKey
     }
 
     if (currentDayKey != null) {
-        out += ChatTimelineEntry.DaySeparator(
-            key = "separator-nf-tail-$currentDayKey",
-            label = formatConversationDayLabel(currentDayTimestamp),
-        )
+        out +=
+            ChatTimelineEntry.DaySeparator(
+                key = "separator-nf-tail-$currentDayKey",
+                label = formatConversationDayLabel(currentDayTimestamp),
+            )
     }
 
     return ensureUniqueTimelineKeys(out)
@@ -150,6 +163,7 @@ internal fun ensureUniqueTimelineKeys(entries: List<ChatTimelineEntry>): List<Ch
         }
         when (entry) {
             is ChatTimelineEntry.DaySeparator -> entry.copy(key = key)
+            is ChatTimelineEntry.UnreadDivider -> entry.copy(key = key)
             is ChatTimelineEntry.MessageEntry -> entry.copy(key = key)
         }
     }

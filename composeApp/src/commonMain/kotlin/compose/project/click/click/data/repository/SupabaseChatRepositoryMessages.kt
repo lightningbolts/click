@@ -63,6 +63,17 @@ internal suspend fun SupabaseChatRepository.fetchMessagesForChatImpl(
                         }.decodeList<Message>()
                 }
             }
+        // Opening a chat warms (or heals) the v2 session so its rows decrypt below instead of
+        // falling back to "New message" when nothing has cached a session for this chat yet.
+        if (!viewerUserId.isNullOrBlank() && rows.any { MessageCrypto.isV2Encrypted(it.content) }) {
+            var session = resolveE2eeV2ChatCryptoForRead(chatId, viewerUserId)
+            // Rows from epochs this device doesn't hold yet: another of the user's devices may have
+            // shared them since the session was cached (email-approved history), so re-fetch once.
+            val missingEpochs = missingV2Epochs(rows.map { it.content }, session?.epochKeys?.keys.orEmpty())
+            if (session != null && missingEpochs.isNotEmpty()) {
+                refreshE2eeV2SessionForSharedHistory(chatId, viewerUserId)?.let { session = it }
+            }
+        }
         val decrypted =
             withContext(Dispatchers.Default) {
                 rows.map { decryptMessageOnCurrentThread(it, crypto) }
@@ -160,7 +171,29 @@ internal suspend fun SupabaseChatRepository.subscribeToMessagesImpl(
                 }
             }
 
-    val merged = merge(messageFlow, reactionFlow)
+    val readCursorFlow =
+        channel
+            .postgresChangeFlow<PostgresAction>(schema = "public") {
+                table = "chat_read_cursors"
+            }.mapNotNull { action ->
+                val record =
+                    when (action) {
+                        is PostgresAction.Insert -> action.record
+                        is PostgresAction.Update -> action.record
+                        else -> null
+                    } ?: return@mapNotNull null
+
+                fun field(key: String) = record[key]?.toString()?.trim('"')
+                if (field("chat_id") != chatId) return@mapNotNull null
+                val userId = field("user_id") ?: return@mapNotNull null
+                val readThrough = field("read_through")?.toLongOrNull() ?: return@mapNotNull null
+                ChatRealtimeEvent.ReadCursorMoved(
+                    compose.project.click.click.data.models
+                        .ReadCursor(userId, readThrough),
+                )
+            }
+
+    val merged = merge(messageFlow, reactionFlow, readCursorFlow)
     return SupabaseMessageSubscription(channel) to merged
 }
 
@@ -312,25 +345,6 @@ internal suspend fun SupabaseChatRepository.fetchReactionsForChatImpl(
     } catch (e: Exception) {
         println("Error fetching reactions: ${e.redactedRestMessage()}")
         emptyList()
-    }
-}
-
-internal suspend fun SupabaseChatRepository.forwardMessageImpl(
-    messageId: String,
-    targetChatId: String,
-    userId: String,
-): Message? {
-    return try {
-        val authToken = ensureFreshJwtForChat() ?: return null
-        apiClient
-            .forwardMessage(messageId, targetChatId, userId, authToken)
-            .recoverCatching {
-                val retried = refreshedJwtAfterAuthFailure() ?: throw it
-                apiClient.forwardMessage(messageId, targetChatId, userId, retried).getOrThrow()
-            }.getOrElse { null }
-    } catch (e: Exception) {
-        println("Error forwarding message: ${e.redactedRestMessage()}")
-        null
     }
 }
 

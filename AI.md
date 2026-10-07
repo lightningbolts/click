@@ -7,8 +7,8 @@ This file is **authoritative guidance** for future developers and AI assistants 
 ## 1. Kotlin Multiplatform architecture 
 
 - **Default location for logic:** `click/composeApp/src/commonMain/kotlin/...`.
-- **Use `expect` / `actual` (or small platform-specific facades)** only when you must call **native APIs** or SDKs that are not available in common code—examples in this repo: **NFC**, secure **Keychain** / **EncryptedSharedPreferences**, location services, and crypto primitives (`PlatformCrypto`).
-- **Do not** duplicate business rules across `androidMain` and `iosMain` if they can live in `commonMain` behind a narrow interface.
+- **Use `expect` / `actual` (or small platform-specific facades)** only when you must call **native APIs** or SDKs that are not available in common code—examples in this repo: **NFC**, secure **EncryptedSharedPreferences**, location services, and crypto primitives (`PlatformCrypto`).
+- **Do not** put business rules in `androidMain` if they can live in `commonMain` behind a narrow interface.
 
 ---
 
@@ -21,11 +21,10 @@ This file is **authoritative guidance** for future developers and AI assistants 
 
 ---
 
-## 3. Push notifications (iOS vs Android)
+## 3. Push notifications
 
-- **iOS:** standard APNs alerts through the Supabase Edge Function **`send-push-notification`**. Do **not** add VoIP / PushKit / CallKit — voice and video calls were removed from mobile.
-- **Android:** FCM via service account JSON configured as a Supabase secret.
-- `incoming_call` push payloads are rejected by the edge function and ignored by both clients.
+- **Android:** FCM through the Supabase Edge Function **`send-push-notification`**, using a service account JSON configured as a Supabase secret. Voice and video calls were removed from mobile — do not re-add call pushes.
+- `incoming_call` push payloads are rejected by the edge function and ignored by the client.
 
 ---
 
@@ -51,6 +50,6 @@ This file is **authoritative guidance** for future developers and AI assistants 
 
 - **Match existing style** in the touched file: package names, coroutine usage, and repository patterns.
 - **Prefer small, focused diffs**—do not refactor unrelated modules when fixing a bug.
-- **Verify platform behavior** on both Android and iOS when changing shared push or connection flows.
+- **Verify behavior on an Android device or emulator** when changing push or connection flows.
 
 When in doubt, read the referenced files before proposing changes.

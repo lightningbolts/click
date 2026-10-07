@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.WavingHand
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Message
 import androidx.compose.material.icons.outlined.NotificationsActive
@@ -170,6 +171,7 @@ internal fun ProfileActionGrid(
     onMessage: () -> Unit,
     onNudge: () -> Unit,
     onOpenDisposableRoll: (() -> Unit)?,
+    nudgeLabel: String = "Nudge",
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -199,12 +201,12 @@ internal fun ProfileActionGrid(
                         variant = ClickButtonVariant.Secondary,
                     ) {
                         Icon(
-                            imageVector = Icons.Outlined.NotificationsActive,
+                            imageVector = if (nudgeLabel == "Wave") Icons.Filled.WavingHand else Icons.Outlined.NotificationsActive,
                             contentDescription = null,
                             modifier = Modifier.size(18.dp),
                         )
                         Spacer(Modifier.width(6.dp))
-                        Text("Nudge")
+                        Text(nudgeLabel)
                     }
                 }
                 if (showDisposableRoll && onOpenDisposableRoll != null) {
@@ -263,8 +265,8 @@ internal fun TimelinePanel(
             Modifier
                 .fillMaxWidth()
                 .fillMaxSize()
-                // Always Compose-scroll inside the pager page (UIKit host sheetBodyScroll is a
-                // no-op; fillMaxSize + verticalScroll keeps tabs scrollable and Metal-safe).
+                // Always Compose-scroll inside the pager page (fillMaxSize + verticalScroll keeps
+                // tabs scrollable).
                 .verticalScroll(scrollState)
                 .padding(top = 12.dp, bottom = 48.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),

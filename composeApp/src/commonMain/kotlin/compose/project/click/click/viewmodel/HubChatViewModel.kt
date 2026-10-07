@@ -21,7 +21,6 @@ import compose.project.click.click.data.models.hasLocalMediaUri // pragma: allow
 import compose.project.click.click.data.models.hubMediaPathOrNull // pragma: allowlist secret
 import compose.project.click.click.data.models.isEncryptedMedia // pragma: allowlist secret
 import compose.project.click.click.data.models.mediaUrlOrNull // pragma: allowlist secret
-import compose.project.click.click.data.models.replySnippetForMetadata // pragma: allowlist secret
 import compose.project.click.click.data.realtime.subscribeWithTimeout // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.normalizeEncryptedMediaPayload // pragma: allowlist secret
@@ -181,6 +180,14 @@ class HubChatViewModel(
     internal var participantDenied: Boolean = false
     internal var hubE2eeV2Session: HubE2eeV2Session? = null
     internal var hubParticipantIds: Set<String> = emptySet()
+
+    /** Visible hub members (Hub Info); empty when the server hides sender profiles. */
+    internal val _participantIds = MutableStateFlow<List<String>>(emptyList())
+    val participantIds: StateFlow<List<String>> = _participantIds.asStateFlow()
+
+    /** Cached display name for a hub member, when their profile is visible. */
+    fun participantName(userId: String): String? = senderUiCache[userId]?.first?.takeIf { it.isNotBlank() }
+
     internal var hubSenderProfilesVisible: Boolean = false
     internal val reactionHydrationMutex = Mutex()
     internal val queuedReactionEvents = mutableListOf<HubReactionRealtimeEvent>()
@@ -381,7 +388,6 @@ class HubChatViewModel(
             replyTarget?.let { target ->
                 buildJsonObject {
                     put("reply_to_id", target.message.id)
-                    put("reply_to_content", replySnippetForMetadata(target.message.content))
                 }
             }
 
@@ -528,7 +534,6 @@ class HubChatViewModel(
                         buildJsonObject {
                             replyTarget?.let { target ->
                                 put("reply_to_id", target.message.id)
-                                put("reply_to_content", replySnippetForMetadata(target.message.content))
                             }
                             put("media_path", JsonPrimitive(path))
                             put("media_bucket", JsonPrimitive("hub-media"))
@@ -635,7 +640,6 @@ class HubChatViewModel(
                         buildJsonObject {
                             replyTarget?.let { target ->
                                 put("reply_to_id", target.message.id)
-                                put("reply_to_content", replySnippetForMetadata(target.message.content))
                             }
                             put("media_path", JsonPrimitive(path))
                             put("media_bucket", JsonPrimitive("hub-media"))

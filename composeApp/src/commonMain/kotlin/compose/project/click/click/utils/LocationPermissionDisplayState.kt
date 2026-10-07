@@ -5,9 +5,11 @@ package compose.project.click.click.utils
  */
 enum class LocationPermissionDisplayState {
     Granted,
-    /** iOS: not determined yet. Android: not granted (tap Allow to prompt). */
+
+    /** Not granted (tap Allow to prompt). */
     NotSet,
-    /** iOS: denied or restricted. User must open system settings. */
+
+    /** Denied or restricted. User must open system settings. */
     Denied,
 }
 
