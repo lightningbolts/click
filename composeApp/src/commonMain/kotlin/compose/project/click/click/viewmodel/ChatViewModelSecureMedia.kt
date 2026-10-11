@@ -12,6 +12,7 @@ import compose.project.click.click.data.models.MessageWithUser // pragma: allowl
 import compose.project.click.click.data.models.audioCacheFileExtension // pragma: allowlist secret
 import compose.project.click.click.data.models.hasLocalMediaUri // pragma: allowlist secret
 import compose.project.click.click.data.models.isEncryptedMedia // pragma: allowlist secret
+import compose.project.click.click.data.models.isGatedDrop // pragma: allowlist secret
 import compose.project.click.click.data.models.mediaUrlOrNull // pragma: allowlist secret
 import compose.project.click.click.ui.chat.deleteSecureChatAudioTempFile // pragma: allowlist secret
 import compose.project.click.click.ui.chat.secureChatImageBitmapCache // pragma: allowlist secret
@@ -131,6 +132,7 @@ internal fun ChatViewModel.resolveVaultedAudioLocalPath(
 internal suspend fun ChatViewModel.warmSecureMediaForTimeline(messages: List<MessageWithUser>) {
     hydrateSecureMediaStateFromByteCache(messages)
     hydrateSecureMediaFromDiskVault(messages)
+    clickDrops.refresh(messages.map { it.message })
 }
 
 internal fun ChatViewModel.cacheAndPublishSecureAudio(
@@ -167,6 +169,8 @@ internal fun ChatViewModel.cacheSecureAudioOnDisk(
 }
 
 internal suspend fun ChatViewModel.fetchDecryptedChatMediaBytesImpl(message: Message): ByteArray? {
+    // A gated drop's media is only its preview: save, share and forward get the developed original.
+    if (message.isGatedDrop()) return loadDevelopedDropOriginal(message)
     secureImageBytesCache.get(message.id)?.takeIf { it.isNotEmpty() }?.let { return it }
     readChatMediaVaultBytesForMessage(
         messageId = message.id,

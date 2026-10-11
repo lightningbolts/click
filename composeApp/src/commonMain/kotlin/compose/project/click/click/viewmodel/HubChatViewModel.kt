@@ -4,7 +4,7 @@ package compose.project.click.click.viewmodel // pragma: allowlist secret
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import compose.project.click.click.collaboration.computeClickDropRevealTtlIso // pragma: allowlist secret
+import compose.project.click.click.collaboration.chatClickDropRevealAtIso // pragma: allowlist secret
 import compose.project.click.click.crypto.MessageCrypto // pragma: allowlist secret
 import compose.project.click.click.crypto.MessageCryptoV2 // pragma: allowlist secret
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
@@ -647,7 +647,7 @@ class HubChatViewModel(
                                         )
                                     },
                             ).getOrElse { e -> throw e }
-                    val revealTtlIso = computeClickDropRevealTtlIso()
+                    val revealTtlIso = chatClickDropRevealAtIso()
                     val metadata: JsonObject =
                         buildJsonObject {
                             replyTarget?.let { target ->

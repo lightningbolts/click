@@ -881,6 +881,24 @@ class SupabaseChatRepository(
         contentType: String,
     ): String? = uploadChatMediaImpl(bytes = bytes, objectPath = objectPath, contentType = contentType)
 
+    override suspend fun uploadClickDropOriginal(
+        plainBytes: ByteArray,
+        chatId: String,
+        senderUserId: String,
+        mimeType: String,
+        previewClientMessageId: String?,
+    ): ClickDropOriginalUpload? = uploadClickDropOriginalImpl(plainBytes, chatId, senderUserId, mimeType, previewClientMessageId)
+
+    override suspend fun loadClickDropOriginal(
+        chatId: String,
+        viewerUserId: String,
+        message: Message,
+        signedUrl: String,
+    ): ByteArray? = loadClickDropOriginalImpl(chatId, viewerUserId, message, signedUrl)
+
+    override fun uploadedMediaClientMessageId(reference: String): String? =
+        e2eeV2MediaRecordForReference(reference)?.metadata?.clientMessageId
+
     override suspend fun uploadEncryptedBlob(
         bucketName: String,
         chatId: String,

@@ -247,6 +247,8 @@ internal data class ChatMediaUploadJsonBody(
     val epoch: Int? = null,
     @SerialName("sender_device_id") val senderDeviceId: String? = null,
     @SerialName("client_message_id") val clientMessageId: String? = null,
+    /** A gated Click Drop's original: stored privately, response `url: null` (flag `drops_develop`). */
+    @SerialName("drop_original") val dropOriginal: Boolean? = null,
 )
 
 @Serializable

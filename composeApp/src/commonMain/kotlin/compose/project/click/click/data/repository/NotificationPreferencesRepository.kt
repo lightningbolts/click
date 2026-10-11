@@ -14,6 +14,8 @@ data class NotificationPreferences(
     val availabilityMatchPushEnabled: Boolean = true,
     val hubMessagePushEnabled: Boolean = true,
     val reconnectNudgePushEnabled: Boolean = true,
+    /** Shared-drop release pushes (`shared_drop_released`, sheet 07 G2-7). */
+    val dropReleasePushEnabled: Boolean = true,
 )
 
 class NotificationPreferencesRepository {
@@ -33,6 +35,7 @@ class NotificationPreferencesRepository {
                                 "availability_match_push_enabled",
                                 "hub_message_push_enabled",
                                 "reconnect_nudge_push_enabled",
+                                "drop_release_push_enabled",
                             ),
                     ) {
                         filter {
@@ -61,6 +64,7 @@ class NotificationPreferencesRepository {
                     availabilityMatchPushEnabled = preferences.availabilityMatchPushEnabled,
                     hubMessagePushEnabled = preferences.hubMessagePushEnabled,
                     reconnectNudgePushEnabled = preferences.reconnectNudgePushEnabled,
+                    dropReleasePushEnabled = preferences.dropReleasePushEnabled,
                 ),
             ).map { }
             .onFailure { error ->
@@ -80,6 +84,8 @@ class NotificationPreferencesRepository {
         val hubMessagePushEnabled: Boolean = true,
         @SerialName("reconnect_nudge_push_enabled")
         val reconnectNudgePushEnabled: Boolean = true,
+        @SerialName("drop_release_push_enabled")
+        val dropReleasePushEnabled: Boolean = true,
     ) {
         fun toNotificationPreferences(): NotificationPreferences =
             NotificationPreferences(
@@ -88,6 +94,7 @@ class NotificationPreferencesRepository {
                 availabilityMatchPushEnabled = availabilityMatchPushEnabled,
                 hubMessagePushEnabled = hubMessagePushEnabled,
                 reconnectNudgePushEnabled = reconnectNudgePushEnabled,
+                dropReleasePushEnabled = dropReleasePushEnabled,
             )
     }
 }

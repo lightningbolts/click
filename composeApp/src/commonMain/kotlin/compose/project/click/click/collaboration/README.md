@@ -45,10 +45,29 @@ Disposable Roll photos are messages with metadata:
 }
 ```
 
-**Client TTL computation** (`ClickDropReveal.kt`):
+**Reveal time** (`ClickDropDevelop.kt`):
 
-- `computeClickDropRevealTtlIso()` — **24 hours** after send (`now + 24h`)
-- `clickDropRevealDelayMs()` — millis until reveal for UI countdown
+- `chatClickDropRevealAtIso()` stamps `collaboration_ttl` on a new chat drop: **24 hours** after send (`CHAT_DROP_REVEAL_HOURS`)
+- Shared drops develop `SHARED_DROP_DEVELOP_HOURS` after posting; the server stamps `reveal_at`
+
+### Click Drop develop state
+
+`ClickDropDevelopState` (`ClickDropDevelop.kt`) is the shared state machine for chat, event and shared drops. It mirrors click-web `lib/drops/developState.ts` and iOS `ClickDropDevelopState`:
+
+| State | When | UI |
+|-------|------|----|
+| `Pending(revealAt)` | before reveal, or reveal time unknown | pixelated, countdown visible |
+| `Ready` | reveal passed, this viewer hasn't developed it | pixelated, quiet (no badge); tap to develop |
+| `Developed` | the viewer tapped, or was watching when the timer hit zero | full photo; permanent per viewer |
+
+`ClickDropDevelopState.resolve(revealAt, developedAt, now)` picks the state. Developed state is per viewer and server-side:
+
+- `POST /api/drops/develop` (≤50 refs) → `{ drops: [{ kind, id, status, developed_at?, url? }] }`, parsed by `parseClickDropDevelopResults()`. `url` is a short-lived signed URL for a gated original.
+- `GET /api/drops/views?kind&ids` (≤100 ids) → `{ developed: { id: developed_at } }`, parsed by `parseClickDropViews()`.
+
+`ClickDropDevelopController` drives a chat timeline: it loads developed state, handles tap to develop and "Develop all", develops drops that reveal while visible, and caches signed original URLs. **Gated drops** (`Message.isGatedDrop()`: the message media is only a ≤480 px preview pixelated at 12 blocks a side, the E2EE original is uploaded separately with `drop_original`) always use it. **Legacy drops** use it only when the `drops_develop` flag is on; otherwise they unlock by themselves once `collaboration_ttl` passes (`Message.isDisposableRollLocked()`).
+
+`ClickDropPixelation` holds the preview sizing and block math shared by the sender and every drop bubble; `SharedDrops.kt` holds the shared-drop models (flag `shared_drops`; audience `all` or `core`).
 
 Server `collaboration_sessions.collaboration_ttl` is set at bump time by `bind-proximity-connection` (typically aligned with the disposable window).
 
@@ -94,7 +113,7 @@ Hourly pg_cron invokes `cron-hourly-maintenance` Edge Function:
 
 Also runs: event beacon day-of / one-hour reminders, expired availability intent friction logging.
 
-**Client handling:** `App.kt` observes disposable reveal pushes → navigates to chat → message unblurs in timeline.
+**Client handling:** `App.kt` observes disposable reveal pushes → navigates to chat → the drop shows as `Ready` until the viewer develops it.
 
 ### End-to-end flow
 
@@ -125,7 +144,7 @@ CollaborationSessionManager.activate()
 
 - **In-memory sessions** — `CollaborationSessionManager` resets on process death; re-hydrate from server on next bump or chat open.
 - **Participant-only RLS** — users cannot read sessions they don't belong to.
-- **Reveal is server-driven** — client does not unblur until cron confirms TTL + message exists.
+- **Develop is per viewer** — a drop stays pixelated after reveal until this viewer develops it (`Ready` → `Developed`); the reveal push only announces that drops are ready.
 - **One notification per session** — `notification_sent` prevents duplicate reveal pushes.
 - **Map drop window** — 15 minutes from `createdAtEpochMs`, independent of 24h reveal TTL.
 - **Group support** — `chat_id` column added in `20260628163100_collaboration_sessions_chat_id.sql` for verified cliques.
@@ -137,7 +156,11 @@ CollaborationSessionManager.activate()
 | File | Role |
 |------|------|
 | `collaboration/CollaborationSessionManager.kt` | In-memory session store |
-| `collaboration/ClickDropReveal.kt` | 24h TTL helpers |
+| `collaboration/ClickDropDevelop.kt` | Develop state machine, reveal times, develop/views parsers |
+| `collaboration/ClickDropDevelopController.kt` | Per-timeline develop flow (tap, Develop all, live develop) |
+| `collaboration/ClickDropPixelation.kt` | Preview size and pixelation grid |
+| `collaboration/SharedDrops.kt` | Shared drop models (`shared_drops`) |
+| `data/api/DropsApi.kt` | `POST /api/drops/develop`, `GET /api/drops/views` |
 | `ui/camera/DisposableCameraView.kt` | Roll capture UI |
 | `ui/components/ConnectionRevealOverlay.kt` | Reveal animation |
 | `viewmodel/ConnectionViewModel.kt` | Activates session on re-bump |

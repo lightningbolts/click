@@ -97,6 +97,8 @@ data class ProfileSheetMedia(
     val durationSeconds: Int? = null,
     val isDisposableRoll: Boolean = false,
     val collaborationTtlIso: String? = null,
+    /** `metadata.drop_gated`: the media is only the drop's preview. */
+    val isGatedDrop: Boolean = false,
 )
 
 enum class ProfileSheetMediaType {

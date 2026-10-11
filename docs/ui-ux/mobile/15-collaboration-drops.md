@@ -1,7 +1,7 @@
 # 15 — Collaboration Drops (Click Drops / Disposable Roll)
 
 **Scope:** `DisposableCameraChrome`, `DisposableRollCapturedPreview`, `DisposableCameraView` (Android/iOS), filter pipeline, locked roll in chat, profile/chat entry points, send pipeline.  
-**Source:** `ui/camera/DisposableCameraShared.kt`, `ui/camera/DisposableRollCapturedPreview.kt`, `ui/camera/DisposableRollFilters.kt`, `ui/camera/DisposableCameraView.kt`, `ui/chat/ChatPhotoBubble.kt`, `ui/chat/ConnectionChatMessageComposer.kt`, `ui/components/ProfileBottomSheet.kt`, `App.kt`, `viewmodel/ChatViewModel.kt`, `collaboration/ClickDropReveal.kt`  
+**Source:** `ui/camera/DisposableCameraShared.kt`, `ui/camera/DisposableRollCapturedPreview.kt`, `ui/camera/DisposableRollFilters.kt`, `ui/camera/DisposableCameraView.kt`, `ui/chat/ChatPhotoBubble.kt`, `ui/chat/ConnectionChatMessageComposer.kt`, `ui/components/ProfileBottomSheet.kt`, `App.kt`, `viewmodel/ChatViewModel.kt`, `collaboration/ClickDropDevelop.kt`  
 **Out of scope:** Web, backend collaboration APIs, redesign proposals.
 
 **Visual system:** Functional Clarity (neo-brutalist) — opaque surfaces, 2px `#000` borders, primary `#630ed4`, no glass/blur/gradients. Design-asset mock: invented from design system.
@@ -216,7 +216,7 @@ Row: horizontal padding 36dp, `SpaceBetween`.
 |-------|-----|
 | Locked | `metadata.disposable_roll == true` AND `now < collaboration_ttl` |
 | Missing/unparseable TTL | Treated as **locked** |
-| Reveal TTL | 24 hours after send (`computeClickDropRevealTtlIso()`) |
+| Reveal TTL | 24 hours after send (`chatClickDropRevealAtIso()`) |
 | Unlocked | Full image; tap expands to `ChatExpandedPhotoPreview` |
 | Profile Media tab | Blur + countdown; click disabled when locked |
 

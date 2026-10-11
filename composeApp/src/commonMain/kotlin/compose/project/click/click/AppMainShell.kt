@@ -364,6 +364,13 @@ internal fun AppMainShell(
         navigateTo(NavigationItem.Connections.route)
     }
 
+    // Shared-drop release pushes open the story from Home's strip.
+    val deepLinkSharedDropId by ChatDeepLinkManager.pendingSharedDropId.collectAsState()
+    LaunchedEffect(deepLinkSharedDropId, currentUser.id) {
+        if (deepLinkSharedDropId.isNullOrBlank() || currentUser.id.isBlank()) return@LaunchedEffect
+        navigateTo(NavigationItem.Home.route)
+    }
+
     val pendingCommunityHubId by ChatDeepLinkManager.pendingCommunityHubId.collectAsState()
 
     val pendingConnectionUserId by ConnectionDeepLinkRouter.pendingConnectionUserId.collectAsState()
