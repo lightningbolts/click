@@ -1,5 +1,7 @@
 package compose.project.click.click.collaboration
 
+import compose.project.click.click.core.FeatureFlags
+import compose.project.click.click.core.FeatureFlagsState
 import kotlinx.datetime.Clock
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.Instant
@@ -20,11 +22,10 @@ object ClickDropFlags {
 const val CHAT_DROP_REVEAL_HOURS = 24
 
 /**
- * Shared drops develop `develop_hours` after posting. The server stamps `reveal_at`, so clients only
- * need this for copy before the first response.
- * TODO(G1-1): read `shared_drops.config.develop_hours` from the FeatureFlags config store.
+ * Shared drops develop `shared_drops.config.develop_hours` after posting (1 when the flags haven't
+ * loaded: the server seed). The server stamps `reveal_at`, so clients only need this for copy.
  */
-const val SHARED_DROP_DEVELOP_HOURS = 1
+fun sharedDropDevelopHours(flags: FeatureFlagsState = FeatureFlags.state.value): Int = flags.sharedDrops.developHours
 
 /** Reveal time stamped on a new chat drop (`collaboration_ttl`). */
 fun chatClickDropRevealAtIso(now: Instant = Clock.System.now()): String = now.plus(CHAT_DROP_REVEAL_HOURS, DateTimeUnit.HOUR).toString()

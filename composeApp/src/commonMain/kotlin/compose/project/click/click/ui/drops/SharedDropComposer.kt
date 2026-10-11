@@ -27,6 +27,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -41,7 +42,8 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import compose.project.click.click.collaboration.SHARED_DROP_DEVELOP_HOURS
+import compose.project.click.click.collaboration.sharedDropDevelopHours
+import compose.project.click.click.core.FeatureFlags
 import compose.project.click.click.collaboration.SharedDrop
 import compose.project.click.click.collaboration.SharedDropAudience
 import compose.project.click.click.collaboration.graphemeCount
@@ -53,7 +55,7 @@ import compose.project.click.click.ui.camera.DisposableCameraView
  * caption (≤100 characters as people count them), the audience (All / Core) and the not-E2EE note.
  */
 
-internal fun sharedDropDisclosure(developHours: Int = SHARED_DROP_DEVELOP_HOURS): String {
+internal fun sharedDropDisclosure(developHours: Int = sharedDropDevelopHours()): String {
     val time = if (developHours == 1) "an hour" else "$developHours hours"
     return "It develops for them in $time, like a story. Shared drops aren't end-to-end encrypted like chats: " +
         "only the people you pick can see them, and you can delete it anytime."
@@ -92,6 +94,7 @@ private fun SharedDropAudienceSheet(
 ) {
     var audience by remember { mutableStateOf(SharedDropAudience.ALL) }
     var caption by remember { mutableStateOf("") }
+    val flags by FeatureFlags.state.collectAsState()
     val photo = rememberDecodedBitmap(jpeg, 1200)
     Column(
         Modifier
@@ -147,6 +150,6 @@ private fun SharedDropAudienceSheet(
                 Text(label, modifier = Modifier.padding(start = 8.dp))
             }
         }
-        Text(sharedDropDisclosure(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(sharedDropDisclosure(sharedDropDevelopHours(flags)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

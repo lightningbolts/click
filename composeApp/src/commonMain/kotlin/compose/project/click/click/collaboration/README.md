@@ -48,7 +48,7 @@ Disposable Roll photos are messages with metadata:
 **Reveal time** (`ClickDropDevelop.kt`):
 
 - `chatClickDropRevealAtIso()` stamps `collaboration_ttl` on a new chat drop: **24 hours** after send (`CHAT_DROP_REVEAL_HOURS`)
-- Shared drops develop `SHARED_DROP_DEVELOP_HOURS` after posting; the server stamps `reveal_at`
+- Shared drops develop `sharedDropDevelopHours()` after posting (FeatureFlags `shared_drops.config.develop_hours`, default 1); the server stamps `reveal_at`
 
 ### Click Drop develop state
 
