@@ -838,7 +838,9 @@ class ChatApiClient(
         mimeType: String,
         authToken: String,
         v2: E2eeV2MediaUploadRequest? = null,
-    ): Result<UploadedMedia> = uploadMediaImpl(fileBytes = fileBytes, chatId = chatId, mimeType = mimeType, authToken = authToken, v2 = v2)
+        dropOriginal: Boolean = false,
+    ): Result<UploadedMedia> =
+        uploadMediaImpl(fileBytes = fileBytes, chatId = chatId, mimeType = mimeType, authToken = authToken, v2 = v2, dropOriginal = dropOriginal)
 
     suspend fun uploadAttachment(
         fileBytes: ByteArray,

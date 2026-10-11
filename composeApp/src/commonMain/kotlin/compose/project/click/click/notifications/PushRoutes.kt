@@ -24,6 +24,11 @@ sealed interface PushRoute {
         val userId: String,
     ) : PushRoute
 
+    /** A released shared Click Drop: Home opens that drop's story (sheet 07 G2-7). */
+    data class SharedDrop(
+        val dropId: String,
+    ) : PushRoute
+
     /** The Clicks list (unknown identity, availability matches). */
     data object Connections : PushRoute
 
@@ -35,7 +40,14 @@ sealed interface PushRoute {
 object PushRoutes {
     /** Types shown with server-written title/body rather than the chat-message path. */
     val serverTextTypes: Set<String> =
-        setOf("event_reminder", "shared_upcoming_event", "reconnect_nudge", "archive_warning", "availability_match")
+        setOf(
+            "event_reminder",
+            "shared_upcoming_event",
+            "reconnect_nudge",
+            "archive_warning",
+            "availability_match",
+            "shared_drop_released",
+        )
 
     fun route(data: Map<String, String>): PushRoute {
         fun value(vararg keys: String): String? = keys.firstNotNullOfOrNull { key -> data[key]?.trim()?.takeIf { it.isNotEmpty() } }
@@ -61,6 +73,8 @@ object PushRoutes {
             "wave" -> connectionId?.let { PushRoute.DirectChat("", it) } ?: directChatOr(PushRoute.Connections)
             "group_revival" -> chatId?.let { PushRoute.GroupChat(it) } ?: PushRoute.Connections
             "availability_match" -> PushRoute.Connections
+            // `{drop_id, poster_id, drop_count}`: one push per poster's batch.
+            "shared_drop_released" -> value("drop_id")?.let { PushRoute.SharedDrop(it) } ?: PushRoute.OpenApp
             else -> PushRoute.OpenApp
         }
     }

@@ -7,6 +7,8 @@
 
 package compose.project.click.click.ui.screens // pragma: allowlist secret
 
+import compose.project.click.click.collaboration.ClickDropFlags
+import compose.project.click.click.core.FeatureFlagGate
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -786,6 +788,20 @@ fun SettingsScreen(
                                                 setAlert("moments") { AppDataManager.setReconnectNudgeNotificationsEnabled(on) }
                                             },
                                         )
+                                        if (FeatureFlagGate.isEnabled(ClickDropFlags.SHARED_DROPS)) {
+                                            SettingsDivider()
+                                            SettingsToggleRow(
+                                                icon = Icons.Default.Notifications,
+                                                title = "Click Drops",
+                                                subtitle = "When a connection's shared drop is ready to develop",
+                                                checked = notificationPreferences.dropReleasePushEnabled,
+                                                enabled = !notificationPreferencesSaving,
+                                                pending = pendingAlertKey == "drops",
+                                                onCheckedChange = { on ->
+                                                    setAlert("drops") { AppDataManager.setDropReleaseNotificationsEnabled(on) }
+                                                },
+                                            )
+                                        }
                                         SettingsDivider()
                                         SettingsToggleRow(
                                             icon = Icons.Default.EventAvailable,

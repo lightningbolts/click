@@ -107,7 +107,7 @@ class ClickFirebaseMessagingService : FirebaseMessagingService() {
             val body = message.data["body"] ?: message.notification?.body ?: "Open Click"
             val launchIntent = launchIntentFor(PushRoutes.route(message.data)) ?: return
             val tag =
-                listOf("beacon_id", "connection_id", "peer_user_id")
+                listOf("beacon_id", "connection_id", "peer_user_id", "poster_id")
                     .firstNotNullOfOrNull { key -> message.data[key]?.takeIf { it.isNotBlank() } }
                     ?: type
             showSimplePush(tag = "$type:$tag", title = title, body = body, launchIntent = launchIntent)
@@ -259,6 +259,7 @@ class ClickFirebaseMessagingService : FirebaseMessagingService() {
             is PushRoute.Event -> MainActivity.createEventDeepLinkIntent(this, route.beaconId)
             is PushRoute.Hub -> MainActivity.createHubDeepLinkIntent(this, route.hubId)
             is PushRoute.Profile -> MainActivity.createProfileDeepLinkIntent(this, route.userId)
+            is PushRoute.SharedDrop -> MainActivity.createSharedDropDeepLinkIntent(this, route.dropId)
             PushRoute.Connections -> MainActivity.createConnectionsIntent(this)
             PushRoute.OpenApp ->
                 packageManager.getLaunchIntentForPackage(packageName)?.apply {

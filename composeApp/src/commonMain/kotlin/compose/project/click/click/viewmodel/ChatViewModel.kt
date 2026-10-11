@@ -268,6 +268,16 @@ class ChatViewModel(
     internal val secureAudioPathCache =
         LruMemoryCache<String, String>(SECURE_CHAT_AUDIO_CACHE_MAX_ENTRIES)
 
+    /** Click Drop develop flow for the open timeline (gated drops always, legacy ones with `drops_develop`). */
+    val clickDrops =
+        compose.project.click.click.collaboration
+            .ClickDropDevelopController(compose.project.click.click.data.api.DropsApi())
+
+    /** Decrypted originals of developed gated drops (cached on disk as `<messageId>-original`). */
+    internal val _dropOriginalBytes = MutableStateFlow<Map<String, ByteArray>>(emptyMap())
+    val dropOriginalBytes: StateFlow<Map<String, ByteArray>> = _dropOriginalBytes.asStateFlow()
+    internal val dropOriginalLoads = mutableSetOf<String>()
+
     internal var currentConnectionId: String? = null
     internal var currentApiChatId: String? = null
     internal var activeMessageSubscription: ChatMessageSubscription? = null

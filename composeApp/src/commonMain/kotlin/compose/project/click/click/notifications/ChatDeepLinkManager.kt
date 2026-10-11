@@ -42,6 +42,21 @@ object ChatDeepLinkManager {
         return value
     }
 
+    private val _pendingSharedDropId = MutableStateFlow<String?>(null)
+
+    /** Shared drop whose story to open on Home (`shared_drop_released` push). */
+    val pendingSharedDropId: StateFlow<String?> = _pendingSharedDropId.asStateFlow()
+
+    fun setPendingSharedDrop(dropId: String) {
+        dropId.trim().takeIf { it.isNotEmpty() }?.let { _pendingSharedDropId.value = it }
+    }
+
+    fun consumeSharedDrop(): String? {
+        val value = _pendingSharedDropId.value
+        _pendingSharedDropId.value = null
+        return value
+    }
+
     fun setPendingChat(connectionId: String) {
         _pendingConnectionId.value = connectionId
     }

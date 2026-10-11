@@ -227,6 +227,11 @@ fun ChatView(
         ensureTargetMessageLoaded = viewModel::ensureTargetMessageLoaded,
     )
 
+    val clickDropHost = rememberClickDropBubbleHost(viewModel)
+    ClickDropChatEffects(viewModel) { toastState.show(coroutineScope, it) }
+    androidx.compose.runtime.CompositionLocalProvider(
+        compose.project.click.click.ui.chat.LocalClickDropBubbleHost provides clickDropHost,
+    ) {
     Box(
         modifier =
             Modifier
@@ -592,6 +597,14 @@ fun ChatView(
             }
         }
 
+        ClickDropDevelopAllChip(
+            viewModel = viewModel,
+            modifier =
+                Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = topInset + 72.dp),
+        )
+
         ChatViewOverlays(
             viewModel = viewModel,
             chatMessagesState = chatMessagesState,
@@ -618,4 +631,5 @@ fun ChatView(
             renameGroupDraftState = renameGroupDraftState,
         )
     } // End outer Box
+    }
 }

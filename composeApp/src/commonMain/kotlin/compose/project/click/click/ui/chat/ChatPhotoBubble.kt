@@ -46,7 +46,7 @@ import coil3.compose.LocalPlatformContext
 import coil3.request.ImageRequest
 import coil3.size.Size
 import compose.project.click.click.data.models.Message
-import compose.project.click.click.data.models.disposableRollCollaborationTtlIso
+import compose.project.click.click.data.models.clickDropRevealAt
 import compose.project.click.click.data.models.isDisposableRollLocked
 import compose.project.click.click.ui.theme.PrimaryBlue
 import compose.project.click.click.util.LruMemoryCache
@@ -58,7 +58,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
-import kotlinx.datetime.Instant
 
 private val chatPhotoAttachmentShape = RoundedCornerShape(16.dp)
 
@@ -147,6 +146,18 @@ internal fun ChatBubblePhotoContent(
     onPhotoClick: (() -> Unit)? = null,
     onPhotoLongPress: (() -> Unit)? = null,
 ) {
+    val dropHost = LocalClickDropBubbleHost.current
+    if (dropHost != null && dropHost.controller.usesDevelopFlow(message)) {
+        ClickDropFlowPhoto(
+            message = message,
+            host = dropHost,
+            secureState = secureState,
+            borderIfReceived = borderIfReceived,
+            onExpand = onPhotoClick,
+            onLongPress = onPhotoLongPress,
+        )
+        return
+    }
     val rollLocked = message.isDisposableRollLocked()
     val canExpand = onPhotoClick != null && !rollLocked
     val expandClick = onPhotoClick.takeIf { canExpand }
@@ -193,9 +204,10 @@ internal fun ChatBubblePhotoContent(
     val countdownLabel =
         remember(message.id, rollLocked) {
             if (!rollLocked) return@remember null
-            val ttlIso = message.disposableRollCollaborationTtlIso() ?: return@remember "Locked"
-            val ttl = runCatching { Instant.parse(ttlIso) }.getOrNull() ?: return@remember "Locked"
+            val ttl = message.clickDropRevealAt() ?: return@remember "Locked"
             val remainMs = (ttl.toEpochMilliseconds() - Clock.System.now().toEpochMilliseconds()).coerceAtLeast(0L)
+            // A gated drop past reveal develops in its chat; here it stays its preview.
+            if (remainMs == 0L) return@remember "Open the chat to develop"
             val totalMin = remainMs / 60_000L
             val hours = totalMin / 60L
             val mins = totalMin % 60L

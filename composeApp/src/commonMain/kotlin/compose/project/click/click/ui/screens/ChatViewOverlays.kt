@@ -37,6 +37,7 @@ import compose.project.click.click.ui.chat.MuteDurationDialog
 import compose.project.click.click.ui.chat.PlanHangoutSheet
 import compose.project.click.click.ui.chat.canEditMessage // pragma: allowlist secret
 import compose.project.click.click.ui.chat.canExportMessageMedia // pragma: allowlist secret
+import compose.project.click.click.viewmodel.clickDropState // pragma: allowlist secret
 import compose.project.click.click.ui.chat.muteResultMessage
 import compose.project.click.click.ui.components.ClickOutlinedTextField // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
@@ -178,8 +179,8 @@ internal fun BoxScope.ChatViewOverlays(
         val capabilities =
             MessageActionCapabilities(
                 canReply = selectedMessage.message.messageType.lowercase() != "call_log",
-                canSaveMedia = canExportMessageMedia(selectedMessage.message),
-                canShareMedia = canExportMessageMedia(selectedMessage.message),
+                canSaveMedia = canExportMessageMedia(selectedMessage.message, viewModel.clickDropState(selectedMessage.message)),
+                canShareMedia = canExportMessageMedia(selectedMessage.message, viewModel.clickDropState(selectedMessage.message)),
                 canEdit = canEditMessage(selectedMessage),
                 canForward = selectedMessage.message.canForward(),
                 canRetry = selectedMessage.message.canRetrySend(),

@@ -141,6 +141,7 @@ internal fun ProfileSheetLocalMessage.toProfileSheetMedia(): ProfileSheetMedia? 
                 ?: meta["duration"]?.jsonPrimitive?.intOrNull,
         isDisposableRoll = isDisposableRoll,
         collaborationTtlIso = collaborationTtlIso,
+        isGatedDrop = isDisposableRoll && meta?.get("drop_gated")?.jsonPrimitive?.booleanOrNull == true,
     )
 }
 
@@ -197,6 +198,7 @@ internal fun ConnectionTabMessage.toProfileSheetMediaFromTab(): ProfileSheetMedi
             },
         isDisposableRoll = isDisposableRoll,
         collaborationTtlIso = collaborationTtlIso,
+        isGatedDrop = isDisposableRoll && meta?.get("drop_gated")?.jsonPrimitive?.booleanOrNull == true,
     )
 }
 
@@ -324,8 +326,9 @@ internal val METADATA_PATH_KEYS =
 
 internal fun JsonObject.disposableRollMetadata(): Pair<Boolean, String?> {
     val isRoll = this["disposable_roll"]?.jsonPrimitive?.booleanOrNull == true
+    // `reveal_at` is the server's stamp on gated drops; `collaboration_ttl` the legacy one.
     val ttl =
-        this["collaboration_ttl"]
+        (this["reveal_at"] ?: this["collaboration_ttl"])
             ?.jsonPrimitive
             ?.contentOrNull
             ?.trim()
@@ -335,6 +338,8 @@ internal fun JsonObject.disposableRollMetadata(): Pair<Boolean, String?> {
 
 internal fun ProfileSheetMedia.isDisposableRollLocked(now: Instant = Clock.System.now()): Boolean {
     if (!isDisposableRoll) return false
+    // A gated drop's media is only its pixelated preview: never shown as the photo here.
+    if (isGatedDrop) return true
     val ttlIso = collaborationTtlIso ?: return true
     val ttl = runCatching { Instant.parse(ttlIso) }.getOrNull() ?: return true
     return now < ttl
@@ -345,6 +350,7 @@ internal fun ProfileSheetMedia.disposableRollCountdownLabel(): String? {
     val ttlIso = collaborationTtlIso ?: return "Locked"
     val ttl = runCatching { Instant.parse(ttlIso) }.getOrNull() ?: return "Locked"
     val remainMs = (ttl.toEpochMilliseconds() - Clock.System.now().toEpochMilliseconds()).coerceAtLeast(0L)
+    if (remainMs == 0L) return "Open the chat to develop"
     val totalMin = remainMs / 60_000L
     val hours = totalMin / 60L
     val mins = totalMin % 60L
@@ -498,6 +504,7 @@ internal fun mergeProfileMedia(items: List<ProfileSheetMedia>): List<ProfileShee
                 durationSeconds = media.durationSeconds ?: prev.durationSeconds,
                 isDisposableRoll = media.isDisposableRoll || prev.isDisposableRoll,
                 collaborationTtlIso = media.collaborationTtlIso ?: prev.collaborationTtlIso,
+                isGatedDrop = media.isGatedDrop || prev.isGatedDrop,
             )
     }
     return merged.values
