@@ -258,9 +258,11 @@ class ClickFirebaseMessagingService : FirebaseMessagingService() {
             is PushRoute.Hub -> MainActivity.createHubDeepLinkIntent(this, route.hubId)
             is PushRoute.Profile -> MainActivity.createProfileDeepLinkIntent(this, route.userId)
             is PushRoute.SharedDrop -> MainActivity.createSharedDropDeepLinkIntent(this, route.dropId)
+            is PushRoute.DeviceApproval -> MainActivity.createDeviceApprovalIntent(this, route.requestId)
             PushRoute.Connections -> MainActivity.createConnectionsIntent(this)
-            // No Android screen yet (G3-2, G6-1, G7-1): open the app where it was.
-            is PushRoute.EventRecap, is PushRoute.DeviceApproval, is PushRoute.Activity,
+            // No Android screen yet: the event recap lands with G3-2, the Activity inbox with G6-1.
+            // Until then, open the app where it was.
+            is PushRoute.EventRecap, is PushRoute.Activity,
             PushRoute.OpenApp,
             ->
                 packageManager.getLaunchIntentForPackage(packageName)?.apply {

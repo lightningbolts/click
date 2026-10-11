@@ -25,6 +25,8 @@ import compose.project.click.click.deeplink.AppDeepLinkRouter
 import compose.project.click.click.deeplink.ConnectionDeepLinkRouter // pragma: allowlist secret
 import compose.project.click.click.deeplink.EventDeepLinkRouter // pragma: allowlist secret
 import compose.project.click.click.encounter.initEncounterTetherWidgetBridge // pragma: allowlist secret
+import compose.project.click.click.navigation.AppRoute // pragma: allowlist secret
+import compose.project.click.click.navigation.AppRouter // pragma: allowlist secret
 import compose.project.click.click.notifications.ChatDeepLinkManager // pragma: allowlist secret
 import compose.project.click.click.notifications.ChatNotificationDismisser // pragma: allowlist secret
 import compose.project.click.click.notifications.initPushNotificationService // pragma: allowlist secret
@@ -66,6 +68,7 @@ class MainActivity : ComponentActivity() {
         handleEventPushDeepLinkIntent(intent)
         handleProfilePushDeepLinkIntent(intent)
         handleSharedDropPushDeepLinkIntent(intent)
+        handleDeviceApprovalPushIntent(intent)
         handleCommunityHubViewIntent(intent)
         handleEventUniversalLinkIntent(intent)
         handleConnectionUniversalLinkIntent(intent)
@@ -99,6 +102,7 @@ class MainActivity : ComponentActivity() {
         handleEventPushDeepLinkIntent(intent)
         handleProfilePushDeepLinkIntent(intent)
         handleSharedDropPushDeepLinkIntent(intent)
+        handleDeviceApprovalPushIntent(intent)
         handleCommunityHubViewIntent(intent)
         handleEventUniversalLinkIntent(intent)
         handleConnectionUniversalLinkIntent(intent)
@@ -166,6 +170,15 @@ class MainActivity : ComponentActivity() {
         intent.getStringExtra(EXTRA_SHARED_DROP_ID)?.let(ChatDeepLinkManager::setPendingSharedDrop)
     }
 
+    private fun handleDeviceApprovalPushIntent(intent: Intent?) {
+        if (intent?.action != ACTION_VIEW_DEVICE_APPROVAL) return
+        intent
+            .getStringExtra(EXTRA_DEVICE_APPROVAL_REQUEST_ID)
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+            ?.let { AppRouter.open(AppRoute.DeviceApproval(it)) }
+    }
+
     private fun handleEventPushDeepLinkIntent(intent: Intent?) {
         if (intent?.action != ACTION_VIEW_EVENT) return
         val beaconId = intent.getStringExtra(EXTRA_EVENT_BEACON_ID)?.trim().orEmpty()
@@ -216,6 +229,20 @@ class MainActivity : ComponentActivity() {
                 action = ACTION_VIEW_SHARED_DROP
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
                 putExtra(EXTRA_SHARED_DROP_ID, dropId)
+            }
+
+        const val ACTION_VIEW_DEVICE_APPROVAL = "compose.project.click.click.action.VIEW_DEVICE_APPROVAL" // pragma: allowlist secret
+        private const val EXTRA_DEVICE_APPROVAL_REQUEST_ID = "extra_device_approval_request_id"
+
+        /** `device_approval {request_id}`: the "Approve new sign-in?" sheet (G7-1). */
+        fun createDeviceApprovalIntent(
+            context: Context,
+            requestId: String,
+        ): Intent =
+            Intent(context, MainActivity::class.java).apply {
+                action = ACTION_VIEW_DEVICE_APPROVAL
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                putExtra(EXTRA_DEVICE_APPROVAL_REQUEST_ID, requestId)
             }
 
         fun createChatDeepLinkIntent(
