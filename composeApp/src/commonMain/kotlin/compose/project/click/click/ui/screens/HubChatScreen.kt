@@ -55,6 +55,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -179,6 +180,8 @@ fun HubChatScreen(
     val occupantCount by viewModel.occupantCount.collectAsState()
     val outOfBounds by viewModel.outOfBounds.collectAsState()
     val isEventHub by viewModel.isEventHubFlow.collectAsState()
+    val hasMoreOlderMessages by viewModel.hasMoreOlderMessages.collectAsState()
+    val isLoadingOlderMessages by viewModel.isLoadingOlderMessages.collectAsState()
     var showClickDropsCamera by remember { mutableStateOf(false) }
     var expandedPhotoTarget by remember { mutableStateOf<MessageWithUser?>(null) }
     var contextMenuMessage by remember { mutableStateOf<MessageWithUser?>(null) }
@@ -222,6 +225,20 @@ fun HubChatScreen(
             parentInteractiveBackSwipePx = parentInteractiveBackSwipePx,
         )
     val hubListState = threadRuntime.listState
+
+    // Event hubs page their full history (G3-27); the reversed list puts older rows at the end.
+    LaunchedEffect(hubListState, isEventHub) {
+        if (!isEventHub) return@LaunchedEffect
+        snapshotFlow {
+            val info = hubListState.layoutInfo
+            val maxVisibleIndex = info.visibleItemsInfo.maxOfOrNull { it.index } ?: 0
+            maxVisibleIndex to info.totalItemsCount
+        }.collect { (maxVisibleIndex, total) ->
+            if (total > 0 && hasMoreOlderMessages && !isLoadingOlderMessages && maxVisibleIndex >= total - 3) {
+                viewModel.loadOlderMessages()
+            }
+        }
+    }
     val suppressKeyboardDismissWhileProgrammaticTimelineScroll =
         threadRuntime.suppressKeyboardDismissWhileProgrammaticTimelineScroll
     val dismissKeyboardOnUserMessageScroll = threadRuntime.dismissKeyboardOnUserMessageScroll
@@ -511,6 +528,7 @@ fun HubChatScreen(
                                     timelineEntries = timelineEntries,
                                     listState = hubListState,
                                     newestSentMessage = null,
+                                    isLoadingOlderMessages = isLoadingOlderMessages,
                                     listBottomPadding =
                                         PaddingValues(
                                             start = 6.dp,

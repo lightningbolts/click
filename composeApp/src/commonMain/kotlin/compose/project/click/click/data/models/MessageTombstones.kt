@@ -29,6 +29,20 @@ fun MessageTombstone.toPlaceholder(): Message =
     )
 
 /**
+ * Tombstones that belong to one loaded page: `time_created` inside [min, max] of [pageTimes].
+ * `cursor` + `include_tombstones=1` has no upper bound server-side, so newer ones are dropped
+ * here (iOS clips to the page span). An empty page has no span and keeps nothing.
+ */
+fun clampTombstonesToPage(
+    tombstones: Collection<MessageTombstone>,
+    pageTimes: Collection<Long>,
+): List<MessageTombstone> {
+    val min = pageTimes.minOrNull() ?: return emptyList()
+    val max = pageTimes.max()
+    return tombstones.filter { it.timeCreated in min..max }
+}
+
+/**
  * Timeline rows plus "Message deleted" placeholders for tombstones inside the loaded window.
  * A tombstone older than the oldest loaded message is left for when that page loads, so a
  * deletion far back in history never shows up detached at the top (iOS clips to the page span).

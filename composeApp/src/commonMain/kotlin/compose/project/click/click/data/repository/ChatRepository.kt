@@ -159,6 +159,16 @@ interface ChatRepository {
     ): List<compose.project.click.click.data.models.MessageTombstone> = emptyList()
 
     /**
+     * Tombstones for the older page of up to [limit] messages strictly before [beforeTimeCreated]
+     * (`cursor=<ms>&include_tombstones=1`). Unclamped: the server has no upper bound.
+     */
+    suspend fun fetchOlderPageTombstones(
+        chatId: String,
+        beforeTimeCreated: Long,
+        limit: Int,
+    ): List<compose.project.click.click.data.models.MessageTombstone> = emptyList()
+
+    /**
      * Rotates the group's E2EE v2 epoch to the current membership right away (iOS
      * `reconcileMembershipEpoch`) instead of on the next send. Fails when the rotation couldn't run.
      */

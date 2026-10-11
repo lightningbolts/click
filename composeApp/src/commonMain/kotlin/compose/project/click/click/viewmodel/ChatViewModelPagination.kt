@@ -11,6 +11,7 @@ import compose.project.click.click.data.models.IcebreakerRepository // pragma: a
 import compose.project.click.click.data.models.Message // pragma: allowlist secret
 import compose.project.click.click.data.models.MessageWithUser // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
+import compose.project.click.click.data.models.clampTombstonesToPage // pragma: allowlist secret
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.put
@@ -80,6 +81,16 @@ internal suspend fun ChatViewModel.loadOlderMessagesPage(): Boolean {
             OlderMessagesPageOutcome.MergePage -> Unit
         }
         val page = fetched ?: return false
+        // G6-17: "Message deleted" placeholders for this older page, clamped to its span.
+        val pageTombstones =
+            clampTombstonesToPage(
+                chatRepository.fetchOlderPageTombstones(
+                    chatId = apiChatId,
+                    beforeTimeCreated = oldest.timeCreated,
+                    limit = OLDER_MESSAGES_PAGE_SIZE,
+                ),
+                page.map { it.timeCreated },
+            )
         val vaulted = vaultMessagesForUi(apiChatId, userId, page)
         val knownUsers =
             buildMap {
@@ -100,8 +111,15 @@ internal suspend fun ChatViewModel.loadOlderMessagesPage(): Boolean {
             }
         val active = _chatMessagesState.value as? ChatMessagesState.Success ?: return false
         if (active.chatDetails.chat.id != apiChatId) return false
-        val merged = mergeMessageTimelinesPreservingLiveState(active.messages, incoming)
+        val deletedIds = pageTombstones.mapTo(HashSet()) { it.messageId }
+        val merged =
+            mergeMessageTimelinesPreservingLiveState(active.messages, incoming)
+                .filterNot { it.message.id in deletedIds }
         _chatMessagesState.value = active.copy(messages = merged)
+        if (pageTombstones.isNotEmpty()) {
+            // Local-store sync removes these ids from LocalMessageStore (ChatViewModelLocalStore).
+            _tombstones.value = _tombstones.value + pageTombstones.associateBy { it.messageId }
+        }
         prefetchedChatPayloads[active.chatDetails.connection.id] =
             (
                 prefetchedChatPayloads[active.chatDetails.connection.id] ?: ChatViewModel.PrefetchedChatPayload(

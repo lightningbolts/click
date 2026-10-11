@@ -766,7 +766,15 @@ internal fun ChatViewModel.startTypingMonitoringImpl(chatId: String) {
         viewModelScope.launch {
             chatRepository.observeTypingStatus(chatId).collect { status ->
                 val currentUser = _currentUserId.value
-                if (status.userId != currentUser && status.isTyping) {
+                if (status.userId != currentUser && !status.isTyping) {
+                    // Explicit stop (iOS `is_typing:false`, Android G0-3): clear right away.
+                    typingExpiryJobs.remove(status.userId)?.cancel()
+                    _typingUserIds.value = _typingUserIds.value - status.userId
+                    if (_typingUserIds.value.isEmpty()) {
+                        peerTypingTimeoutJob?.cancel()
+                        _isPeerTyping.value = false
+                    }
+                } else if (status.userId != currentUser) {
                     _isPeerTyping.value = true
                     _typingUserIds.value = _typingUserIds.value + status.userId
                     typingExpiryJobs.remove(status.userId)?.cancel()
@@ -812,7 +820,13 @@ internal fun ChatViewModel.onUserTypingImpl(chatId: String) {
 }
 
 internal fun ChatViewModel.onUserStoppedTypingImpl(chatId: String) {
+    val wasTyping = lastTypingSent != 0L
     lastTypingSent = 0L
+    val userId = _currentUserId.value ?: return
+    if (!wasTyping) return
+    viewModelScope.launch {
+        chatRepository.sendTypingStatus(chatId, userId, false)
+    }
 }
 
 internal fun ChatViewModel.applyReactionChangeEvent(event: ReactionChangeEvent) {

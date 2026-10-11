@@ -557,6 +557,7 @@ internal suspend fun HubChatViewModel.loadInitialMessages() {
                     // before publishing the message rows so they cannot appear a frame later.
                     finishInitialHubReactionHydration(snapshot.reactions.map { it.toMessageReaction() })
                     mergeMessages(snapshot.messages.map { it.toHubMessageRow() })
+                    _hasMoreOlderMessages.value = snapshot.messages.size >= HUB_INITIAL_MESSAGE_LIMIT
                     return@withContext
                 },
                 onFailure = { err ->
