@@ -36,6 +36,13 @@ data class ConnectionEncounter(
     val exactBarometricElevationM: Double? = null,
     @SerialName("relative_altitude_m")
     val relativeAltitudeM: Double? = null,
+    /** Station pressure from this reporter's barometer (kPa; G4-12 pressure pill). */
+    @SerialName("barometric_pressure_kpa")
+    val barometricPressureKpa: Double? = null,
+    @SerialName("gps_altitude_m")
+    val gpsAltitudeM: Double? = null,
+    @SerialName("gps_vertical_accuracy_m")
+    val gpsVerticalAccuracyM: Double? = null,
     @SerialName("lux_level")
     val luxLevel: Double? = null,
     @SerialName("motion_variance")

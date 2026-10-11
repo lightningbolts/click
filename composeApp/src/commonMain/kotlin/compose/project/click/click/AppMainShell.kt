@@ -188,7 +188,6 @@ internal fun AppMainShell(
     val connectionsChatSuppressesTabBarState = remember { mutableStateOf(false) }
     var connectionsChatSuppressesTabBar by connectionsChatSuppressesTabBarState
     val verifiedCliqueProximityAutofillIntentState = remember { mutableStateOf<VerifiedCliqueProximityIntent?>(null) }
-    var verifiedCliqueProximityAutofillIntent by verifiedCliqueProximityAutofillIntentState
 
     fun navigateTo(route: String) {
         if (routeHistory.navigateTo(route)) {
@@ -273,24 +272,6 @@ internal fun AppMainShell(
         }
     }
 
-    LaunchedEffect(connectionViewModel, currentUser.id) {
-        if (currentUser.id.isBlank()) return@LaunchedEffect
-        connectionViewModel.verifiedCliqueFromProximity.collect { intent ->
-            verifiedCliqueProximityAutofillIntent = intent
-            navigateTo(NavigationItem.Connections.route)
-            showNfcScreen = false
-            showQRScanner = false
-            showMyQRCode = false
-            hubChatCloseJob?.cancel()
-            hubChatCloseJob = null
-            hubChatArgs = null
-            dismissEventHubSheet()
-            connectionRevealState = null
-            pendingChatId = null
-            pendingTargetMessageId = null
-            pendingHubTargetMessageId = null
-        }
-    }
     val addClickOverlayKey =
         when {
             showMyQRCode -> "my_qr"

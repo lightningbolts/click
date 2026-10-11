@@ -238,6 +238,7 @@ internal fun AppDataManager.startPendingConnectionSync() {
                                 groupCliqueCandidateMemberIds = proximity.groupCliqueCandidateMemberIds,
                                 pendingHandshakeId = proximity.pendingHandshakeId,
                                 isAggregateNewConnection = proximity.isAggregateNewConnection,
+                                existingConnectionId = proximity.existingConnectionId,
                             ),
                         )
                     }

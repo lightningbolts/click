@@ -44,6 +44,9 @@ import kotlinx.coroutines.withTimeout
 import kotlinx.datetime.Clock
 import kotlin.random.Random
 
+/** A deferred group bind finished in the background; its group chat is being set up. */
+internal const val GROUP_AFTER_TAP_RECOVERED_NOTICE: String = "Group Click saved. Setting up your group chat…"
+
 internal fun ConnectionViewModel.handleInstantProximityOutcome(
     outcome: BindProximityHandshakeOutcome,
     currentUserId: String,
@@ -88,6 +91,11 @@ internal fun ConnectionViewModel.handleInstantProximityOutcome(
             peerUserIds = others,
             connectionIds = listOfNotNull(outcome.connectionId),
         )
+        prepareGroupAfterTap(
+            currentUserId = currentUserId,
+            groupMemberIds = groupIds,
+            peers = users.toGroupAfterTapPeers(),
+        )
         _connectionState.value =
             ConnectionState.TaggingContext(
                 newConnections = listOf(groupConnection),
@@ -123,6 +131,8 @@ internal fun ConnectionViewModel.handleInstantProximityOutcome(
             peerUserIds = listOf(peer.id),
             connectionIds = listOf(outcome.connectionId),
         )
+        // G4-5: someone who tapped a moment later can still turn this into a group.
+        startGroupWatch(outcome.pendingHandshakeId, outcome.connectionId, currentUserId)
         _connectionState.value =
             ConnectionState.TaggingContext(
                 newConnections = listOf(connection),
@@ -211,7 +221,12 @@ internal fun ConnectionViewModel.handleAwaitingHostSelection(
             pendingHandshakeId = awaiting.pendingHandshakeId,
             requiresSelection = true,
             selectedPeerIds = selected,
+            existingConnectionId = awaiting.existingConnectionId,
         )
+    hostSelectionCurrent = selected
+    hostSelectionExcluded = emptySet()
+    // G4-4: another phone's confirm or a late joiner updates this review.
+    startReviewWatch(awaiting.pendingHandshakeId, currentUserId)
 }
 
 internal fun ConnectionViewModel.startPendingProximityRecovery(
@@ -418,8 +433,25 @@ internal fun ConnectionViewModel.startTapProximityHandshakeImpl(
                     val heardTokensAudio = listenResult.heardTokens
                     val detectedDevicesBle = listenResult.detectedDevices
 
+                    // G4-1..3: this phone's best fix at the moment, its quality keys and sensor_observation.
+                    val captured =
+                        runCatching {
+                            captureConnectContext(
+                                method = "tap",
+                                momentMs = Clock.System.now().toEpochMilliseconds(),
+                                includeLocation = shouldFetchLocation,
+                            )
+                        }.getOrNull()
+                    val capturedFix = captured?.fix
                     val location =
-                        locationDeferred?.await()
+                        capturedFix?.let {
+                            LocationResult(
+                                latitude = it.latitude,
+                                longitude = it.longitude,
+                                altitudeMeters = it.ellipsoidalAltitudeMeters,
+                                accuracyMeters = it.horizontalAccuracyMeters,
+                            )
+                        } ?: locationDeferred?.await()
                             ?: if (shouldFetchLocation) {
                                 runCatching { locationService.getCurrentLocation() }.getOrNull()
                                     ?: AppDataManager.lastKnownDeviceLocation.value?.let { (la, lo) ->
@@ -463,6 +495,7 @@ internal fun ConnectionViewModel.startTapProximityHandshakeImpl(
                                                 bindExactNoiseLevelDb = proximitySensorContext?.exactNoiseLevelDb,
                                                 bindHeightCategory = proximitySensorContext?.heightCategory,
                                                 simulatorMock = simulatorMock,
+                                                observationKeys = captured?.observationKeys,
                                             ).getOrThrow()
                                     },
                                 )
@@ -474,6 +507,8 @@ internal fun ConnectionViewModel.startTapProximityHandshakeImpl(
                         }
 
                     if (bindResult.isSuccess) {
+                        // G4-7: tighten this phone's fix while still; sent once the flow confirms its IDs.
+                        captured?.let { beginEncounterFollowUp(it) }
                         when (val handshake = bindResult.getOrNull()!!) {
                             is BindProximityHandshakeResult.PendingServerMatch -> {
                                 ConnectionFlowTelemetry.recordPending()
@@ -549,7 +584,7 @@ internal fun ConnectionViewModel.startTapProximityHandshakeImpl(
 
 /**
  * When [AppDataManager] / WorkManager finishes a deferred bind, resume the confirm step or
- * emit [verifiedCliqueFromProximity] for a multi-user cluster.
+ * set up the group chat ([prepareGroupAfterTap]) for a multi-user cluster.
  */
 internal fun ConnectionViewModel.onProximityHandshakeRecoveredFromBackgroundImpl(
     payload: ProximityHandshakeRecoveryPayload,
@@ -572,6 +607,7 @@ internal fun ConnectionViewModel.onProximityHandshakeRecoveredFromBackgroundImpl
                 candidates = users,
                 isAggregateNewConnection = payload.isAggregateNewConnection,
                 groupCliqueCandidateMemberIds = payload.groupCliqueCandidateMemberIds,
+                existingConnectionId = payload.existingConnectionId,
             ),
             currentUserId,
         )
@@ -579,23 +615,22 @@ internal fun ConnectionViewModel.onProximityHandshakeRecoveredFromBackgroundImpl
     }
     val groupIds = payload.groupCliqueCandidateMemberIds
     val others = groupIds?.filter { it != currentUserId }?.distinct().orEmpty()
-    // Only first-time multi (≥2 peers) autofills verified clique; reconnects open encounter sheet.
+    // A bound group (≥2 peers): find or create its group chat right away (GroupAfterTap).
     if (
-        payload.isAggregateNewConnection &&
         currentUserId.isNotBlank() &&
         groupIds != null &&
         others.size >= 2
     ) {
         PlatformHapticsPolicy.successNotification()
-        viewModelScope.launch {
-            _verifiedCliqueFromProximity.emit(
-                VerifiedCliqueProximityIntent(
-                    preselectFriendIds = others.take(PROXIMITY_HOST_SELECTION_MAX_PEERS),
-                    matchedUsers = users,
-                ),
-            )
+        prepareGroupAfterTap(
+            currentUserId = currentUserId,
+            groupMemberIds = groupIds,
+            peers = users.toGroupAfterTapPeers(),
+        )
+        if (payload.isAggregateNewConnection) {
+            _transientNotice.tryEmit(GROUP_AFTER_TAP_RECOVERED_NOTICE)
+            return
         }
-        return
     }
     val cur = _connectionState.value
     if (cur is ConnectionState.ProximityCapturedOfflineSyncing ||
@@ -665,6 +700,7 @@ internal fun ConnectionViewModel.tryFlushPendingProximityHandshakesImpl(
                             candidates = r.recoveredUsers,
                             isAggregateNewConnection = r.isAggregateNewConnection,
                             groupCliqueCandidateMemberIds = r.groupCliqueCandidateMemberIds,
+                            existingConnectionId = r.existingConnectionId,
                         ),
                         currentUserId,
                     )
@@ -672,18 +708,20 @@ internal fun ConnectionViewModel.tryFlushPendingProximityHandshakesImpl(
                 }
                 val g = r.groupCliqueCandidateMemberIds
                 val others = g?.filter { it != currentUserId }?.distinct().orEmpty()
+                if (currentUserId.isNotBlank() && g != null && others.size >= 2) {
+                    prepareGroupAfterTap(
+                        currentUserId = currentUserId,
+                        groupMemberIds = g,
+                        peers = r.recoveredUsers.toGroupAfterTapPeers(),
+                    )
+                }
                 if (
                     r.isAggregateNewConnection &&
                     currentUserId.isNotBlank() &&
                     g != null &&
                     others.size >= 2
                 ) {
-                    _verifiedCliqueFromProximity.emit(
-                        VerifiedCliqueProximityIntent(
-                            preselectFriendIds = others.take(PROXIMITY_HOST_SELECTION_MAX_PEERS),
-                            matchedUsers = r.recoveredUsers,
-                        ),
-                    )
+                    _transientNotice.tryEmit(GROUP_AFTER_TAP_RECOVERED_NOTICE)
                     _connectionState.value = ConnectionState.Idle
                 } else {
                     val peers =

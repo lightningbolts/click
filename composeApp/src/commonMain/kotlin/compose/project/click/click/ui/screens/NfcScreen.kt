@@ -16,6 +16,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import compose.project.click.click.viewmodel.stopConnectionCapture // pragma: allowlist secret
+import compose.project.click.click.viewmodel.warmUpConnectionCapture // pragma: allowlist secret
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
@@ -110,6 +112,12 @@ fun NfcScreen(
 
     LaunchedEffect(authToken) {
         connectionViewModel.prewarmBindProximityEdgeFunction(httpClient, authToken)
+    }
+
+    // G4-1: warm location + pressure while Tap is visible (never prompts); dropped on leave.
+    DisposableEffect(Unit) {
+        connectionViewModel.warmUpConnectionCapture("tap")
+        onDispose { connectionViewModel.stopConnectionCapture() }
     }
 
     // GPS warm-up when the NFC sheet is visible (non-blocking).
@@ -478,6 +486,9 @@ fun NfcScreen(
                         encounterSaveInProgress = tagging.encounterSubmitting,
                         selectableUsers = sheetSelectableUsers,
                         initialSelectedUserIds = sheetInitialSelectedIds,
+                        existingGroup = tagging.requiresSelection && !tagging.existingConnectionId.isNullOrBlank(),
+                        errorMessage = tagging.tagSaveError,
+                        onSelectionChanged = { ids -> if (tagging.requiresSelection) connectionViewModel.updateHostSelection(ids) },
                         onSaveEncounter = { selectedIds ->
                             scope.launch {
                                 connectionViewModel.saveReconnectEncounter(

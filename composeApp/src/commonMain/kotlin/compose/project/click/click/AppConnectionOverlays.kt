@@ -206,6 +206,9 @@ internal fun AppConnectionOverlays(
             encounterSaveInProgress = tagging.encounterSubmitting,
             selectableUsers = sheetSelectableUsers,
             initialSelectedUserIds = sheetInitialSelectedIds,
+            existingGroup = tagging.requiresSelection && !tagging.existingConnectionId.isNullOrBlank(),
+            errorMessage = tagging.tagSaveError,
+            onSelectionChanged = { ids -> if (tagging.requiresSelection) connectionViewModel.updateHostSelection(ids) },
             onSaveEncounter = { selectedIds ->
                 connectionScope.launch {
                     connectionViewModel.saveReconnectEncounter(

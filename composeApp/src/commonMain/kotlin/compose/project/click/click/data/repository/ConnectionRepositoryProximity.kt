@@ -59,6 +59,7 @@ internal suspend fun ConnectionRepository.bindProximityHandshakeImpl(
     bindExactNoiseLevelDb: Double? = null,
     bindHeightCategory: HeightCategory? = null,
     simulatorMock: Boolean = false,
+    observationKeys: kotlinx.serialization.json.JsonObject? = null,
 ): Result<BindProximityHandshakeResult> {
     return try {
         @Suppress("UNUSED_PARAMETER")
@@ -112,12 +113,12 @@ internal suspend fun ConnectionRepository.bindProximityHandshakeImpl(
             )
         val outgoingJson = json.encodeToString(ProximityHandshakePostBody.serializer(), request)
         println("OUTGOING_HANDSHAKE_PAYLOAD: $outgoingJson")
-        val firstResult = apiClient.postProximityHandshake(request, bearerJwt = bearerJwt)
+        val firstResult = apiClient.postProximityHandshake(request, bearerJwt = bearerJwt, extraKeys = observationKeys)
         val apiResult =
             firstResult.getOrElse { firstError ->
                 val refreshed = if (firstError.isClickWebAuthFailure()) refreshedJwtAfterAuthFailure() else null
                 refreshed?.let { freshJwt ->
-                    apiClient.postProximityHandshake(request, bearerJwt = freshJwt).getOrNull()
+                    apiClient.postProximityHandshake(request, bearerJwt = freshJwt, extraKeys = observationKeys).getOrNull()
                 } ?: return Result.failure(firstError)
             }
         when (apiResult) {
@@ -336,6 +337,7 @@ internal suspend fun ConnectionRepository.syncPendingProximityHandshakesImpl(bea
                         groupCliqueCandidateMemberIds = bindResult.groupCliqueCandidateMemberIds,
                         pendingHandshakeId = bindResult.pendingHandshakeId,
                         isAggregateNewConnection = bindResult.isAggregateNewConnection,
+                        existingConnectionId = bindResult.existingConnectionId,
                     )
                 }
                 is BindProximityHandshakeResult.InstantMatch -> {
