@@ -129,7 +129,10 @@ fun graphemeCount(text: String): Int {
     return count
 }
 
-private fun codePointAt(text: String, index: Int): Int {
+private fun codePointAt(
+    text: String,
+    index: Int,
+): Int {
     val high = text[index]
     if (high.isHighSurrogate() && index + 1 < text.length) {
         val low = text[index + 1]

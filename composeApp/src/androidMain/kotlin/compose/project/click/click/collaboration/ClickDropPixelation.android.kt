@@ -54,4 +54,3 @@ actual fun encodedImageSize(bytes: ByteArray): Pair<Int, Int>? {
     BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
     return if (bounds.outWidth > 0 && bounds.outHeight > 0) bounds.outWidth to bounds.outHeight else null
 }
-
