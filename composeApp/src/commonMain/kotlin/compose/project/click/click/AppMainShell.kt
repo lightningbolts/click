@@ -345,7 +345,7 @@ internal fun AppMainShell(
             }
             AppDeepLink.Clicks -> navigateTo(NavigationItem.Connections.route)
             AppDeepLink.AddClick -> navigateTo(NavigationItem.AddClick.route)
-            is AppDeepLink.Chat, is AppDeepLink.Profile -> Unit
+            is AppDeepLink.Chat, is AppDeepLink.Profile, is AppDeepLink.EventPass, is AppDeepLink.PassScanner -> Unit
         }
     }
 
@@ -788,6 +788,8 @@ internal fun AppMainShell(
 
     // Wrap Scaffold in a Box to allow search overlay to be positioned at true screen bottom
     Box(modifier = Modifier.fillMaxSize()) {
+        // Click Pass and the door scanner (click://pass/{id}[/scan], the event page, the ongoing notification).
+        compose.project.click.click.ui.screens.EventPassOverlayHost() // pragma: allowlist secret
         LaunchedEffect(currentUser.id) {
             EncounterTetherManager.setCurrentUserId(currentUser.id)
         }
