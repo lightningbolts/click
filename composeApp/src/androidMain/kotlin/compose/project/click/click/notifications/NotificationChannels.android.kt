@@ -13,6 +13,10 @@ import compose.project.click.click.R // pragma: allowlist secret
  * Notification channels (G1-4). Android channels are immutable once created, so the Click sound
  * (`res/raw/click`, from iOS `click.caf`) needs new channel IDs: the v2 channels take over the
  * user's importance from the old ones, which are then deleted.
+ *
+ * The sound ships as `click.wav` (PCM) rather than the `click.ogg` the parity sheet names: no
+ * transcoder was available to convert the `.caf`, and channels play WAV natively. Swapping in an
+ * Ogg file later keeps the resource name `click`, so nothing else changes.
  */
 internal object ClickNotificationChannels {
     const val MESSAGES = "click_messages_v2"

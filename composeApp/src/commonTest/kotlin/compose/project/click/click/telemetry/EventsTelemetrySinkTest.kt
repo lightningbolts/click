@@ -18,13 +18,14 @@ class EventsTelemetrySinkTest {
         var status: Int? = 202,
         var now: Instant,
     ) {
+        /** Bodies the server accepted (2xx); rejected or offline attempts are not deliveries. */
         val posted = mutableListOf<ProductEventBody>()
 
         fun sink() =
             EventsTelemetrySink(
                 storage = storage,
                 post = { body ->
-                    if (status != null) posted += body
+                    if (status in 200..299) posted += body
                     status
                 },
                 appVersion = { "grouchy" },
