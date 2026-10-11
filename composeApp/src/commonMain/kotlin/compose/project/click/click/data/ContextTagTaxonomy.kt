@@ -3,24 +3,25 @@ package compose.project.click.click.data
 import compose.project.click.click.data.models.ContextTag
 
 object ContextTagTaxonomy {
-    val all: List<ContextTag> = listOf(
-        ContextTag("lecture", "Lecture / Class", "🎓"),
-        ContextTag("study", "Study Session", "📚"),
-        ContextTag("dorm", "Dorms / Residence Hall", "🛏️"),
-        ContextTag("party", "Party", "🎉"),
-        ContextTag("cafe", "Cafe / Coffee", "☕"),
-        ContextTag("bar", "Bar / Nightlife", "🍻"),
-        ContextTag("event", "Campus Event", "🏟️"),
-        ContextTag("sports", "Sports / Rec", "⚽"),
-        ContextTag("club", "Club / Org Meeting", "🤝"),
-        ContextTag("transit", "Transit / Commute", "🚌"),
-        ContextTag("gym", "Gym / Workout", "💪"),
-        ContextTag("conference", "Conference", "🎤"),
-        ContextTag("outdoor", "Outdoors / Nature", "🌲"),
-        ContextTag("dining", "Dining / Food", "🍽️"),
-        ContextTag("at_event", "At event", "📍"),
-        ContextTag("custom", "Other...", "✏️")
-    )
+    val all: List<ContextTag> =
+        listOf(
+            ContextTag("lecture", "Lecture / Class", "🎓"),
+            ContextTag("study", "Study Session", "📚"),
+            ContextTag("dorm", "Dorms / Residence Hall", "🛏️"),
+            ContextTag("party", "Party", "🎉"),
+            ContextTag("cafe", "Cafe / Coffee", "☕"),
+            ContextTag("bar", "Bar / Nightlife", "🍻"),
+            ContextTag("event", "Campus Event", "🏟️"),
+            ContextTag("sports", "Sports / Rec", "⚽"),
+            ContextTag("club", "Club / Org Meeting", "🤝"),
+            ContextTag("transit", "Transit / Commute", "🚌"),
+            ContextTag("gym", "Gym / Workout", "💪"),
+            ContextTag("conference", "Conference", "🎤"),
+            ContextTag("outdoor", "Outdoors / Nature", "🌲"),
+            ContextTag("dining", "Dining / Food", "🍽️"),
+            ContextTag("at_event", "At event", "📍"),
+            ContextTag("custom", "Other...", "✏️"),
+        )
 
     fun displayLabel(tagId: String): String {
         val trimmed = tagId.trim()
@@ -31,8 +32,10 @@ object ContextTagTaxonomy {
     }
 
     /** Legacy entry point: the time alone plus a place name (weekday assumed). */
-    fun suggest(locationName: String?, hourOfDay: Int): List<ContextTag> =
-        suggest(TagSignals(hourOfDay = hourOfDay, isWeekend = false, placeName = locationName))
+    fun suggest(
+        locationName: String?,
+        hourOfDay: Int,
+    ): List<ContextTag> = suggest(TagSignals(hourOfDay = hourOfDay, isWeekend = false, placeName = locationName))
 
     /**
      * Up to four tags for an encounter, best first (port of iOS `ContextTagTaxonomy.suggest`,
@@ -93,7 +96,10 @@ object ContextTagTaxonomy {
 
         // What these people tag together, weighted by how often (capped so one habit can't
         // crowd out the place itself).
-        signals.pastTags.groupingBy { it }.eachCount().forEach { (tag, count) -> add(minOf(count, 3) * 2.0, tag) }
+        signals.pastTags
+            .groupingBy { it }
+            .eachCount()
+            .forEach { (tag, count) -> add(minOf(count, 3) * 2.0, tag) }
 
         val ranked =
             all
@@ -169,27 +175,30 @@ private fun titleCaseWords(s: String): String =
     }
 
 private fun inferEmojiForCustom(lower: String): String {
-    val rules: List<Pair<Regex, String>> = listOf(
-        Regex("(study|studying|homework|library|exam|midterm|read(ing)?\\s+group)") to "📚",
-        Regex("(lecture|class(room)?|seminar|lab\\s*section)") to "🎓",
-        Regex("(party|celebrat|birthday\\s*party)") to "🎉",
-        Regex("(coffee|cafe|café|espresso|latte|starbucks)") to "☕",
-        Regex("(bar|pub|nightclub|night\\s*life)") to "🍻",
-        Regex("(dorm|residence|suite|roommate)") to "🛏️",
-        Regex("(gym|workout|lift|run(ning)? club)") to "💪",
-        Regex("(bus|train|transit|commute|subway)") to "🚌",
-        Regex("(park|trail|hike|outdoor|beach)") to "🌲",
-        Regex("(food|dinner|lunch|dining|restaurant|kitchen)") to "🍽️",
-    )
+    val rules: List<Pair<Regex, String>> =
+        listOf(
+            Regex("(study|studying|homework|library|exam|midterm|read(ing)?\\s+group)") to "📚",
+            Regex("(lecture|class(room)?|seminar|lab\\s*section)") to "🎓",
+            Regex("(party|celebrat|birthday\\s*party)") to "🎉",
+            Regex("(coffee|cafe|café|espresso|latte|starbucks)") to "☕",
+            Regex("(bar|pub|nightclub|night\\s*life)") to "🍻",
+            Regex("(dorm|residence|suite|roommate)") to "🛏️",
+            Regex("(gym|workout|lift|run(ning)? club)") to "💪",
+            Regex("(bus|train|transit|commute|subway)") to "🚌",
+            Regex("(park|trail|hike|outdoor|beach)") to "🌲",
+            Regex("(food|dinner|lunch|dining|restaurant|kitchen)") to "🍽️",
+        )
     for ((pattern, emoji) in rules) {
         if (pattern.containsMatchIn(lower)) return emoji
     }
     for (tag in ContextTagTaxonomy.all) {
         if (tag.id == "custom") continue
         if (lower.contains(tag.id)) return tag.emoji
-        val fragments = tag.label.split(Regex("[/,&()]"))
-            .map { it.trim().lowercase() }
-            .filter { it.length >= 3 }
+        val fragments =
+            tag.label
+                .split(Regex("[/,&()]"))
+                .map { it.trim().lowercase() }
+                .filter { it.length >= 3 }
         for (f in fragments) {
             if (f.isNotEmpty() && lower.contains(f)) return tag.emoji
         }

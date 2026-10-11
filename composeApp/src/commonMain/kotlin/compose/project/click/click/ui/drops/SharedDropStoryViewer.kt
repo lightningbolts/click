@@ -186,8 +186,21 @@ private fun StoryPage(
         // Progress segments.
         Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             ids.forEachIndexed { i, _ ->
-                val fill = if (i < index) 1f else if (i == index) progress.value else 0f
-                Box(Modifier.weight(1f).height(3.dp).clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = 0.3f))) {
+                val fill =
+                    if (i < index) {
+                        1f
+                    } else if (i == index) {
+                        progress.value
+                    } else {
+                        0f
+                    }
+                Box(
+                    Modifier
+                        .weight(1f)
+                        .height(3.dp)
+                        .clip(RoundedCornerShape(50))
+                        .background(Color.White.copy(alpha = 0.3f)),
+                ) {
                     Box(Modifier.fillMaxWidth(fill).height(3.dp).background(Color.White))
                 }
             }
@@ -195,7 +208,12 @@ private fun StoryPage(
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             ConnectionListUserAvatarFace(drop.user.name, null, drop.user.avatarUrl, drop.userId, Modifier.size(32.dp))
             Spacer(Modifier.width(10.dp))
-            Text(if (drop.isMine) "You" else drop.user.firstName, color = Color.White, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            Text(
+                if (drop.isMine) "You" else drop.user.firstName,
+                color = Color.White,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.weight(1f),
+            )
             Box {
                 IconButton(onClick = { menuOpen = true }) { Icon(Icons.Filled.MoreVert, "More", tint = Color.White) }
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
@@ -229,7 +247,13 @@ private fun StoryPage(
                             holding = false
                         },
                         onTap = { offset ->
-                            if (replyFocused) focus.clearFocus() else if (offset.x < size.width / 3f) previous() else next()
+                            if (replyFocused) {
+                                focus.clearFocus()
+                            } else if (offset.x < size.width / 3f) {
+                                previous()
+                            } else {
+                                next()
+                            }
                         },
                     )
                 }.pointerInput(drop.id) {
@@ -250,7 +274,13 @@ private fun StoryPage(
             when {
                 photo != null && developsHere && !bloomed ->
                     ClickDropDevelopEffect(photo, reduceMotion, Modifier.fillMaxSize()) { bloomed = true }
-                photo != null -> Image(photo, "Click Drop from ${drop.user.firstName}", Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                photo != null ->
+                    Image(
+                        photo,
+                        "Click Drop from ${drop.user.firstName}",
+                        Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop,
+                    )
                 teaser != null -> ClickDropPixelatedImage(teaser, Modifier.fillMaxSize())
             }
             if (photo == null) CircularProgressIndicator(color = Color.White, modifier = Modifier.size(28.dp))
@@ -291,7 +321,11 @@ private fun StoryPage(
                     enabled = dropState == ClickDropDevelopState.Developed,
                     placeholder = { Text("Reply to ${drop.user.firstName}…", color = Color.White.copy(alpha = 0.6f)) },
                     trailingIcon = {
-                        if (reply.isNotBlank()) IconButton(onClick = send) { Icon(Icons.AutoMirrored.Filled.Send, "Send reply", tint = Color.White) }
+                        if (reply.isNotBlank()) {
+                            IconButton(
+                                onClick = send,
+                            ) { Icon(Icons.AutoMirrored.Filled.Send, "Send reply", tint = Color.White) }
+                        }
                     },
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                     keyboardActions = KeyboardActions(onSend = { send() }),

@@ -28,7 +28,12 @@ class ClickDropDevelopControllerTest {
             developCalls += refs.map { it.id }
             if (fail) error("500")
             return refs.map {
-                ClickDropDevelopResult(it, ClickDropDevelopResult.Status.DEVELOPED, Instant.parse("2026-10-01T12:00:01Z"), "https://signed.example/${it.id}")
+                ClickDropDevelopResult(
+                    it,
+                    ClickDropDevelopResult.Status.DEVELOPED,
+                    Instant.parse("2026-10-01T12:00:01Z"),
+                    "https://signed.example/${it.id}",
+                )
             }
         }
 
@@ -50,7 +55,10 @@ class ClickDropDevelopControllerTest {
             content = " ",
             timeCreated = 0L,
             messageType = ChatMessageType.IMAGE,
-            metadata = Json.parseToJsonElement("""{"media_url":"https://signed.example/$id","disposable_roll":true,"reveal_at":"${now + revealIn}"$gate}"""),
+            metadata =
+                Json.parseToJsonElement(
+                    """{"media_url":"https://signed.example/$id","disposable_roll":true,"reveal_at":"${now + revealIn}"$gate}""",
+                ),
         )
     }
 
@@ -129,7 +137,12 @@ class ClickDropDevelopControllerTest {
 
     @Test
     fun aPendingOptimisticSendStaysPending() {
-        val item = drop("temp-1", (-60).seconds, gated = true).copy(deliveryState = compose.project.click.click.data.models.MessageDeliveryState.PENDING)
+        val item =
+            drop(
+                "temp-1",
+                (-60).seconds,
+                gated = true,
+            ).copy(deliveryState = compose.project.click.click.data.models.MessageDeliveryState.PENDING)
         assertTrue(controller(FakeService(), flagOn = true).state(item)!!.isPending)
     }
 }

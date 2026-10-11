@@ -59,6 +59,7 @@ import compose.project.click.click.data.models.MessageReaction
 import compose.project.click.click.data.models.MessageWithUser
 import compose.project.click.click.data.models.PlanResponses
 import compose.project.click.click.data.models.PlanRsvp
+import compose.project.click.click.data.models.dropReplyOrNull
 import compose.project.click.click.data.models.hasLocalMediaUri
 import compose.project.click.click.data.models.hubMediaPathOrNull
 import compose.project.click.click.data.models.isBeaconChatMessage
@@ -68,7 +69,6 @@ import compose.project.click.click.data.models.mediaUrlOrNull
 import compose.project.click.click.data.models.parsedMediaMetadata
 import compose.project.click.click.data.models.planOrNull
 import compose.project.click.click.data.models.replyQuoteText
-import compose.project.click.click.data.models.dropReplyOrNull
 import compose.project.click.click.data.models.replyRef
 import compose.project.click.click.ui.components.ConnectionListUserAvatarFace
 import compose.project.click.click.ui.theme.PrimaryBlue
@@ -596,7 +596,13 @@ fun ChatMessageBubble(
                                                 )
                                             }
                                         }
-                                        message.dropReplyOrNull()?.let { ChatDropReplyQuote(it, mine = isSent, maxWidth = bubbleContentMaxWidth) }
+                                        message.dropReplyOrNull()?.let {
+                                            ChatDropReplyQuote(
+                                                it,
+                                                mine = isSent,
+                                                maxWidth = bubbleContentMaxWidth,
+                                            )
+                                        }
                                         when {
                                             mt == ChatMessageType.AUDIO && audioPlaybackSource != null -> {
                                                 ChatAudioBubble(
@@ -788,7 +794,13 @@ fun ChatMessageBubble(
                                         }
                                         val onBody = MaterialTheme.colorScheme.onSurface
                                         val linkC = MaterialTheme.colorScheme.primary
-                                        message.dropReplyOrNull()?.let { ChatDropReplyQuote(it, mine = isSent, maxWidth = bubbleContentMaxWidth) }
+                                        message.dropReplyOrNull()?.let {
+                                            ChatDropReplyQuote(
+                                                it,
+                                                mine = isSent,
+                                                maxWidth = bubbleContentMaxWidth,
+                                            )
+                                        }
                                         when {
                                             mt == ChatMessageType.AUDIO && audioPlaybackSource != null -> {
                                                 ChatAudioBubble(

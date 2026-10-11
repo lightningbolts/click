@@ -121,7 +121,13 @@ fun ClickDropDevelopEffect(
             val start = index * 0.16f
             val t = ((p - start) / (1f - start)).coerceIn(0f, 1f)
             if (t <= 0f) return@forEachIndexed
-            val path = Path().apply { addOval(androidx.compose.ui.geometry.Rect(center, maxRadius * t)) }
+            val path =
+                Path().apply {
+                    addOval(
+                        androidx.compose.ui.geometry
+                            .Rect(center, maxRadius * t),
+                    )
+                }
             clipPath(path) { drawCropped(image, if (image === original) FilterQuality.Medium else FilterQuality.None) }
         }
     }

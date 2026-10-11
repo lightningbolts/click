@@ -13,7 +13,12 @@ class SharedDropsTest {
     private val json = Json { ignoreUnknownKeys = true }
 
     private fun strip(body: String): List<SharedDrop> =
-        json.decodeFromString(compose.project.click.click.data.api.SharedDropsStripResponse.serializer(), body).drops
+        json
+            .decodeFromString(
+                compose.project.click.click.data.api.SharedDropsStripResponse
+                    .serializer(),
+                body,
+            ).drops
 
     @Test
     fun theStripParsesStatesFromRevealTimeAndMyDevelopedAt() {
@@ -31,7 +36,11 @@ class SharedDropsTest {
                 """.trimIndent(),
             )
         assertEquals(
-            listOf(ClickDropDevelopState.Ready, ClickDropDevelopState.Developed, ClickDropDevelopState.Pending(Instant.parse("2999-01-01T00:00:00Z"))),
+            listOf(
+                ClickDropDevelopState.Ready,
+                ClickDropDevelopState.Developed,
+                ClickDropDevelopState.Pending(Instant.parse("2999-01-01T00:00:00Z")),
+            ),
             drops.map { it.state() },
         )
         assertEquals("c1", drops[0].connectionId)
@@ -95,7 +104,13 @@ class SharedDropsTest {
             ).single()
         assertEquals("sunset", drop.caption)
         assertEquals("🔥", drop.reactions?.mine)
-        assertEquals("Jo", drop.reactions?.reactions?.single()?.name)
+        assertEquals(
+            "Jo",
+            drop.reactions
+                ?.reactions
+                ?.single()
+                ?.name,
+        )
         assertEquals("Maya", drop.user.firstName)
     }
 

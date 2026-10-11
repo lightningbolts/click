@@ -109,7 +109,12 @@ class EncounterFollowUp internal constructor(
     /** The flow logged encounters on these connections; the reading is sent for them once known. */
     fun confirm(ids: List<String>) {
         if (isCancelled || connectionIds != null) return
-        connectionIds = ids.map { it.trim() }.filter { it.isNotEmpty() }.distinct().take(MAXIMUM_CONNECTIONS)
+        connectionIds =
+            ids
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+                .distinct()
+                .take(MAXIMUM_CONNECTIONS)
     }
 
     /** The connection did not happen: stop and send nothing. Ignored once confirmed. */
@@ -172,7 +177,9 @@ class EncounterFollowUp internal constructor(
                     _refinedAccuracyMeters.value = next.horizontalAccuracyMeters
                 }
                 // Nothing tighter is worth waiting for once the phone moved or the fix is excellent.
-                if (moved || (refined?.horizontalAccuracyMeters ?: Double.POSITIVE_INFINITY) <= ConnectionLocationQuality.EXCELLENT_ACCURACY_M) {
+                if (moved ||
+                    (refined?.horizontalAccuracyMeters ?: Double.POSITIVE_INFINITY) <= ConnectionLocationQuality.EXCELLENT_ACCURACY_M
+                ) {
                     break
                 }
                 sleep(POLL_MS)

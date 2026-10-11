@@ -2,8 +2,8 @@
 
 package compose.project.click.click.data // pragma: allowlist secret
 
-import compose.project.click.click.core.AppSessionHooks // pragma: allowlist secret
 import compose.project.click.click.auth.LocalSessionCache // pragma: allowlist secret
+import compose.project.click.click.core.AppSessionHooks // pragma: allowlist secret
 import compose.project.click.click.data.auth.EnsureFreshAccessToken // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.models.UserAvailability // pragma: allowlist secret

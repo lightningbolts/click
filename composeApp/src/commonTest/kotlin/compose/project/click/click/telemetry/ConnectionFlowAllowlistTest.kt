@@ -53,7 +53,10 @@ class ConnectionFlowAllowlistTest {
 
     @Test
     fun qrFailureReasonsAreShortCodes() {
-        assertEquals("proximity_failed", ConnectionFlowTelemetry.qrFailureReason("Connection failed: Users must be in the same physical location."))
+        assertEquals(
+            "proximity_failed",
+            ConnectionFlowTelemetry.qrFailureReason("Connection failed: Users must be in the same physical location."),
+        )
         assertEquals("expired", ConnectionFlowTelemetry.qrFailureReason("This QR code has expired. Ask them to generate a new one."))
         assertEquals("validation", ConnectionFlowTelemetry.qrFailureReason(null))
     }

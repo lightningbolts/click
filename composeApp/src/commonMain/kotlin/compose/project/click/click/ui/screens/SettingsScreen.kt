@@ -7,8 +7,6 @@
 
 package compose.project.click.click.ui.screens // pragma: allowlist secret
 
-import compose.project.click.click.collaboration.ClickDropFlags
-import compose.project.click.click.core.FeatureFlagGate
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -22,8 +20,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Bookmark
-import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.EventAvailable
 import androidx.compose.material.icons.filled.Height
@@ -65,13 +63,15 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.appVersionLabel // pragma: allowlist secret
 import compose.project.click.click.calendar.CalendarProvider // pragma: allowlist secret
 import compose.project.click.click.calendar.DeviceCalendar // pragma: allowlist secret
+import compose.project.click.click.collaboration.ClickDropFlags
+import compose.project.click.click.core.FeatureFlagGate
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.IdentityCache // pragma: allowlist secret
 import compose.project.click.click.data.api.ApiClient
-import compose.project.click.click.data.api.deleteAccountImpl // pragma: allowlist secret
 import compose.project.click.click.data.api.BlockedUserDto // pragma: allowlist secret
 import compose.project.click.click.data.api.EventBookmarkItemDto // pragma: allowlist secret
 import compose.project.click.click.data.api.PROFILE_BIO_MAX_LENGTH
+import compose.project.click.click.data.api.deleteAccountImpl // pragma: allowlist secret
 import compose.project.click.click.data.models.AvailabilityIntentRow // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
 import compose.project.click.click.data.repository.AuthRepository // pragma: allowlist secret

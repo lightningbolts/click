@@ -64,11 +64,20 @@ internal fun ChatDropReplyQuote(
                 .padding(6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.size(36.dp, 48.dp).clip(RoundedCornerShape(8.dp)).background(Color.Black.copy(alpha = 0.2f)), contentAlignment = Alignment.Center) {
+        Box(
+            Modifier.size(36.dp, 48.dp).clip(RoundedCornerShape(8.dp)).background(Color.Black.copy(alpha = 0.2f)),
+            contentAlignment = Alignment.Center,
+        ) {
             when {
                 photo != null -> Image(photo, null, Modifier.size(36.dp, 48.dp), contentScale = ContentScale.Crop)
                 teaser != null -> ClickDropPixelatedImage(teaser, Modifier.size(36.dp, 48.dp), contentDescription = null)
-                else -> Icon(Icons.Filled.PhotoCamera, null, tint = tint.takeIf { it != Color.Unspecified } ?: Color.Gray, modifier = Modifier.size(18.dp))
+                else ->
+                    Icon(
+                        Icons.Filled.PhotoCamera,
+                        null,
+                        tint = tint.takeIf { it != Color.Unspecified } ?: Color.Gray,
+                        modifier = Modifier.size(18.dp),
+                    )
             }
         }
         Spacer(Modifier.width(8.dp))

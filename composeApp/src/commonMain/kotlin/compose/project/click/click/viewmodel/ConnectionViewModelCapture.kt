@@ -36,10 +36,11 @@ internal data class CapturedConnectContext(
  */
 fun ConnectionViewModel.warmUpConnectionCapture(method: String) {
     viewModelScope.launch {
-        val session = captureSession?.takeIf { it.method == method } ?: ConnectionCaptureSession(method).also {
-            captureSession?.stop()
-            captureSession = it
-        }
+        val session =
+            captureSession?.takeIf { it.method == method } ?: ConnectionCaptureSession(method).also {
+                captureSession?.stop()
+                captureSession = it
+            }
         val baroOptIn = runCatching { createTokenStorage().getBarometricContextOptIn() }.getOrNull() ?: false
         session.start(
             location = AppDataManager.shouldCaptureLocationAtTap(),

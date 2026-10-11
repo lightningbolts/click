@@ -143,7 +143,12 @@ internal fun parseClickWebCodedError(
     body: String?,
 ): ClickWebCodedException {
     val parsed = body?.let { runCatching { errorJson.decodeFromString<ClickWebErrorCodeDto>(it) }.getOrNull() }
-    val message = parsed?.error?.trim()?.takeIf { it.isNotEmpty() }?.take(200) ?: "Request failed ($status)"
+    val message =
+        parsed
+            ?.error
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+            ?.take(200) ?: "Request failed ($status)"
     return ClickWebCodedException(status, parsed?.code?.trim()?.takeIf { it.isNotEmpty() }, message)
 }
 

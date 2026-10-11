@@ -31,13 +31,15 @@ data class ClickDropOriginalUpload(
 )
 
 /** `metadata.drop_original` = `{ epoch, sender_device_id, client_message_id, media_ciphertext_sha256 }`. */
-internal fun Message.dropOriginalV2MetadataOrNull(chatId: String): MessageCryptoV2.MediaMetadata? = dropOriginalV2MetadataOrNull(metadata, chatId)
+internal fun Message.dropOriginalV2MetadataOrNull(chatId: String): MessageCryptoV2.MediaMetadata? =
+    dropOriginalV2MetadataOrNull(metadata, chatId)
 
 internal fun dropOriginalV2MetadataOrNull(
     metadata: JsonElement?,
     chatId: String,
 ): MessageCryptoV2.MediaMetadata? {
     val fields = (metadata as? JsonObject)?.get("drop_original") as? JsonObject ?: return null
+
     fun str(key: String) = (fields[key] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
     return MessageCryptoV2.MediaMetadata(
         chatId = chatId,

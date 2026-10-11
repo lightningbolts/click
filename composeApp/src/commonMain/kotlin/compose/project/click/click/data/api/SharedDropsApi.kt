@@ -18,7 +18,7 @@ import kotlinx.serialization.Serializable
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 
-/* click-web `app/api/me/shared-drops` (strip, post, delete, archive). Flag `shared_drops`. */
+// click-web `app/api/me/shared-drops` (strip, post, delete, archive). Flag `shared_drops`.
 
 @Serializable
 internal data class SharedDropsStripResponse(
@@ -61,7 +61,13 @@ class SharedDropsApi(
     suspend fun strip(): Result<List<SharedDrop>> =
         call {
             val response = api.clickWebClient.get(base)
-            if (response.status.value in 200..299) Result.success(response.body<SharedDropsStripResponse>().drops) else api.clickWebFailure(response)
+            if (response.status.value in
+                200..299
+            ) {
+                Result.success(response.body<SharedDropsStripResponse>().drops)
+            } else {
+                api.clickWebFailure(response)
+            }
         }
 
     /** One page of every drop you can see ("View all"), newest first. */
@@ -107,7 +113,9 @@ class SharedDropsApi(
                     )
                 }
             when (response.status.value) {
-                in 200..299 -> response.body<SharedDropResponse>().drop?.let { Result.success(it) } ?: Result.failure(Exception("Missing drop"))
+                in 200..299 ->
+                    response.body<SharedDropResponse>().drop?.let { Result.success(it) }
+                        ?: Result.failure(Exception("Missing drop"))
                 409 -> Result.failure(SharedDropPostException.CapReached())
                 413 -> Result.failure(SharedDropPostException.InvalidPhoto())
                 else -> api.clickWebFailure(response)
@@ -125,7 +133,13 @@ class SharedDropsApi(
     suspend fun download(url: String): Result<ByteArray> =
         call {
             val response = api.clickWebPlainClient.get(url)
-            if (response.status.value in 200..299) Result.success(response.body<ByteArray>()) else Result.failure(Exception("HTTP ${response.status.value}"))
+            if (response.status.value in
+                200..299
+            ) {
+                Result.success(response.body<ByteArray>())
+            } else {
+                Result.failure(Exception("HTTP ${response.status.value}"))
+            }
         }
 
     private inline fun <T> call(block: () -> Result<T>): Result<T> =

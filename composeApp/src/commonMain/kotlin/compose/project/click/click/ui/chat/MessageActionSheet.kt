@@ -90,7 +90,6 @@ internal fun canEditMessage(messageWithUser: MessageWithUser): Boolean {
         !message.id.startsWith("temp-")
 }
 
-/** A Click Drop stays unsaveable and unshareable until its collaboration window ends. */
 /**
  * Save/share only once a Click Drop has developed for this viewer ([dropState] from the develop
  * flow); a gated drop then exports its original, never the preview.

@@ -2,7 +2,6 @@
 
 package compose.project.click.click.data.repository
 
-import compose.project.click.click.data.api.installClickWebPlatformHeader // pragma: allowlist secret
 import compose.project.click.click.collaboration.CollaborationSession
 import compose.project.click.click.data.AppDataManager
 import compose.project.click.click.data.ContextTagTaxonomy
@@ -12,6 +11,7 @@ import compose.project.click.click.data.WeatherService
 import compose.project.click.click.data.api.ClickWebRequestException
 import compose.project.click.click.data.api.CollaborationSessionPostResponse
 import compose.project.click.click.data.api.ProximityBindOkResponseDto
+import compose.project.click.click.data.api.installClickWebPlatformHeader // pragma: allowlist secret
 import compose.project.click.click.data.auth.EnsureFreshAccessToken // pragma: allowlist secret
 import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.ConnectionActivityStatus

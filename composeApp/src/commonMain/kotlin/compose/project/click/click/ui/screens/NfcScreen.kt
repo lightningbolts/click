@@ -16,8 +16,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import compose.project.click.click.viewmodel.stopConnectionCapture // pragma: allowlist secret
-import compose.project.click.click.viewmodel.warmUpConnectionCapture // pragma: allowlist secret
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
@@ -57,6 +55,8 @@ import compose.project.click.click.ui.utils.rememberProximityHardwarePermissionR
 import compose.project.click.click.utils.LocationService // pragma: allowlist secret
 import compose.project.click.click.viewmodel.ConnectionState // pragma: allowlist secret
 import compose.project.click.click.viewmodel.ConnectionViewModel // pragma: allowlist secret
+import compose.project.click.click.viewmodel.stopConnectionCapture // pragma: allowlist secret
+import compose.project.click.click.viewmodel.warmUpConnectionCapture // pragma: allowlist secret
 import io.ktor.client.HttpClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch

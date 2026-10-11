@@ -533,7 +533,10 @@ class AuthViewModel(
         )
         // G1-9: the same teardown as sign-out, minus the local message store ([SessionEnd]).
         // An account already ended (or a different account now signed in) is left alone.
-        val userId = runCatching { tokenStorage.getUserId() }.getOrNull() ?: SupabaseConfig.client.auth.currentUserOrNull()?.id
+        val userId =
+            runCatching { tokenStorage.getUserId() }.getOrNull() ?: SupabaseConfig.client.auth
+                .currentUserOrNull()
+                ?.id
         if (userId != null) {
             SessionEnd.onRefreshRejected(userId)
             return
@@ -551,7 +554,11 @@ class AuthViewModel(
             SessionEndCoordinator(
                 currentUserId = {
                     runCatching { tokenStorage.getUserId() }.getOrNull()
-                        ?: runCatching { SupabaseConfig.client.auth.currentUserOrNull()?.id }.getOrNull()
+                        ?: runCatching {
+                            SupabaseConfig.client.auth
+                                .currentUserOrNull()
+                                ?.id
+                        }.getOrNull()
                 },
                 teardown = {
                     SessionRefreshCoordinator.clearSuccessfulRefresh()

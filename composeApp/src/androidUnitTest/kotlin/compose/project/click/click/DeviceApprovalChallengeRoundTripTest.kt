@@ -37,7 +37,8 @@ class DeviceApprovalChallengeRoundTripTest {
         assertEquals(Base64.encode(nonce), proof)
 
         // Bound to the request: the same envelope never unwraps for another one.
-        val other = deviceApprovalWrapMetadata("00000000-0000-4000-8000-000000000000", approver.info.deviceId, challenge.copy(chatId = null))
+        val other =
+            deviceApprovalWrapMetadata("00000000-0000-4000-8000-000000000000", approver.info.deviceId, challenge.copy(chatId = null))
         assertFails { MessageCryptoV2.unwrapEpochKey(other, approver, challenge.envelope) }
     }
 }

@@ -51,7 +51,10 @@ class DeviceApprovalViewModel(
         val loaded: Boolean = false,
     ) {
         val busy: Boolean get() = phase == Phase.Approving || phase == Phase.Denying
-        val finished: Boolean get() = phase == Phase.Approved || phase == Phase.Denied || (phase as? Phase.Failed)?.error?.retryable == false
+        val finished: Boolean get() =
+            phase == Phase.Approved ||
+                phase == Phase.Denied ||
+                (phase as? Phase.Failed)?.error?.retryable == false
     }
 
     private val _state = MutableStateFlow(UiState())
@@ -68,7 +71,14 @@ class DeviceApprovalViewModel(
             return
         }
         val deviceId = myDeviceId()
-        val listed = deviceId?.let { id -> api.historyRequests(id).getOrNull()?.incoming?.firstOrNull { it.id == requestId } }
+        val listed =
+            deviceId?.let { id ->
+                api
+                    .historyRequests(id)
+                    .getOrNull()
+                    ?.incoming
+                    ?.firstOrNull { it.id == requestId }
+            }
         if (listed != null) {
             _state.value = UiState(Phase.Asking, listed.deviceLabel, listed.createdAt, loaded = true)
             return

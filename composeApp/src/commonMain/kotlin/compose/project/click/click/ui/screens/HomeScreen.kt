@@ -45,6 +45,7 @@ import compose.project.click.click.ui.components.UnifiedToastHost // pragma: all
 import compose.project.click.click.ui.components.homeGreetingTitle // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberBottomChromePadding // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberUnifiedToastState // pragma: allowlist secret
+import compose.project.click.click.ui.drops.SharedDropsHomeSection
 import compose.project.click.click.ui.theme.* // pragma: allowlist secret
 import compose.project.click.click.ui.utils.mergeMapBeaconLists // pragma: allowlist secret
 import compose.project.click.click.viewmodel.AvailabilityViewModel // pragma: allowlist secret
@@ -53,7 +54,6 @@ import compose.project.click.click.viewmodel.HomeViewModel // pragma: allowlist 
 import compose.project.click.click.viewmodel.MapLayerFilter // pragma: allowlist secret
 import compose.project.click.click.viewmodel.MapViewModel // pragma: allowlist secret
 import compose.project.click.click.viewmodel.SharedDropsViewModel
-import compose.project.click.click.ui.drops.SharedDropsHomeSection
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.datetime.Clock

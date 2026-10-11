@@ -6,10 +6,11 @@ import androidx.compose.ui.Modifier
 data class QrScannerDetection(
     val normalizedCenterX: Float,
     val normalizedCenterY: Float,
-    val normalizedSize: Float
+    val normalizedSize: Float,
 )
 
 @Composable
+@Suppress("ktlint:standard:function-naming")
 expect fun QRScanner(
     modifier: Modifier = Modifier,
     isActive: Boolean = true,
@@ -21,5 +22,5 @@ expect fun QRScanner(
      * passes true and de-duplicates itself (the same pass may be scanned again after 3 s).
      */
     deliverRepeats: Boolean = false,
-    onResult: (String) -> Unit
+    onResult: (String) -> Unit,
 )

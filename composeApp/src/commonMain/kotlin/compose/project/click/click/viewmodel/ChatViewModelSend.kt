@@ -533,8 +533,7 @@ internal suspend fun ChatViewModel.activateConnectionIfPending(connectionId: Str
 }
 
 /** 1:1 chats only (group rows are synthetic), and only until the first send lands. */
-internal fun shouldMarkChatBegunAfterSend(details: ChatWithDetails): Boolean =
-    details.groupClique == null && !details.connection.has_begun
+internal fun shouldMarkChatBegunAfterSend(details: ChatWithDetails): Boolean = details.groupClique == null && !details.connection.has_begun
 
 internal fun ChatViewModel.updateMessageInputImpl(text: String) {
     _messageInput.value = text.take(CHAT_MESSAGE_INPUT_MAX_LENGTH)

@@ -367,7 +367,19 @@ class ChatApiClient(
                 client.post("$clickWebBaseUrl/api/chat/devices") {
                     header(HttpHeaders.Authorization, bearerAuthHeader(authToken))
                     contentType(ContentType.Application.Json)
-                    setBody(ClickWebRegisterChatDeviceBody(deviceId, identityPublicKey, deviceLabel?.trim()?.take(DEVICE_LABEL_MAX_LENGTH)?.takeIf { it.isNotEmpty() }))
+                    setBody(
+                        ClickWebRegisterChatDeviceBody(
+                            deviceId,
+                            identityPublicKey,
+                            deviceLabel
+                                ?.trim()
+                                ?.take(
+                                    DEVICE_LABEL_MAX_LENGTH,
+                                )?.takeIf {
+                                    it.isNotEmpty()
+                                },
+                        ),
+                    )
                 }
             if (response.status.value in 200..299) {
                 Result.success(response.body<ClickWebChatDeviceEnvelope>().device)
@@ -851,7 +863,14 @@ class ChatApiClient(
         v2: E2eeV2MediaUploadRequest? = null,
         dropOriginal: Boolean = false,
     ): Result<UploadedMedia> =
-        uploadMediaImpl(fileBytes = fileBytes, chatId = chatId, mimeType = mimeType, authToken = authToken, v2 = v2, dropOriginal = dropOriginal)
+        uploadMediaImpl(
+            fileBytes = fileBytes,
+            chatId = chatId,
+            mimeType = mimeType,
+            authToken = authToken,
+            v2 = v2,
+            dropOriginal = dropOriginal,
+        )
 
     suspend fun uploadAttachment(
         fileBytes: ByteArray,

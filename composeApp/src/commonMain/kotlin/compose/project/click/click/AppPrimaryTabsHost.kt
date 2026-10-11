@@ -23,7 +23,6 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import compose.project.click.click.viewmodel.warmUpConnectionCapture // pragma: allowlist secret
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
@@ -56,6 +55,7 @@ import compose.project.click.click.viewmodel.HomeViewModel // pragma: allowlist 
 import compose.project.click.click.viewmodel.MapLayerFilter // pragma: allowlist secret
 import compose.project.click.click.viewmodel.MapViewModel // pragma: allowlist secret
 import compose.project.click.click.viewmodel.VerifiedCliqueProximityIntent // pragma: allowlist secret
+import compose.project.click.click.viewmodel.warmUpConnectionCapture // pragma: allowlist secret
 import io.ktor.client.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.serialization.kotlinx.json.*

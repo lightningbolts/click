@@ -140,7 +140,11 @@ internal class AndroidConnectionSensorFeed(
         val listener =
             object : SensorEventListener {
                 override fun onSensorChanged(event: SensorEvent) {
-                    val hpa = event.values.firstOrNull()?.takeIf { it > 0f }?.toDouble() ?: return
+                    val hpa =
+                        event.values
+                            .firstOrNull()
+                            ?.takeIf { it > 0f }
+                            ?.toDouble() ?: return
                     val now = System.currentTimeMillis()
                     val observedAt = now - (SystemClock.elapsedRealtimeNanos() - event.timestamp).coerceAtLeast(0L) / 1_000_000L
                     onSample(PressureSample(pressureHpa = hpa, observedAtMs = observedAt))
@@ -217,4 +221,5 @@ actual fun currentConnectionDeviceContext(preciseLocationAuthorized: Boolean): C
 }
 
 /** True when fine (precise) location was granted. */
-actual fun hasPreciseLocationPermission(): Boolean = locationAppContextOrNull()?.hasPermission(Manifest.permission.ACCESS_FINE_LOCATION) == true
+actual fun hasPreciseLocationPermission(): Boolean =
+    locationAppContextOrNull()?.hasPermission(Manifest.permission.ACCESS_FINE_LOCATION) == true

@@ -123,9 +123,11 @@ class EventsTelemetrySink(
     }
 
     private fun readQueueLocked(): List<ProductEventBody> =
-        storage.get(KEY_QUEUE)?.let { raw ->
-            runCatching { json.decodeFromString(queueSerializer, raw) }.getOrNull()
-        }.orEmpty()
+        storage
+            .get(KEY_QUEUE)
+            ?.let { raw ->
+                runCatching { json.decodeFromString(queueSerializer, raw) }.getOrNull()
+            }.orEmpty()
 
     private fun writeQueueLocked(queue: List<ProductEventBody>) {
         storage.set(KEY_QUEUE, if (queue.isEmpty()) null else json.encodeToString(queueSerializer, queue))

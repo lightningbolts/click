@@ -13,7 +13,15 @@ class PushRoutesTableTest {
 
     @Test
     fun chatMessage() {
-        assertEquals(PushRoute.DirectChat("ch1", "c1"), route("chat_message", "chat_id" to "ch1", "connection_id" to "c1", "sender_user_id" to "u"))
+        assertEquals(
+            PushRoute.DirectChat("ch1", "c1"),
+            route(
+                "chat_message",
+                "chat_id" to "ch1",
+                "connection_id" to "c1",
+                "sender_user_id" to "u",
+            ),
+        )
         assertEquals(PushRoute.GroupChat("g1"), route("chat_message", "chat_id" to "g1", "group_id" to "grp", "sender_user_id" to "u"))
     }
 
@@ -37,8 +45,24 @@ class PushRoutesTableTest {
 
     @Test
     fun disposableRevealSingleAndBatched() {
-        assertEquals(PushRoute.DirectChat("ch1", "c1"), route("disposable_reveal", "encounter_id" to "e1", "connection_id" to "c1", "chat_id" to "ch1"))
-        assertEquals(PushRoute.DirectChat("ch1", ""), route("disposable_reveal", "chat_id" to "ch1", "message_id" to "m1", "drop_count" to "3"))
+        assertEquals(
+            PushRoute.DirectChat("ch1", "c1"),
+            route(
+                "disposable_reveal",
+                "encounter_id" to "e1",
+                "connection_id" to "c1",
+                "chat_id" to "ch1",
+            ),
+        )
+        assertEquals(
+            PushRoute.DirectChat("ch1", ""),
+            route(
+                "disposable_reveal",
+                "chat_id" to "ch1",
+                "message_id" to "m1",
+                "drop_count" to "3",
+            ),
+        )
     }
 
     @Test
@@ -64,7 +88,15 @@ class PushRoutesTableTest {
 
     @Test
     fun availabilityMatch() {
-        assertEquals(PushRoute.Connections, route("availability_match", "intent_tag" to "coffee", "connection_id" to "c1", "peer_user_id" to "u2"))
+        assertEquals(
+            PushRoute.Connections,
+            route(
+                "availability_match",
+                "intent_tag" to "coffee",
+                "connection_id" to "c1",
+                "peer_user_id" to "u2",
+            ),
+        )
     }
 
     @Test
@@ -105,7 +137,15 @@ class PushRoutesTableTest {
 
     @Test
     fun hangoutConfirm() {
-        assertEquals(PushRoute.Profile("u2"), route("hangout_confirm", "confirmation_id" to "h1", "peer_user_id" to "u2", "connection_id" to "c1"))
+        assertEquals(
+            PushRoute.Profile("u2"),
+            route(
+                "hangout_confirm",
+                "confirmation_id" to "h1",
+                "peer_user_id" to "u2",
+                "connection_id" to "c1",
+            ),
+        )
     }
 
     @Test
@@ -115,7 +155,15 @@ class PushRoutesTableTest {
 
     @Test
     fun sharedDropReleased() {
-        assertEquals(PushRoute.SharedDrop("d1", posterId = "u2", dropCount = 3), route("shared_drop_released", "drop_id" to "d1", "poster_id" to "u2", "drop_count" to "3"))
+        assertEquals(
+            PushRoute.SharedDrop("d1", posterId = "u2", dropCount = 3),
+            route(
+                "shared_drop_released",
+                "drop_id" to "d1",
+                "poster_id" to "u2",
+                "drop_count" to "3",
+            ),
+        )
         assertEquals(PushRoute.SharedDrop("d1", posterId = "u2"), route("shared_drop_released", "drop_id" to "d1", "poster_id" to "u2"))
         assertEquals(PushRoute.OpenApp, route("shared_drop_released"))
     }
@@ -132,7 +180,15 @@ class PushRoutesTableTest {
 
     @Test
     fun reconnectNearby() {
-        assertEquals(PushRoute.DirectChat("", "c1"), route("reconnect_nearby", "connection_id" to "c1", "peer_user_id" to "u1", "sender_name" to "Maya"))
+        assertEquals(
+            PushRoute.DirectChat("", "c1"),
+            route(
+                "reconnect_nearby",
+                "connection_id" to "c1",
+                "peer_user_id" to "u1",
+                "sender_name" to "Maya",
+            ),
+        )
         assertEquals(PushRoute.Connections, route("reconnect_nearby"))
     }
 

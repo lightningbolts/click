@@ -16,8 +16,8 @@ import compose.project.click.click.data.models.ChatMessageType // pragma: allowl
 import compose.project.click.click.data.models.Message // pragma: allowlist secret
 import compose.project.click.click.data.models.MessageDeliveryState // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
-import compose.project.click.click.data.repository.gatedClickDropMetadata // pragma: allowlist secret
 import compose.project.click.click.data.repository.ChatRepository // pragma: allowlist secret
+import compose.project.click.click.data.repository.gatedClickDropMetadata // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatAttachmentDownloadOutcome // pragma: allowlist secret
 import compose.project.click.click.ui.chat.saveDecryptedAttachmentToDownloads // pragma: allowlist secret
 import compose.project.click.click.util.readChatMediaVaultBytesForMessage // pragma: allowlist secret

@@ -2,22 +2,22 @@
 
 package compose.project.click.click.data // pragma: allowlist secret
 
+import compose.project.click.click.data.models.Message // pragma: allowlist secret
 import compose.project.click.click.data.realtime.LiveKind // pragma: allowlist secret
 import compose.project.click.click.data.realtime.LiveUpdates // pragma: allowlist secret
-import compose.project.click.click.data.models.Message // pragma: allowlist secret
 import compose.project.click.click.data.realtime.RealtimeCoordinator // pragma: allowlist secret
 import compose.project.click.click.util.chatMediaDispatcher // pragma: allowlist secret
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
 import io.github.jan.supabase.auth.auth
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit

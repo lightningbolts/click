@@ -109,7 +109,8 @@ internal fun ClickDropFlowPhoto(
     LaunchedEffect(message.id, secureState?.imageBytes) {
         if (mediaBitmap != null) return@LaunchedEffect
         val bytes = secureState?.imageBytes ?: return@LaunchedEffect
-        val decoded = withContext(Dispatchers.Default) { runCatching { bytes.toChatDisplayImageBitmap() }.getOrNull() } ?: return@LaunchedEffect
+        val decoded =
+            withContext(Dispatchers.Default) { runCatching { bytes.toChatDisplayImageBitmap() }.getOrNull() } ?: return@LaunchedEffect
         secureChatImageBitmapCache.put(message.id, decoded)
         mediaBitmap = decoded
     }

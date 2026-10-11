@@ -114,11 +114,17 @@ class SharedDropsViewModel(
             }
         }
         viewModelScope.launch {
-            api.strip().onSuccess { list ->
-                _state.update { it.copy(drops = list, loaded = true) }
-                writeChatMediaVaultFile(stripCacheKey(uid), json.encodeToString(ListSerializer(SharedDrop.serializer()), list).encodeToByteArray(), "json")
-                list.forEach { warmImages(it) }
-            }.onFailure { _state.update { s -> s.copy(loaded = true) } }
+            api
+                .strip()
+                .onSuccess { list ->
+                    _state.update { it.copy(drops = list, loaded = true) }
+                    writeChatMediaVaultFile(
+                        stripCacheKey(uid),
+                        json.encodeToString(ListSerializer(SharedDrop.serializer()), list).encodeToByteArray(),
+                        "json",
+                    )
+                    list.forEach { warmImages(it) }
+                }.onFailure { _state.update { s -> s.copy(loaded = true) } }
         }
     }
 
@@ -127,7 +133,17 @@ class SharedDropsViewModel(
         val id = drop.id
         if (id !in _previews.value) {
             readChatMediaVaultBytes(previewKey(id), "jpg")?.let { b -> _previews.update { it + (id to b) } }
-                ?: drop.previewUrl?.let { url -> load("p:$id") { api.download(url).getOrNull()?.also { b -> writeChatMediaVaultFile(previewKey(id), b, "jpg"); _previews.update { it + (id to b) } } } }
+                ?: drop.previewUrl?.let { url ->
+                    load("p:$id") {
+                        api.download(url).getOrNull()?.also { b ->
+                            writeChatMediaVaultFile(previewKey(id), b, "jpg")
+                            _previews.update {
+                                it +
+                                    (id to b)
+                            }
+                        }
+                    }
+                }
         }
         if (drop.state() == ClickDropDevelopState.Developed && id !in _originals.value) {
             readChatMediaVaultBytes(originalKey(id), "jpg")?.let { b -> _originals.update { it + (id to b) } }
@@ -227,7 +243,14 @@ class SharedDropsViewModel(
                     // You already have your own original.
                     writeChatMediaVaultFile(originalKey(drop.id), pending.jpeg, "jpg")
                     _previews.update { it + (drop.id to preview) }
-                    _state.update { s -> s.copy(posting = false, pendingPost = null, drops = listOf(drop) + s.drops.filterNot { it.id == drop.id }) }
+                    _state.update { s ->
+                        s.copy(
+                            posting = false,
+                            pendingPost = null,
+                            drops =
+                                listOf(drop) + s.drops.filterNot { it.id == drop.id },
+                        )
+                    }
                 }.onFailure { error ->
                     val message = (error as? SharedDropPostException)?.message ?: "Couldn't share your drop. Try again."
                     // Past the cap a retry can't succeed: drop the pending photo.
@@ -246,8 +269,18 @@ class SharedDropsViewModel(
         viewModelScope.launch {
             api
                 .delete(drop.id)
-                .onSuccess { _state.update { s -> s.copy(drops = s.drops.filterNot { it.id == drop.id }, archive = s.archive.filterNot { it.id == drop.id }) } }
-                .onFailure { _state.update { it.copy(notice = "Couldn't delete it. Try again.") } }
+                .onSuccess {
+                    _state.update { s ->
+                        s.copy(
+                            drops = s.drops.filterNot { it.id == drop.id },
+                            archive =
+                                s.archive.filterNot {
+                                    it.id ==
+                                        drop.id
+                                },
+                        )
+                    }
+                }.onFailure { _state.update { it.copy(notice = "Couldn't delete it. Try again.") } }
         }
     }
 
@@ -308,7 +341,18 @@ class SharedDropsViewModel(
                 )
             val first = drop.user.firstName
             _state.update {
-                it.copy(notice = if (sent == null) "Couldn't send. Try again." else if (isReaction) "Reaction sent to $first" else "Sent to $first")
+                it.copy(
+                    notice =
+                        if (sent ==
+                            null
+                        ) {
+                            "Couldn't send. Try again."
+                        } else if (isReaction) {
+                            "Reaction sent to $first"
+                        } else {
+                            "Sent to $first"
+                        },
+                )
             }
         }
     }
@@ -327,8 +371,19 @@ class SharedDropsViewModel(
                 .archive(if (reset) null else s.archiveNextBefore)
                 .onSuccess { page ->
                     _state.update {
-                        val merged = if (reset) page.drops else it.archive + page.drops.filter { d -> it.archive.none { a -> a.id == d.id } }
-                        it.copy(archive = merged, archiveNextBefore = page.nextBefore, archiveEnd = page.nextBefore == null, archiveLoading = false)
+                        val merged =
+                            if (reset) {
+                                page.drops
+                            } else {
+                                it.archive +
+                                    page.drops.filter { d -> it.archive.none { a -> a.id == d.id } }
+                            }
+                        it.copy(
+                            archive = merged,
+                            archiveNextBefore = page.nextBefore,
+                            archiveEnd = page.nextBefore == null,
+                            archiveLoading = false,
+                        )
                     }
                     page.drops.forEach { warmImages(it) }
                 }.onFailure { _state.update { it.copy(archiveLoading = false) } }

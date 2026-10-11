@@ -42,12 +42,12 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import compose.project.click.click.collaboration.sharedDropDevelopHours
-import compose.project.click.click.core.FeatureFlags
 import compose.project.click.click.collaboration.SharedDrop
 import compose.project.click.click.collaboration.SharedDropAudience
 import compose.project.click.click.collaboration.graphemeCount
 import compose.project.click.click.collaboration.sharedDropCaptionFits
+import compose.project.click.click.collaboration.sharedDropDevelopHours
+import compose.project.click.click.core.FeatureFlags
 import compose.project.click.click.ui.camera.DisposableCameraView
 
 /*
@@ -108,10 +108,21 @@ private fun SharedDropAudienceSheet(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = onCancel) { Text("Cancel") }
-            Text("Share drop", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            Text(
+                "Share drop",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.weight(1f),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            )
             Button(onClick = { onShare(audience, caption.trim().takeIf { it.isNotEmpty() }) }) { Text("Share") }
         }
-        Box(Modifier.fillMaxWidth().aspectRatio(3f / 4f).clip(RoundedCornerShape(20.dp)).background(Color.Black)) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .aspectRatio(3f / 4f)
+                .clip(RoundedCornerShape(20.dp))
+                .background(Color.Black),
+        ) {
             photo?.let { Image(it, "Your drop", Modifier.fillMaxSize(), contentScale = ContentScale.Crop) }
             val left = SharedDrop.CAPTION_LIMIT - graphemeCount(caption)
             if (left < 20) {
@@ -143,13 +154,23 @@ private fun SharedDropAudienceSheet(
         Text("Share with", style = MaterialTheme.typography.titleSmall)
         listOf(SharedDropAudience.ALL to "All connections", SharedDropAudience.CORE to "Core connections").forEach { (value, label) ->
             Row(
-                Modifier.fillMaxWidth().selectable(selected = audience == value, role = Role.RadioButton) { audience = value }.padding(vertical = 4.dp),
+                Modifier
+                    .fillMaxWidth()
+                    .selectable(
+                        selected = audience == value,
+                        role = Role.RadioButton,
+                    ) { audience = value }
+                    .padding(vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 RadioButton(selected = audience == value, onClick = null)
                 Text(label, modifier = Modifier.padding(start = 8.dp))
             }
         }
-        Text(sharedDropDisclosure(sharedDropDevelopHours(flags)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(
+            sharedDropDisclosure(sharedDropDevelopHours(flags)),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }

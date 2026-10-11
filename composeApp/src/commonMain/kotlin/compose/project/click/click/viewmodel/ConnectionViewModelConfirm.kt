@@ -280,7 +280,11 @@ internal fun ConnectionViewModel.syncHostSelectionExclusions(
     tagging: ConnectionState.TaggingContext,
     selected: Set<String>,
 ) {
-    val candidates = tagging.selectableUsers.ifEmpty { tagging.targetUsers }.map { it.id }.toSet()
+    val candidates =
+        tagging.selectableUsers
+            .ifEmpty { tagging.targetUsers }
+            .map { it.id }
+            .toSet()
     val excluded = proximityExcludedMemberIds(candidates, selected)
     hostSelectionCurrent = selected
     hostSelectionExcluded = excluded
@@ -390,7 +394,11 @@ internal fun ConnectionViewModel.confirmHostProximitySelectionImpl(
                         )
                     }.getOrElse { err ->
                         // G4-5: another phone in the same tap may have confirmed first; its match includes us.
-                        val jwt = runCatching { compose.project.click.click.data.auth.EnsureFreshAccessToken.get(repository.tokenStorage) }.getOrNull() // pragma: allowlist secret
+                        val jwt =
+                            runCatching {
+                                compose.project.click.click.data.auth.EnsureFreshAccessToken
+                                    .get(repository.tokenStorage)
+                            }.getOrNull() // pragma: allowlist secret
                         val recovered =
                             jwt?.takeIf { it.isNotBlank() }?.let {
                                 withContext(Dispatchers.Default) { repository.recoverPendingProximityHandshake(it, pendingId) }.getOrNull()
@@ -761,7 +769,10 @@ internal fun ConnectionViewModel.connectWithUserImpl(
                     runCatching {
                         captureConnectContext(
                             method = captureSession?.method ?: "link",
-                            momentMs = qrScanMomentMs ?: kotlinx.datetime.Clock.System.now().toEpochMilliseconds(),
+                            momentMs =
+                                qrScanMomentMs ?: kotlinx.datetime.Clock.System
+                                    .now()
+                                    .toEpochMilliseconds(),
                             includeLocation = venueId.isNullOrBlank() && AppDataManager.shouldCaptureLocationAtTap(),
                             cold = captureSession?.isRunning != true,
                         )

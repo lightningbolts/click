@@ -37,7 +37,6 @@ import compose.project.click.click.ui.chat.MuteDurationDialog
 import compose.project.click.click.ui.chat.PlanHangoutSheet
 import compose.project.click.click.ui.chat.canEditMessage // pragma: allowlist secret
 import compose.project.click.click.ui.chat.canExportMessageMedia // pragma: allowlist secret
-import compose.project.click.click.viewmodel.clickDropState // pragma: allowlist secret
 import compose.project.click.click.ui.chat.muteResultMessage
 import compose.project.click.click.ui.components.ClickOutlinedTextField // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
@@ -51,6 +50,7 @@ import compose.project.click.click.viewmodel.ChatMessagesState // pragma: allowl
 import compose.project.click.click.viewmodel.ChatViewModel // pragma: allowlist secret
 import compose.project.click.click.viewmodel.canDiscardFailed
 import compose.project.click.click.viewmodel.canRetrySend
+import compose.project.click.click.viewmodel.clickDropState // pragma: allowlist secret
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 

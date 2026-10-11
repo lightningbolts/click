@@ -94,7 +94,12 @@ fun SharedDropsStrip(
                 .padding(horizontal = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("Click Drops", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            Text(
+                "Click Drops",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.weight(1f),
+            )
             if (onViewAll != null) {
                 Text("View all", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -156,7 +161,12 @@ private fun PersonTile(
                     label.removePrefix("Develops "),
                     style = MaterialTheme.typography.labelSmall,
                     color = Color.White,
-                    modifier = Modifier.align(Alignment.BottomCenter).background(Color.Black.copy(alpha = 0.4f), RoundedCornerShape(50)).padding(horizontal = 8.dp, vertical = 3.dp),
+                    modifier =
+                        Modifier
+                            .align(
+                                Alignment.BottomCenter,
+                            ).background(Color.Black.copy(alpha = 0.4f), RoundedCornerShape(50))
+                            .padding(horizontal = 8.dp, vertical = 3.dp),
                 )
             }
         }

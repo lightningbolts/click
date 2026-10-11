@@ -68,6 +68,7 @@ internal suspend fun ChatViewModel.loadDevelopedDropOriginal(message: Message): 
     val s = _chatMessagesState.value as? ChatMessagesState.Success ?: return null
     val chatId = s.chatDetails.chat.id ?: return null
     val viewer = _currentUserId.value ?: return null
+
     suspend fun fetch(url: String?): ByteArray? =
         url?.let {
             withContext(compose.project.click.click.util.chatMediaDispatcher) {
@@ -101,7 +102,16 @@ private fun ChatViewModel.publishDropOriginal(
 ) {
     _dropOriginalBytes.update { current ->
         val next = current + (id to bytes)
-        if (next.size <= DROP_ORIGINAL_MEMORY_ENTRIES) next else next.entries.drop(next.size - DROP_ORIGINAL_MEMORY_ENTRIES).associate { it.key to it.value }
+        if (next.size <=
+            DROP_ORIGINAL_MEMORY_ENTRIES
+        ) {
+            next
+        } else {
+            next.entries.drop(next.size - DROP_ORIGINAL_MEMORY_ENTRIES).associate {
+                it.key to
+                    it.value
+            }
+        }
     }
 }
 

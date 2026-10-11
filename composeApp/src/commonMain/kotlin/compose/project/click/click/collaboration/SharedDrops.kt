@@ -25,7 +25,12 @@ data class SharedDropUser(
     val name: String = "Someone",
     @SerialName("avatar_url") val avatarUrl: String? = null,
 ) {
-    val firstName: String get() = name.trim().split(Regex("\\s+")).firstOrNull()?.takeIf { it.isNotEmpty() } ?: name
+    val firstName: String get() =
+        name
+            .trim()
+            .split(Regex("\\s+"))
+            .firstOrNull()
+            ?.takeIf { it.isNotEmpty() } ?: name
 }
 
 /** One drop as `GET /api/me/shared-drops` (and the archive) sends it. */

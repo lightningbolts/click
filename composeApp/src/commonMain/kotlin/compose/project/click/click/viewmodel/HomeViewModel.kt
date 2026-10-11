@@ -2,8 +2,6 @@
 
 package compose.project.click.click.viewmodel // pragma: allowlist secret
 
-import compose.project.click.click.data.realtime.LiveKind // pragma: allowlist secret
-import compose.project.click.click.data.realtime.LiveUpdates // pragma: allowlist secret
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
@@ -25,6 +23,8 @@ import compose.project.click.click.data.models.collapseOneToOneConnectionsByPeer
 import compose.project.click.click.data.models.homePriority
 import compose.project.click.click.data.models.isActiveForUser // pragma: allowlist secret
 import compose.project.click.click.data.models.typed
+import compose.project.click.click.data.realtime.LiveKind // pragma: allowlist secret
+import compose.project.click.click.data.realtime.LiveUpdates // pragma: allowlist secret
 import compose.project.click.click.data.repository.ChatRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.ConnectionRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.MapBeaconRepository // pragma: allowlist secret

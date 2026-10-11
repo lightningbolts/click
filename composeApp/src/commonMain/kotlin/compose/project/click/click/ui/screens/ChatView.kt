@@ -232,102 +232,33 @@ fun ChatView(
     androidx.compose.runtime.CompositionLocalProvider(
         compose.project.click.click.ui.chat.LocalClickDropBubbleHost provides clickDropHost,
     ) {
-    Box(
-        modifier =
-            Modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background),
-    ) {
-        val successForMesh = chatMessagesState as? ChatMessagesState.Success
-        if (successForMesh != null) {
-            ChatAmbientMeshBackground(
-                connection = successForMesh.chatDetails.connection,
-                isHubNeutral = successForMesh.chatDetails.groupClique != null,
-                modifier = Modifier.fillMaxSize(),
-            )
-        }
-        Column(modifier = Modifier.fillMaxSize()) {
-            when (val state = chatMessagesState) {
-                is ChatMessagesState.Loading -> {
-                    val hintedRow =
-                        (chatListState as? ChatListState.Success)
-                            ?.chats
-                            ?.firstOrNull { it.connection.id == chatId || it.chat.id == chatId }
-                    if (hintedRow != null &&
-                        (
-                            hintedRow.lastMessage != null ||
-                                hintedRow.chat.messages.isNotEmpty()
-                        )
-                    ) {
-                        ChatWarmLoadingView(
-                            topInset = topInset,
-                            onBackPressed = onBackPressed,
-                            chatRow = hintedRow,
-                        )
-                    } else {
-                        ChatChannelLoadingView(
-                            topInset = topInset,
-                            onBackPressed = onBackPressed,
-                        )
-                    }
-                }
-                is ChatMessagesState.Error -> {
-                    Box(modifier = Modifier.padding(start = 20.dp, top = topInset, end = 20.dp)) {
-                        Row(
-                            modifier =
-                                Modifier
-                                    .fillMaxWidth()
-                                    .height(56.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            ChatHeaderIconButton(
-                                icon = Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "Back",
-                                onClick = onBackPressed,
-                                showBorder = true,
-                            )
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Text(
-                                text = "Chat",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurface,
-                            )
-                        }
-                    }
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                "Error loading chat",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.error,
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                state.message,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-                }
-                is ChatMessagesState.Success -> {
-                    val stateMatchesThread =
-                        state.chatDetails.connection.id == chatId ||
-                            (
-                                !state.chatDetails.chat.id
-                                    .isNullOrBlank() &&
-                                    state.chatDetails.chat.id == chatId
-                            )
-                    if (!stateMatchesThread) {
+        Box(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.background),
+        ) {
+            val successForMesh = chatMessagesState as? ChatMessagesState.Success
+            if (successForMesh != null) {
+                ChatAmbientMeshBackground(
+                    connection = successForMesh.chatDetails.connection,
+                    isHubNeutral = successForMesh.chatDetails.groupClique != null,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+            Column(modifier = Modifier.fillMaxSize()) {
+                when (val state = chatMessagesState) {
+                    is ChatMessagesState.Loading -> {
                         val hintedRow =
                             (chatListState as? ChatListState.Success)
                                 ?.chats
                                 ?.firstOrNull { it.connection.id == chatId || it.chat.id == chatId }
-                        if (hintedRow != null) {
+                        if (hintedRow != null &&
+                            (
+                                hintedRow.lastMessage != null ||
+                                    hintedRow.chat.messages.isNotEmpty()
+                            )
+                        ) {
                             ChatWarmLoadingView(
                                 topInset = topInset,
                                 onBackPressed = onBackPressed,
@@ -339,297 +270,372 @@ fun ChatView(
                                 onBackPressed = onBackPressed,
                             )
                         }
-                        return@Column
                     }
-                    val chatDetails = state.chatDetails
-                    val messages = state.messages
-                    // R1.1: hoist secure media load state above the LazyColumn so each item doesn't
-                    // subscribe to the full map.
-                    val isGroupChat = chatDetails.groupClique != null
-                    val overlapRepo = remember { SupabaseRepository() }
-                    val chatPeerId = chatDetails.otherUser.id
-                    val tetherChannelId =
-                        remember(
-                            chatDetails.connection.id,
-                            collaborationSessions,
+                    is ChatMessagesState.Error -> {
+                        Box(modifier = Modifier.padding(start = 20.dp, top = topInset, end = 20.dp)) {
+                            Row(
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .height(56.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                ChatHeaderIconButton(
+                                    icon = Icons.AutoMirrored.Filled.ArrowBack,
+                                    contentDescription = "Back",
+                                    onClick = onBackPressed,
+                                    showBorder = true,
+                                )
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Text(
+                                    text = "Chat",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                )
+                            }
+                        }
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center,
                         ) {
-                            collaborationSessions[chatDetails.connection.id]?.encounterId?.takeIf { it.isNotBlank() }
-                                ?: chatDetails.connection.recentEncounterId()?.takeIf { it.isNotBlank() }
-                                ?: chatDetails.connection.id
-                        }
-                    val tetherMemberNamesById =
-                        remember(chatDetails.groupMemberUsers, currentUser, chatDetails.otherUser) {
-                            (chatDetails.groupMemberUsers + listOfNotNull(currentUser, chatDetails.otherUser))
-                                .distinctBy { it.id }
-                                .associate { user ->
-                                    user.id to (user.name?.trim()?.takeIf { it.isNotEmpty() } ?: "Friend")
-                                }
-                        }
-                    val peerDisplayName = chatDetails.otherUser.name ?: "Friend"
-                    LaunchedEffect(tetherChannelId, peerDisplayName) {
-                        EncounterTetherWidgetBridge.updateRecentEncounter(tetherChannelId, peerDisplayName)
-                    }
-                    LaunchedEffect(tetherChannelId, currentUserId, chatPeerId, peerDisplayName, tetherMemberNamesById) {
-                        val self = currentUserId ?: return@LaunchedEffect
-                        val resolver: (String) -> String = { senderId ->
-                            if (isGroupChat) {
-                                tetherMemberNamesById[senderId] ?: "Someone"
-                            } else if (senderId == chatPeerId) {
-                                peerDisplayName
-                            } else {
-                                "Friend"
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    "Error loading chat",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.error,
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    state.message,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
                             }
                         }
-                        EncounterTetherManager.setPeerNameResolver(resolver)
-                        EncounterTetherManager.subscribe(tetherChannelId, self, resolver)
                     }
-                    LaunchedEffect(tetherPayload, chatPeerId, currentUserId, isGroupChat) {
-                        val ping =
-                            tetherPayload ?: run {
-                                tetherToastMessage = null
-                                return@LaunchedEffect
-                            }
-                        if (ping.senderId == currentUserId) return@LaunchedEffect
-                        if (!isGroupChat && ping.senderId != chatPeerId) return@LaunchedEffect
-                        val receiver = LocationService().getCurrentLocation()
-                        tetherToastMessage =
-                            if (receiver != null) {
-                                tetherCompassMessage(
-                                    senderName = ping.senderName,
-                                    receiverLat = receiver.latitude,
-                                    receiverLng = receiver.longitude,
-                                    senderLat = ping.latitude,
-                                    senderLng = ping.longitude,
+                    is ChatMessagesState.Success -> {
+                        val stateMatchesThread =
+                            state.chatDetails.connection.id == chatId ||
+                                (
+                                    !state.chatDetails.chat.id
+                                        .isNullOrBlank() &&
+                                        state.chatDetails.chat.id == chatId
+                                )
+                        if (!stateMatchesThread) {
+                            val hintedRow =
+                                (chatListState as? ChatListState.Success)
+                                    ?.chats
+                                    ?.firstOrNull { it.connection.id == chatId || it.chat.id == chatId }
+                            if (hintedRow != null) {
+                                ChatWarmLoadingView(
+                                    topInset = topInset,
+                                    onBackPressed = onBackPressed,
+                                    chatRow = hintedRow,
                                 )
                             } else {
-                                "${ping.senderName} pinged their tether"
+                                ChatChannelLoadingView(
+                                    topInset = topInset,
+                                    onBackPressed = onBackPressed,
+                                )
                             }
-                    }
-                    var chatHasIntentOverlap by remember(chatDetails.otherUser.id, currentUserId, isGroupChat) {
-                        val v = currentUserId
-                        val cached =
-                            if (!isGroupChat && !v.isNullOrBlank()) {
-                                AvailabilityOverlapCache.get(v, chatPeerId)
-                            } else {
-                                null
-                            }
-                        mutableStateOf(cached == true)
-                    }
-                    LaunchedEffect(chatDetails.otherUser.id, currentUserId, isGroupChat) {
-                        if (isGroupChat) {
-                            chatHasIntentOverlap = false
-                            return@LaunchedEffect
+                            return@Column
                         }
-                        val v =
-                            currentUserId ?: run {
+                        val chatDetails = state.chatDetails
+                        val messages = state.messages
+                        // R1.1: hoist secure media load state above the LazyColumn so each item doesn't
+                        // subscribe to the full map.
+                        val isGroupChat = chatDetails.groupClique != null
+                        val overlapRepo = remember { SupabaseRepository() }
+                        val chatPeerId = chatDetails.otherUser.id
+                        val tetherChannelId =
+                            remember(
+                                chatDetails.connection.id,
+                                collaborationSessions,
+                            ) {
+                                collaborationSessions[chatDetails.connection.id]?.encounterId?.takeIf { it.isNotBlank() }
+                                    ?: chatDetails.connection.recentEncounterId()?.takeIf { it.isNotBlank() }
+                                    ?: chatDetails.connection.id
+                            }
+                        val tetherMemberNamesById =
+                            remember(chatDetails.groupMemberUsers, currentUser, chatDetails.otherUser) {
+                                (chatDetails.groupMemberUsers + listOfNotNull(currentUser, chatDetails.otherUser))
+                                    .distinctBy { it.id }
+                                    .associate { user ->
+                                        user.id to (user.name?.trim()?.takeIf { it.isNotEmpty() } ?: "Friend")
+                                    }
+                            }
+                        val peerDisplayName = chatDetails.otherUser.name ?: "Friend"
+                        LaunchedEffect(tetherChannelId, peerDisplayName) {
+                            EncounterTetherWidgetBridge.updateRecentEncounter(tetherChannelId, peerDisplayName)
+                        }
+                        LaunchedEffect(tetherChannelId, currentUserId, chatPeerId, peerDisplayName, tetherMemberNamesById) {
+                            val self = currentUserId ?: return@LaunchedEffect
+                            val resolver: (String) -> String = { senderId ->
+                                if (isGroupChat) {
+                                    tetherMemberNamesById[senderId] ?: "Someone"
+                                } else if (senderId == chatPeerId) {
+                                    peerDisplayName
+                                } else {
+                                    "Friend"
+                                }
+                            }
+                            EncounterTetherManager.setPeerNameResolver(resolver)
+                            EncounterTetherManager.subscribe(tetherChannelId, self, resolver)
+                        }
+                        LaunchedEffect(tetherPayload, chatPeerId, currentUserId, isGroupChat) {
+                            val ping =
+                                tetherPayload ?: run {
+                                    tetherToastMessage = null
+                                    return@LaunchedEffect
+                                }
+                            if (ping.senderId == currentUserId) return@LaunchedEffect
+                            if (!isGroupChat && ping.senderId != chatPeerId) return@LaunchedEffect
+                            val receiver = LocationService().getCurrentLocation()
+                            tetherToastMessage =
+                                if (receiver != null) {
+                                    tetherCompassMessage(
+                                        senderName = ping.senderName,
+                                        receiverLat = receiver.latitude,
+                                        receiverLng = receiver.longitude,
+                                        senderLat = ping.latitude,
+                                        senderLng = ping.longitude,
+                                    )
+                                } else {
+                                    "${ping.senderName} pinged their tether"
+                                }
+                        }
+                        var chatHasIntentOverlap by remember(chatDetails.otherUser.id, currentUserId, isGroupChat) {
+                            val v = currentUserId
+                            val cached =
+                                if (!isGroupChat && !v.isNullOrBlank()) {
+                                    AvailabilityOverlapCache.get(v, chatPeerId)
+                                } else {
+                                    null
+                                }
+                            mutableStateOf(cached == true)
+                        }
+                        LaunchedEffect(chatDetails.otherUser.id, currentUserId, isGroupChat) {
+                            if (isGroupChat) {
                                 chatHasIntentOverlap = false
                                 return@LaunchedEffect
                             }
-                        val peer = chatDetails.otherUser.id
-                        AvailabilityOverlapCache.get(v, peer)?.let { cached ->
-                            chatHasIntentOverlap = cached
-                            return@LaunchedEffect
-                        }
-                        val mine =
-                            ViewerAvailabilityBubblesCache.get(v)
-                                ?: overlapRepo.fetchPeerProfileAvailabilityBubbles(v, v).also {
-                                    ViewerAvailabilityBubblesCache.put(v, it)
+                            val v =
+                                currentUserId ?: run {
+                                    chatHasIntentOverlap = false
+                                    return@LaunchedEffect
                                 }
-                        val result =
-                            withContext(Dispatchers.Default) {
-                                val theirs = overlapRepo.fetchPeerProfileAvailabilityBubbles(v, peer)
-                                hasActiveAvailabilityIntentOverlap(mine, theirs)
+                            val peer = chatDetails.otherUser.id
+                            AvailabilityOverlapCache.get(v, peer)?.let { cached ->
+                                chatHasIntentOverlap = cached
+                                return@LaunchedEffect
                             }
-                        AvailabilityOverlapCache.put(v, peer, result)
-                        chatHasIntentOverlap = result
-                    }
-                    val typingUserIds by viewModel.typingUserIds.collectAsState()
-                    val typingIdentities = rememberIdentityNames(if (isGroupChat) typingUserIds else emptyList())
-                    val typingPeerLabel =
-                        remember(chatDetails.otherUser.name, isGroupChat, typingUserIds, chatDetails.groupMemberUsers, typingIdentities) {
-                            if (isGroupChat) {
-                                val names =
-                                    typingUserIds.map { id ->
-                                        (
-                                            chatDetails.groupMemberUsers.firstOrNull { it.id == id }?.name
-                                                ?: typingIdentities[id]?.name
-                                        )?.substringBefore(' ')
-                                            ?.ifBlank { null } ?: "Someone"
+                            val mine =
+                                ViewerAvailabilityBubblesCache.get(v)
+                                    ?: overlapRepo.fetchPeerProfileAvailabilityBubbles(v, v).also {
+                                        ViewerAvailabilityBubblesCache.put(v, it)
                                     }
-                                typingLabel(names) ?: "Someone is typing"
+                            val result =
+                                withContext(Dispatchers.Default) {
+                                    val theirs = overlapRepo.fetchPeerProfileAvailabilityBubbles(v, peer)
+                                    hasActiveAvailabilityIntentOverlap(mine, theirs)
+                                }
+                            AvailabilityOverlapCache.put(v, peer, result)
+                            chatHasIntentOverlap = result
+                        }
+                        val typingUserIds by viewModel.typingUserIds.collectAsState()
+                        val typingIdentities = rememberIdentityNames(if (isGroupChat) typingUserIds else emptyList())
+                        val typingPeerLabel =
+                            remember(
+                                chatDetails.otherUser.name,
+                                isGroupChat,
+                                typingUserIds,
+                                chatDetails.groupMemberUsers,
+                                typingIdentities,
+                            ) {
+                                if (isGroupChat) {
+                                    val names =
+                                        typingUserIds.map { id ->
+                                            (
+                                                chatDetails.groupMemberUsers.firstOrNull { it.id == id }?.name
+                                                    ?: typingIdentities[id]?.name
+                                            )?.substringBefore(' ')
+                                                ?.ifBlank { null } ?: "Someone"
+                                        }
+                                    typingLabel(names) ?: "Someone is typing"
+                                } else {
+                                    "${chatDetails.otherUser.name ?: "Someone"} is typing"
+                                }
+                            }
+                        val groupTitle =
+                            chatDetails.groupClique
+                                ?.name
+                                ?.trim()
+                                ?.ifBlank { null }
+                                ?: "Verified click"
+                        val memberSummaryLine =
+                            remember(chatDetails.groupClique, chatDetails.groupMemberUsers, currentUser) {
+                                val gc = chatDetails.groupClique ?: return@remember null
+                                val self = currentUser
+                                val nameParts =
+                                    buildList {
+                                        val byId =
+                                            (chatDetails.groupMemberUsers + listOfNotNull(self))
+                                                .distinctBy { it.id }
+                                                .associateBy { it.id }
+                                        gc.memberUserIds.sorted().forEach { id ->
+                                            val u = byId[id]
+                                            val part =
+                                                u?.firstName?.trim()?.takeIf { it.isNotEmpty() }
+                                                    ?: u
+                                                        ?.name
+                                                        ?.trim()
+                                                        ?.split(Regex("\\s+"))
+                                                        ?.firstOrNull()
+                                                        ?.takeIf { it.isNotEmpty() }
+                                                    ?: "Member"
+                                            add(part)
+                                        }
+                                    }
+                                "${gc.memberUserIds.size} members: ${nameParts.joinToString(", ")}"
+                            }
+                        val mediaPickers =
+                            rememberChatMediaPickers(
+                                onImagePicked = { bytes, mime -> viewModel.stageMediaForUpload(bytes, mime) },
+                                onAudioPicked = { bytes, mime, dur -> viewModel.sendChatAudio(bytes, mime, dur?.toInt()) },
+                                onFilePicked = { picked ->
+                                    viewModel.sendChatFile(picked.bytes, picked.mimeType, picked.fileName)
+                                },
+                                onMediaAccessBlocked = { msg ->
+                                    toastState.show(coroutineScope, msg)
+                                },
+                            )
+
+                        /**
+                         * Full-screen ambient mesh behind header + thread. Top padding uses
+                         * [WindowInsets.statusBars] only so opening the IME does not push the header past the
+                         * top via [WindowInsets.safeDrawing] / display cutout coupling.
+                         */
+                        val reverseListNewestEdgePad = 6.dp
+                        val showIcebreaker = showIcebreakerPanel && icebreakerPrompts.isNotEmpty() && messages.size < 5
+                        val icebreakerPanelHeightPxState = remember { mutableIntStateOf(0) }
+                        var icebreakerPanelHeightPx by icebreakerPanelHeightPxState
+                        val icebreakerTimelineTopReserve =
+                            if (showIcebreaker) {
+                                val measured = with(density) { icebreakerPanelHeightPx.toDp() }
+                                if (measured > 0.dp) measured + 8.dp else 228.dp
                             } else {
-                                "${chatDetails.otherUser.name ?: "Someone"} is typing"
+                                0.dp
                             }
-                        }
-                    val groupTitle =
-                        chatDetails.groupClique
-                            ?.name
-                            ?.trim()
-                            ?.ifBlank { null }
-                            ?: "Verified click"
-                    val memberSummaryLine =
-                        remember(chatDetails.groupClique, chatDetails.groupMemberUsers, currentUser) {
-                            val gc = chatDetails.groupClique ?: return@remember null
-                            val self = currentUser
-                            val nameParts =
-                                buildList {
-                                    val byId =
-                                        (chatDetails.groupMemberUsers + listOfNotNull(self))
-                                            .distinctBy { it.id }
-                                            .associateBy { it.id }
-                                    gc.memberUserIds.sorted().forEach { id ->
-                                        val u = byId[id]
-                                        val part =
-                                            u?.firstName?.trim()?.takeIf { it.isNotEmpty() }
-                                                ?: u
-                                                    ?.name
-                                                    ?.trim()
-                                                    ?.split(Regex("\\s+"))
-                                                    ?.firstOrNull()
-                                                    ?.takeIf { it.isNotEmpty() }
-                                                ?: "Member"
-                                        add(part)
-                                    }
-                                }
-                            "${gc.memberUserIds.size} members: ${nameParts.joinToString(", ")}"
-                        }
-                    val mediaPickers =
-                        rememberChatMediaPickers(
-                            onImagePicked = { bytes, mime -> viewModel.stageMediaForUpload(bytes, mime) },
-                            onAudioPicked = { bytes, mime, dur -> viewModel.sendChatAudio(bytes, mime, dur?.toInt()) },
-                            onFilePicked = { picked ->
-                                viewModel.sendChatFile(picked.bytes, picked.mimeType, picked.fileName)
-                            },
-                            onMediaAccessBlocked = { msg ->
-                                toastState.show(coroutineScope, msg)
-                            },
-                        )
+                        val messageContentModifier =
+                            Modifier
+                                .weight(1f)
+                                .fillMaxWidth()
 
-                    /**
-                     * Full-screen ambient mesh behind header + thread. Top padding uses
-                     * [WindowInsets.statusBars] only so opening the IME does not push the header past the
-                     * top via [WindowInsets.safeDrawing] / display cutout coupling.
-                     */
-                    val reverseListNewestEdgePad = 6.dp
-                    val showIcebreaker = showIcebreakerPanel && icebreakerPrompts.isNotEmpty() && messages.size < 5
-                    val icebreakerPanelHeightPxState = remember { mutableIntStateOf(0) }
-                    var icebreakerPanelHeightPx by icebreakerPanelHeightPxState
-                    val icebreakerTimelineTopReserve =
-                        if (showIcebreaker) {
-                            val measured = with(density) { icebreakerPanelHeightPx.toDp() }
-                            if (measured > 0.dp) measured + 8.dp else 228.dp
-                        } else {
-                            0.dp
-                        }
-                    val messageContentModifier =
-                        Modifier
-                            .weight(1f)
-                            .fillMaxWidth()
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                        ) {
+                            Column(modifier = Modifier.fillMaxSize()) {
+                                ChatViewSuccessHeader(
+                                    viewModel = viewModel,
+                                    topInset = topInset,
+                                    chatDetails = chatDetails,
+                                    isGroupChat = isGroupChat,
+                                    groupTitle = groupTitle,
+                                    memberSummaryLine = memberSummaryLine,
+                                    coreConnectionIds = coreConnectionIds,
+                                    chatHasIntentOverlap = chatHasIntentOverlap,
+                                    onBackPressed = onBackPressed,
+                                    onOpenUserProfile = onOpenUserProfile,
+                                    onOpenGroupMembersPicker = onOpenGroupMembersPicker,
+                                    showConnectionSheetState = showConnectionSheetState,
+                                    showRenameGroupDialogState = showRenameGroupDialogState,
+                                    renameGroupDraftState = renameGroupDraftState,
+                                )
 
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                    ) {
-                        Column(modifier = Modifier.fillMaxSize()) {
-                            ChatViewSuccessHeader(
-                                viewModel = viewModel,
-                                topInset = topInset,
-                                chatDetails = chatDetails,
-                                isGroupChat = isGroupChat,
-                                groupTitle = groupTitle,
-                                memberSummaryLine = memberSummaryLine,
-                                coreConnectionIds = coreConnectionIds,
-                                chatHasIntentOverlap = chatHasIntentOverlap,
-                                onBackPressed = onBackPressed,
-                                onOpenUserProfile = onOpenUserProfile,
-                                onOpenGroupMembersPicker = onOpenGroupMembersPicker,
-                                showConnectionSheetState = showConnectionSheetState,
-                                showRenameGroupDialogState = showRenameGroupDialogState,
-                                renameGroupDraftState = renameGroupDraftState,
-                            )
-
-                            ChatViewTimelinePane(
-                                viewModel = viewModel,
-                                chatId = chatId,
-                                targetMessageId = targetMessageId,
-                                state = state,
-                                chatDetails = chatDetails,
-                                messages = messages,
-                                isGroupChat = isGroupChat,
-                                currentUserId = currentUserId,
-                                activeApiChatId = activeApiChatId,
-                                listState = listState,
-                                coroutineScope = coroutineScope,
-                                dismissKeyboardOnUserMessageScroll = dismissKeyboardOnUserMessageScroll,
-                                suppressKeyboardDismissWhileProgrammaticTimelineScroll = suppressKeyboardDismissWhileProgrammaticTimelineScroll,
-                                initialTimelineScrollDoneState = initialTimelineScrollDoneState,
-                                focusedSearchMessageIdState = focusedSearchMessageIdState,
-                                integrateTimestampPeekWithSwipeBackContainer = integrateTimestampPeekWithSwipeBackContainer,
-                                onRegisterSwipeBackRightToLeftPeek = onRegisterSwipeBackRightToLeftPeek,
-                                reverseListNewestEdgePad = reverseListNewestEdgePad,
-                                messageContentModifier = messageContentModifier,
-                                showIcebreaker = showIcebreaker,
-                                icebreakerPrompts = icebreakerPrompts,
-                                icebreakerCooldownRemainingSec = icebreakerCooldownRemainingSec,
-                                icebreakerPanelHeightPxState = icebreakerPanelHeightPxState,
-                                icebreakerTimelineTopReserve = icebreakerTimelineTopReserve,
-                                isLoadingOlderMessages = isLoadingOlderMessages,
-                                typingPeerLabel = typingPeerLabel,
-                                editingMessageId = editingMessageId,
-                                replyingTo = replyingTo,
-                                mediaPickers = mediaPickers,
-                                tetherChannelId = tetherChannelId,
-                                tetherSenderAckState = tetherSenderAckState,
-                                onOpenUserProfile = onOpenUserProfile,
-                                onOpenDisposableRoll = onOpenDisposableRoll,
-                                onOpenDisposableRollForChat = onOpenDisposableRollForChat,
-                                shareableBeacons = shareableBeacons,
-                                mapViewModel = mapViewModel,
-                                contextMenuMessageState = contextMenuMessageState,
-                                expandedPhotoTargetState = expandedPhotoTargetState,
-                                openBeaconDetailIdState = openBeaconDetailIdState,
-                                openBeaconDetailFallbackState = openBeaconDetailFallbackState,
-                                openBeaconDetailMetadataState = openBeaconDetailMetadataState,
-                                openBeaconDetailContentState = openBeaconDetailContentState,
-                            )
+                                ChatViewTimelinePane(
+                                    viewModel = viewModel,
+                                    chatId = chatId,
+                                    targetMessageId = targetMessageId,
+                                    state = state,
+                                    chatDetails = chatDetails,
+                                    messages = messages,
+                                    isGroupChat = isGroupChat,
+                                    currentUserId = currentUserId,
+                                    activeApiChatId = activeApiChatId,
+                                    listState = listState,
+                                    coroutineScope = coroutineScope,
+                                    dismissKeyboardOnUserMessageScroll = dismissKeyboardOnUserMessageScroll,
+                                    suppressKeyboardDismissWhileProgrammaticTimelineScroll = suppressKeyboardDismissWhileProgrammaticTimelineScroll,
+                                    initialTimelineScrollDoneState = initialTimelineScrollDoneState,
+                                    focusedSearchMessageIdState = focusedSearchMessageIdState,
+                                    integrateTimestampPeekWithSwipeBackContainer = integrateTimestampPeekWithSwipeBackContainer,
+                                    onRegisterSwipeBackRightToLeftPeek = onRegisterSwipeBackRightToLeftPeek,
+                                    reverseListNewestEdgePad = reverseListNewestEdgePad,
+                                    messageContentModifier = messageContentModifier,
+                                    showIcebreaker = showIcebreaker,
+                                    icebreakerPrompts = icebreakerPrompts,
+                                    icebreakerCooldownRemainingSec = icebreakerCooldownRemainingSec,
+                                    icebreakerPanelHeightPxState = icebreakerPanelHeightPxState,
+                                    icebreakerTimelineTopReserve = icebreakerTimelineTopReserve,
+                                    isLoadingOlderMessages = isLoadingOlderMessages,
+                                    typingPeerLabel = typingPeerLabel,
+                                    editingMessageId = editingMessageId,
+                                    replyingTo = replyingTo,
+                                    mediaPickers = mediaPickers,
+                                    tetherChannelId = tetherChannelId,
+                                    tetherSenderAckState = tetherSenderAckState,
+                                    onOpenUserProfile = onOpenUserProfile,
+                                    onOpenDisposableRoll = onOpenDisposableRoll,
+                                    onOpenDisposableRollForChat = onOpenDisposableRollForChat,
+                                    shareableBeacons = shareableBeacons,
+                                    mapViewModel = mapViewModel,
+                                    contextMenuMessageState = contextMenuMessageState,
+                                    expandedPhotoTargetState = expandedPhotoTargetState,
+                                    openBeaconDetailIdState = openBeaconDetailIdState,
+                                    openBeaconDetailFallbackState = openBeaconDetailFallbackState,
+                                    openBeaconDetailMetadataState = openBeaconDetailMetadataState,
+                                    openBeaconDetailContentState = openBeaconDetailContentState,
+                                )
+                            }
                         }
                     }
                 }
             }
-        }
 
-        ClickDropDevelopAllChip(
-            viewModel = viewModel,
-            modifier =
-                Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(top = topInset + 72.dp),
-        )
+            ClickDropDevelopAllChip(
+                viewModel = viewModel,
+                modifier =
+                    Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = topInset + 72.dp),
+            )
 
-        ChatViewOverlays(
-            viewModel = viewModel,
-            chatMessagesState = chatMessagesState,
-            currentUserId = currentUserId,
-            archivedConnectionIds = archivedConnectionIds,
-            coreConnectionIds = coreConnectionIds,
-            topInset = topInset,
-            edgeBottomInset = edgeBottomInset,
-            toastState = toastState,
-            shareableBeacons = shareableBeacons,
-            mapViewModel = mapViewModel,
-            onShareBeaconToChats = onShareBeaconToChats,
-            onBackPressed = onBackPressed,
-            tetherToastMessageState = tetherToastMessageState,
-            tetherSenderAckState = tetherSenderAckState,
-            expandedPhotoTargetState = expandedPhotoTargetState,
-            openBeaconDetailIdState = openBeaconDetailIdState,
-            openBeaconDetailFallbackState = openBeaconDetailFallbackState,
-            openBeaconDetailMetadataState = openBeaconDetailMetadataState,
-            openBeaconDetailContentState = openBeaconDetailContentState,
-            contextMenuMessageState = contextMenuMessageState,
-            showConnectionSheetState = showConnectionSheetState,
-            showRenameGroupDialogState = showRenameGroupDialogState,
-            renameGroupDraftState = renameGroupDraftState,
-        )
-    } // End outer Box
+            ChatViewOverlays(
+                viewModel = viewModel,
+                chatMessagesState = chatMessagesState,
+                currentUserId = currentUserId,
+                archivedConnectionIds = archivedConnectionIds,
+                coreConnectionIds = coreConnectionIds,
+                topInset = topInset,
+                edgeBottomInset = edgeBottomInset,
+                toastState = toastState,
+                shareableBeacons = shareableBeacons,
+                mapViewModel = mapViewModel,
+                onShareBeaconToChats = onShareBeaconToChats,
+                onBackPressed = onBackPressed,
+                tetherToastMessageState = tetherToastMessageState,
+                tetherSenderAckState = tetherSenderAckState,
+                expandedPhotoTargetState = expandedPhotoTargetState,
+                openBeaconDetailIdState = openBeaconDetailIdState,
+                openBeaconDetailFallbackState = openBeaconDetailFallbackState,
+                openBeaconDetailMetadataState = openBeaconDetailMetadataState,
+                openBeaconDetailContentState = openBeaconDetailContentState,
+                contextMenuMessageState = contextMenuMessageState,
+                showConnectionSheetState = showConnectionSheetState,
+                showRenameGroupDialogState = showRenameGroupDialogState,
+                renameGroupDraftState = renameGroupDraftState,
+            )
+        } // End outer Box
     }
 }

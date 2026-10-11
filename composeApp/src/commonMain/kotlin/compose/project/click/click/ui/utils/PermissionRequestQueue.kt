@@ -95,7 +95,7 @@ fun permissionPrimeCopy(kind: PermissionKind): Pair<String, String> =
         PermissionKind.Calendar ->
             "Calendar" to
                 "Click checks your calendar on this phone to show whether you're free for plans and events. " +
-                    "It reads only busy times, and only adds events you ask it to."
+                "It reads only busy times, and only adds events you ask it to."
         PermissionKind.Contacts ->
             "Contacts" to
                 "Click hashes phone numbers and emails on this device to find people you already know. Your address book never leaves your phone."

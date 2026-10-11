@@ -29,6 +29,8 @@ class SharedDropDevelopHoursTest {
     @Test
     fun disclosureCopyFollowsConfig() {
         assertTrue(sharedDropDisclosure(1).startsWith("It develops for them in an hour,"))
-        assertTrue(sharedDropDisclosure(sharedDropDevelopHours(flags("""{"develop_hours":3}"""))).startsWith("It develops for them in 3 hours,"))
+        assertTrue(
+            sharedDropDisclosure(sharedDropDevelopHours(flags("""{"develop_hours":3}"""))).startsWith("It develops for them in 3 hours,"),
+        )
     }
 }

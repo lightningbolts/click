@@ -297,7 +297,10 @@ class ConnectionViewModel : ViewModel() {
         venueId: String?,
     ) {
         if (scannedUserId.isBlank()) return
-        qrScanMomentMs = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
+        qrScanMomentMs =
+            kotlinx.datetime.Clock.System
+                .now()
+                .toEpochMilliseconds()
         // A Click link opened outside the scanner captures cold from here (never prompts).
         if (captureSession?.isRunning != true) warmUpConnectionCapture(if (qrToken == null) "link" else "qr")
         viewModelScope.launch {
@@ -448,7 +451,11 @@ class ConnectionViewModel : ViewModel() {
             tagging.pendingHandshakeId?.let { pendingId ->
                 saveProximityExclusions(
                     pendingHandshakeId = pendingId,
-                    excludedIds = tagging.selectableUsers.ifEmpty { tagging.targetUsers }.map { it.id }.toSet(),
+                    excludedIds =
+                        tagging.selectableUsers
+                            .ifEmpty { tagging.targetUsers }
+                            .map { it.id }
+                            .toSet(),
                 )
             }
         }

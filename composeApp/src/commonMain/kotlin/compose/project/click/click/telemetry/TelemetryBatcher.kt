@@ -1,8 +1,8 @@
 package compose.project.click.click.telemetry
 
-import compose.project.click.click.data.api.installClickWebPlatformHeader // pragma: allowlist secret
 import compose.project.click.click.data.SupabaseConfig
 import compose.project.click.click.data.api.ApiConfig
+import compose.project.click.click.data.api.installClickWebPlatformHeader // pragma: allowlist secret
 import compose.project.click.click.util.chatMediaDispatcher
 import compose.project.click.click.util.redactedRestMessage
 import io.github.jan.supabase.auth.auth
@@ -34,7 +34,6 @@ import kotlinx.serialization.json.Json
  * non-identifying payloads leave the device when session rules are met.
  */
 object TelemetryBatcher {
-
     private const val ANOMALY_MIN_DURATION_SEC = 30L
     private const val GRASS_NUDGE_MIN_DURATION_SEC = 240L
     private const val ACTIVE_PAN_WINDOW_MS = 45_000L
@@ -60,14 +59,16 @@ object TelemetryBatcher {
 
     private var session = FrictionSession()
     private var mapSessionActive = false
+
     /** Once the user taps Got it, do not re-show the nudge until the map session ends. */
     private var grassNudgeDismissed = false
 
-    private val json = Json {
-        ignoreUnknownKeys = true
-        isLenient = true
-        explicitNulls = true
-    }
+    private val json =
+        Json {
+            ignoreUnknownKeys = true
+            isLenient = true
+            explicitNulls = true
+        }
 
     private val httpClient by lazy {
         HttpClient {
@@ -88,10 +89,11 @@ object TelemetryBatcher {
         }
         mapSessionActive = true
         val now = Clock.System.now().toEpochMilliseconds()
-        session = FrictionSession(
-            sessionStartTimeMs = now,
-            hexbinId = hexbinId,
-        )
+        session =
+            FrictionSession(
+                sessionStartTimeMs = now,
+                hexbinId = hexbinId,
+            )
         publishUi()
     }
 
@@ -103,7 +105,10 @@ object TelemetryBatcher {
         }
     }
 
-    fun updateHexbinFromCoordinates(latitude: Double?, longitude: Double?) {
+    fun updateHexbinFromCoordinates(
+        latitude: Double?,
+        longitude: Double?,
+    ) {
         if (latitude == null || longitude == null) return
         val cell = AnonymizedHexbin.fromCoordinates(latitude, longitude)
         if (cell == session.hexbinId) return
@@ -114,10 +119,11 @@ object TelemetryBatcher {
     fun recordMapPan() {
         if (!mapSessionActive) beginMapSession()
         val now = Clock.System.now().toEpochMilliseconds()
-        session = session.copy(
-            mapPanCount = session.mapPanCount + 1,
-            lastPanAtMs = now,
-        )
+        session =
+            session.copy(
+                mapPanCount = session.mapPanCount + 1,
+                lastPanAtMs = now,
+            )
         publishUi()
     }
 
@@ -127,10 +133,11 @@ object TelemetryBatcher {
     }
 
     fun recordActionTaken() {
-        session = session.copy(
-            actionTakenCount = session.actionTakenCount + 1,
-            lastPanAtMs = 0L,
-        )
+        session =
+            session.copy(
+                actionTakenCount = session.actionTakenCount + 1,
+                lastPanAtMs = 0L,
+            )
         publishUi()
     }
 
@@ -181,23 +188,27 @@ object TelemetryBatcher {
 
     private fun publishUi() {
         val now = Clock.System.now().toEpochMilliseconds()
-        val elapsedSec = if (session.sessionStartTimeMs > 0L) {
-            ((now - session.sessionStartTimeMs) / 1000L).coerceAtLeast(0L)
-        } else {
-            0L
-        }
-        val recentlyPanning = session.lastPanAtMs > 0L &&
-            (now - session.lastPanAtMs) <= ACTIVE_PAN_WINDOW_MS
-        val showNudge = !grassNudgeDismissed &&
-            session.actionTakenCount == 0 &&
-            session.mapPanCount > 0 &&
-            elapsedSec >= GRASS_NUDGE_MIN_DURATION_SEC &&
-            recentlyPanning
+        val elapsedSec =
+            if (session.sessionStartTimeMs > 0L) {
+                ((now - session.sessionStartTimeMs) / 1000L).coerceAtLeast(0L)
+            } else {
+                0L
+            }
+        val recentlyPanning =
+            session.lastPanAtMs > 0L &&
+                (now - session.lastPanAtMs) <= ACTIVE_PAN_WINDOW_MS
+        val showNudge =
+            !grassNudgeDismissed &&
+                session.actionTakenCount == 0 &&
+                session.mapPanCount > 0 &&
+                elapsedSec >= GRASS_NUDGE_MIN_DURATION_SEC &&
+                recentlyPanning
 
-        _uiState.value = FrictionUiState(
-            session = session,
-            showGrassNudge = showNudge,
-        )
+        _uiState.value =
+            FrictionUiState(
+                session = session,
+                showGrassNudge = showNudge,
+            )
     }
 
     @Serializable
@@ -214,26 +225,31 @@ object TelemetryBatcher {
         panCount: Int,
         hexbinId: String,
     ) {
-        val token = runCatching {
-            SupabaseConfig.client.auth.currentSessionOrNull()?.accessToken
-        }.getOrNull()?.takeIf { it.isNotBlank() } ?: return
+        val token =
+            runCatching {
+                SupabaseConfig.client.auth
+                    .currentSessionOrNull()
+                    ?.accessToken
+            }.getOrNull()?.takeIf { it.isNotBlank() } ?: return
 
         val url = "${ApiConfig.CLICK_WEB_BASE_URL.trimEnd('/')}/api/telemetry/friction"
-        val body = FrictionAnomalyPayload(
-            event = "map_friction_anomaly",
-            durationSec = durationSec,
-            panCount = panCount,
-            actionTaken = null,
-            hexbinId = hexbinId,
-        )
+        val body =
+            FrictionAnomalyPayload(
+                event = "map_friction_anomaly",
+                durationSec = durationSec,
+                panCount = panCount,
+                actionTaken = null,
+                hexbinId = hexbinId,
+            )
 
         runCatching {
             withContext(chatMediaDispatcher) {
-                val response = httpClient.post(url) {
-                    contentType(ContentType.Application.Json)
-                    header(HttpHeaders.Authorization, "Bearer $token")
-                    setBody(body)
-                }
+                val response =
+                    httpClient.post(url) {
+                        contentType(ContentType.Application.Json)
+                        header(HttpHeaders.Authorization, "Bearer $token")
+                        setBody(body)
+                    }
                 if (response.status.isSuccess()) {
                     println("TelemetryBatcher: friction POST ok duration=${body.durationSec}s pans=${body.panCount}")
                 } else {

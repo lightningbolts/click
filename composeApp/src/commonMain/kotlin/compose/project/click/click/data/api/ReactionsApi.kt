@@ -31,7 +31,12 @@ data class Reactor(
     @SerialName("avatar_url") val avatarUrl: String? = null,
     val emoji: String = "",
 ) {
-    val firstName: String get() = name.trim().split(Regex("\\s+")).firstOrNull()?.takeIf { it.isNotEmpty() } ?: name
+    val firstName: String get() =
+        name
+            .trim()
+            .split(Regex("\\s+"))
+            .firstOrNull()
+            ?.takeIf { it.isNotEmpty() } ?: name
 }
 
 /** `{ mine, reactions, is_owner }`. Owners see everyone; others their connections. Newest first. */

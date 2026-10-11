@@ -33,7 +33,16 @@ actual suspend fun clickDropPreviewJpeg(bytes: ByteArray): ByteArray? =
             val out = Bitmap.createBitmap(ClickDropPixelation.pixelate(pixels, pw, ph), pw, ph, Bitmap.Config.ARGB_8888)
             try {
                 ByteArrayOutputStream().use { bos ->
-                    if (!out.compress(Bitmap.CompressFormat.JPEG, ClickDropPixelation.PREVIEW_JPEG_QUALITY, bos)) null else bos.toByteArray()
+                    if (!out.compress(
+                            Bitmap.CompressFormat.JPEG,
+                            ClickDropPixelation.PREVIEW_JPEG_QUALITY,
+                            bos,
+                        )
+                    ) {
+                        null
+                    } else {
+                        bos.toByteArray()
+                    }
                 }
             } finally {
                 out.recycle()

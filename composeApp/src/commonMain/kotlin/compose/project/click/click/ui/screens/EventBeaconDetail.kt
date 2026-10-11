@@ -30,14 +30,13 @@ import compose.project.click.click.deeplink.EventPassDestination // pragma: allo
 import compose.project.click.click.deeplink.EventPassRouter // pragma: allowlist secret
 import compose.project.click.click.events.ClickPassStore // pragma: allowlist secret
 import compose.project.click.click.events.EventChatOpenState // pragma: allowlist secret
-import compose.project.click.click.events.canScanClickPasses // pragma: allowlist secret
-import compose.project.click.click.events.clickPassCardSubtitle // pragma: allowlist secret
-import compose.project.click.click.events.showsClickPassCard // pragma: allowlist secret
 import compose.project.click.click.events.EventChatResolver // pragma: allowlist secret
 import compose.project.click.click.events.EventRsvpRequestStatus // pragma: allowlist secret
 import compose.project.click.click.events.JOIN_REQUEST_POLL_MS // pragma: allowlist secret
 import compose.project.click.click.events.buildEventShareText // pragma: allowlist secret
 import compose.project.click.click.events.buildEventShareUrl // pragma: allowlist secret
+import compose.project.click.click.events.canScanClickPasses // pragma: allowlist secret
+import compose.project.click.click.events.clickPassCardSubtitle // pragma: allowlist secret
 import compose.project.click.click.events.eventCheckInCtaLabel // pragma: allowlist secret
 import compose.project.click.click.events.eventSchedule // pragma: allowlist secret
 import compose.project.click.click.events.formatEventPostedAtLabel // pragma: allowlist secret
@@ -48,6 +47,7 @@ import compose.project.click.click.events.joinRequestDecisionMessage // pragma: 
 import compose.project.click.click.events.label // pragma: allowlist secret
 import compose.project.click.click.events.openEventMapsRoute // pragma: allowlist secret
 import compose.project.click.click.events.parseEventListingOptions // pragma: allowlist secret
+import compose.project.click.click.events.showsClickPassCard // pragma: allowlist secret
 import compose.project.click.click.notifications.ChatDeepLinkManager // pragma: allowlist secret
 import compose.project.click.click.platform.shareText // pragma: allowlist secret
 import compose.project.click.click.ui.components.AnimatedClickDialog // pragma: allowlist secret

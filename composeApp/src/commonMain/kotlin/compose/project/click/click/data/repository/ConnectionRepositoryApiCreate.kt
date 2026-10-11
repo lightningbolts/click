@@ -54,7 +54,13 @@ internal fun connectionsCreateBody(
         val lat = request.locationLat
         val lon = request.locationLng
         // A venue QR resolves its own location server-side; never send this phone's then.
-        if (request.venueId.isNullOrBlank() && lat != null && lon != null && lat.isFinite() && lon.isFinite() && !(lat == 0.0 && lon == 0.0)) {
+        if (request.venueId.isNullOrBlank() &&
+            lat != null &&
+            lon != null &&
+            lat.isFinite() &&
+            lon.isFinite() &&
+            !(lat == 0.0 && lon == 0.0)
+        ) {
             put(
                 "location1",
                 buildJsonObject {
@@ -73,7 +79,10 @@ internal fun connectionsCreateBody(
         request.motionVariance?.takeIf { it.isFinite() }?.let { put("motion_variance", it) }
         request.compassAzimuth?.takeIf { it.isFinite() }?.let { put("compass_azimuth", it) }
         request.batteryLevel?.takeIf { it in 0..100 }?.let { put("battery_level", it) }
-        request.weatherSnapshotLabel?.trim()?.takeIf { it.isNotEmpty() }?.let { put("weather_snapshot", it) }
+        request.weatherSnapshotLabel
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+            ?.let { put("weather_snapshot", it) }
         put("timezone_offset_minutes", timezoneOffsetMinutes)
         request.observationKeys?.forEach { (key, value) -> put(key, value) }
     }

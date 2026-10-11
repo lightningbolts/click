@@ -8,6 +8,7 @@ import compose.project.click.click.chat.encodeDeviceApprovalProof
 import compose.project.click.click.crypto.MessageCryptoV2
 import compose.project.click.click.data.api.AskForHistoryBody
 import compose.project.click.click.data.api.AskForHistoryResponseDto
+import compose.project.click.click.data.api.ClickWebRegisterChatDeviceBody
 import compose.project.click.click.data.api.DeviceApprovalChallengeDto
 import compose.project.click.click.data.api.DeviceApprovalDecisionBody
 import compose.project.click.click.data.api.DeviceHistoryRequestDto
@@ -15,7 +16,6 @@ import compose.project.click.click.data.api.DeviceHistoryRequestsDto
 import compose.project.click.click.data.api.MyDeviceDto
 import compose.project.click.click.data.api.MyDevicesDto
 import compose.project.click.click.data.api.parseClickWebCodedError
-import compose.project.click.click.data.api.ClickWebRegisterChatDeviceBody
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlin.test.Test
@@ -139,9 +139,15 @@ class DeviceApprovalFlowTest {
         runTest {
             val deny = FakeDeviceApi()
             decideDeviceApproval(deny, REQUEST_ID, approve = false, myDeviceId = "d") { _, _ -> nonce }
-            assertEquals("deny", deny.decided.single().second.decision)
+            assertEquals(
+                "deny",
+                deny.decided
+                    .single()
+                    .second.decision,
+            )
 
-            val notAllowed = FakeDeviceApi(challenge = Result.failure(parseClickWebCodedError(403, """{"error":"x","code":"APPROVER_NOT_ALLOWED"}""")))
+            val notAllowed =
+                FakeDeviceApi(challenge = Result.failure(parseClickWebCodedError(403, """{"error":"x","code":"APPROVER_NOT_ALLOWED"}""")))
             val failed = decideDeviceApproval(notAllowed, REQUEST_ID, approve = true, myDeviceId = "d") { _, _ -> nonce }
             assertEquals(DeviceApprovalError.ApproverNotAllowed, DeviceApprovalError.from(failed.exceptionOrNull()!!))
             assertTrue(notAllowed.decided.isEmpty())
@@ -226,7 +232,11 @@ class DeviceApprovalFlowTest {
             )
         assertEquals("Pixel 9", devices.devices.single().label)
 
-        val ask = json.decodeFromString(AskForHistoryResponseDto.serializer(), """{"status":"exists","own":{"id":"r","status":"pending"}}""")
+        val ask =
+            json.decodeFromString(
+                AskForHistoryResponseDto.serializer(),
+                """{"status":"exists","own":{"id":"r","status":"pending"}}""",
+            )
         assertEquals("exists", ask.status)
         assertEquals("pending", ask.own?.status)
     }
@@ -251,6 +261,11 @@ class DeviceApprovalFlowTest {
     @Test
     fun thisDeviceIsListedFirst() {
         val devices = listOf(MyDeviceDto("a"), MyDeviceDto("me"), MyDeviceDto("b"))
-        assertEquals(listOf("me", "a", "b"), compose.project.click.click.viewmodel.sortDevicesForSettings(devices, "me").map { it.deviceId })
+        assertEquals(
+            listOf("me", "a", "b"),
+            compose.project.click.click.viewmodel
+                .sortDevicesForSettings(devices, "me")
+                .map { it.deviceId },
+        )
     }
 }

@@ -50,12 +50,12 @@ import compose.project.click.click.data.ContextTagTaxonomy // pragma: allowlist 
 import compose.project.click.click.data.models.ConnectionEncounter // pragma: allowlist secret
 import compose.project.click.click.data.models.HeightCategory // pragma: allowlist secret
 import compose.project.click.click.data.models.NoiseLevelCategory // pragma: allowlist secret
-import compose.project.click.click.sensors.noiseLevelCategoryFromApproximateDb // pragma: allowlist secret
 import compose.project.click.click.data.models.ProfileAvailabilityIntentBubble // pragma: allowlist secret
 import compose.project.click.click.data.repository.ConnectionRepository
 import compose.project.click.click.deeplink.EventDeepLinkRouter // pragma: allowlist secret
 import compose.project.click.click.events.EventSchedule // pragma: allowlist secret
 import compose.project.click.click.events.formatEventScheduleRange // pragma: allowlist secret
+import compose.project.click.click.sensors.noiseLevelCategoryFromApproximateDb // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickFormBottomSheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret

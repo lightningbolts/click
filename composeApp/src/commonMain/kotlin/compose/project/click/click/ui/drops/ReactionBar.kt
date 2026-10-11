@@ -86,7 +86,19 @@ fun ReactionBar(
     Column(modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
         if (state?.isOwner ?: isOwner) {
             if (reactions.isEmpty()) {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.height(ReactionTrayHeight).alpha(if (state == null) 0f else 1f)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier =
+                        Modifier.height(ReactionTrayHeight).alpha(
+                            if (state ==
+                                null
+                            ) {
+                                0f
+                            } else {
+                                1f
+                            },
+                        ),
+                ) {
                     Icon(Icons.Filled.FavoriteBorder, null, tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
                     Text("No reactions yet", color = Color.White.copy(alpha = 0.7f))
@@ -95,7 +107,15 @@ fun ReactionBar(
                 ReactorList(reactions)
             }
         } else {
-            val trayAlpha by animateFloatAsState(if (composing) 0f else if (reactable) 1f else 0.45f)
+            val trayAlpha by animateFloatAsState(
+                if (composing) {
+                    0f
+                } else if (reactable) {
+                    1f
+                } else {
+                    0.45f
+                },
+            )
             ReactionTray(
                 mine = state?.mine,
                 enabled = reactable && !composing,
@@ -207,7 +227,12 @@ private fun ReactorFaces(
     onClick: () -> Unit,
 ) {
     val faces = reactions.take(3)
-    val emoji = reactions.map { it.emoji }.distinct().take(3).joinToString("")
+    val emoji =
+        reactions
+            .map { it.emoji }
+            .distinct()
+            .take(3)
+            .joinToString("")
     Row(
         modifier =
             Modifier

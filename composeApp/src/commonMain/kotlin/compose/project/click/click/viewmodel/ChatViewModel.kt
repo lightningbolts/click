@@ -271,7 +271,10 @@ class ChatViewModel(
     /** Click Drop develop flow for the open timeline (gated drops always, legacy ones with `drops_develop`). */
     val clickDrops =
         compose.project.click.click.collaboration
-            .ClickDropDevelopController(compose.project.click.click.data.api.DropsApi())
+            .ClickDropDevelopController(
+                compose.project.click.click.data.api
+                    .DropsApi(),
+            )
 
     /** Decrypted originals of developed gated drops (cached on disk as `<messageId>-original`). */
     internal val _dropOriginalBytes = MutableStateFlow<Map<String, ByteArray>>(emptyMap())

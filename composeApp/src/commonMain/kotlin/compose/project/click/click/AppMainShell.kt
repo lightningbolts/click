@@ -41,7 +41,6 @@ import compose.project.click.click.data.storage.TokenStorage // pragma: allowlis
 import compose.project.click.click.data.storage.createTokenStorage
 import compose.project.click.click.deeplink.AppDeepLink // pragma: allowlist secret
 import compose.project.click.click.deeplink.AppDeepLinkRouter // pragma: allowlist secret
-import compose.project.click.click.ui.components.DeviceApprovalHost // pragma: allowlist secret
 import compose.project.click.click.deeplink.ConnectionDeepLinkRouter // pragma: allowlist secret
 import compose.project.click.click.deeplink.EventDeepLinkRouter // pragma: allowlist secret
 import compose.project.click.click.encounter.EncounterTetherManager // pragma: allowlist secret
@@ -55,6 +54,7 @@ import compose.project.click.click.telemetry.ConnectionFlowTelemetry // pragma: 
 import compose.project.click.click.ui.components.AppShimmerScreen // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionRevealPhase // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionRevealUiState // pragma: allowlist secret
+import compose.project.click.click.ui.components.DeviceApprovalHost // pragma: allowlist secret
 import compose.project.click.click.ui.components.OfflineStatusBanner // pragma: allowlist secret
 import compose.project.click.click.ui.components.PlatformBackHandler // pragma: allowlist secret
 import compose.project.click.click.ui.components.UnifiedToastTokens // pragma: allowlist secret

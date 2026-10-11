@@ -22,7 +22,13 @@ internal const val REVIEW_WATCH_WINDOW_MS: Long = 60_000L
  */
 internal fun otherPhoneConfirmedNotice(stillIn: List<User>): String? {
     if (stillIn.isEmpty()) return null
-    val names = stillIn.map { it.name?.trim()?.substringBefore(' ')?.ifEmpty { null } ?: "someone" }
+    val names =
+        stillIn.map {
+            it.name
+                ?.trim()
+                ?.substringBefore(' ')
+                ?.ifEmpty { null } ?: "someone"
+        }
     val joined =
         when (names.size) {
             1 -> names[0]
@@ -72,8 +78,14 @@ internal fun ConnectionViewModel.startReviewWatch(
     reviewWatchJob?.cancel()
     reviewWatchJob =
         viewModelScope.launch {
-            val deadline = kotlinx.datetime.Clock.System.now().toEpochMilliseconds() + REVIEW_WATCH_WINDOW_MS
-            while (kotlinx.datetime.Clock.System.now().toEpochMilliseconds() < deadline) {
+            val deadline =
+                kotlinx.datetime.Clock.System
+                    .now()
+                    .toEpochMilliseconds() + REVIEW_WATCH_WINDOW_MS
+            while (kotlinx.datetime.Clock.System
+                    .now()
+                    .toEpochMilliseconds() < deadline
+            ) {
                 delay(ConnectionViewModel.PENDING_MATCH_RECOVERY_DELAY_MS)
                 val current = _connectionState.value as? ConnectionState.TaggingContext ?: return@launch
                 if (!current.requiresSelection || current.pendingHandshakeId != pendingHandshakeId) return@launch
@@ -127,8 +139,14 @@ internal fun ConnectionViewModel.startGroupWatch(
     groupWatchJob =
         viewModelScope.launch {
             var shown = shownConnectionId
-            val deadline = kotlinx.datetime.Clock.System.now().toEpochMilliseconds() + REVIEW_WATCH_WINDOW_MS
-            while (kotlinx.datetime.Clock.System.now().toEpochMilliseconds() < deadline) {
+            val deadline =
+                kotlinx.datetime.Clock.System
+                    .now()
+                    .toEpochMilliseconds() + REVIEW_WATCH_WINDOW_MS
+            while (kotlinx.datetime.Clock.System
+                    .now()
+                    .toEpochMilliseconds() < deadline
+            ) {
                 delay(ConnectionViewModel.PENDING_MATCH_RECOVERY_DELAY_MS)
                 val state = _connectionState.value
                 val stillShowing =

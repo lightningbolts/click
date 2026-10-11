@@ -66,9 +66,9 @@ import compose.project.click.click.ui.components.AppScreenScaffold // pragma: al
 import compose.project.click.click.ui.components.ClickCircularGlassIconButton // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickListRowShimmer // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionsSegmentBar // pragma: allowlist secret
+import compose.project.click.click.ui.components.DeviceHistoryBanner // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassToastHost // pragma: allowlist secret
-import compose.project.click.click.ui.components.DeviceHistoryBanner // pragma: allowlist secret
 import compose.project.click.click.ui.components.InboxNudgeBanner // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberFabAboveNavPadding // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberGlassToastState // pragma: allowlist secret

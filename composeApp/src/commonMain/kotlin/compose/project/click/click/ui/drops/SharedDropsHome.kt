@@ -175,7 +175,16 @@ private fun SharedDropsArchive(
     val originals by viewModel.originals.collectAsState()
     val grid = rememberLazyGridState()
     LaunchedEffect(Unit) { viewModel.loadMoreArchive(reset = true) }
-    val nearEnd by remember { derivedStateOf { (grid.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0) >= grid.layoutInfo.totalItemsCount - 6 } }
+    val nearEnd by remember {
+        derivedStateOf {
+            (
+                grid.layoutInfo.visibleItemsInfo
+                    .lastOrNull()
+                    ?.index ?: 0
+            ) >=
+                grid.layoutInfo.totalItemsCount - 6
+        }
+    }
     LaunchedEffect(grid) { snapshotFlow { nearEnd }.collect { if (it) viewModel.loadMoreArchive() } }
     val byDay = remember(state.archive) { state.archive.groupBy { dayLabel(it.createdAt) } }
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
@@ -193,7 +202,11 @@ private fun SharedDropsArchive(
             ) {
                 byDay.forEach { (day, drops) ->
                     item(key = "day-$day", span = { GridItemSpan(maxLineSpan) }) {
-                        Text(day, style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(start = 8.dp, top = 16.dp, bottom = 6.dp))
+                        Text(
+                            day,
+                            style = MaterialTheme.typography.titleSmall,
+                            modifier = Modifier.padding(start = 8.dp, top = 16.dp, bottom = 6.dp),
+                        )
                     }
                     items(drops, key = { it.id }) { drop ->
                         val dropState = drop.state()
@@ -216,10 +229,16 @@ private fun dayLabel(createdAt: String?): String {
     val instant = createdAt?.let { runCatching { Instant.parse(it) }.getOrNull() } ?: return "Earlier"
     val zone = TimeZone.currentSystemDefault()
     val date = instant.toLocalDateTime(zone).date
-    val today = Clock.System.now().toLocalDateTime(zone).date
+    val today =
+        Clock.System
+            .now()
+            .toLocalDateTime(zone)
+            .date
     return when {
         date == today -> "Today"
         date.toEpochDays() == today.toEpochDays() - 1 -> "Yesterday"
-        else -> "${date.month.name.lowercase().replaceFirstChar { it.uppercase() }} ${date.dayOfMonth}" + if (date.year != today.year) ", ${date.year}" else ""
+        else ->
+            "${date.month.name.lowercase().replaceFirstChar { it.uppercase() }} ${date.dayOfMonth}" +
+                if (date.year != today.year) ", ${date.year}" else ""
     }
 }

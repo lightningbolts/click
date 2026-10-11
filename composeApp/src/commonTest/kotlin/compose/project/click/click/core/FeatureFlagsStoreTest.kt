@@ -135,7 +135,10 @@ class FeatureFlagsStoreTest {
             flags.restore("u1")
             flags.refresh()
             val state = flags.state.value
-            assertEquals(SharedDropsConfig(developHours = 1, dailyCap = 3, stripWindowHours = 24, stripMin = 25, stripMax = 150), state.sharedDrops)
+            assertEquals(
+                SharedDropsConfig(developHours = 1, dailyCap = 3, stripWindowHours = 24, stripMin = 25, stripMax = 150),
+                state.sharedDrops,
+            )
             assertEquals(48, state.eventHistory.recapCardHours)
             // Missing configs fall back to the server seeds.
             assertEquals(EventDropsConfig(perUserCap = 10, revealHourLocal = 10, absenteeLimit = 6), state.eventDrops)

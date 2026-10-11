@@ -136,7 +136,11 @@ fun Message.isGatedDrop(): Boolean {
 fun Message.clickDropRevealAt(): Instant? {
     val root = metadata as? JsonObject ?: return null
     val raw =
-        root["reveal_at"]?.jsonPrimitive?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
+        root["reveal_at"]
+            ?.jsonPrimitive
+            ?.contentOrNull
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
             ?: disposableRollCollaborationTtlIso()
             ?: return null
     return runCatching { Instant.parse(raw) }.getOrNull()
