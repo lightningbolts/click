@@ -323,6 +323,7 @@ internal suspend fun SupabaseChatRepository.resolveE2eeV2ChatCrypto(
     viewerUserId: String,
     forceRefresh: Boolean = false,
     allowLifecycle: Boolean = false,
+    strictRotation: Boolean = false,
 ): E2eeV2ChatSession? {
     if (!forceRefresh && !allowLifecycle) E2eeV2SessionCache.get(chatId)?.let { return it }
     val token = ensureFreshJwtForChat() ?: return null
@@ -335,9 +336,9 @@ internal suspend fun SupabaseChatRepository.resolveE2eeV2ChatCrypto(
     apiClient.registerE2eeV2Device(identity.info.deviceId, identity.info.publicKeySpkiBase64, token)
     val devices =
         apiClient.discoverE2eeV2Devices(chatId, token).getOrElse { throw E2eeV2RequiredException() }
-    val registered =
-        devices.firstOrNull { it.deviceId == identity.info.deviceId }
-            ?: throw E2eeV2RequiredException()
+    // A phone shared by several member accounts has one row per account for the same device id.
+    val ownRowIds = devices.filter { it.deviceId == identity.info.deviceId }.map { it.id }.toSet()
+    if (ownRowIds.isEmpty()) throw E2eeV2RequiredException()
     val logicalDeviceId = identity.info.deviceId
     var state =
         apiClient.getE2eeV2State(chatId, token, logicalDeviceId).getOrElse {
@@ -383,14 +384,33 @@ internal suspend fun SupabaseChatRepository.resolveE2eeV2ChatCrypto(
                     membershipFingerprintMatches = state.membershipFingerprint == membershipFingerprint,
                 )
             ) {
+                val rotateFrom = state
+                val nextEpoch = state.currentEpoch + 1
                 state =
-                    createE2eeV2EpochWithFreshKey(
-                        chatId = chatId,
-                        identity = identity,
-                        devices = devices,
-                        epoch = state.currentEpoch + 1,
-                        membershipFingerprint = membershipFingerprint,
-                        authToken = token,
+                    E2eeV2LifecyclePolicy.rotateOrContinue(
+                        strict = strictRotation,
+                        current = rotateFrom,
+                        rotate = {
+                            createE2eeV2EpochWithFreshKey(
+                                chatId = chatId,
+                                identity = identity,
+                                devices = devices,
+                                epoch = nextEpoch,
+                                membershipFingerprint = membershipFingerprint,
+                                authToken = token,
+                            )
+                        },
+                        refetch = {
+                            apiClient.getE2eeV2State(chatId, token, logicalDeviceId).getOrElse {
+                                throw E2eeV2RequiredException()
+                            }
+                        },
+                        onSkipped = { error ->
+                            println(
+                                "ChatRepository: epoch rotation failed chatId=$chatId; sending on epoch " +
+                                    "${rotateFrom.currentEpoch}: ${error.redactedRestMessage()}",
+                            )
+                        },
                     )
             }
         }
@@ -403,7 +423,7 @@ internal suspend fun SupabaseChatRepository.resolveE2eeV2ChatCrypto(
     // contract and the envelope AAD use the logical identity.deviceId instead.
     fun unwrapKeys(source: compose.project.click.click.data.api.ClickWebChatE2eeV2StateEnvelope): Map<Int, ByteArray> =
         source.envelopes
-            .filter { it.recipientDeviceId == registered.id || it.recipientDeviceId == logicalDeviceId }
+            .filter { it.recipientDeviceId in ownRowIds || it.recipientDeviceId == logicalDeviceId }
             .mapNotNull { envelope ->
                 val key =
                     runCatching {
@@ -526,7 +546,7 @@ private suspend fun SupabaseChatRepository.createE2eeV2EpochWithFreshKey(
 ): compose.project.click.click.data.api.ClickWebChatE2eeV2StateEnvelope {
     val epochKey = MessageCryptoV2.generateEpochKey()
     val envelopes =
-        devices.map { recipient ->
+        E2eeV2LifecyclePolicy.distinctEpochRecipients(devices).map { recipient ->
             val envelope =
                 MessageCryptoV2.wrapEpochKey(
                     metadata =

@@ -450,7 +450,7 @@ class ChatApiClient(
             if (response.status.value in 200..299) {
                 Result.success(Unit)
             } else {
-                Result.failure(Exception(readClickWebErrorMessage(response)))
+                Result.failure(ClickWebRequestException(response.status.value, readClickWebErrorMessage(response)))
             }
         } catch (e: Exception) {
             Result.failure(e)
@@ -535,7 +535,7 @@ class ChatApiClient(
             if (response.status.value in 200..299) {
                 Result.success(Unit)
             } else {
-                Result.failure(Exception(readClickWebErrorMessage(response)))
+                Result.failure(ClickWebRequestException(response.status.value, readClickWebErrorMessage(response)))
             }
         } catch (e: Exception) {
             Result.failure(e)
@@ -711,11 +711,14 @@ class ChatApiClient(
     /**
      * Tombstones for the latest [windowSize] messages (`include_tombstones=1`), i.e. where
      * recently deleted messages were. Only the tombstones are used; history loads elsewhere.
+     * With [beforeTimeCreated] (`cursor=<ms>`) the window is the older page below that time; the
+     * server has no upper bound there, so callers clamp (see [clampTombstonesToPage]).
      */
     suspend fun getTombstones(
         chatId: String,
         windowSize: Int,
         authToken: String,
+        beforeTimeCreated: Long? = null,
     ): Result<List<compose.project.click.click.data.models.MessageTombstone>> =
         try {
             val token = resolveClickWebAccessToken(tokenStorage) ?: authToken.trim().takeIf { it.isNotEmpty() }
@@ -728,6 +731,7 @@ class ChatApiClient(
                         parameter("chatId", chatId)
                         parameter("include_tombstones", "1")
                         parameter("limit", windowSize.coerceIn(1, 200))
+                        if (beforeTimeCreated != null) parameter("cursor", beforeTimeCreated)
                     }
                 if (response.status.value in 200..299) {
                     Result.success(response.body<TombstonesEnvelope>().tombstones)
@@ -1162,8 +1166,15 @@ class ChatApiClient(
         authToken: String,
         aroundMessageId: String? = null,
         limit: Int = 120,
+        beforeCreatedAtMs: Long? = null,
     ): Result<HubThreadResponse> =
-        fetchHubThreadImpl(hubId = hubId, authToken = authToken, aroundMessageId = aroundMessageId, limit = limit)
+        fetchHubThreadImpl(
+            hubId = hubId,
+            authToken = authToken,
+            aroundMessageId = aroundMessageId,
+            limit = limit,
+            beforeCreatedAtMs = beforeCreatedAtMs,
+        )
 
     /**
      * Search messages — use [searchConversations] (`GET /api/chat/search`) or local/repository scan.
