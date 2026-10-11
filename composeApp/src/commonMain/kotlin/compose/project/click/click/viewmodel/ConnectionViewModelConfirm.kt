@@ -280,9 +280,12 @@ internal fun ConnectionViewModel.syncHostSelectionExclusions(
     tagging: ConnectionState.TaggingContext,
     selected: Set<String>,
 ) {
-    val pendingId = tagging.pendingHandshakeId?.trim()?.takeIf { it.isNotEmpty() } ?: return
     val candidates = tagging.selectableUsers.ifEmpty { tagging.targetUsers }.map { it.id }.toSet()
-    saveProximityExclusions(pendingId, proximityExcludedMemberIds(candidates, selected))
+    val excluded = proximityExcludedMemberIds(candidates, selected)
+    hostSelectionCurrent = selected
+    hostSelectionExcluded = excluded
+    val pendingId = tagging.pendingHandshakeId?.trim()?.takeIf { it.isNotEmpty() } ?: return
+    saveProximityExclusions(pendingId, excluded)
 }
 
 /** The ids a review removed: every candidate that is not selected. */
@@ -386,6 +389,16 @@ internal fun ConnectionViewModel.confirmHostProximitySelectionImpl(
                             contextTags = contextTagIds,
                         )
                     }.getOrElse { err ->
+                        // G4-5: another phone in the same tap may have confirmed first; its match includes us.
+                        val jwt = runCatching { compose.project.click.click.data.auth.EnsureFreshAccessToken.get(repository.tokenStorage) }.getOrNull() // pragma: allowlist secret
+                        val recovered =
+                            jwt?.takeIf { it.isNotBlank() }?.let {
+                                withContext(Dispatchers.Default) { repository.recoverPendingProximityHandshake(it, pendingId) }.getOrNull()
+                            }
+                        if (recovered is compose.project.click.click.data.repository.BindProximityHandshakeResult.InstantMatch) {
+                            finishAfterOtherConfirmed(recovered.outcome, currentUserId)
+                            return@launch
+                        }
                         _connectionState.value =
                             ConnectionState.Error(
                                 err.message ?: "Failed to confirm proximity selection",
@@ -471,6 +484,27 @@ internal fun ConnectionViewModel.confirmHostProximitySelectionImpl(
                 // Tags already sent with confirm when present; skip second tagging sheet.
                 if (!contextTagIds.isNullOrEmpty()) {
                     val primary = created.first()
+                    // G0-15: confirm tags only the group connection; each pair timeline gets them too.
+                    if (selected.size >= 2 && contextTag != null) {
+                        val members = primary.user_ids
+                        ConnectionBackgroundScope.launch {
+                            val peers = members.filter { it != currentUserId }
+                            val pairs =
+                                runCatching { repository.fetchPairConnectionIds(currentUserId, peers) }.getOrNull()
+                                    ?: return@launch
+                            for (pairId in pairs.values.distinct()) {
+                                repository.updateConnectionTags(
+                                    connectionId = pairId,
+                                    reportingUserId = currentUserId,
+                                    contextTag = contextTag,
+                                    noiseLevelCategory = sensorContext?.noiseLevelCategory,
+                                    exactNoiseLevelDb = sensorContext?.exactNoiseLevelDb,
+                                    heightCategory = null,
+                                    exactBarometricElevationMeters = null,
+                                )
+                            }
+                        }
+                    }
                     _connectionState.value =
                         ConnectionState.Success(
                             primary,
@@ -585,12 +619,46 @@ internal fun ConnectionViewModel.saveContextTagsImpl(
             val heightOut = heightCategory ?: snapshot?.heightCategory
             val baroOut = exactBarometricElevationMeters ?: snapshot?.exactBarometricElevationMeters
             val selfId = AppDataManager.currentUser.value?.id
-            for (connection in connections) {
-                if (connection.isPendingSync()) continue
+            val directIds = connections.filterNot { it.isPendingSync() }.map { it.id }
+            // G0-15: a group's tags and noise also go to the viewer's pair connection with each
+            // member. A failed lookup fails the save visibly (sheet stays open) and isn't cached.
+            val targetIds =
+                if (tagging.isGroup && selfId != null) {
+                    val members =
+                        (tagging.memberUserIds + targetProfiles.map { it.id } + selfId).distinct()
+                    val pairs =
+                        runCatching {
+                            resolveGroupPairConnectionIds(selfId, members)
+                        }.getOrElse { err ->
+                            if (err is kotlinx.coroutines.CancellationException) throw err
+                            // Noise is best effort: it still reaches the Click's own connections.
+                            if (noiseOut != null || exactDbOut != null) {
+                                ConnectionBackgroundScope.launch {
+                                    for (id in directIds) {
+                                        repository.updateConnectionTags(
+                                            connectionId = id,
+                                            reportingUserId = selfId,
+                                            contextTag = null,
+                                            noiseLevelCategory = noiseOut,
+                                            exactNoiseLevelDb = exactDbOut,
+                                            heightCategory = heightOut,
+                                            exactBarometricElevationMeters = baroOut,
+                                        )
+                                    }
+                                }
+                            }
+                            _connectionState.value = tagging.copy(tagSaveError = GROUP_TAG_TARGETS_FAILED_MESSAGE)
+                            return@launch
+                        }
+                    groupTagTargetIds(directIds, pairs)
+                } else {
+                    directIds
+                }
+            for ((index, connectionId) in targetIds.withIndex()) {
                 val patch =
                     withContext(Dispatchers.Default) {
                         repository.updateConnectionTags(
-                            connectionId = connection.id,
+                            connectionId = connectionId,
                             reportingUserId = selfId,
                             contextTag = contextTag,
                             noiseLevelCategory = noiseOut,
@@ -599,6 +667,8 @@ internal fun ConnectionViewModel.saveContextTagsImpl(
                             exactBarometricElevationMeters = baroOut,
                         )
                     }
+                // A member's own row can predate this tap (merged into an earlier hangout).
+                if (patch.isFailure && index > 0 && isNoActiveEncounterFailure(patch.exceptionOrNull())) continue
                 if (patch.isFailure) {
                     _connectionState.value =
                         ConnectionState.Error(
@@ -683,8 +753,28 @@ internal fun ConnectionViewModel.connectWithUserImpl(
                     else -> null
                 }
 
-            val locLat = latitude ?: lastProximityLat
-            val locLng = longitude ?: lastProximityLng
+            // G4-1..3: QR / link — this phone's fix at the recognition moment, with its quality
+            // keys and sensor_observation (venue codes never send this phone's location).
+            if (connectionMethod == "qr") ConnectionFlowTelemetry.recordQrStarted(captureSession?.method ?: "link")
+            val captured =
+                if (connectionMethod == "qr") {
+                    runCatching {
+                        captureConnectContext(
+                            method = captureSession?.method ?: "link",
+                            momentMs = qrScanMomentMs ?: kotlinx.datetime.Clock.System.now().toEpochMilliseconds(),
+                            includeLocation = venueId.isNullOrBlank() && AppDataManager.shouldCaptureLocationAtTap(),
+                            cold = captureSession?.isRunning != true,
+                        )
+                    }.getOrNull()
+                } else {
+                    null
+                }
+            qrScanMomentMs = null
+            // The scan is over; the follow-up (if any) runs its own sensors.
+            if (connectionMethod == "qr") stopConnectionCapture()
+            val capturedFix = captured?.fix
+            val locLat = capturedFix?.latitude ?: latitude ?: lastProximityLat
+            val locLng = capturedFix?.longitude ?: longitude ?: lastProximityLng
             val locAlt = altitudeMeters ?: lastProximityAltitudeMeters
             val qrHardwareVibe =
                 when (connectionMethod) {
@@ -721,6 +811,7 @@ internal fun ConnectionViewModel.connectWithUserImpl(
                     compassAzimuth = requestHardwareVibe?.compassAzimuth?.takeIf { it.isFinite() }?.toDouble(),
                     batteryLevel = requestHardwareVibe?.batteryLevel?.takeIf { it in 0..100 },
                     weatherSnapshotLabel = weatherSnapshotLabel?.trim()?.takeIf { it.isNotEmpty() },
+                    observationKeys = captured?.observationKeys,
                 )
 
             val result =
@@ -729,9 +820,18 @@ internal fun ConnectionViewModel.connectWithUserImpl(
                 }
 
             if (result.isSuccess) {
+                // G4-7: tighten the scan's fix while still; confirmed once the result state lands.
+                captured?.let { beginEncounterFollowUp(it) }
                 val outcome = result.getOrNull()!!
                 val connection = outcome.connection
                 val encounterLogged = outcome.encounterLogged
+                if (connectionMethod == "qr") {
+                    if (encounterLogged) {
+                        ConnectionFlowTelemetry.recordQrSucceeded(isReconnect = null, captureQuality = lastCaptureQuality)
+                    } else {
+                        ConnectionFlowTelemetry.recordQrRateLimited(captureQuality = lastCaptureQuality)
+                    }
+                }
                 activateCollaborationSessionIfPresent(outcome)
                 val connectedUserId = connection.user_ids.firstOrNull { it != currentUserId } ?: scannedUserId
                 val connectedUser =
@@ -786,6 +886,9 @@ internal fun ConnectionViewModel.connectWithUserImpl(
                 }
             } else {
                 val error = result.exceptionOrNull()?.message ?: "Failed to create connection"
+                if (connectionMethod == "qr") {
+                    ConnectionFlowTelemetry.recordQrFailed(ConnectionFlowTelemetry.qrFailureReason(error), lastCaptureQuality)
+                }
                 _connectionState.value = ConnectionState.Error(error)
             }
         } catch (e: Exception) {

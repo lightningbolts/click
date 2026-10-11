@@ -23,6 +23,7 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import compose.project.click.click.viewmodel.warmUpConnectionCapture // pragma: allowlist secret
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
@@ -523,7 +524,9 @@ internal fun AppPrimaryTabsHost(
                                         dismissAddClickOverlay(NavigationTransitionMode.Tap)
                                     },
                                 )
-                            "qr_scanner" ->
+                            "qr_scanner" -> {
+                                // G4-1: warm location + pressure while the scanner is visible (never prompts).
+                                LaunchedEffect(Unit) { connectionViewModel.warmUpConnectionCapture("qr") }
                                 QRScannerScreen(
                                     onQRCodeScanned = { userId ->
                                         showQRScanner = false
@@ -553,6 +556,7 @@ internal fun AppPrimaryTabsHost(
                                         dismissAddClickOverlay(NavigationTransitionMode.Tap)
                                     },
                                 )
+                            }
                             "nfc" -> {
                                 val userId =
                                     when (val state = authViewModel.authState) {

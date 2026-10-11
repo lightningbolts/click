@@ -131,6 +131,8 @@ internal fun ConnectionViewModel.handleInstantProximityOutcome(
             peerUserIds = listOf(peer.id),
             connectionIds = listOf(outcome.connectionId),
         )
+        // G4-5: someone who tapped a moment later can still turn this into a group.
+        startGroupWatch(outcome.pendingHandshakeId, outcome.connectionId, currentUserId)
         _connectionState.value =
             ConnectionState.TaggingContext(
                 newConnections = listOf(connection),
@@ -221,6 +223,10 @@ internal fun ConnectionViewModel.handleAwaitingHostSelection(
             selectedPeerIds = selected,
             existingConnectionId = awaiting.existingConnectionId,
         )
+    hostSelectionCurrent = selected
+    hostSelectionExcluded = emptySet()
+    // G4-4: another phone's confirm or a late joiner updates this review.
+    startReviewWatch(awaiting.pendingHandshakeId, currentUserId)
 }
 
 internal fun ConnectionViewModel.startPendingProximityRecovery(
@@ -427,8 +433,25 @@ internal fun ConnectionViewModel.startTapProximityHandshakeImpl(
                     val heardTokensAudio = listenResult.heardTokens
                     val detectedDevicesBle = listenResult.detectedDevices
 
+                    // G4-1..3: this phone's best fix at the moment, its quality keys and sensor_observation.
+                    val captured =
+                        runCatching {
+                            captureConnectContext(
+                                method = "tap",
+                                momentMs = Clock.System.now().toEpochMilliseconds(),
+                                includeLocation = shouldFetchLocation,
+                            )
+                        }.getOrNull()
+                    val capturedFix = captured?.fix
                     val location =
-                        locationDeferred?.await()
+                        capturedFix?.let {
+                            LocationResult(
+                                latitude = it.latitude,
+                                longitude = it.longitude,
+                                altitudeMeters = it.ellipsoidalAltitudeMeters,
+                                accuracyMeters = it.horizontalAccuracyMeters,
+                            )
+                        } ?: locationDeferred?.await()
                             ?: if (shouldFetchLocation) {
                                 runCatching { locationService.getCurrentLocation() }.getOrNull()
                                     ?: AppDataManager.lastKnownDeviceLocation.value?.let { (la, lo) ->
@@ -472,6 +495,7 @@ internal fun ConnectionViewModel.startTapProximityHandshakeImpl(
                                                 bindExactNoiseLevelDb = proximitySensorContext?.exactNoiseLevelDb,
                                                 bindHeightCategory = proximitySensorContext?.heightCategory,
                                                 simulatorMock = simulatorMock,
+                                                observationKeys = captured?.observationKeys,
                                             ).getOrThrow()
                                     },
                                 )
@@ -483,6 +507,8 @@ internal fun ConnectionViewModel.startTapProximityHandshakeImpl(
                         }
 
                     if (bindResult.isSuccess) {
+                        // G4-7: tighten this phone's fix while still; sent once the flow confirms its IDs.
+                        captured?.let { beginEncounterFollowUp(it) }
                         when (val handshake = bindResult.getOrNull()!!) {
                             is BindProximityHandshakeResult.PendingServerMatch -> {
                                 ConnectionFlowTelemetry.recordPending()

@@ -27,6 +27,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonPrimitive
 import kotlin.random.Random
 
 /**
@@ -64,9 +65,13 @@ object ConnectionFlowTelemetry {
             "proximity_recovery_incomplete",
             "verified_clique_from_proximity_blocked",
             "proximity_at_event_skipped",
+            "qr_connect_started",
+            "qr_connect_failed",
+            "qr_connect_reconnect_rate_limited",
         )
 
-    private val ALLOWED_EVENTS =
+    /** Keep in sync with click-web `CONNECTION_FLOW_ALLOWED_EVENTS` (`lib/server/telemetry/connectionFlowEvents.ts`). */
+    internal val ALLOWED_EVENTS =
         setOf(
             "proximity_handshake_started",
             "proximity_handshake_matched",
@@ -85,7 +90,48 @@ object ConnectionFlowTelemetry {
             "verified_clique_from_proximity_blocked",
             "proximity_at_event_attached",
             "proximity_at_event_skipped",
+            // QR scans and Click links; `capture_quality.connection_method` tells them apart.
+            "qr_connect_started",
+            "qr_connect_succeeded",
+            "qr_connect_failed",
+            "qr_connect_reconnect_rate_limited",
         )
+
+    /** click-web `CAPTURE_QUALITY_*` allowlist: anything else is dropped before it leaves the phone. */
+    internal val CAPTURE_QUALITY_KEYS: Set<String> =
+        setOf(
+            "location_accuracy_m",
+            "location_capture_ms",
+            "location_update_count",
+            "barometer_accuracy_m",
+            "ble_peer_count",
+            "ble_rssi_median_dbm",
+            "ble_rssi_sample_count",
+            "ble_discovery_ms",
+            "ble_gatt_read_ms",
+            "ultrasonic_peer_count",
+            "ultrasonic_snr_db",
+            "ultrasonic_peak_ratio",
+            "ultrasonic_decode_ms",
+            "motion_sample_count",
+            "capture_duration_ms",
+            "location_full_accuracy",
+            "location_available",
+            "barometer_available",
+            "motion_available",
+            "heading_available",
+            "uwb_available",
+            "floor_available",
+            "activity_available",
+            "pedometer_available",
+            "location_accuracy_bucket",
+            "connection_method",
+            "sensor_failure",
+        )
+
+    /** Keeps only allowlisted aggregate keys (never coordinates, tokens or identifiers). */
+    internal fun sanitizeCaptureQuality(raw: Map<String, JsonPrimitive>?): Map<String, JsonPrimitive>? =
+        raw?.filterKeys { it in CAPTURE_QUALITY_KEYS }?.takeIf { it.isNotEmpty() }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -113,7 +159,38 @@ object ConnectionFlowTelemetry {
         @SerialName("selected_count") val selectedCount: Int? = null,
         @SerialName("candidate_count") val candidateCount: Int? = null,
         val reason: String? = null,
+        @SerialName("capture_quality") val captureQuality: Map<String, JsonPrimitive>? = null,
     )
+
+    fun recordQrStarted(method: String) =
+        record(event = "qr_connect_started", captureQuality = mapOf("connection_method" to JsonPrimitive(method)))
+
+    fun recordQrSucceeded(
+        isReconnect: Boolean?,
+        captureQuality: Map<String, JsonPrimitive>?,
+    ) = record(event = "qr_connect_succeeded", isReconnect = isReconnect, captureQuality = captureQuality)
+
+    fun recordQrRateLimited(captureQuality: Map<String, JsonPrimitive>?) =
+        record(event = "qr_connect_reconnect_rate_limited", isReconnect = true, captureQuality = captureQuality)
+
+    fun recordQrFailed(
+        reason: String,
+        captureQuality: Map<String, JsonPrimitive>?,
+    ) = record(event = "qr_connect_failed", reason = reason, captureQuality = captureQuality)
+
+    /** A short machine code for a failed QR redeem (never a server message or an identifier). */
+    fun qrFailureReason(message: String?): String {
+        val m = message?.lowercase().orEmpty()
+        return when {
+            "same physical location" in m -> "proximity_failed"
+            "expired" in m -> "expired"
+            "already used" in m -> "already_used"
+            "no longer valid" in m -> "not_found"
+            "yourself" in m -> "self_connect"
+            "sign in" in m -> "unauthorized"
+            else -> "validation"
+        }
+    }
 
     fun recordStarted(
         peerCount: Int? = null,
@@ -296,6 +373,7 @@ object ConnectionFlowTelemetry {
         selectedCount: Int? = null,
         candidateCount: Int? = null,
         reason: String? = null,
+        captureQuality: Map<String, JsonPrimitive>? = null,
     ) {
         val trimmed = event.trim()
         if (trimmed !in ALLOWED_EVENTS) return
@@ -310,6 +388,7 @@ object ConnectionFlowTelemetry {
                 selectedCount = selectedCount?.coerceAtLeast(0),
                 candidateCount = candidateCount?.coerceAtLeast(0),
                 reason = reason?.trim()?.take(128)?.takeIf { it.isNotEmpty() },
+                captureQuality = sanitizeCaptureQuality(captureQuality),
             )
         scope.launch {
             queueMutex.withLock {

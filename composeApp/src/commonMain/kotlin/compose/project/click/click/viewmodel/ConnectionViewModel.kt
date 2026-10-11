@@ -128,6 +128,8 @@ sealed class ConnectionState {
          * group, so confirming saves an encounter on it ("Save this Click").
          */
         val existingConnectionId: String? = null,
+        /** Set when saving tags failed visibly (e.g. a group's pair lookup); the sheet stays open to retry. */
+        val tagSaveError: String? = null,
     ) : ConnectionState()
 
     /** QR parsed locally; user fills context before any redeem/create network work. */
@@ -174,6 +176,9 @@ class ConnectionViewModel : ViewModel() {
     /** The group chat a group Click finds or creates ([GroupAfterTap]), for the result screen. */
     val groupAfterTap: StateFlow<GroupAfterTapUiState> = _groupAfterTap.asStateFlow()
 
+    /** Pair connection IDs per group member set, cached only after a successful lookup (G0-15). */
+    internal val groupTagPairCache: MutableMap<String, List<String>> = mutableMapOf()
+
     /** Member sets whose [GroupAfterTap] run is in flight. */
     internal val groupAfterTapKeys: MutableSet<String> = mutableSetOf()
 
@@ -190,8 +195,38 @@ class ConnectionViewModel : ViewModel() {
     internal var lastTapProximityStartedAtMs: Long = 0L
     internal var activeTapProximityJob: Job? = null
 
+    /** This phone's warm capture for the visible Tap / QR flow (G4-1). */
+    internal var captureSession: compose.project.click.click.connect.ConnectionCaptureSession? = null
+
+    /** The location follow-up of the latest connect (G4-7). */
+    internal var activeFollowUp: compose.project.click.click.connect.EncounterFollowUp? = null
+    internal var followUpAccuracyJob: Job? = null
+    internal val _followUpAccuracyMeters = MutableStateFlow<Double?>(null)
+
+    /** Live "Location ±N m" once the follow-up tightened the moment's fix. */
+    val followUpAccuracyMeters: StateFlow<Double?> = _followUpAccuracyMeters.asStateFlow()
+
+    /** `capture_quality` aggregates of the latest capture, for connect telemetry. */
+    internal var lastCaptureQuality: Map<String, kotlinx.serialization.json.JsonPrimitive>? = null
+
+    /** When the QR / link was recognized: the connection moment for that flow. */
+    internal var qrScanMomentMs: Long? = null
+
+    /** G4-4 review poll and G4-5 late-joiner watch. */
+    internal var reviewWatchJob: Job? = null
+    internal var groupWatchJob: Job? = null
+
+    /** The review's live selection / removals as last saved (sheet-owned; mirrored for polling). */
+    internal var hostSelectionCurrent: Set<String>? = null
+    internal var hostSelectionExcluded: Set<String> = emptySet()
+
     /** Serial chain of `/proximity/selection` saves; the latest exclusion set always lands last. */
     internal var proximityExclusionsJob: Job? = null
+
+    init {
+        // G4-7: the follow-up is confirmed or cancelled as each flow settles.
+        viewModelScope.launch { _connectionState.collect { syncFollowUpWith(it) } }
+    }
 
     fun lastProximityCoordinates(): Pair<Double?, Double?> = lastProximityLat to lastProximityLng
 
@@ -262,6 +297,9 @@ class ConnectionViewModel : ViewModel() {
         venueId: String?,
     ) {
         if (scannedUserId.isBlank()) return
+        qrScanMomentMs = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
+        // A Click link opened outside the scanner captures cold from here (never prompts).
+        if (captureSession?.isRunning != true) warmUpConnectionCapture(if (qrToken == null) "link" else "qr")
         viewModelScope.launch {
             val profile =
                 repository.getUserById(scannedUserId).getOrNull()?.toUserProfile()
@@ -416,6 +454,12 @@ class ConnectionViewModel : ViewModel() {
         }
         activeTapProximityJob?.cancel()
         activeTapProximityJob = null
+        reviewWatchJob?.cancel()
+        reviewWatchJob = null
+        groupWatchJob?.cancel()
+        groupWatchJob = null
+        hostSelectionCurrent = null
+        hostSelectionExcluded = emptySet()
         lastTapProximityStartedAtMs = 0L
         lastProximityEncounterLoggedAggregate = true
         lastProximityHardwareVibe = null
