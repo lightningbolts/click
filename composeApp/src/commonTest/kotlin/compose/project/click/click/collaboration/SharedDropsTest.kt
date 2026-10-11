@@ -120,4 +120,27 @@ class SharedDropsTest {
         assertFalse(sharedDropCaptionFits("a".repeat(101)))
         assertTrue(sharedDropCaptionFits("a".repeat(100)))
     }
+
+    @Test
+    fun graphemeCountMatchesWhatPeopleSee() {
+        // Escapes keep the invisible joiners and selectors readable.
+        val thumbsUpMedium = "\uD83D\uDC4D\uD83C\uDFFD"
+        assertEquals(0, graphemeCount(""))
+        assertEquals(5, graphemeCount("hello"))
+        assertEquals(1, graphemeCount(thumbsUpMedium))
+        // Family: man ZWJ woman ZWJ girl ZWJ boy.
+        assertEquals(1, graphemeCount("\uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67\u200D\uD83D\uDC66"))
+        // Red heart with emoji presentation selector.
+        assertEquals(1, graphemeCount("\u2764\uFE0F"))
+        // Keycap one.
+        assertEquals(1, graphemeCount("1\uFE0F\u20E3"))
+        // Two flags (US, JP) are two regional-indicator pairs.
+        assertEquals(2, graphemeCount("\uD83C\uDDFA\uD83C\uDDF8\uD83C\uDDEF\uD83C\uDDF5"))
+        // Scotland: black flag plus tag sequence.
+        assertEquals(1, graphemeCount("\uD83C\uDFF4\uDB40\uDC67\uDB40\uDC62\uDB40\uDC73\uDB40\uDC63\uDB40\uDC74\uDB40\uDC7F"))
+        // e plus combining acute accent.
+        assertEquals(1, graphemeCount("e\u0301"))
+        assertEquals(1, graphemeCount("\r\n"))
+        assertEquals(3, graphemeCount("a${thumbsUpMedium}b"))
+    }
 }

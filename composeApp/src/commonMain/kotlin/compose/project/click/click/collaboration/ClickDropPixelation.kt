@@ -98,5 +98,60 @@ expect suspend fun clickDropPreviewJpeg(bytes: ByteArray): ByteArray?
 /** Pixel width and height of an encoded image, or null. */
 expect fun encodedImageSize(bytes: ByteArray): Pair<Int, Int>?
 
-/** Grapheme clusters as people count them (an emoji counts once); used for the caption limit. */
-expect fun graphemeCount(text: String): Int
+/**
+ * Grapheme clusters as people count them (an emoji counts once); used for the caption limit.
+ *
+ * Pure Kotlin so it counts the same everywhere: `java.text.BreakIterator` on JDK 17 splits emoji
+ * modifier and ZWJ sequences, while Android's ICU-backed one doesn't. Covers the parts of UAX #29
+ * that captions hit: combining marks, variation selectors, skin tones, ZWJ sequences, flag pairs,
+ * keycaps, tag sequences and CRLF. Hangul jamo sequences count per jamo.
+ */
+fun graphemeCount(text: String): Int {
+    var count = 0
+    var i = 0
+    var previous = -1
+    var regionalRun = 0
+    while (i < text.length) {
+        val cp = codePointAt(text, i)
+        val joins =
+            when {
+                previous == -1 -> false
+                previous == 0x0D && cp == 0x0A -> true
+                previous == 0x200D -> true
+                isRegionalIndicator(cp) -> isRegionalIndicator(previous) && regionalRun % 2 == 1
+                else -> isGraphemeExtender(cp)
+            }
+        if (!joins) count++
+        regionalRun = if (isRegionalIndicator(cp)) (if (joins) regionalRun + 1 else 1) else 0
+        previous = cp
+        i += if (cp > 0xFFFF) 2 else 1
+    }
+    return count
+}
+
+private fun codePointAt(text: String, index: Int): Int {
+    val high = text[index]
+    if (high.isHighSurrogate() && index + 1 < text.length) {
+        val low = text[index + 1]
+        if (low.isLowSurrogate()) return ((high.code - 0xD800) shl 10) + (low.code - 0xDC00) + 0x10000
+    }
+    return high.code
+}
+
+private fun isRegionalIndicator(cp: Int): Boolean = cp in 0x1F1E6..0x1F1FF
+
+private fun isGraphemeExtender(cp: Int): Boolean =
+    cp == 0x200D ||
+        cp == 0x20E3 ||
+        cp in 0xFE00..0xFE0F ||
+        cp in 0x1F3FB..0x1F3FF ||
+        cp in 0xE0020..0xE007F ||
+        cp in 0xE0100..0xE01EF ||
+        (
+            cp <= 0xFFFF &&
+                cp.toChar().category.let {
+                    it == CharCategory.NON_SPACING_MARK ||
+                        it == CharCategory.ENCLOSING_MARK ||
+                        it == CharCategory.COMBINING_SPACING_MARK
+                }
+        )

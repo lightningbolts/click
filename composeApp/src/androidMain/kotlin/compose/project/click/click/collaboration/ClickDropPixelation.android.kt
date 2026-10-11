@@ -5,7 +5,6 @@ import android.graphics.BitmapFactory
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
-import java.text.BreakIterator
 import kotlin.math.max
 
 actual suspend fun clickDropPreviewJpeg(bytes: ByteArray): ByteArray? =
@@ -56,10 +55,3 @@ actual fun encodedImageSize(bytes: ByteArray): Pair<Int, Int>? {
     return if (bounds.outWidth > 0 && bounds.outHeight > 0) bounds.outWidth to bounds.outHeight else null
 }
 
-actual fun graphemeCount(text: String): Int {
-    val it = BreakIterator.getCharacterInstance()
-    it.setText(text)
-    var n = 0
-    while (it.next() != BreakIterator.DONE) n++
-    return n
-}
