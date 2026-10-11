@@ -31,6 +31,16 @@ sealed interface AppDeepLink {
 
     /** The Add Click tab (public profile "Open Add Click"); not parsed from a URL. */
     data object AddClick : AppDeepLink
+
+    /** `click://pass/{beaconId}`: your Click Pass (the ongoing notification's "Pass"). */
+    data class EventPass(
+        val beaconId: String,
+    ) : AppDeepLink
+
+    /** `click://pass/{beaconId}/scan`: the host's door scanner (the notification's "Scan"). */
+    data class PassScanner(
+        val beaconId: String,
+    ) : AppDeepLink
 }
 
 /** Minimal URL split; enough for `click://` and joinclick.co links without platform URI types. */
@@ -93,7 +103,8 @@ private val WEB_HOSTS = setOf("joinclick.co", "www.joinclick.co", "click-us.verc
 /**
  * Routes the URLs iOS handles beyond `/c`, `/e` and `/hub` (which keep their own routers):
  * `click://chat/{chatId}?m=`, `click://profile/{userId}` (alias `u`), `click://myqr`,
- * `click://scan`, `click://tap`, `click://search?q=` and `https://joinclick.co/search?q=`.
+ * `click://scan`, `click://tap`, `click://search?q=`, `https://joinclick.co/search?q=` and
+ * `click://pass/{beaconId}[/scan]`.
  */
 object AppDeepLinkRouter {
     private val _pending = MutableStateFlow<AppDeepLink?>(null)
@@ -113,6 +124,10 @@ object AppDeepLinkRouter {
                     "scan" -> AppDeepLink.Scan
                     "tap" -> AppDeepLink.TapConnect
                     "search" -> AppDeepLink.Search(link.query["q"].orEmpty().trim())
+                    "pass" ->
+                        first?.let {
+                            if (link.segments.getOrNull(1) == "scan") AppDeepLink.PassScanner(it) else AppDeepLink.EventPass(it)
+                        }
                     else -> null
                 }
             "https", "http" ->
@@ -129,6 +144,8 @@ object AppDeepLinkRouter {
         when (this) {
             is AppDeepLink.Chat -> chatId.isNotBlank()
             is AppDeepLink.Profile -> userId.isNotBlank()
+            is AppDeepLink.EventPass -> beaconId.isNotBlank()
+            is AppDeepLink.PassScanner -> beaconId.isNotBlank()
             else -> true
         }
 
@@ -147,6 +164,8 @@ object AppDeepLinkRouter {
                 link.messageId?.let { ChatDeepLinkManager.setPendingTargetMessage(it) }
             }
             is AppDeepLink.Profile -> ChatDeepLinkManager.setPendingProfile(link.userId)
+            is AppDeepLink.EventPass -> EventPassRouter.open(EventPassDestination.Pass(link.beaconId))
+            is AppDeepLink.PassScanner -> EventPassRouter.open(EventPassDestination.Scanner(link.beaconId))
             else -> _pending.value = link
         }
     }

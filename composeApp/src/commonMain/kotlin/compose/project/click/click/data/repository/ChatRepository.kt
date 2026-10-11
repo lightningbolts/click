@@ -159,6 +159,16 @@ interface ChatRepository {
     ): List<compose.project.click.click.data.models.MessageTombstone> = emptyList()
 
     /**
+     * Tombstones for the older page of up to [limit] messages strictly before [beforeTimeCreated]
+     * (`cursor=<ms>&include_tombstones=1`). Unclamped: the server has no upper bound.
+     */
+    suspend fun fetchOlderPageTombstones(
+        chatId: String,
+        beforeTimeCreated: Long,
+        limit: Int,
+    ): List<compose.project.click.click.data.models.MessageTombstone> = emptyList()
+
+    /**
      * Rotates the group's E2EE v2 epoch to the current membership right away (iOS
      * `reconcileMembershipEpoch`) instead of on the next send. Fails when the rotation couldn't run.
      */
@@ -412,6 +422,26 @@ interface ChatRepository {
         objectPath: String,
         contentType: String,
     ): String?
+
+    /** Encrypts and uploads a gated Click Drop's original (`drop_original: true`); null on failure. */
+    suspend fun uploadClickDropOriginal(
+        plainBytes: ByteArray,
+        chatId: String,
+        senderUserId: String,
+        mimeType: String,
+        previewClientMessageId: String?,
+    ): ClickDropOriginalUpload? = null
+
+    /** The decrypted original of a developed gated Click Drop, from a develop-issued signed URL. */
+    suspend fun loadClickDropOriginal(
+        chatId: String,
+        viewerUserId: String,
+        message: Message,
+        signedUrl: String,
+    ): ByteArray? = null
+
+    /** The v2 media client message ID behind an uploaded media URL or path, when known. */
+    fun uploadedMediaClientMessageId(reference: String): String? = null
 
     /** Downloads ciphertext from [mediaUrl] and decrypts for [chatId] as [viewerUserId]. */
     suspend fun downloadAndDecryptChatMedia(

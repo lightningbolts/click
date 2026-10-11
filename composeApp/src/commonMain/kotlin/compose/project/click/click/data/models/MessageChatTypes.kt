@@ -121,11 +121,78 @@ fun Message.disposableRollCollaborationTtlIso(): String? {
         ?.takeIf { it.isNotEmpty() }
 }
 
+/**
+ * A gated Click Drop (`metadata.drop_gated`, written by the server): this message's media is only
+ * the 12-block pixelated preview. The original comes from `/api/drops/develop` after reveal, so the
+ * media must never be shown, saved or shared as the photo.
+ */
+fun Message.isGatedDrop(): Boolean {
+    if (!isDisposableRoll() || messageType.lowercase() != ChatMessageType.IMAGE) return false
+    val root = metadata as? JsonObject ?: return false
+    return root["drop_gated"]?.jsonPrimitive?.booleanOrNull == true
+}
+
+/** Click Drop reveal time: `reveal_at` (server-stamped on gated drops), else the legacy `collaboration_ttl`. */
+fun Message.clickDropRevealAt(): Instant? {
+    val root = metadata as? JsonObject ?: return null
+    val raw =
+        root["reveal_at"]
+            ?.jsonPrimitive
+            ?.contentOrNull
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+            ?: disposableRollCollaborationTtlIso()
+            ?: return null
+    return runCatching { Instant.parse(raw) }.getOrNull()
+}
+
+/**
+ * True while a Click Drop's media must stay pixelated on surfaces without the develop flow
+ * (profile media, hub previews, export). A gated drop's media is only its preview, so it stays
+ * locked forever there; a legacy drop is locked while its develop state is pending.
+ */
 fun Message.isDisposableRollLocked(now: Instant = Clock.System.now()): Boolean {
     if (!isDisposableRoll()) return false
-    val ttlIso = disposableRollCollaborationTtlIso() ?: return true
-    val ttl = runCatching { Instant.parse(ttlIso) }.getOrNull() ?: return true
-    return now < ttl
+    if (isGatedDrop()) return true
+    return compose.project.click.click.collaboration.ClickDropDevelopState
+        .resolve(revealAt = clickDropRevealAt(), developedAt = null, now = now)
+        .isPending
+}
+
+/**
+ * A chat message that answers a shared Click Drop (`metadata.drop_reply`, iOS `ChatDropReply`):
+ * a typed reply, or a reaction whose (encrypted) text is the emoji.
+ */
+data class ChatDropReply(
+    val dropId: String,
+    val isReaction: Boolean,
+) {
+    fun wire(): JsonObject =
+        buildJsonObject {
+            put("kind", "shared")
+            put("id", dropId)
+            put("reaction", isReaction)
+        }
+
+    fun label(mine: Boolean): String =
+        when {
+            isReaction && mine -> "You reacted to their drop"
+            isReaction -> "Reacted to your drop"
+            mine -> "You replied to their drop"
+            else -> "Replied to your drop"
+        }
+
+    companion object {
+        const val METADATA_KEY = "drop_reply"
+    }
+}
+
+fun Message.dropReplyOrNull(): ChatDropReply? {
+    if (messageType.lowercase() != ChatMessageType.TEXT) return null
+    val reply = (metadata as? JsonObject)?.get(ChatDropReply.METADATA_KEY) as? JsonObject ?: return null
+    if (reply["kind"]?.jsonPrimitive?.contentOrNull != "shared") return null
+    val id = reply["id"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotEmpty() } ?: return null
+    return ChatDropReply(dropId = id, isReaction = reply["reaction"]?.jsonPrimitive?.booleanOrNull == true)
 }
 
 fun Message.hasLocalMediaUri(): Boolean = mediaUrlOrNull()?.startsWith("file://", ignoreCase = true) == true

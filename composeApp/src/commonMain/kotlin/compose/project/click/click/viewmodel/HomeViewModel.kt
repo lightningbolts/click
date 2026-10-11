@@ -23,6 +23,8 @@ import compose.project.click.click.data.models.collapseOneToOneConnectionsByPeer
 import compose.project.click.click.data.models.homePriority
 import compose.project.click.click.data.models.isActiveForUser // pragma: allowlist secret
 import compose.project.click.click.data.models.typed
+import compose.project.click.click.data.realtime.LiveKind // pragma: allowlist secret
+import compose.project.click.click.data.realtime.LiveUpdates // pragma: allowlist secret
 import compose.project.click.click.data.repository.ChatRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.ConnectionRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.MapBeaconRepository // pragma: allowlist secret
@@ -280,6 +282,14 @@ class HomeViewModel(
         viewModelScope.launch {
             AppDataManager.eventEngagementVersion.collect {
                 refreshEventSectionsAfterEngagement()
+            }
+        }
+        // Live updates (G1-2): refetch only the Home modules a hint names.
+        viewModelScope.launch {
+            LiveUpdates.batches.collect { batch ->
+                val catchUp = LiveKind.HOME in batch.kinds
+                if (catchUp || LiveKind.NUDGES in batch.kinds) loadHomeNudges()
+                if (catchUp || LiveKind.AVAILABILITY in batch.kinds) refreshHomeAvailabilityIntents()
             }
         }
     }

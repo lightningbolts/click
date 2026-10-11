@@ -4,7 +4,7 @@ package compose.project.click.click.viewmodel // pragma: allowlist secret
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import compose.project.click.click.collaboration.computeClickDropRevealTtlIso // pragma: allowlist secret
+import compose.project.click.click.collaboration.chatClickDropRevealAtIso // pragma: allowlist secret
 import compose.project.click.click.crypto.MessageCrypto // pragma: allowlist secret
 import compose.project.click.click.crypto.MessageCryptoV2 // pragma: allowlist secret
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
@@ -127,6 +127,17 @@ class HubChatViewModel(
 
     internal val _isEventHub = MutableStateFlow(isEventHub)
     val isEventHubFlow: StateFlow<Boolean> = _isEventHub.asStateFlow()
+
+    /** Event hubs keep every message until `expires_at` (G3-27), so their history pages back. */
+    internal val _hasMoreOlderMessages = MutableStateFlow(false)
+    val hasMoreOlderMessages: StateFlow<Boolean> = _hasMoreOlderMessages.asStateFlow()
+
+    internal val _isLoadingOlderMessages = MutableStateFlow(false)
+    val isLoadingOlderMessages: StateFlow<Boolean> = _isLoadingOlderMessages.asStateFlow()
+
+    fun loadOlderMessages() {
+        viewModelScope.launch { loadOlderHubMessagesPage() }
+    }
 
     internal val _secureChatMediaLoadState = MutableStateFlow<Map<String, SecureChatMediaLoadState>>(emptyMap())
     override val secureChatMediaLoadState: StateFlow<Map<String, SecureChatMediaLoadState>> =
@@ -461,7 +472,8 @@ class HubChatViewModel(
                 _draft.value = text
                 if (_replyingTo.value == null) _replyingTo.value = replyTarget
                 if (isHubExpired(e)) {
-                    _sendError.value = HUB_EXPIRED_MESSAGE
+                    // 410: the hub's chat was deleted server-side; wipe its local copy (G3-27).
+                    handleHubInteractionFailure(e, "Could not send")
                 } else if (isHubOutOfRange(e) && !_isEventHub.value) {
                     _outOfBounds.value = true
                     _sendError.value = HUB_OUT_OF_RANGE_MESSAGE
@@ -574,7 +586,7 @@ class HubChatViewModel(
                 }
             } catch (e: Exception) {
                 if (isHubExpired(e)) {
-                    _sendError.value = HUB_EXPIRED_MESSAGE
+                    handleHubInteractionFailure(e, HUB_EXPIRED_MESSAGE)
                 } else if (isHubOutOfRange(e) && !_isEventHub.value) {
                     _outOfBounds.value = true
                     _sendError.value = HUB_OUT_OF_RANGE_MESSAGE
@@ -635,7 +647,7 @@ class HubChatViewModel(
                                         )
                                     },
                             ).getOrElse { e -> throw e }
-                    val revealTtlIso = computeClickDropRevealTtlIso()
+                    val revealTtlIso = chatClickDropRevealAtIso()
                     val metadata: JsonObject =
                         buildJsonObject {
                             replyTarget?.let { target ->
@@ -682,7 +694,7 @@ class HubChatViewModel(
                 }
             } catch (e: Exception) {
                 if (isHubExpired(e)) {
-                    _sendError.value = HUB_EXPIRED_MESSAGE
+                    handleHubInteractionFailure(e, HUB_EXPIRED_MESSAGE)
                 } else if (isHubOutOfRange(e) && !_isEventHub.value) {
                     _outOfBounds.value = true
                     _sendError.value = HUB_OUT_OF_RANGE_MESSAGE

@@ -3,6 +3,7 @@
 package compose.project.click.click.data // pragma: allowlist secret
 
 import compose.project.click.click.auth.LocalSessionCache // pragma: allowlist secret
+import compose.project.click.click.core.AppSessionHooks // pragma: allowlist secret
 import compose.project.click.click.data.auth.EnsureFreshAccessToken // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.models.UserAvailability // pragma: allowlist secret
@@ -210,6 +211,7 @@ internal suspend fun AppDataManager.loadAllData() {
 
             _currentUser.value = loadedUser
             println("AppDataManager: Current user set to: ${loadedUser.name}")
+            AppSessionHooks.onUserResolved(loadedUser.id)
             runCatching { chatRepository.startGlobalPresence(loadedUser.id) }
                 .onFailure { e -> println("AppDataManager: Global presence start failed: ${e.redactedRestMessage()}") }
             startPresenceHeartbeat(loadedUser.id)

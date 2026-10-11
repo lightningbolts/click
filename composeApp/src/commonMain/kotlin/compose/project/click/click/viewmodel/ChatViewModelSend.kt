@@ -523,8 +523,17 @@ internal suspend fun ChatViewModel.activateConnectionIfPending(connectionId: Str
                 updateConnectionState(connectionId) { it.copy(expiry_state = "active", status = "active") }
             }
         }
+        // G0-11: the chat has begun once someone sends, not when it opens.
+        if (shouldMarkChatBegunAfterSend(currentState.chatDetails)) {
+            if (supabaseRepository.updateConnectionHasBegun(connection.id, true)) {
+                updateConnectionState(connection.id) { it.copy(has_begun = true) }
+            }
+        }
     }
 }
+
+/** 1:1 chats only (group rows are synthetic), and only until the first send lands. */
+internal fun shouldMarkChatBegunAfterSend(details: ChatWithDetails): Boolean = details.groupClique == null && !details.connection.has_begun
 
 internal fun ChatViewModel.updateMessageInputImpl(text: String) {
     _messageInput.value = text.take(CHAT_MESSAGE_INPUT_MAX_LENGTH)

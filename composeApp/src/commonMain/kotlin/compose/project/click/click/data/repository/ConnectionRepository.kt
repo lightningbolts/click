@@ -11,6 +11,7 @@ import compose.project.click.click.data.WeatherService
 import compose.project.click.click.data.api.ClickWebRequestException
 import compose.project.click.click.data.api.CollaborationSessionPostResponse
 import compose.project.click.click.data.api.ProximityBindOkResponseDto
+import compose.project.click.click.data.api.installClickWebPlatformHeader // pragma: allowlist secret
 import compose.project.click.click.data.auth.EnsureFreshAccessToken // pragma: allowlist secret
 import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.ConnectionActivityStatus
@@ -112,6 +113,8 @@ data class PendingProximityHandshakeSyncResult(
      */
     val pendingHandshakeId: String? = null,
     val isAggregateNewConnection: Boolean = true,
+    /** `existing_connection_id` when recovery landed on `awaiting_selection` for an existing group. */
+    val existingConnectionId: String? = null,
 )
 
 data class ProximityHandshakeRecoveryPayload(
@@ -121,6 +124,8 @@ data class ProximityHandshakeRecoveryPayload(
     /** Present when recovery landed on `awaiting_selection` (host confirm still required). */
     val pendingHandshakeId: String? = null,
     val isAggregateNewConnection: Boolean = true,
+    /** `existing_connection_id` when recovery landed on `awaiting_selection` for an existing group. */
+    val existingConnectionId: String? = null,
 )
 
 data class BindProximityHandshakeOutcome(
@@ -145,6 +150,8 @@ data class BindProximityHandshakeOutcome(
     val groupCliqueCandidateMemberIds: List<String>? = null,
     val connectionId: String? = null,
     val isGroup: Boolean = false,
+    /** This phone's stored tap; polled for a late joiner turning a 1:1 into a group (G4-5). */
+    val pendingHandshakeId: String? = null,
 )
 
 /** Result of `POST /api/connections/proximity` — instant match vs async pending. */
@@ -163,6 +170,8 @@ sealed class BindProximityHandshakeResult {
         val candidates: List<User>,
         val isAggregateNewConnection: Boolean = true,
         val groupCliqueCandidateMemberIds: List<String>? = null,
+        /** This exact member set already has a group; confirming saves an encounter ("Save this Click"). */
+        val existingConnectionId: String? = null,
     ) : BindProximityHandshakeResult()
 
     data class PendingServerMatch(
@@ -196,6 +205,7 @@ internal fun ProximityBindOkResponseDto.toBindOutcome(): BindProximityHandshakeO
         isGroup = isGroup == true,
         encounterId = encounterId?.trim()?.takeIf { it.isNotEmpty() },
         collaborationTtl = collaborationTtl?.trim()?.takeIf { it.isNotEmpty() },
+        pendingHandshakeId = pendingHandshakeId?.trim()?.takeIf { it.isNotEmpty() },
     )
 }
 
@@ -214,6 +224,7 @@ internal fun ProximityBindOkResponseDto.toAwaitingHostSelectionOrNull(): BindPro
         candidates = rows,
         isAggregateNewConnection = aggregateNewConnection,
         groupCliqueCandidateMemberIds = groupCliqueCandidate?.memberUserIds?.takeIf { it.isNotEmpty() },
+        existingConnectionId = existingConnectionId?.trim()?.takeIf { it.isNotEmpty() },
     )
 }
 
@@ -515,6 +526,7 @@ class ConnectionRepository(
             install(ContentNegotiation) {
                 json(this@ConnectionRepository.json)
             }
+            installClickWebPlatformHeader()
         }
     }
     internal val connectionsSelectWithEncounters = Columns.raw("*, connection_encounters(*)")
@@ -584,6 +596,7 @@ class ConnectionRepository(
         bindExactNoiseLevelDb: Double? = null,
         bindHeightCategory: HeightCategory? = null,
         simulatorMock: Boolean = false,
+        observationKeys: JsonObject? = null,
     ): Result<BindProximityHandshakeResult> =
         bindProximityHandshakeImpl(
             httpClient = httpClient,
@@ -602,6 +615,7 @@ class ConnectionRepository(
             bindExactNoiseLevelDb = bindExactNoiseLevelDb,
             bindHeightCategory = bindHeightCategory,
             simulatorMock = simulatorMock,
+            observationKeys = observationKeys,
         )
 
     suspend fun recoverPendingProximityHandshake(
@@ -622,6 +636,18 @@ class ConnectionRepository(
             contextTags = contextTags,
             bearerJwt = bearerJwt,
         )
+
+    /** The viewer's 1:1 connection with each peer (`user_ids=cs.{viewer,peer}`, two members). Throws on failure. */
+    suspend fun fetchPairConnectionIds(
+        viewerId: String,
+        peerIds: List<String>,
+    ): Map<String, String> = fetchPairConnectionIdsImpl(viewerId = viewerId, peerIds = peerIds)
+
+    /** POST `/api/connections/proximity/selection` with the full set of removed member ids. */
+    suspend fun saveProximitySelectionExclusions(
+        pendingHandshakeId: String,
+        excludedMemberIds: Set<String>,
+    ): Result<Unit> = apiClient.postProximitySelectionExclusions(pendingHandshakeId, excludedMemberIds)
 
     suspend fun enqueuePendingProximityHandshake(
         myToken: String,

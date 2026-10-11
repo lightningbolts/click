@@ -405,6 +405,7 @@ internal suspend fun ChatApiClient.fetchHubThreadImpl(
     authToken: String,
     aroundMessageId: String? = null,
     limit: Int = 120,
+    beforeCreatedAtMs: Long? = null,
 ): Result<ChatApiClient.HubThreadResponse> =
     try {
         val id = hubId.trim()
@@ -417,12 +418,16 @@ internal suspend fun ChatApiClient.fetchHubThreadImpl(
                     parameter("hubId", id)
                     parameter("limit", limit.coerceIn(1, 120).toString())
                     aroundMessageId?.trim()?.takeIf { it.isNotEmpty() }?.let { parameter("aroundMessageId", it) }
+                    // Older history: rows created before this time (ms).
+                    beforeCreatedAtMs?.let { parameter("cursor", it.toString()) }
                     accept(ContentType.Application.Json)
                 }
             val parsed = runCatching { response.body<ChatApiClient.HubThreadResponse>() }.getOrNull()
             return when {
                 response.status.value in 200..299 && parsed != null -> Result.success(parsed)
                 response.status.value == 401 -> Result.failure(Exception("HTTP 401 for hub thread"))
+                // Event hub past expires_at: its chat is deleted (G3-27).
+                response.status.value == 410 -> Result.failure(Exception("HUB_EXPIRED"))
                 response.status.value == 403 ->
                     Result.failure(Exception(parsed?.error?.takeIf { it.isNotBlank() } ?: "NOT_A_PARTICIPANT"))
                 else -> Result.failure(Exception("HTTP ${response.status} for hub thread"))

@@ -77,6 +77,8 @@ internal data class ClickWebChatDevicesEnvelope(
 internal data class ClickWebRegisterChatDeviceBody(
     @SerialName("device_id") val deviceId: String,
     @SerialName("identity_public_key") val identityPublicKey: String,
+    /** "Pixel 9": what kind of device this is (1..64 chars), shown when another device approves it. */
+    @SerialName("device_label") val deviceLabel: String? = null,
 )
 
 @Serializable
@@ -245,6 +247,8 @@ internal data class ChatMediaUploadJsonBody(
     val epoch: Int? = null,
     @SerialName("sender_device_id") val senderDeviceId: String? = null,
     @SerialName("client_message_id") val clientMessageId: String? = null,
+    /** A gated Click Drop's original: stored privately, response `url: null` (flag `drops_develop`). */
+    @SerialName("drop_original") val dropOriginal: Boolean? = null,
 )
 
 @Serializable

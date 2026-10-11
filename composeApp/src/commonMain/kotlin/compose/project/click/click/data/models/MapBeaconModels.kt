@@ -205,6 +205,35 @@ data class MapBeaconInsert(
 )
 
 /**
+ * The Place an event belongs to (`place` from click-web `withPlaceRefs`; only listed, verified
+ * Places). An event hosted by a Place shows the Place as host (sheet 08 G3-22).
+ */
+data class BeaconPlaceRef(
+    val id: String,
+    val slug: String? = null,
+    val name: String,
+    val category: String? = null,
+    val photoUrl: String? = null,
+    val city: String? = null,
+)
+
+internal fun parseBeaconPlaceRef(element: JsonElement?): BeaconPlaceRef? {
+    val obj = element as? JsonObject ?: return null
+
+    fun str(key: String): String? = (obj[key] as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
+    val id = str("id") ?: return null
+    val name = str("name") ?: return null
+    return BeaconPlaceRef(
+        id = id,
+        slug = str("slug"),
+        name = name,
+        category = str("category"),
+        photoUrl = str("photo_url"),
+        city = str("city"),
+    )
+}
+
+/**
  * One row from `public.map_beacons` (or Edge Function projection).
  */
 data class MapBeacon(
@@ -223,6 +252,10 @@ data class MapBeacon(
     val visibilityAudience: BeaconVisibilityAudience = BeaconVisibilityAudience.EVERYONE,
     /** Event hub id from `map_beacons.hub_id`, API JSON, or legacy metadata `hub_id`. */
     val hubId: String? = null,
+    /** `venue_id`: the Place that hosts this event, if any. */
+    val venueId: String? = null,
+    /** The hosting Place's public face (`place`, additive since web #133). */
+    val place: BeaconPlaceRef? = null,
 )
 
 fun parseMapBeaconRows(element: JsonElement): List<MapBeacon> =
@@ -319,6 +352,8 @@ private fun parseMapBeaconRow(element: JsonElement): MapBeacon? {
         creatorDisplayName = creatorDisplayName,
         visibilityAudience = visibilityAudience,
         hubId = hubId,
+        venueId = strKey("venue_id", "venueId"),
+        place = parseBeaconPlaceRef(obj["place"]),
     )
 }
 

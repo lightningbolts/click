@@ -15,6 +15,8 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import compose.project.click.click.collaboration.ClickDropFlags
+import compose.project.click.click.core.FeatureFlagGate
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.api.CommunityHubNearbyDto // pragma: allowlist secret
 import compose.project.click.click.data.models.AvailabilityIntentRow // pragma: allowlist secret
@@ -43,6 +45,7 @@ import compose.project.click.click.ui.components.UnifiedToastHost // pragma: all
 import compose.project.click.click.ui.components.homeGreetingTitle // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberBottomChromePadding // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberUnifiedToastState // pragma: allowlist secret
+import compose.project.click.click.ui.drops.SharedDropsHomeSection
 import compose.project.click.click.ui.theme.* // pragma: allowlist secret
 import compose.project.click.click.ui.utils.mergeMapBeaconLists // pragma: allowlist secret
 import compose.project.click.click.viewmodel.AvailabilityViewModel // pragma: allowlist secret
@@ -50,6 +53,7 @@ import compose.project.click.click.viewmodel.HomeState // pragma: allowlist secr
 import compose.project.click.click.viewmodel.HomeViewModel // pragma: allowlist secret
 import compose.project.click.click.viewmodel.MapLayerFilter // pragma: allowlist secret
 import compose.project.click.click.viewmodel.MapViewModel // pragma: allowlist secret
+import compose.project.click.click.viewmodel.SharedDropsViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.datetime.Clock
@@ -97,6 +101,7 @@ fun HomeScreen(
     val nudgeResult by homeViewModel.nudgeResult.collectAsState()
     val pollPairSuggestion by homeViewModel.pollPairSuggestion.collectAsState()
     val icebreakerSendCooldownSec by homeViewModel.icebreakerSendCooldownRemainingSec.collectAsState()
+    val sharedDropsViewModel: SharedDropsViewModel = viewModel(key = "home-shared-drops") { SharedDropsViewModel() }
     val availabilityViewModel: AvailabilityViewModel =
         viewModel(key = "home-availability") { AvailabilityViewModel() }
     var showAvailabilityIntentSheet by remember { mutableStateOf(false) }
@@ -294,6 +299,14 @@ fun HomeScreen(
                     if (onOpenSearch != null) {
                         item(key = "home_search_pill") {
                             HomeSearchPill(onClick = onOpenSearch)
+                        }
+                    }
+                    if (FeatureFlagGate.isEnabled(ClickDropFlags.SHARED_DROPS)) {
+                        item(key = "shared_drops_strip") {
+                            SharedDropsHomeSection(
+                                viewModel = sharedDropsViewModel,
+                                onToast = { toastState.show(scope, it) },
+                            )
                         }
                     }
                     homeNudge?.let { nudge ->

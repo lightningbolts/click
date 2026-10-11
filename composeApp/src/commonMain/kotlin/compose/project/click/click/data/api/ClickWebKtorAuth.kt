@@ -20,11 +20,31 @@ import kotlinx.datetime.Clock
 
 private val ClickWebAuthRetryOnceKey = AttributeKey<Boolean>("click-web-auth-retry-once")
 
+/** Tells click-web which app sent the request (web W-4 gates platform-specific flags on it). */
+internal const val CLICK_PLATFORM_HEADER = "X-Click-Platform"
+internal const val CLICK_PLATFORM_ANDROID = "android"
+
+private val ClickWebPlatformHeaderPlugin =
+    createClientPlugin("ClickWebPlatformHeader") {
+        val authHost = Url(ApiConfig.CLICK_WEB_BASE_URL.trimEnd('/')).host
+        onRequest { request, _ ->
+            if (request.url.host.equals(authHost, ignoreCase = true) && !request.headers.contains(CLICK_PLATFORM_HEADER)) {
+                request.headers.append(CLICK_PLATFORM_HEADER, CLICK_PLATFORM_ANDROID)
+            }
+        }
+    }
+
+/** Adds `X-Click-Platform: android` to every click-web request made by this client. */
+internal fun HttpClientConfig<*>.installClickWebPlatformHeader() {
+    install(ClickWebPlatformHeaderPlugin)
+}
+
 /**
  * Ktor bearer auth for click-web BFF routes — shared by [ApiClient] and [ChatApiClient].
  * Single-flight refresh via [AuthRepository] → [SessionRefreshCoordinator].
  */
 internal fun HttpClientConfig<*>.installClickWebBearerAuth(tokenStorage: TokenStorage = createTokenStorage()) {
+    installClickWebPlatformHeader()
     val authOrigin = ApiConfig.CLICK_WEB_BASE_URL.trimEnd('/')
     val authHost = Url(authOrigin).host
     install(Auth) {

@@ -77,7 +77,7 @@ Per-chat Realtime sessions are **short-lived** and torn down when the user leave
 |-------|----------|
 | **Join** | `joinChatEphemeralChannel` creates typing/presence on `chat:{chatId}` — **non-blocking** for paint (8s subscribe timeout; load continues on timeout) |
 | **Open paint** | `ChatViewModel.loadChatMessages` bridges `Loading → Success` immediately after chat id resolve, **before** ephemeral join |
-| **Typing** | `TypingBroadcastPayload` broadcast on the channel; exposed as `Flow<TypingStatus>` |
+| **Typing** | `TypingBroadcastCodec.kt` (sheet 08 G0-3). Android sends `{user_id, userId, is_typing}`: both id keys, so iOS (`user_id`) and web / legacy Android (`userId`) can read it, and `is_typing` on start (`true`) and stop (`false`). The decode is lenient: it accepts either id key, and a missing `is_typing` means `true`. `decodeTypingBroadcasts` decodes each message on its own, so a malformed payload is logged and skipped rather than ending the collector, and it drops our own broadcasts. Exposed as `Flow<TypingStatus>` |
 | **Presence refresh** | Presence `track` refreshed every **25 s** (`PRESENCE_TRACK_REFRESH_MS = 25_000L`) |
 | **Leave** | `leaveChatEphemeral(chatId)` cancels jobs, `untrack()`, `unsubscribe()`, removes from `ephemeralSessions` map |
 | **Global presence** | Separate `room:presence` channel for app-wide online dots (`startGlobalPresence`) |

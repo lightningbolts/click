@@ -364,6 +364,11 @@ data class ConnectionRequest(
     /** Human-readable weather from the client (e.g. `15°C, Clear`) for `/api/qr` and encounter rows. */
     @SerialName("weather_snapshot")
     val weatherSnapshotLabel: String? = null,
+    /**
+     * This phone's own `gps_*` / `barometric_*` quality keys and `sensor_observation` (G4-2/G4-3),
+     * merged into the `/api/qr` redeem and `POST /api/connections` bodies.
+     */
+    val observationKeys: kotlinx.serialization.json.JsonObject? = null,
 )
 
 @Serializable

@@ -90,8 +90,19 @@ internal fun canEditMessage(messageWithUser: MessageWithUser): Boolean {
         !message.id.startsWith("temp-")
 }
 
-/** A Click Drop stays unsaveable and unshareable until its collaboration window ends. */
-internal fun canExportMessageMedia(message: Message): Boolean = !message.isDisposableRollLocked()
+/**
+ * Save/share only once a Click Drop has developed for this viewer ([dropState] from the develop
+ * flow); a gated drop then exports its original, never the preview.
+ */
+internal fun canExportMessageMedia(
+    message: Message,
+    dropState: compose.project.click.click.collaboration.ClickDropDevelopState? = null,
+): Boolean =
+    if (dropState != null) {
+        dropState == compose.project.click.click.collaboration.ClickDropDevelopState.Developed
+    } else {
+        !message.isDisposableRollLocked()
+    }
 
 /** Saves an image message to the gallery (decrypting first when needed); true on success. */
 internal suspend fun saveMessageImage(

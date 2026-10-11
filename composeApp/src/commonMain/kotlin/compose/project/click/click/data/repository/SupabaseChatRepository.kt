@@ -118,11 +118,6 @@ class SupabaseChatRepository(
         val jobs: List<Job>,
     )
 
-    @Serializable
-    internal data class TypingBroadcastPayload(
-        val userId: String,
-    )
-
     internal data class ChatEphemeralSession(
         val channel: RealtimeChannel,
         val peerUserId: String,
@@ -397,13 +392,29 @@ class SupabaseChatRepository(
         return apiClient.getTombstones(chatId, windowSize, token).getOrDefault(emptyList())
     }
 
+    override suspend fun fetchOlderPageTombstones(
+        chatId: String,
+        beforeTimeCreated: Long,
+        limit: Int,
+    ): List<MessageTombstone> {
+        val token = ensureFreshJwtForChat() ?: return emptyList()
+        return apiClient
+            .getTombstones(chatId, limit, token, beforeTimeCreated = beforeTimeCreated)
+            .getOrDefault(emptyList())
+    }
+
     override suspend fun secureGroupAfterMembershipChange(
         chatId: String,
         userId: String,
     ): Result<Unit> =
         runCatching {
-            resolveE2eeV2ChatCrypto(chatId, userId, forceRefresh = true, allowLifecycle = true)
-                ?: error("Group encryption could not be updated")
+            resolveE2eeV2ChatCrypto(
+                chatId,
+                userId,
+                forceRefresh = true,
+                allowLifecycle = true,
+                strictRotation = true,
+            ) ?: error("Group encryption could not be updated")
             Unit
         }
 
@@ -586,12 +597,11 @@ class SupabaseChatRepository(
         userId: String,
         isTyping: Boolean,
     ) {
-        if (!isTyping) return
         val session = ephemeralMutex.withLock { ephemeralSessions[chatId] } ?: return
         try {
             session.channel.broadcast(
                 event = "typing",
-                message = buildJsonObject { put("userId", userId) },
+                message = buildTypingBroadcastPayload(userId = userId, isTyping = isTyping),
             )
         } catch (e: Exception) {
             println("ChatRepository: typing broadcast failed: ${e.redactedRestMessage()}")
@@ -870,6 +880,24 @@ class SupabaseChatRepository(
         objectPath: String,
         contentType: String,
     ): String? = uploadChatMediaImpl(bytes = bytes, objectPath = objectPath, contentType = contentType)
+
+    override suspend fun uploadClickDropOriginal(
+        plainBytes: ByteArray,
+        chatId: String,
+        senderUserId: String,
+        mimeType: String,
+        previewClientMessageId: String?,
+    ): ClickDropOriginalUpload? = uploadClickDropOriginalImpl(plainBytes, chatId, senderUserId, mimeType, previewClientMessageId)
+
+    override suspend fun loadClickDropOriginal(
+        chatId: String,
+        viewerUserId: String,
+        message: Message,
+        signedUrl: String,
+    ): ByteArray? = loadClickDropOriginalImpl(chatId, viewerUserId, message, signedUrl)
+
+    override fun uploadedMediaClientMessageId(reference: String): String? =
+        e2eeV2MediaRecordForReference(reference)?.metadata?.clientMessageId
 
     override suspend fun uploadEncryptedBlob(
         bucketName: String,

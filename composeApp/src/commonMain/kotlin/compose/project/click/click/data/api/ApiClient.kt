@@ -71,6 +71,7 @@ class ApiClient {
                 install(ContentNegotiation) {
                     json(json)
                 }
+                installClickWebPlatformHeader()
             }
         }
     internal val clickWebPlainClient: HttpClient get() = clickWebPlainClientLazy.value
@@ -543,7 +544,8 @@ class ApiClient {
     suspend fun postProximityHandshake(
         body: ProximityHandshakePostBody,
         bearerJwt: String? = null,
-    ): Result<ProximityHandshakePostResult> = postProximityHandshakeImpl(body = body, bearerJwt = bearerJwt)
+        extraKeys: kotlinx.serialization.json.JsonObject? = null,
+    ): Result<ProximityHandshakePostResult> = postProximityHandshakeImpl(body = body, bearerJwt = bearerJwt, extraKeys = extraKeys)
 
     suspend fun postProximityConfirmSelection(
         bearerJwt: String,
@@ -556,6 +558,15 @@ class ApiClient {
             pendingHandshakeId = pendingHandshakeId,
             selectedMemberIds = selectedMemberIds,
             contextTags = contextTags,
+        )
+
+    suspend fun postProximitySelectionExclusions(
+        pendingHandshakeId: String,
+        excludedMemberIds: Collection<String>,
+    ): Result<Unit> =
+        postProximitySelectionExclusionsImpl(
+            pendingHandshakeId = pendingHandshakeId,
+            excludedMemberIds = excludedMemberIds,
         )
 
     suspend fun getPendingProximityHandshake(

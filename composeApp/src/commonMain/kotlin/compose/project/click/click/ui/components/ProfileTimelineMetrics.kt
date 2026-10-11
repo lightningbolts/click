@@ -23,6 +23,7 @@ import androidx.compose.material.icons.outlined.Air
 import androidx.compose.material.icons.outlined.Cloud
 import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.outlined.GraphicEq
+import androidx.compose.material.icons.outlined.Speed
 import androidx.compose.material.icons.outlined.Terrain
 import androidx.compose.material.icons.outlined.Thermostat
 import androidx.compose.material3.Icon
@@ -54,6 +55,7 @@ import compose.project.click.click.data.repository.ConnectionRepository
 import compose.project.click.click.deeplink.EventDeepLinkRouter // pragma: allowlist secret
 import compose.project.click.click.events.EventSchedule // pragma: allowlist secret
 import compose.project.click.click.events.formatEventScheduleRange // pragma: allowlist secret
+import compose.project.click.click.sensors.noiseLevelCategoryFromApproximateDb // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickFormBottomSheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
@@ -71,6 +73,7 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.plus
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.datetime.todayIn
+import kotlin.math.pow
 import kotlin.math.roundToInt
 
 internal fun sharedInterestTags(
@@ -149,7 +152,11 @@ internal fun ageFromBirthdayIso(birthday: String?): Int? {
 }
 
 internal fun ConnectionEncounter.metricNoiseLabel(): String? {
-    val raw = noiseLevel?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    // G4-12: the band only, never dB; a dB-only row is banded locally.
+    val raw =
+        noiseLevel?.trim()?.takeIf { it.isNotEmpty() }
+            ?: exactNoiseLevelDb?.takeIf { it.isFinite() }?.let { noiseLevelCategoryFromApproximateDb(it).name }
+            ?: return null
     val friendly =
         runCatching { NoiseLevelCategory.valueOf(raw.uppercase().replace(' ', '_')) }
             .getOrNull()
@@ -202,8 +209,33 @@ internal fun ConnectionEncounter.metricWindLabel(): String? {
     return "${kph.roundToInt()} km/h$suffix"
 }
 
-internal fun ConnectionEncounter.metricPressureLabel(): String? =
-    weatherSnapshot?.pressureMslHpa?.takeIf { it.isFinite() }?.let { "${it.roundToInt()} hPa" }
+/** G4-12: "1016 hPa" from this phone's barometer (kPa × 10), else the weather's sea-level pressure. */
+internal fun ConnectionEncounter.metricPressureLabel(): String? {
+    val hpa =
+        barometricPressureKpa?.takeIf { it.isFinite() && it > 0 }?.let { it * 10 }
+            ?: weatherSnapshot?.pressureMslHpa?.takeIf { it.isFinite() && it > 0 }
+            ?: return null
+    return "${hpa.roundToInt()} hPa"
+}
+
+/**
+ * G4-12 height pill: the server's band / relative altitude ("Elevated · 12 m") when present;
+ * otherwise "Alt. N m" from the barometric altitude, then the pressure altitude against the
+ * weather's sea-level pressure, then GPS altitude only when its vertical accuracy is ≤ 10 m.
+ */
+internal fun ConnectionEncounter.metricHeightLabel(): String? {
+    metricElevationLabel()?.let { return it }
+    val absolute =
+        exactBarometricElevationM?.takeIf { it.isFinite() }
+            ?: run {
+                val station = barometricPressureKpa?.takeIf { it.isFinite() && it > 0 } ?: return@run null
+                val msl = weatherSnapshot?.pressureMslHpa?.takeIf { it.isFinite() && it > 0 } ?: return@run null
+                (44330.0 * (1 - (station * 10 / msl).pow(1 / 5.255))).takeIf { it.isFinite() }
+            }
+            ?: gpsAltitudeM?.takeIf { it.isFinite() && (gpsVerticalAccuracyM ?: Double.POSITIVE_INFINITY) <= 10.0 }
+            ?: return null
+    return "Alt. ${absolute.roundToInt()} m"
+}
 
 internal fun ConnectionEncounter.metricConditionLabel(): String? =
     weatherSnapshot?.condition?.trim()?.takeIf { it.isNotEmpty() }
@@ -434,7 +466,8 @@ internal fun OurTimelineSection(
                             enc.metricTemperatureLabel()?.let { add(Triple(Icons.Outlined.Thermostat, Color(0xFFFFCC80), it)) }
                             enc.metricWindLabel()?.let { add(Triple(Icons.Outlined.Air, Color(0xFF81D4FA), it)) }
                             enc.metricNoiseLabel()?.let { add(Triple(Icons.Outlined.GraphicEq, Color(0xFF69F0AE), it)) }
-                            enc.metricElevationLabel()?.let { add(Triple(Icons.Outlined.Terrain, LightBlue.copy(alpha = 0.95f), it)) }
+                            enc.metricHeightLabel()?.let { add(Triple(Icons.Outlined.Terrain, LightBlue.copy(alpha = 0.95f), it)) }
+                            enc.metricPressureLabel()?.let { add(Triple(Icons.Outlined.Speed, Color(0xFFCE93D8), it)) }
                             enc.metricCompassAzimuthLabel()?.let { add(Triple(Icons.Outlined.Explore, Color(0xFFB39DDB), it)) }
                         }
                     if (pills.isNotEmpty()) {

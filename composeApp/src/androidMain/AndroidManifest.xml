@@ -82,7 +82,8 @@
                     android:pathPrefix="/hub"/>
             </intent-filter>
 
-            <!-- Universal Link connection routing: https://joinclick.co/c/{userId} -->
+            <!-- Universal Link connection routing: https://joinclick.co/c/{userId} and legacy /connect/{userId}.
+                 MainActivity is the only owner of these paths (G0-6). -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW"/>
                 <category android:name="android.intent.category.DEFAULT"/>
@@ -99,6 +100,18 @@
                     android:scheme="https"
                     android:host="click-us.vercel.app"
                     android:pathPrefix="/c"/>
+                <data
+                    android:scheme="https"
+                    android:host="joinclick.co"
+                    android:pathPrefix="/connect"/>
+                <data
+                    android:scheme="https"
+                    android:host="www.joinclick.co"
+                    android:pathPrefix="/connect"/>
+                <data
+                    android:scheme="https"
+                    android:host="click-us.vercel.app"
+                    android:pathPrefix="/connect"/>
             </intent-filter>
 
             <!-- Event share Universal Link: https://joinclick.co/e/{beaconId} -->
@@ -130,7 +143,7 @@
                     android:host="e"/>
             </intent-filter>
 
-            <!-- In-app routes: click://chat/{id}, profile/{id} (u), myqr, scan, tap, search?q= -->
+            <!-- In-app routes: click://chat/{id}, profile/{id} (u), myqr, scan, tap, search?q=, pass/{id}[/scan] -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW"/>
                 <category android:name="android.intent.category.DEFAULT"/>
@@ -142,6 +155,7 @@
                 <data android:scheme="click" android:host="scan"/>
                 <data android:scheme="click" android:host="tap"/>
                 <data android:scheme="click" android:host="search"/>
+                <data android:scheme="click" android:host="pass"/>
             </intent-filter>
 
             <!-- Search Universal Link: https://joinclick.co/search?q= -->
@@ -183,49 +197,6 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
-
-        <!-- Instant App / deep link preview for unauthenticated users -->
-        <activity
-            android:name=".instant.InstantProfileActivity"
-            android:exported="true"
-            android:theme="@android:style/Theme.Material.Light.NoActionBar"
-            android:launchMode="singleTask"
-            android:screenOrientation="portrait">
-            <intent-filter android:autoVerify="true">
-                <action android:name="android.intent.action.VIEW"/>
-                <category android:name="android.intent.category.DEFAULT"/>
-                <category android:name="android.intent.category.BROWSABLE"/>
-                <data
-                    android:scheme="https"
-                    android:host="joinclick.co"
-                    android:pathPrefix="/connect"/>
-                <data
-                    android:scheme="https"
-                    android:host="www.joinclick.co"
-                    android:pathPrefix="/connect"/>
-                <data
-                    android:scheme="https"
-                    android:host="click-us.vercel.app"
-                    android:pathPrefix="/connect"/>
-            </intent-filter>
-            <intent-filter android:autoVerify="true">
-                <action android:name="android.intent.action.VIEW"/>
-                <category android:name="android.intent.category.DEFAULT"/>
-                <category android:name="android.intent.category.BROWSABLE"/>
-                <data
-                    android:scheme="https"
-                    android:host="joinclick.co"
-                    android:pathPrefix="/c"/>
-                <data
-                    android:scheme="https"
-                    android:host="www.joinclick.co"
-                    android:pathPrefix="/c"/>
-                <data
-                    android:scheme="https"
-                    android:host="click-us.vercel.app"
-                    android:pathPrefix="/c"/>
-            </intent-filter>
-        </activity>
 
         <service
             android:name=".notifications.ClickFirebaseMessagingService"

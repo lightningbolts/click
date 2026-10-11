@@ -34,6 +34,8 @@ actual fun QRScanner(
     modifier: Modifier,
     isActive: Boolean,
     onDetectionChanged: (QrScannerDetection?) -> Unit,
+    deniedMessage: String,
+    deliverRepeats: Boolean,
     onResult: (String) -> Unit,
 ) {
     val context = LocalContext.current
@@ -126,7 +128,7 @@ actual fun QRScanner(
                                     )
 
                                     qrBarcode?.rawValue?.let { value ->
-                                        if (lastDeliveredResult != value) {
+                                        if (deliverRepeats || lastDeliveredResult != value) {
                                             lastDeliveredResult = value
                                             onResult(value)
                                         }
@@ -157,7 +159,7 @@ actual fun QRScanner(
         )
     } else {
         Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("Camera permission required")
+            Text(deniedMessage)
         }
     }
 }

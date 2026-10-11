@@ -8,7 +8,7 @@ package compose.project.click.click.viewmodel
 import androidx.lifecycle.viewModelScope
 import compose.project.click.click.chat.attachments.AttachmentCrypto // pragma: allowlist secret
 import compose.project.click.click.chat.attachments.ChatAttachmentValidator // pragma: allowlist secret
-import compose.project.click.click.collaboration.computeClickDropRevealTtlIso
+import compose.project.click.click.collaboration.chatClickDropRevealAtIso
 import compose.project.click.click.crypto.MessageCryptoV2 // pragma: allowlist secret
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.CHAT_ATTACHMENTS_BUCKET // pragma: allowlist secret
@@ -17,6 +17,7 @@ import compose.project.click.click.data.models.Message // pragma: allowlist secr
 import compose.project.click.click.data.models.MessageDeliveryState // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.repository.ChatRepository // pragma: allowlist secret
+import compose.project.click.click.data.repository.gatedClickDropMetadata // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ChatAttachmentDownloadOutcome // pragma: allowlist secret
 import compose.project.click.click.ui.chat.saveDecryptedAttachmentToDownloads // pragma: allowlist secret
 import compose.project.click.click.util.readChatMediaVaultBytesForMessage // pragma: allowlist secret
@@ -44,7 +45,7 @@ internal fun ChatViewModel.sendDisposableRollPhotoImpl(
     if (bytes.isEmpty() || encounterId.isBlank()) return
     val connectionId = currentConnectionId ?: return
     val userId = _currentUserId.value ?: return
-    val revealTtlIso = computeClickDropRevealTtlIso()
+    val revealTtlIso = chatClickDropRevealAtIso()
     _messageSendError.value = null
     viewModelScope.launch {
         outboundChatMessageMutex.withLock {
@@ -95,8 +96,21 @@ internal fun ChatViewModel.sendDisposableRollPhotoImpl(
                 val unique = "${Clock.System.now().toEpochMilliseconds()}-${Random.nextInt(1_000_000_000)}"
                 val path = "$userId/$apiChatId/$unique.$ext"
                 val uploadBytes = bytes
+                // drops_develop: only the pixelated preview is the message media; the original is gated.
+                val gated =
+                    if (gatesClickDropOriginal(mimeType)) {
+                        uploadGatedClickDrop(bytes, apiChatId, userId, mimeType, "$userId/$apiChatId/$unique.jpg") ?: run {
+                            markOptimisticSendFailed(tempId)
+                            secureImageBytesCache.remove(tempId)
+                            _secureChatMediaLoadState.update { m -> m - tempId }
+                            _messageSendError.value = "Failed to upload Click Drop photo"
+                            return@withLock
+                        }
+                    } else {
+                        null
+                    }
                 val url =
-                    chatRepository.uploadChatMedia(uploadBytes, path, mimeType) ?: run {
+                    gated?.first ?: chatRepository.uploadChatMedia(uploadBytes, path, mimeType) ?: run {
                         markOptimisticSendFailed(tempId)
                         secureImageBytesCache.remove(tempId)
                         _secureChatMediaLoadState.update { m -> m - tempId }
@@ -115,15 +129,16 @@ internal fun ChatViewModel.sendDisposableRollPhotoImpl(
                             )
                     )
                 }
-                val meta =
+                val baseMeta =
                     buildJsonObject {
                         put("media_url", url)
-                        put("original_mime_type", mimeType)
+                        put("original_mime_type", if (gated != null) "image/jpeg" else mimeType)
                         put("is_encrypted_media", true)
                         put("disposable_roll", true)
                         put("encounter_id", encounterId)
                         put("collaboration_ttl", revealTtlIso)
                     }
+                val meta = gated?.let { gatedClickDropMetadata(baseMeta, it.second) } ?: baseMeta
                 val message =
                     chatRepository.sendMessage(
                         chatId = apiChatId,
@@ -134,6 +149,7 @@ internal fun ChatViewModel.sendDisposableRollPhotoImpl(
                         clientLocalSentAtMs = localMs,
                     )
                 if (message != null) {
+                    if (gated != null) storeOwnDropOriginal(message, bytes)
                     applyInsertedMessage(message, currentUser, userId, optimisticTempId = tempId)
                     activateConnectionIfPending(connectionId)
                 } else {

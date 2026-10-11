@@ -75,3 +75,7 @@ composeApp/.idea/
 .maestro/**/*.png
 .maestro/**/*.mp4
 .maestro/.screenshots/
+
+### Node tooling (never commit dependencies) ###
+node_modules/
+messaging-agent/

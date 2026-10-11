@@ -23,6 +23,7 @@ internal suspend fun ChatApiClient.uploadMediaImpl(
     mimeType: String,
     authToken: String,
     v2: E2eeV2MediaUploadRequest? = null,
+    dropOriginal: Boolean = false,
 ): Result<ChatApiClient.UploadedMedia> {
     if (fileBytes.isEmpty()) return Result.failure(IllegalArgumentException("Empty media"))
     return try {
@@ -41,12 +42,22 @@ internal suspend fun ChatApiClient.uploadMediaImpl(
                         epoch = v2?.epoch,
                         senderDeviceId = v2?.senderDeviceId,
                         clientMessageId = v2?.clientMessageId,
+                        dropOriginal = if (dropOriginal) true else null,
                     ),
                 )
             }
         if (response.status.value in 200..299) {
             val payload = response.body<ChatMediaUploadUrlResponse>()
             val url = payload.url?.trim().orEmpty()
+            val path = payload.path?.trim()?.takeIf { it.isNotEmpty() }
+            if (dropOriginal) {
+                // Never signed at upload: only its path comes back, named once in the message.
+                return if (path != null) {
+                    Result.success(ChatApiClient.UploadedMedia(url = "", path = path))
+                } else {
+                    Result.failure(Exception("Drop original upload response missing path"))
+                }
+            }
             if (url.isNotEmpty()) {
                 Result.success(ChatApiClient.UploadedMedia(url = url, path = payload.path?.trim()?.takeIf { it.isNotEmpty() }))
             } else {

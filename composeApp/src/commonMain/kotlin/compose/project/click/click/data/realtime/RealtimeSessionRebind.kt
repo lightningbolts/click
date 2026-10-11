@@ -22,5 +22,6 @@ internal suspend fun rebindRealtimeSocket() {
     runCatching { RealtimeCoordinator.stopAndAwait() }
     if (!userId.isNullOrBlank()) {
         runCatching { RealtimeCoordinator.ensureStarted(userId) }
+        runCatching { LiveUpdates.rebind(userId) }
     }
 }

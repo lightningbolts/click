@@ -716,7 +716,7 @@ object AppDataManager {
         startLoadAllDataJob()
     }
 
-    suspend fun clearData() = clearDataImpl()
+    suspend fun clearData(keepLocalHistory: Boolean = false) = clearDataImpl(keepLocalHistory)
 
     /**
      * Reset all cached data and reload from server.
@@ -903,6 +903,12 @@ object AppDataManager {
         )
     }
 
+    fun setDropReleaseNotificationsEnabled(enabled: Boolean) {
+        updateNotificationPreferences(
+            _notificationPreferences.value.copy(dropReleasePushEnabled = enabled),
+        )
+    }
+
     fun setMessageNotificationsEnabled(enabled: Boolean) {
         updateNotificationPreferences(
             _notificationPreferences.value.copy(messagePushEnabled = enabled),
@@ -1049,6 +1055,7 @@ object AppDataManager {
                     groupCliqueCandidateMemberIds = proximity.groupCliqueCandidateMemberIds,
                     pendingHandshakeId = proximity.pendingHandshakeId,
                     isAggregateNewConnection = proximity.isAggregateNewConnection,
+                    existingConnectionId = proximity.existingConnectionId,
                 ),
             )
         }

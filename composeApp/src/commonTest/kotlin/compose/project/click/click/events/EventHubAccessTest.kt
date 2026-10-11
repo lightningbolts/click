@@ -99,12 +99,6 @@ class EventHubAccessTest {
     }
 
     @Test
-    fun hubExpiresOneDayAfterEventEnd() {
-        val end = 1_000_000L
-        assertEquals(end + EVENT_HUB_TTL_AFTER_END_MS, eventHubExpiresAtEpochMs(end))
-    }
-
-    @Test
     fun openCtaNeedsHubIdAndRsvpAccess() {
         assertFalse(canOpenEventHub(hubId = null, isCreator = true, checkedIn = true, hasRsvp = true))
         assertTrue(canOpenEventHub(hubId = "hub_1", isCreator = true, checkedIn = false, hasRsvp = false))

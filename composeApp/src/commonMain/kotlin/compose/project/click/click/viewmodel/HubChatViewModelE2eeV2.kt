@@ -5,6 +5,8 @@ import compose.project.click.click.crypto.PlatformCrypto // pragma: allowlist se
 import compose.project.click.click.data.api.ClickWebChatDeviceDto // pragma: allowlist secret
 import compose.project.click.click.data.api.ClickWebHubEpochWriteEnvelope // pragma: allowlist secret
 import compose.project.click.click.data.models.Message // pragma: allowlist secret
+import compose.project.click.click.data.repository.E2eeV2LifecyclePolicy // pragma: allowlist secret
+import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
@@ -57,9 +59,10 @@ internal suspend fun HubChatViewModel.ensureHubE2eeV2Session(
     // Registration is idempotent from the caller's perspective: an existing identity returns 409.
     chatApi.registerE2eeV2Device(identity.info.deviceId, identity.info.publicKeySpkiBase64, token)
     var devices = chatApi.discoverHubE2eeV2Devices(hubId, token).getOrElse { throw it }
-    val own =
-        devices.firstOrNull { it.deviceId == identity.info.deviceId }
-            ?: throw IllegalStateException("The current E2EE v2 device is not registered in this hub")
+    // A phone shared by several member accounts has one row per account for the same device id.
+    if (devices.none { it.deviceId == identity.info.deviceId }) {
+        throw IllegalStateException("The current E2EE v2 device is not registered in this hub")
+    }
     var state = chatApi.getHubE2eeV2State(hubId, token, identity.info.deviceId).getOrElse { throw it }
 
     if (state.currentEpoch == null) {
@@ -81,13 +84,28 @@ internal suspend fun HubChatViewModel.ensureHubE2eeV2Session(
         // is added or revoked and the participant ids are intentionally hidden from this client.
         val fingerprint = membershipFingerprintForHubDevices(devices)
         if (state.membershipFingerprint != fingerprint) {
+            val rotateFrom = state
+            val nextEpoch = state.currentEpoch + 1
+            // Hubs have no client membership-change path, so rotation is never strict (G0-14).
             state =
-                createHubE2eeV2EpochWithFreshKey(
-                    identity = identity,
-                    devices = devices,
-                    epoch = state.currentEpoch + 1,
-                    membershipFingerprint = fingerprint,
-                    authToken = token,
+                E2eeV2LifecyclePolicy.rotateOrContinue(
+                    strict = false,
+                    current = rotateFrom,
+                    rotate = {
+                        createHubE2eeV2EpochWithFreshKey(
+                            identity = identity,
+                            devices = devices,
+                            epoch = nextEpoch,
+                            membershipFingerprint = fingerprint,
+                            authToken = token,
+                        )
+                    },
+                    refetch = { chatApi.getHubE2eeV2State(hubId, token, identity.info.deviceId).getOrElse { throw it } },
+                    onSkipped = { error ->
+                        println(
+                            "HubChatViewModel: hub epoch rotation failed; sending on epoch ${rotateFrom.currentEpoch}: ${error.redactedRestMessage()}",
+                        )
+                    },
                 )
             devices = chatApi.discoverHubE2eeV2Devices(hubId, token).getOrElse { throw it }
         }
@@ -97,9 +115,10 @@ internal suspend fun HubChatViewModel.ensureHubE2eeV2Session(
     if (state.hubId != hubId || state.deviceId != identity.info.deviceId || currentEpoch <= 0) {
         throw IllegalStateException("Hub E2EE v2 epoch response identity mismatch")
     }
+    val ownRowIds = devices.filter { it.deviceId == identity.info.deviceId }.map { it.id }.toSet()
     val keys = linkedMapOf<Int, ByteArray>()
     state.envelopes
-        .filter { it.hubId == hubId && it.recipientDeviceId == own.id }
+        .filter { it.hubId == hubId && it.recipientDeviceId in ownRowIds }
         .forEach { envelope ->
             val key =
                 runCatching {
@@ -150,7 +169,7 @@ private suspend fun HubChatViewModel.createHubE2eeV2EpochWithFreshKey(
 ): compose.project.click.click.data.api.ClickWebHubE2eeV2StateEnvelope {
     val epochKey = MessageCryptoV2.generateEpochKey()
     val envelopes =
-        devices.map { recipient ->
+        E2eeV2LifecyclePolicy.distinctEpochRecipients(devices).map { recipient ->
             ClickWebHubEpochWriteEnvelope(
                 recipientDeviceId = recipient.deviceId,
                 envelope =

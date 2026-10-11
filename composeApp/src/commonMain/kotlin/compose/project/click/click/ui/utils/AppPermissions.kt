@@ -13,7 +13,7 @@ enum class AppPermission(
     Camera("Camera", "QR scanning, photos"),
     Photos("Photos", "Sharing and saving photos"),
     Contacts("Contacts", "Finding people you know (hashed on this phone)"),
-    Calendar("Calendar", "Free/busy for availability"),
+    Calendar("Calendar", "Busy times for availability; adds only events you ask it to"),
     Notifications("Notifications", "Messages and alerts"),
 }
 

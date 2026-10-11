@@ -50,6 +50,13 @@ internal fun SupabaseChatRepository.userIdFromPresence(p: Presence): String? {
     return fromObject(nested)
 }
 
+/** Chat ephemeral presence meta; carries both id keys (iOS/web don't track, but read either). */
+internal fun ephemeralPresenceTrackPayload(userId: String): JsonObject =
+    buildJsonObject {
+        put("userId", userId)
+        put("user_id", userId)
+    }
+
 internal suspend fun SupabaseChatRepository.disposeEphemeralSession(session: SupabaseChatRepository.ChatEphemeralSession) {
     session.jobs.forEach { it.cancel() }
     session.scope.cancel()
@@ -263,7 +270,7 @@ internal suspend fun SupabaseChatRepository.joinChatEphemeralChannelImpl(
     /** Presence keys are configured as each client's user id; diff joins/leaves are authoritative. */
     val presenceSessions = PresenceSessionTracker()
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    val broadcastFlow = channel.broadcastFlow<SupabaseChatRepository.TypingBroadcastPayload>(event = "typing")
+    val broadcastFlow = channel.broadcastFlow<JsonObject>(event = "typing")
     val presenceFlow = channel.presenceChangeFlow()
 
     val presenceJob =
@@ -300,7 +307,7 @@ internal suspend fun SupabaseChatRepository.joinChatEphemeralChannelImpl(
             abandonJoin()
             return
         }
-        channel.track(buildJsonObject { put("userId", currentUserId) })
+        channel.track(ephemeralPresenceTrackPayload(currentUserId))
     } catch (e: CancellationException) {
         abandonJoin()
         throw e
@@ -313,10 +320,8 @@ internal suspend fun SupabaseChatRepository.joinChatEphemeralChannelImpl(
     val broadcastJob =
         scope.launch {
             try {
-                broadcastFlow.collect { payload ->
-                    if (payload.userId != currentUserId) {
-                        typingFlow.emit(TypingStatus(userId = payload.userId, isTyping = true))
-                    }
+                broadcastFlow.decodeTypingBroadcasts(currentUserId).collect { status ->
+                    typingFlow.emit(status)
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -336,7 +341,7 @@ internal suspend fun SupabaseChatRepository.joinChatEphemeralChannelImpl(
                     continue
                 }
                 runCatching {
-                    channel.track(buildJsonObject { put("userId", currentUserId) })
+                    channel.track(ephemeralPresenceTrackPayload(currentUserId))
                 }
             }
         }

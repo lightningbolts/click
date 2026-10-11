@@ -9,6 +9,8 @@ import compose.project.click.click.data.models.* // pragma: allowlist secret
 import compose.project.click.click.data.repository.AuthRepository // pragma: allowlist secret
 import compose.project.click.click.data.storage.TokenStorage // pragma: allowlist secret
 import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
+import compose.project.click.click.platform.DEVICE_LABEL_MAX_LENGTH // pragma: allowlist secret
+import compose.project.click.click.platform.thisDeviceLabel // pragma: allowlist secret
 import compose.project.click.click.qr.CLICK_WEB_BASE_URL // pragma: allowlist secret
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
 import io.ktor.client.*
@@ -348,11 +350,16 @@ class ChatApiClient(
         authToken: String,
     ): Result<List<Message>> = Result.failure(Exception("getChatMessages is no longer served; use click-web /api/chat/messages"))
 
-    /** Register the public half of the locally persisted v2 device identity. */
+    /**
+     * Register the public half of the locally persisted v2 device identity. Posted on every launch
+     * and sign-in: a repeat answers 409, which marks the device active (`last_seen_at`) and fills in
+     * a missing [deviceLabel].
+     */
     internal suspend fun registerE2eeV2Device(
         deviceId: String,
         identityPublicKey: String,
         authToken: String,
+        deviceLabel: String? = thisDeviceLabel(),
     ): Result<ClickWebChatDeviceDto> =
         try {
             require(deviceId.isNotBlank() && identityPublicKey.isNotBlank()) { "device identity is required" }
@@ -360,7 +367,19 @@ class ChatApiClient(
                 client.post("$clickWebBaseUrl/api/chat/devices") {
                     header(HttpHeaders.Authorization, bearerAuthHeader(authToken))
                     contentType(ContentType.Application.Json)
-                    setBody(ClickWebRegisterChatDeviceBody(deviceId, identityPublicKey))
+                    setBody(
+                        ClickWebRegisterChatDeviceBody(
+                            deviceId,
+                            identityPublicKey,
+                            deviceLabel
+                                ?.trim()
+                                ?.take(
+                                    DEVICE_LABEL_MAX_LENGTH,
+                                )?.takeIf {
+                                    it.isNotEmpty()
+                                },
+                        ),
+                    )
                 }
             if (response.status.value in 200..299) {
                 Result.success(response.body<ClickWebChatDeviceEnvelope>().device)
@@ -450,7 +469,7 @@ class ChatApiClient(
             if (response.status.value in 200..299) {
                 Result.success(Unit)
             } else {
-                Result.failure(Exception(readClickWebErrorMessage(response)))
+                Result.failure(ClickWebRequestException(response.status.value, readClickWebErrorMessage(response)))
             }
         } catch (e: Exception) {
             Result.failure(e)
@@ -535,7 +554,7 @@ class ChatApiClient(
             if (response.status.value in 200..299) {
                 Result.success(Unit)
             } else {
-                Result.failure(Exception(readClickWebErrorMessage(response)))
+                Result.failure(ClickWebRequestException(response.status.value, readClickWebErrorMessage(response)))
             }
         } catch (e: Exception) {
             Result.failure(e)
@@ -711,11 +730,14 @@ class ChatApiClient(
     /**
      * Tombstones for the latest [windowSize] messages (`include_tombstones=1`), i.e. where
      * recently deleted messages were. Only the tombstones are used; history loads elsewhere.
+     * With [beforeTimeCreated] (`cursor=<ms>`) the window is the older page below that time; the
+     * server has no upper bound there, so callers clamp (see [clampTombstonesToPage]).
      */
     suspend fun getTombstones(
         chatId: String,
         windowSize: Int,
         authToken: String,
+        beforeTimeCreated: Long? = null,
     ): Result<List<compose.project.click.click.data.models.MessageTombstone>> =
         try {
             val token = resolveClickWebAccessToken(tokenStorage) ?: authToken.trim().takeIf { it.isNotEmpty() }
@@ -728,6 +750,7 @@ class ChatApiClient(
                         parameter("chatId", chatId)
                         parameter("include_tombstones", "1")
                         parameter("limit", windowSize.coerceIn(1, 200))
+                        if (beforeTimeCreated != null) parameter("cursor", beforeTimeCreated)
                     }
                 if (response.status.value in 200..299) {
                     Result.success(response.body<TombstonesEnvelope>().tombstones)
@@ -838,7 +861,16 @@ class ChatApiClient(
         mimeType: String,
         authToken: String,
         v2: E2eeV2MediaUploadRequest? = null,
-    ): Result<UploadedMedia> = uploadMediaImpl(fileBytes = fileBytes, chatId = chatId, mimeType = mimeType, authToken = authToken, v2 = v2)
+        dropOriginal: Boolean = false,
+    ): Result<UploadedMedia> =
+        uploadMediaImpl(
+            fileBytes = fileBytes,
+            chatId = chatId,
+            mimeType = mimeType,
+            authToken = authToken,
+            v2 = v2,
+            dropOriginal = dropOriginal,
+        )
 
     suspend fun uploadAttachment(
         fileBytes: ByteArray,
@@ -1162,8 +1194,15 @@ class ChatApiClient(
         authToken: String,
         aroundMessageId: String? = null,
         limit: Int = 120,
+        beforeCreatedAtMs: Long? = null,
     ): Result<HubThreadResponse> =
-        fetchHubThreadImpl(hubId = hubId, authToken = authToken, aroundMessageId = aroundMessageId, limit = limit)
+        fetchHubThreadImpl(
+            hubId = hubId,
+            authToken = authToken,
+            aroundMessageId = aroundMessageId,
+            limit = limit,
+            beforeCreatedAtMs = beforeCreatedAtMs,
+        )
 
     /**
      * Search messages — use [searchConversations] (`GET /api/chat/search`) or local/repository scan.

@@ -15,9 +15,8 @@ data class EventHubAccessPolicy(
 
 val EVENT_HUB_ACCESS = EventHubAccessPolicy()
 
-const val EVENT_HUB_TTL_AFTER_END_MS = 24L * 60L * 60L * 1000L
-
-fun eventHubExpiresAtEpochMs(eventEndEpochMs: Long): Long = eventEndEpochMs + EVENT_HUB_TTL_AFTER_END_MS
+// No client-side event hub lifetime: the server owns `hub_venues.expires_at` (drops reveal + 24 h)
+// and answers 410 HUB_EXPIRED after it (G3-27).
 
 fun evaluateEventHubAccess(
     userId: String,

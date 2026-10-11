@@ -7,7 +7,6 @@ package compose.project.click.click.ui.components // pragma: allowlist secret
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,7 +24,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -60,6 +58,7 @@ import compose.project.click.click.calendar.CalendarSyncSession // pragma: allow
 import compose.project.click.click.calendar.calculateAvailabilityOverlaps // pragma: allowlist secret
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.ContextTagTaxonomy // pragma: allowlist secret
+import compose.project.click.click.data.TagSignals // pragma: allowlist secret
 import compose.project.click.click.data.api.ApiClient // pragma: allowlist secret
 import compose.project.click.click.data.api.ConnectionEventRecommendationDto // pragma: allowlist secret
 import compose.project.click.click.data.models.ContextTag // pragma: allowlist secret
@@ -78,6 +77,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
+import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 
@@ -248,30 +248,21 @@ private fun StackedProfileAvatarRow(
     }
 }
 
+/** "Who's in this Click?" row (G4-4; iOS `TapConnectView.row`): status line plus Remove / Add back. */
 @Composable
 private fun ConnectionContextSelectableUserRow(
     profile: UserProfile,
     selected: Boolean,
     onToggle: () -> Unit,
 ) {
+    val name = profile.displayName.trim().ifBlank { "Connection" }
     Row(
         modifier =
             Modifier
                 .fillMaxWidth()
-                .clickable {
-                    PlatformHapticsPolicy.lightImpact()
-                    onToggle()
-                }.padding(vertical = 6.dp),
+                .padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Checkbox(
-            checked = selected,
-            onCheckedChange = {
-                PlatformHapticsPolicy.lightImpact()
-                onToggle()
-            },
-        )
-        Spacer(modifier = Modifier.width(4.dp))
         ProfileAvatarBubble(
             profile = profile,
             size = 40.dp,
@@ -281,17 +272,35 @@ private fun ConnectionContextSelectableUserRow(
                 } else {
                     MaterialTheme.colorScheme.surfaceContainerHigh
                 },
+            modifier = Modifier.alpha(if (selected) 1f else 0.45f),
         )
         Spacer(modifier = Modifier.width(12.dp))
-        Text(
-            text = profile.displayName.trim().ifBlank { "Connection" },
-            style = MaterialTheme.typography.bodyLarge,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-            color = GlassSheetTokens.OnOled(),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
-        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = name,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = if (selected) GlassSheetTokens.OnOled() else GlassSheetTokens.OnOledMuted(),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = if (selected) "Connecting" else "Won't be connected with you",
+                style = MaterialTheme.typography.bodySmall,
+                color = GlassSheetTokens.OnOledMuted(),
+                maxLines = 1,
+            )
+        }
+        Spacer(modifier = Modifier.width(8.dp))
+        ClickButton(
+            onClick = {
+                PlatformHapticsPolicy.lightImpact()
+                onToggle()
+            },
+            variant = ClickButtonVariant.Secondary,
+        ) {
+            Text(if (selected) "Remove" else "Add back")
+        }
     }
 }
 
@@ -319,17 +328,32 @@ fun ConnectionContextSheet(
     onSendClickDrop: (() -> Unit)? = null,
     /** The tap bind already saved this crossing server-side (it may have been folded into an Extended Hangout). */
     encounterAlreadySaved: Boolean = false,
+    /** Each Remove / Add back in the people picker (saved right away via `/proximity/selection`). */
+    onSelectionChanged: ((Set<String>) -> Unit)? = null,
+    /** This exact group already exists (`existing_connection_id`): confirming saves this Click on it. */
+    existingGroup: Boolean = false,
+    /** Richer suggestion signals once the encounter is known (place type, noise, history). */
+    tagSignals: TagSignals? = null,
+    /** A visible save failure (e.g. a group's pair lookup); confirming again retries. */
+    errorMessage: String? = null,
 ) {
-    val hourOfDay =
+    val localNow =
         remember {
             Clock.System
                 .now()
                 .toLocalDateTime(TimeZone.currentSystemDefault())
-                .hour
         }
+    // Tag suggestions v2 (G4-11): weighted by the time, the place and these people's history.
     val suggestions =
-        remember(locationName, hourOfDay) {
-            ContextTagTaxonomy.suggest(locationName = locationName, hourOfDay = hourOfDay)
+        remember(locationName, localNow, tagSignals) {
+            ContextTagTaxonomy.suggest(
+                tagSignals
+                    ?: TagSignals(
+                        hourOfDay = localNow.hour,
+                        isWeekend = localNow.dayOfWeek == DayOfWeek.SATURDAY || localNow.dayOfWeek == DayOfWeek.SUNDAY,
+                        placeName = locationName,
+                    ),
+            )
         }
     val allTags = remember { ContextTagTaxonomy.all }
 
@@ -515,6 +539,10 @@ fun ConnectionContextSheet(
             }
         ConnectionContextPresentation.NewSpark ->
             when {
+                showPeerMultiSelect && existingGroup -> {
+                    titleText = "Who's in this Click?"
+                    subtitleText = "You're already a group. Remove anyone who isn't here, then save this Click."
+                }
                 showPeerMultiSelect -> {
                     titleText = "Who was in this tap?"
                     subtitleText = "Select people to connect with, then pick optional context. You can skip and keep going."
@@ -556,6 +584,7 @@ fun ConnectionContextSheet(
             } else {
                 selectedUserIds + userId
             }
+        onSelectionChanged?.invoke(selectedUserIds)
     }
 
     ClickFormBottomSheet(
@@ -584,6 +613,14 @@ fun ConnectionContextSheet(
 
             if (!showPeerMultiSelect && connectedUsers.isNotEmpty()) {
                 ConnectionContextHeaderAvatars(connectedUsers)
+            }
+
+            if (!errorMessage.isNullOrBlank()) {
+                Text(
+                    text = errorMessage,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
+                )
             }
 
             if (!locationName.isNullOrBlank()) {
@@ -657,7 +694,7 @@ fun ConnectionContextSheet(
 
             if (showPeerMultiSelect) {
                 Text(
-                    text = "People",
+                    text = "Who's in this Click?",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = GlassSheetTokens.OnOled(),
@@ -669,12 +706,39 @@ fun ConnectionContextSheet(
                             .heightIn(max = 280.dp),
                     verticalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
-                    uniqueSelectableUsers.forEach { profile ->
+                    val (connecting, removed) = uniqueSelectableUsers.partition { it.id in selectedUserIds }
+                    Text(
+                        text = "Connecting · ${connecting.size}",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = GlassSheetTokens.OnOledMuted(),
+                    )
+                    if (connecting.isEmpty()) {
+                        Text(
+                            text = "Nobody. Add someone back, or skip this Click.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = GlassSheetTokens.OnOledMuted(),
+                        )
+                    }
+                    connecting.forEach { profile ->
                         ConnectionContextSelectableUserRow(
                             profile = profile,
-                            selected = profile.id in selectedUserIds,
+                            selected = true,
                             onToggle = { toggleSelectableUser(profile.id) },
                         )
+                    }
+                    if (removed.isNotEmpty()) {
+                        Text(
+                            text = "Not connecting · ${removed.size}",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = GlassSheetTokens.OnOledMuted(),
+                        )
+                        removed.forEach { profile ->
+                            ConnectionContextSelectableUserRow(
+                                profile = profile,
+                                selected = false,
+                                onToggle = { toggleSelectableUser(profile.id) },
+                            )
+                        }
                     }
                 }
                 HorizontalDivider(
@@ -869,15 +933,28 @@ fun ConnectionContextSheet(
                         ClickButton(
                             onClick = {
                                 PlatformHapticsPolicy.lightImpact()
-                                onConfirm(resolveSelectedTag(), ambientNoiseOptIn, resolvedSelectedIds)
+                                // Removing everyone skips the tap (nothing is created for this person).
+                                if (selectionRequiredAndEmpty) {
+                                    dismissSheet()
+                                } else {
+                                    onConfirm(resolveSelectedTag(), ambientNoiseOptIn, resolvedSelectedIds)
+                                }
                             },
                             modifier =
                                 Modifier
                                     .weight(1f)
                                     .scale(springBtn),
-                            enabled = !isCustomSelectionInvalid && !selectionRequiredAndEmpty,
+                            enabled = !isCustomSelectionInvalid,
                         ) {
-                            Text("Connect")
+                            // iOS `isExistingGroup`: an existing group with nobody removed saves this Click.
+                            val allSelected = uniqueSelectableUsers.all { it.id in selectedUserIds }
+                            Text(
+                                when {
+                                    selectionRequiredAndEmpty -> "Skip this Click"
+                                    existingGroup && showPeerMultiSelect && allSelected -> "Save this Click"
+                                    else -> "Connect"
+                                },
+                            )
                         }
                     }
                 }

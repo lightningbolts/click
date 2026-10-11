@@ -13,6 +13,7 @@ import compose.project.click.click.data.api.ApiClient // pragma: allowlist secre
 import compose.project.click.click.data.models.BeaconVisibilityAudience // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
+import compose.project.click.click.data.realtime.LiveUpdates // pragma: allowlist secret
 import compose.project.click.click.data.repository.AuthRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.ChatRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.MapBeaconRepository // pragma: allowlist secret
@@ -332,6 +333,14 @@ class MapViewModel : ViewModel() {
         viewModelScope.launch {
             AppDataManager.discoveryMapPrefetchComplete.collect { done ->
                 if (done) warmDiscoveryFeed()
+            }
+        }
+        // Live updates (G1-2): a beacon changed near the last fix → silent discovery refetch.
+        viewModelScope.launch {
+            LiveUpdates.batches.collect { batch ->
+                val change = batch.beaconChange ?: return@collect
+                val here = AppDataManager.lastKnownDeviceLocation.value
+                if (change.affects(here?.first, here?.second)) refreshDiscoveryFromMapInteraction()
             }
         }
         viewModelScope.launch {

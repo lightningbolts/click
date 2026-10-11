@@ -54,6 +54,7 @@ import compose.project.click.click.telemetry.ConnectionFlowTelemetry // pragma: 
 import compose.project.click.click.ui.components.AppShimmerScreen // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionRevealPhase // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionRevealUiState // pragma: allowlist secret
+import compose.project.click.click.ui.components.DeviceApprovalHost // pragma: allowlist secret
 import compose.project.click.click.ui.components.OfflineStatusBanner // pragma: allowlist secret
 import compose.project.click.click.ui.components.PlatformBackHandler // pragma: allowlist secret
 import compose.project.click.click.ui.components.UnifiedToastTokens // pragma: allowlist secret
@@ -187,7 +188,6 @@ internal fun AppMainShell(
     val connectionsChatSuppressesTabBarState = remember { mutableStateOf(false) }
     var connectionsChatSuppressesTabBar by connectionsChatSuppressesTabBarState
     val verifiedCliqueProximityAutofillIntentState = remember { mutableStateOf<VerifiedCliqueProximityIntent?>(null) }
-    var verifiedCliqueProximityAutofillIntent by verifiedCliqueProximityAutofillIntentState
 
     fun navigateTo(route: String) {
         if (routeHistory.navigateTo(route)) {
@@ -272,24 +272,6 @@ internal fun AppMainShell(
         }
     }
 
-    LaunchedEffect(connectionViewModel, currentUser.id) {
-        if (currentUser.id.isBlank()) return@LaunchedEffect
-        connectionViewModel.verifiedCliqueFromProximity.collect { intent ->
-            verifiedCliqueProximityAutofillIntent = intent
-            navigateTo(NavigationItem.Connections.route)
-            showNfcScreen = false
-            showQRScanner = false
-            showMyQRCode = false
-            hubChatCloseJob?.cancel()
-            hubChatCloseJob = null
-            hubChatArgs = null
-            dismissEventHubSheet()
-            connectionRevealState = null
-            pendingChatId = null
-            pendingTargetMessageId = null
-            pendingHubTargetMessageId = null
-        }
-    }
     val addClickOverlayKey =
         when {
             showMyQRCode -> "my_qr"
@@ -345,7 +327,7 @@ internal fun AppMainShell(
             }
             AppDeepLink.Clicks -> navigateTo(NavigationItem.Connections.route)
             AppDeepLink.AddClick -> navigateTo(NavigationItem.AddClick.route)
-            is AppDeepLink.Chat, is AppDeepLink.Profile -> Unit
+            is AppDeepLink.Chat, is AppDeepLink.Profile, is AppDeepLink.EventPass, is AppDeepLink.PassScanner -> Unit
         }
     }
 
@@ -380,6 +362,13 @@ internal fun AppMainShell(
     LaunchedEffect(deepLinkProfileUserId, currentUser.id) {
         if (deepLinkProfileUserId.isNullOrBlank() || currentUser.id.isBlank()) return@LaunchedEffect
         navigateTo(NavigationItem.Connections.route)
+    }
+
+    // Shared-drop release pushes open the story from Home's strip.
+    val deepLinkSharedDropId by ChatDeepLinkManager.pendingSharedDropId.collectAsState()
+    LaunchedEffect(deepLinkSharedDropId, currentUser.id) {
+        if (deepLinkSharedDropId.isNullOrBlank() || currentUser.id.isBlank()) return@LaunchedEffect
+        navigateTo(NavigationItem.Home.route)
     }
 
     val pendingCommunityHubId by ChatDeepLinkManager.pendingCommunityHubId.collectAsState()
@@ -914,6 +903,9 @@ internal fun AppMainShell(
                         disposableRollExitWithScaleState = disposableRollExitWithScaleState,
                     )
 
+                    // "Approve new sign-in?" (device_approval push, or a request seen on refresh).
+                    DeviceApprovalHost(currentUserId = currentUser.id)
+
                     if (homeRevealAlpha > 0.01f) {
                         Box(
                             modifier =
@@ -945,5 +937,7 @@ internal fun AppMainShell(
             pendingTargetMessageIdState = pendingTargetMessageIdState,
             pendingBeaconIdState = pendingBeaconIdState,
         )
+        // Click Pass and the door scanner over everything (click://pass/{id}[/scan], the event page).
+        EventPassOverlayHost()
     }
 }

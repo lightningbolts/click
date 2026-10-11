@@ -55,6 +55,7 @@ import compose.project.click.click.viewmodel.HomeViewModel // pragma: allowlist 
 import compose.project.click.click.viewmodel.MapLayerFilter // pragma: allowlist secret
 import compose.project.click.click.viewmodel.MapViewModel // pragma: allowlist secret
 import compose.project.click.click.viewmodel.VerifiedCliqueProximityIntent // pragma: allowlist secret
+import compose.project.click.click.viewmodel.warmUpConnectionCapture // pragma: allowlist secret
 import io.ktor.client.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.serialization.kotlinx.json.*
@@ -523,7 +524,9 @@ internal fun AppPrimaryTabsHost(
                                         dismissAddClickOverlay(NavigationTransitionMode.Tap)
                                     },
                                 )
-                            "qr_scanner" ->
+                            "qr_scanner" -> {
+                                // G4-1: warm location + pressure while the scanner is visible (never prompts).
+                                LaunchedEffect(Unit) { connectionViewModel.warmUpConnectionCapture("qr") }
                                 QRScannerScreen(
                                     onQRCodeScanned = { userId ->
                                         showQRScanner = false
@@ -553,6 +556,7 @@ internal fun AppPrimaryTabsHost(
                                         dismissAddClickOverlay(NavigationTransitionMode.Tap)
                                     },
                                 )
+                            }
                             "nfc" -> {
                                 val userId =
                                     when (val state = authViewModel.authState) {

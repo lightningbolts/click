@@ -50,6 +50,7 @@ import compose.project.click.click.viewmodel.ChatMessagesState // pragma: allowl
 import compose.project.click.click.viewmodel.ChatViewModel // pragma: allowlist secret
 import compose.project.click.click.viewmodel.canDiscardFailed
 import compose.project.click.click.viewmodel.canRetrySend
+import compose.project.click.click.viewmodel.clickDropState // pragma: allowlist secret
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 
@@ -178,8 +179,8 @@ internal fun BoxScope.ChatViewOverlays(
         val capabilities =
             MessageActionCapabilities(
                 canReply = selectedMessage.message.messageType.lowercase() != "call_log",
-                canSaveMedia = canExportMessageMedia(selectedMessage.message),
-                canShareMedia = canExportMessageMedia(selectedMessage.message),
+                canSaveMedia = canExportMessageMedia(selectedMessage.message, viewModel.clickDropState(selectedMessage.message)),
+                canShareMedia = canExportMessageMedia(selectedMessage.message, viewModel.clickDropState(selectedMessage.message)),
                 canEdit = canEditMessage(selectedMessage),
                 canForward = selectedMessage.message.canForward(),
                 canRetry = selectedMessage.message.canRetrySend(),

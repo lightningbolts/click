@@ -96,6 +96,7 @@ internal suspend fun ConnectionRepository.createConnectionOnline(request: Connec
                     heightCategory = request.heightCategory,
                     exactBarometricElevationM = request.exactBarometricElevationMeters,
                     contextTags = redeemTagLine?.let { listOf(it) },
+                    observationKeys = request.observationKeys,
                 ).getOrElse { return Result.failure(it) }
             } else {
                 null
@@ -115,6 +116,27 @@ internal suspend fun ConnectionRepository.createConnectionOnline(request: Connec
         val preflightEncounterLogged = redeemedToken?.encounterLogged ?: request.preflightEncounterLogged
         val preflightEncounterId = redeemedToken?.encounterId
         val preflightCollaborationTtl = redeemedToken?.collaborationTtl
+
+        // G4-10: QR / manual connects go through click-web (server enrichment), not PostgREST.
+        if (useConnectApiPath(request)) {
+            val existingId = preflightConnectionId?.takeIf { it.isNotBlank() }
+            if (existingId != null) {
+                // The redeem already logged this crossing on the existing pair (iOS does the same).
+                val existing =
+                    fetchConnectionById(existingId)
+                        ?: return Result.failure(Exception("Could not load this connection. Try refreshing your connections."))
+                AppDataManager.applyRestoredConnection(existing)
+                return Result.success(
+                    ConnectionCreateOutcome(
+                        connection = existing,
+                        encounterLogged = preflightEncounterLogged ?: true,
+                        encounterId = preflightEncounterId,
+                        collaborationTtl = preflightCollaborationTtl,
+                    ),
+                )
+            }
+            return createConnectionViaApi(request, scannedUserId, resolvedTokenAgeMs)
+        }
 
         // Prefer server-issued connection id from proximity bind before any insert.
         val byPreflightId =
@@ -655,6 +677,7 @@ internal suspend fun ConnectionRepository.redeemQrToken(
     heightCategory: HeightCategory? = null,
     exactBarometricElevationM: Double? = null,
     contextTags: List<String>? = null,
+    observationKeys: kotlinx.serialization.json.JsonObject? = null,
 ): Result<ConnectionRepository.RedeemQrTokenResponse> {
     return try {
         val jwt =
@@ -688,7 +711,13 @@ internal suspend fun ConnectionRepository.redeemQrToken(
                     append(HttpHeaders.Authorization, "Bearer $jwt")
                 }
                 contentType(ContentType.Application.Json)
-                setBody(requestPayload)
+                // G4-2: this phone's quality keys and sensor_observation ride at the top level.
+                val encoded = json.encodeToJsonElement(ConnectionRepository.QrApiRedeemRequest.serializer(), requestPayload).jsonObject
+                setBody(
+                    kotlinx.serialization.json.JsonObject(
+                        encoded + (observationKeys ?: kotlinx.serialization.json.JsonObject(emptyMap())),
+                    ),
+                )
             }
 
         val bodyText = response.bodyAsText()

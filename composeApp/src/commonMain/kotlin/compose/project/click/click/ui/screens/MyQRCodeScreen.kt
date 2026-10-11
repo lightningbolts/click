@@ -29,6 +29,9 @@ fun MyQRCodeScreen(
     onNavigateBack: () -> Unit,
 ) {
     val displayName = username?.trim()?.takeIf { it.isNotEmpty() } ?: "me"
+    // Full brightness and keep-awake while the code is up (G3-29).
+    compose.project.click.click.ui.components
+        .KeepScreenBrightAndAwake() // pragma: allowlist secret
     AdaptiveBackground(modifier = Modifier.fillMaxSize()) {
         AppScreenWithFloatingHeader(
             title = "My QR Code",

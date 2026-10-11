@@ -1,5 +1,7 @@
 # 07: Android ⇄ iOS gap closure (October 2026)
 
+> **Superseded by [08](08-gap-closure-v2-2026-10-06.md)** as the working plan (verified against `click-ios@093ed67`, `click@b461f6b4`, `click-web@e9fb51a`). Rows that 08 marks "= 07" are still specified here.
+
 **Status:** Plan · **Date:** 2026-10-06 · **Baselines (fetched 2026-10-06):** `click-ios@2161bba`
 (origin/main, PR #60) · `click@53b93685` (origin/main) · `click-web@7555bce` (origin/main, PR #131)
 

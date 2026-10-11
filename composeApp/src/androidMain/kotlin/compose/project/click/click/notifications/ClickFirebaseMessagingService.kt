@@ -1,7 +1,6 @@
 package compose.project.click.click.notifications // pragma: allowlist secret
 
 import android.Manifest
-import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
@@ -20,8 +19,7 @@ import compose.project.click.click.crypto.PushPreviewKeyStore
 import compose.project.click.click.data.ChatMuteStore
 import compose.project.click.click.data.storage.createTokenStorage
 
-private const val CLICK_MESSAGES_CHANNEL_ID = "click_messages"
-private const val CLICK_MESSAGES_CHANNEL_NAME = "Click messages"
+private const val CLICK_MESSAGES_CHANNEL_ID = ClickNotificationChannels.MESSAGES
 
 class ClickFirebaseMessagingService : FirebaseMessagingService() {
     override fun onCreate() {
@@ -106,8 +104,15 @@ class ClickFirebaseMessagingService : FirebaseMessagingService() {
             val title = message.data["title"] ?: message.notification?.title ?: "Click"
             val body = message.data["body"] ?: message.notification?.body ?: "Open Click"
             val launchIntent = launchIntentFor(PushRoutes.route(message.data)) ?: return
+            // device_approval is tagged by request (sheet 10 §A4) so a re-sent push replaces the first.
+            val tagKeys =
+                if (type == "device_approval") {
+                    listOf("request_id")
+                } else {
+                    listOf("beacon_id", "connection_id", "peer_user_id", "poster_id")
+                }
             val tag =
-                listOf("beacon_id", "connection_id", "peer_user_id")
+                tagKeys
                     .firstNotNullOfOrNull { key -> message.data[key]?.takeIf { it.isNotBlank() } }
                     ?: type
             showSimplePush(tag = "$type:$tag", title = title, body = body, launchIntent = launchIntent)
@@ -259,8 +264,14 @@ class ClickFirebaseMessagingService : FirebaseMessagingService() {
             is PushRoute.Event -> MainActivity.createEventDeepLinkIntent(this, route.beaconId)
             is PushRoute.Hub -> MainActivity.createHubDeepLinkIntent(this, route.hubId)
             is PushRoute.Profile -> MainActivity.createProfileDeepLinkIntent(this, route.userId)
+            is PushRoute.SharedDrop -> MainActivity.createSharedDropDeepLinkIntent(this, route.dropId)
+            is PushRoute.DeviceApproval -> MainActivity.createDeviceApprovalIntent(this, route.requestId)
             PushRoute.Connections -> MainActivity.createConnectionsIntent(this)
-            PushRoute.OpenApp ->
+            // No Android screen yet: the event recap lands with G3-2, the Activity inbox with G6-1.
+            // Until then, open the app where it was.
+            is PushRoute.EventRecap, is PushRoute.Activity,
+            PushRoute.OpenApp,
+            ->
                 packageManager.getLaunchIntentForPackage(packageName)?.apply {
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
                 }
@@ -327,17 +338,4 @@ class ClickFirebaseMessagingService : FirebaseMessagingService() {
     }
 }
 
-private fun ensureNotificationChannel(context: Context) {
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-
-    val notificationManager = context.getSystemService(NotificationManager::class.java) ?: return
-    if (notificationManager.getNotificationChannel(CLICK_MESSAGES_CHANNEL_ID) != null) return
-
-    notificationManager.createNotificationChannel(
-        NotificationChannel(
-            CLICK_MESSAGES_CHANNEL_ID,
-            CLICK_MESSAGES_CHANNEL_NAME,
-            NotificationManager.IMPORTANCE_HIGH,
-        ),
-    )
-}
+private fun ensureNotificationChannel(context: Context) = ClickNotificationChannels.ensure(context)

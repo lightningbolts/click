@@ -2,6 +2,16 @@
 
 <!-- What changed and why. -->
 
+## Other platform impact (required)
+
+Pick one. Parity rows live in `docs/parity/`.
+
+- [ ] None: Android-only change with no iOS or web counterpart.
+- [ ] Ledger row: F### <!-- e.g. F123 -->
+- [ ] Follow-up issue: <!-- link to the iOS / click-web issue -->
+
+Wire-format changes (request/response models, push payloads, realtime events) must also link the matching click-web fixture change under `__tests__/fixtures/mobile/`: <!-- link -->
+
 ## Visual proof (required — do not merge without this)
 
 Attach a screen recording **or** screenshots covering **every tab and its nested screens**, showing real content (not empty black bodies). CI green is not sufficient.
