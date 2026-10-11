@@ -62,7 +62,8 @@ suspend fun ApiClient.getEventPass(beaconId: String): ClickPassFetch {
 private suspend fun ApiClient.passFetchFrom(response: HttpResponse): ClickPassFetch {
     if (response.status.value in 200..299) {
         val pass =
-            runCatching { json.decodeFromString(ClickPass.serializer(), response.bodyAsText()) }.getOrNull()
+            runCatching { json.decodeFromString(ClickPass.serializer(), response.bodyAsText()) }
+                .getOrNull()
                 ?.takeIf { it.credentialUrl.isNotBlank() && it.code.isNotBlank() }
                 ?: return ClickPassFetch.Failed("Couldn't read your pass")
         return ClickPassFetch.Loaded(pass)

@@ -11,11 +11,9 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -38,6 +36,7 @@ import androidx.compose.ui.zIndex
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import coil3.compose.AsyncImage
+import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.api.ApiClient // pragma: allowlist secret
 import compose.project.click.click.data.api.getEventPass // pragma: allowlist secret
@@ -53,11 +52,10 @@ import compose.project.click.click.events.ClickPassFetch // pragma: allowlist se
 import compose.project.click.click.events.ClickPassStore // pragma: allowlist secret
 import compose.project.click.click.events.EventChatOpenState // pragma: allowlist secret
 import compose.project.click.click.events.EventChatResolver // pragma: allowlist secret
-import compose.project.click.click.events.EventLiveUpdates // pragma: allowlist secret
 import compose.project.click.click.events.PassScanGate // pragma: allowlist secret
 import compose.project.click.click.events.PassScanOutcome // pragma: allowlist secret
 import compose.project.click.click.events.PassScanTone // pragma: allowlist secret
-import compose.project.click.click.events.clickPassIsAtTheDoor // pragma: allowlist secret
+import compose.project.click.click.events.clickPassShouldPoll // pragma: allowlist secret
 import compose.project.click.click.events.clickPassStatusLine // pragma: allowlist secret
 import compose.project.click.click.events.eventSchedule // pragma: allowlist secret
 import compose.project.click.click.events.formatEventScheduleRange // pragma: allowlist secret
@@ -66,11 +64,9 @@ import compose.project.click.click.events.passScanHaptic // pragma: allowlist se
 import compose.project.click.click.events.passScanLook // pragma: allowlist secret
 import compose.project.click.click.events.passScannerSubtitle // pragma: allowlist secret
 import compose.project.click.click.notifications.ChatDeepLinkManager // pragma: allowlist secret
-import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
 import compose.project.click.click.ui.components.*
 import compose.project.click.click.ui.utils.displayDynamicTitle // pragma: allowlist secret
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 
@@ -208,7 +204,6 @@ fun ClickPassScreen(
         if (previous != null && !previous.isCheckedIn && fresh.isCheckedIn) {
             // The host just scanned you in.
             PlatformHapticsPolicy.successNotification()
-            EventLiveUpdates.setCheckedIn(beaconId, true)
         }
         state = PassUiState.Showing(fresh)
     }
@@ -229,7 +224,7 @@ fun ClickPassScreen(
     val resumed = rememberIsResumed()
     val schedule = beacon?.eventSchedule()
     val showing = (state as? PassUiState.Showing)?.pass
-    val watching = showing != null && !showing.isCheckedIn && clickPassIsAtTheDoor(schedule, nowMs())
+    val watching = clickPassShouldPoll(showing, schedule, nowMs())
     LaunchedEffect(beaconId, watching, resumed) {
         if (!watching || !resumed) return@LaunchedEffect
         while (true) {
@@ -323,9 +318,19 @@ private fun PassEmptyState(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Icon(Icons.Filled.ConfirmationNumber, contentDescription = null, modifier = Modifier.size(44.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        Icon(
+            Icons.Filled.ConfirmationNumber,
+            contentDescription = null,
+            modifier = Modifier.size(44.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
         Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)
-        Text(message, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
+        Text(
+            message,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
         ClickButton(onClick = onAction) { Text(actionLabel, fontWeight = FontWeight.SemiBold) }
     }
 }
@@ -658,6 +663,7 @@ private fun PassScanCard(
             PassScanTone.ERROR -> Icons.Filled.Cancel
         }
     val holder = (outcome as? PassScanOutcome.Scanned)?.scan?.holder
+    val tierName = (outcome as? PassScanOutcome.Scanned)?.scan?.tierName
     Column(
         modifier =
             Modifier
@@ -670,7 +676,12 @@ private fun PassScanCard(
         holder?.let {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                 PassAvatar(url = it.avatarUrl, name = it.name, seed = it.userId, size = 64.dp)
-                Text(it.name ?: "Guest", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, maxLines = 2)
+                Column {
+                    Text(it.name ?: "Guest", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, maxLines = 2)
+                    tierName?.let { tier ->
+                        Text(tier, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
             }
         }
         Row(

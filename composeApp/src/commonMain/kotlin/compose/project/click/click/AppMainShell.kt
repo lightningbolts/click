@@ -788,8 +788,6 @@ internal fun AppMainShell(
 
     // Wrap Scaffold in a Box to allow search overlay to be positioned at true screen bottom
     Box(modifier = Modifier.fillMaxSize()) {
-        // Click Pass and the door scanner (click://pass/{id}[/scan], the event page, the ongoing notification).
-        compose.project.click.click.ui.screens.EventPassOverlayHost() // pragma: allowlist secret
         LaunchedEffect(currentUser.id) {
             EncounterTetherManager.setCurrentUserId(currentUser.id)
         }
@@ -947,5 +945,7 @@ internal fun AppMainShell(
             pendingTargetMessageIdState = pendingTargetMessageIdState,
             pendingBeaconIdState = pendingBeaconIdState,
         )
+        // Click Pass and the door scanner over everything (click://pass/{id}[/scan], the event page).
+        EventPassOverlayHost()
     }
 }

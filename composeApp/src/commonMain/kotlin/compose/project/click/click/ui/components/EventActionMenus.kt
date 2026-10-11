@@ -16,10 +16,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Directions
-import androidx.compose.material.icons.filled.Map
-import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.Mail
+import androidx.compose.material.icons.filled.Map
+import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme

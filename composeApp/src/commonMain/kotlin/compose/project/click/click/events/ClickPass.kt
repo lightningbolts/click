@@ -48,10 +48,17 @@ enum class PassScanResult(
     NOT_GOING("not_going"),
     WRONG_EVENT("wrong_event"),
     INVALID("invalid"),
+
+    /** A ticket that was refunded (web ticketing; iOS `PassScan.Result.refunded`). */
+    REFUNDED("refunded"),
+
+    /** The event was cancelled, so no ticket admits anyone. */
+    EVENT_CANCELLED("event_cancelled"),
     ;
 
     companion object {
-        fun fromWire(value: String?): PassScanResult? = entries.firstOrNull { it.wire == value?.trim() }
+        /** Anything this build doesn't know reads as [INVALID], like iOS `PassScan.decode`. */
+        fun fromWire(value: String?): PassScanResult = entries.firstOrNull { it.wire == value?.trim() } ?: INVALID
     }
 }
 
@@ -68,6 +75,8 @@ data class PassScanResponse(
     val attendee: PassScanAttendee? = null,
     @SerialName("checked_in_at") val checkedInAt: String? = null,
     @SerialName("check_in_count") val checkInCount: Int? = null,
+    /** The ticket type, for ticket scans ("VIP"). */
+    @SerialName("tier_name") val tierName: String? = null,
 )
 
 data class PassScan(
@@ -75,17 +84,17 @@ data class PassScan(
     val holder: PassScanAttendee?,
     val checkedInAt: String?,
     val checkInCount: Int?,
+    val tierName: String? = null,
 )
 
-fun PassScanResponse.toPassScan(): PassScan? {
-    val parsed = PassScanResult.fromWire(result) ?: return null
-    return PassScan(
-        result = parsed,
+fun PassScanResponse.toPassScan(): PassScan =
+    PassScan(
+        result = PassScanResult.fromWire(result),
         holder = attendee?.takeIf { it.userId.isNotBlank() },
         checkedInAt = checkedInAt,
         checkInCount = checkInCount,
+        tierName = tierName?.trim()?.takeIf { it.isNotEmpty() },
     )
-}
 
 /** A door scan's outcome: the server's answer, or a network failure (retryable at once). */
 sealed interface PassScanOutcome {
@@ -128,6 +137,9 @@ fun passScanLook(
                     PassScanLook("Not on the list", "Their RSVP isn't active for this event.", PassScanTone.ERROR)
                 PassScanResult.WRONG_EVENT -> PassScanLook("Pass for another event", null, PassScanTone.WARNING)
                 PassScanResult.INVALID -> PassScanLook("Not a Click Pass", null, PassScanTone.ERROR)
+                PassScanResult.REFUNDED -> PassScanLook("Refunded", "This ticket was refunded.", PassScanTone.ERROR)
+                PassScanResult.EVENT_CANCELLED ->
+                    PassScanLook("Event cancelled", "Tickets for this event no longer admit anyone.", PassScanTone.ERROR)
             }
         }
     }
@@ -149,7 +161,7 @@ fun passScannerSubtitle(checkedInCount: Int?): String =
  * After a network failure, [reset] lets the same pass be tried again at once.
  */
 class PassScanGate(
-    private val windowMs: Long = 3_000L,
+    private val windowMs: Long = PASS_SCAN_REREAD_WINDOW_MS,
 ) {
     private var lastValue: String? = null
     private var lastAtMs: Long = 0L
@@ -170,6 +182,9 @@ class PassScanGate(
     }
 }
 
+/** How long the scanner ignores the same value held in frame. */
+const val PASS_SCAN_REREAD_WINDOW_MS = 3_000L
+
 /** Poll `…/pass` every 4 s while not checked in, the start is within 1 h and the event hasn't ended. */
 const val CLICK_PASS_POLL_MS = 4_000L
 
@@ -180,6 +195,13 @@ fun clickPassIsAtTheDoor(
     schedule ?: return false
     return schedule.startEpochMs - nowMs < 60L * 60_000L && !schedule.isEnded(nowMs)
 }
+
+/** Whether the pass screen polls for the host's scan: shown, not yet checked in, and at the door. */
+fun clickPassShouldPoll(
+    pass: ClickPass?,
+    schedule: EventSchedule?,
+    nowMs: Long,
+): Boolean = pass != null && !pass.isCheckedIn && clickPassIsAtTheDoor(schedule, nowMs)
 
 /** The holder row's status (iOS `ClickPassView.status`). */
 fun clickPassStatusLine(
@@ -195,8 +217,7 @@ fun clickPassStatusLine(
 }
 
 /** The event-page card: shown while going and not expired. */
-fun clickPassCardSubtitle(pass: ClickPass?): String =
-    if (pass?.isCheckedIn == true) "You're checked in" else "Show it at the door"
+fun clickPassCardSubtitle(pass: ClickPass?): String = if (pass?.isCheckedIn == true) "You're checked in" else "Show it at the door"
 
 /** Whether "Scan Click Passes" shows: creator (or Place manager), events only, not expired. */
 fun canScanClickPasses(
@@ -217,6 +238,10 @@ internal fun formatPassClock(
     iso: String?,
     timeZone: TimeZone,
 ): String? {
-    val ms = iso?.let { compose.project.click.click.data.models.parseEpochMs(it) } ?: return null
+    val ms =
+        iso?.let {
+            compose.project.click.click.data.models
+                .parseEpochMs(it)
+        } ?: return null
     return formatEventClockLabel(Instant.fromEpochMilliseconds(ms).toLocalDateTime(timeZone))
 }

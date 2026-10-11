@@ -42,8 +42,7 @@ actual object EventPlatformActions {
 
     actual fun openUri(uri: String): Boolean = start(Intent(Intent.ACTION_VIEW, Uri.parse(uri)))
 
-    actual fun openGeoChooser(uri: String): Boolean =
-        start(Intent.createChooser(Intent(Intent.ACTION_VIEW, Uri.parse(uri)), "Open with"))
+    actual fun openGeoChooser(uri: String): Boolean = start(Intent.createChooser(Intent(Intent.ACTION_VIEW, Uri.parse(uri)), "Open with"))
 
     actual fun copyToClipboard(
         label: String,

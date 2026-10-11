@@ -60,6 +60,7 @@ fun eventCalendarDetails(
 /** `20261007T010000Z` */
 fun compactUtcStamp(epochMs: Long): String {
     val t = Instant.fromEpochMilliseconds(epochMs).toLocalDateTime(TimeZone.UTC)
+
     fun two(v: Int) = v.toString().padStart(2, '0')
     return "${t.year}${two(t.monthNumber)}${two(t.dayOfMonth)}T${two(t.hour)}${two(t.minute)}${two(t.second)}Z"
 }
@@ -67,6 +68,7 @@ fun compactUtcStamp(epochMs: Long): String {
 /** `2026-10-07T01:00:00Z` (ISO 8601 without fractions, like iOS `ISO8601DateFormatter`). */
 fun isoUtcStamp(epochMs: Long): String {
     val t = Instant.fromEpochMilliseconds(epochMs).toLocalDateTime(TimeZone.UTC)
+
     fun two(v: Int) = v.toString().padStart(2, '0')
     return "${t.year}-${two(t.monthNumber)}-${two(t.dayOfMonth)}T${two(t.hour)}:${two(t.minute)}:${two(t.second)}Z"
 }
@@ -122,6 +124,10 @@ object EventDirectionsLinks {
 
 /** The text "Copy Address" copies: the address, else the place name, else the coordinate. */
 fun eventCopyAddressText(beacon: MapBeacon): String =
-    beacon.metadata.formattedAddress?.trim()?.takeIf { it.isNotEmpty() }
-        ?: beacon.metadata.locationName?.trim()?.takeIf { it.isNotEmpty() }
+    beacon.metadata.formattedAddress
+        ?.trim()
+        ?.takeIf { it.isNotEmpty() }
+        ?: beacon.metadata.locationName
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
         ?: "${beacon.latitude}, ${beacon.longitude}"
