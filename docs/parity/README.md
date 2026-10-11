@@ -29,6 +29,12 @@ Almost everything here is therefore Android client work.
 | 04 | [Chat, groups and hubs](04-chat-groups-hubs.md) | Mutes, forwarding, reaction details, read cursors, tombstones, search, group profile, Hub Info, and more. |
 | 05 | [App-wide remainder](05-app-wide.md) | Me/Settings, events, map, deep links, push, telemetry, and retired-feature cleanup. |
 | 06 | [Post-9/29 features](06-post-9-29-features.md) | Feature flags, Click Drop develop state, alert confirmations, Listening now, event drops + recap + history, shared drops, reconnect near here, pilot analytics. |
+| 07 | [Gap closure](07-gap-closure-2026-10.md) | G-rows against iOS #60. |
+| 08 | [Gap closure v2](08-gap-closure-v2-2026-10-06.md) | G-rows against iOS #67, plus W- and I-items and the contract appendix. |
+| 09 | [Parity audit, 2026-10-10](09-parity-audit-2026-10-10.md) | **Current master index.** Gap size, the full list of iOS features Android lacks, phases P0–P8, schedule, decisions. |
+| 10 | [iOS #68–#80](10-post-10-06-ios-features.md) | Ticketing, Home Upcoming and Recommended, map stacks, Core ring, Drops v3, Devices, owner authentication, auto-unlock. |
+| 11 | [Platform and quality blind spots](11-platform-quality-blind-spots.md) | Accessibility, tab badge, paste, autofill, audio focus, transport, haptics, phantom Instant activity. |
+| 12 | [Worktree landing plan](12-worktree-landing-plan.md) | Merging the in-flight `parity08/*` worktrees. |
 
 ## Conventions used in every sheet
 
