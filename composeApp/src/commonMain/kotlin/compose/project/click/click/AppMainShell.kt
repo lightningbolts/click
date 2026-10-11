@@ -327,7 +327,7 @@ internal fun AppMainShell(
             }
             AppDeepLink.Clicks -> navigateTo(NavigationItem.Connections.route)
             AppDeepLink.AddClick -> navigateTo(NavigationItem.AddClick.route)
-            is AppDeepLink.Chat, is AppDeepLink.Profile -> Unit
+            is AppDeepLink.Chat, is AppDeepLink.Profile, is AppDeepLink.EventPass, is AppDeepLink.PassScanner -> Unit
         }
     }
 
@@ -937,5 +937,7 @@ internal fun AppMainShell(
             pendingTargetMessageIdState = pendingTargetMessageIdState,
             pendingBeaconIdState = pendingBeaconIdState,
         )
+        // Click Pass and the door scanner over everything (click://pass/{id}[/scan], the event page).
+        EventPassOverlayHost()
     }
 }

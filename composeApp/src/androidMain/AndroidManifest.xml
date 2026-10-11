@@ -130,7 +130,7 @@
                     android:host="e"/>
             </intent-filter>
 
-            <!-- In-app routes: click://chat/{id}, profile/{id} (u), myqr, scan, tap, search?q= -->
+            <!-- In-app routes: click://chat/{id}, profile/{id} (u), myqr, scan, tap, search?q=, pass/{id}[/scan] -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW"/>
                 <category android:name="android.intent.category.DEFAULT"/>
@@ -142,6 +142,7 @@
                 <data android:scheme="click" android:host="scan"/>
                 <data android:scheme="click" android:host="tap"/>
                 <data android:scheme="click" android:host="search"/>
+                <data android:scheme="click" android:host="pass"/>
             </intent-filter>
 
             <!-- Search Universal Link: https://joinclick.co/search?q= -->

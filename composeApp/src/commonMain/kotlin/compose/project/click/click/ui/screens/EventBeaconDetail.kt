@@ -26,7 +26,13 @@ import compose.project.click.click.data.AppDataManager // pragma: allowlist secr
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
 import compose.project.click.click.data.models.withPreservedEventScheduleFrom // pragma: allowlist secret
+import compose.project.click.click.deeplink.EventPassDestination // pragma: allowlist secret
+import compose.project.click.click.deeplink.EventPassRouter // pragma: allowlist secret
+import compose.project.click.click.events.ClickPassStore // pragma: allowlist secret
 import compose.project.click.click.events.EventChatOpenState // pragma: allowlist secret
+import compose.project.click.click.events.canScanClickPasses // pragma: allowlist secret
+import compose.project.click.click.events.clickPassCardSubtitle // pragma: allowlist secret
+import compose.project.click.click.events.showsClickPassCard // pragma: allowlist secret
 import compose.project.click.click.events.EventChatResolver // pragma: allowlist secret
 import compose.project.click.click.events.EventRsvpRequestStatus // pragma: allowlist secret
 import compose.project.click.click.events.JOIN_REQUEST_POLL_MS // pragma: allowlist secret
@@ -65,6 +71,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.datetime.Clock
 
 @Composable
 internal fun BeaconDetailSheetContent(
@@ -467,6 +474,15 @@ internal fun EventBeaconDetail(
 
         schedule?.let { EventScheduleBento(schedule = it, border = border, cardSurface = cardSurface) }
 
+        val cachedPasses by ClickPassStore.passes.collectAsState()
+        val nowForPass = Clock.System.now().toEpochMilliseconds()
+        if (showsClickPassCard(going = currentUserSignedUp, schedule = schedule, nowMs = nowForPass)) {
+            ClickPassEntryCard(
+                beaconId = displayBeacon.id,
+                subtitle = clickPassCardSubtitle(cachedPasses[displayBeacon.id]),
+            )
+        }
+
         if (categories.isNotEmpty()) {
             EventCategoryChips(categories = categories, border = border, cardSurface = cardSurface)
         }
@@ -579,6 +595,17 @@ internal fun EventBeaconDetail(
             onOpenDirectory = { showPeopleDirectory = true },
         )
 
+        if (canScanClickPasses(isEventCreator, displayBeacon.kind == MapBeaconKind.EVENT, schedule, nowForPass)) {
+            ClickButton(
+                onClick = { EventPassRouter.open(EventPassDestination.Scanner(displayBeacon.id)) },
+                modifier = Modifier.fillMaxWidth(),
+                variant = ClickButtonVariant.Secondary,
+            ) {
+                Icon(Icons.Filled.QrCodeScanner, contentDescription = null, modifier = Modifier.size(20.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Scan Click Passes", fontWeight = FontWeight.SemiBold)
+            }
+        }
         if (isEventCreator) {
             ClickButton(
                 onClick = { showGuestList = true },
@@ -824,6 +851,8 @@ internal fun EventBeaconDetail(
                         if (rsvpPending) return@ClickButton
                         rsvpError = null
                         viewModel.cancelRsvpToBeacon(displayBeacon.id) { ok ->
+                            // The pass is void at the door from now on; don't keep showing it.
+                            if (ok) ClickPassStore.clear(displayBeacon.id)
                             if (!ok) {
                                 rsvpError = viewModel.engagementSnackbar.value
                                     ?: "Could not update RSVP. Please try again."
