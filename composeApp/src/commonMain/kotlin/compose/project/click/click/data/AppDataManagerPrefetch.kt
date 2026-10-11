@@ -2,6 +2,8 @@
 
 package compose.project.click.click.data // pragma: allowlist secret
 
+import compose.project.click.click.data.realtime.LiveKind // pragma: allowlist secret
+import compose.project.click.click.data.realtime.LiveUpdates // pragma: allowlist secret
 import compose.project.click.click.data.models.Message // pragma: allowlist secret
 import compose.project.click.click.data.realtime.RealtimeCoordinator // pragma: allowlist secret
 import compose.project.click.click.util.chatMediaDispatcher // pragma: allowlist secret
@@ -15,6 +17,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
@@ -257,7 +260,32 @@ internal fun AppDataManager.startRealtimeCoordinatorSync(userId: String) {
             refreshInboxFromCoordinator(force = false)
         }
     }
+    startLiveUpdatesRefetch(userId)
 }
+
+// region Live updates (G1-2)
+private var liveUpdatesRefetchJob: Job? = null
+
+/** Joins the Live updates topics and refetches the app-wide data a hint names. */
+internal fun AppDataManager.startLiveUpdatesRefetch(userId: String) {
+    scope.launch { runCatching { LiveUpdates.start(userId) } }
+    if (liveUpdatesRefetchJob?.isActive == true) return
+    liveUpdatesRefetchJob =
+        scope.launch {
+            LiveUpdates.batches.collect { batch ->
+                if (LiveKind.CONNECTIONS in batch.kinds || LiveKind.HOME in batch.kinds) {
+                    refreshInboxFromCoordinator(force = false)
+                }
+                val change = batch.beaconChange
+                val here = _lastKnownDeviceLocation.value
+                if (change != null && change.affects(here?.first, here?.second)) {
+                    beaconPrefetchJob?.cancel()
+                    startBeaconPrefetch()
+                }
+            }
+        }
+}
+// endregion
 
 /** Lightweight inbox refresh after Realtime junction change (avoids full loadAllData). */
 internal fun AppDataManager.refreshInboxFromCoordinator(force: Boolean) {

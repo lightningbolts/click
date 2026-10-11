@@ -2,6 +2,7 @@
 
 package compose.project.click.click.data.repository
 
+import compose.project.click.click.data.api.installClickWebPlatformHeader // pragma: allowlist secret
 import compose.project.click.click.collaboration.CollaborationSession
 import compose.project.click.click.data.AppDataManager
 import compose.project.click.click.data.ContextTagTaxonomy
@@ -515,6 +516,7 @@ class ConnectionRepository(
             install(ContentNegotiation) {
                 json(this@ConnectionRepository.json)
             }
+            installClickWebPlatformHeader()
         }
     }
     internal val connectionsSelectWithEncounters = Columns.raw("*, connection_encounters(*)")

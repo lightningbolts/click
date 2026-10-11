@@ -71,6 +71,7 @@ class ApiClient {
                 install(ContentNegotiation) {
                     json(json)
                 }
+                installClickWebPlatformHeader()
             }
         }
     internal val clickWebPlainClient: HttpClient get() = clickWebPlainClientLazy.value

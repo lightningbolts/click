@@ -1,7 +1,6 @@
 package compose.project.click.click.notifications // pragma: allowlist secret
 
 import android.Manifest
-import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
@@ -20,8 +19,7 @@ import compose.project.click.click.crypto.PushPreviewKeyStore
 import compose.project.click.click.data.ChatMuteStore
 import compose.project.click.click.data.storage.createTokenStorage
 
-private const val CLICK_MESSAGES_CHANNEL_ID = "click_messages"
-private const val CLICK_MESSAGES_CHANNEL_NAME = "Click messages"
+private const val CLICK_MESSAGES_CHANNEL_ID = ClickNotificationChannels.MESSAGES
 
 class ClickFirebaseMessagingService : FirebaseMessagingService() {
     override fun onCreate() {
@@ -260,7 +258,10 @@ class ClickFirebaseMessagingService : FirebaseMessagingService() {
             is PushRoute.Hub -> MainActivity.createHubDeepLinkIntent(this, route.hubId)
             is PushRoute.Profile -> MainActivity.createProfileDeepLinkIntent(this, route.userId)
             PushRoute.Connections -> MainActivity.createConnectionsIntent(this)
-            PushRoute.OpenApp ->
+            // No Android screen yet (G2-4, G3-2, G6-1, G7-1): open the app where it was.
+            is PushRoute.EventRecap, is PushRoute.SharedDrop, is PushRoute.DeviceApproval, is PushRoute.Activity,
+            PushRoute.OpenApp,
+            ->
                 packageManager.getLaunchIntentForPackage(packageName)?.apply {
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
                 }
@@ -327,17 +328,4 @@ class ClickFirebaseMessagingService : FirebaseMessagingService() {
     }
 }
 
-private fun ensureNotificationChannel(context: Context) {
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-
-    val notificationManager = context.getSystemService(NotificationManager::class.java) ?: return
-    if (notificationManager.getNotificationChannel(CLICK_MESSAGES_CHANNEL_ID) != null) return
-
-    notificationManager.createNotificationChannel(
-        NotificationChannel(
-            CLICK_MESSAGES_CHANNEL_ID,
-            CLICK_MESSAGES_CHANNEL_NAME,
-            NotificationManager.IMPORTANCE_HIGH,
-        ),
-    )
-}
+private fun ensureNotificationChannel(context: Context) = ClickNotificationChannels.ensure(context)

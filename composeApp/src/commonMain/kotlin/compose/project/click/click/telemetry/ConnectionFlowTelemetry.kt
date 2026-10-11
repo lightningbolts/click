@@ -1,5 +1,6 @@
 package compose.project.click.click.telemetry
 
+import compose.project.click.click.data.api.installClickWebPlatformHeader // pragma: allowlist secret
 import compose.project.click.click.data.SupabaseConfig
 import compose.project.click.click.data.api.ApiConfig
 import compose.project.click.click.data.storage.createTokenStorage
@@ -101,6 +102,7 @@ object ConnectionFlowTelemetry {
             install(ContentNegotiation) {
                 json(json)
             }
+            installClickWebPlatformHeader()
         }
     }
 
