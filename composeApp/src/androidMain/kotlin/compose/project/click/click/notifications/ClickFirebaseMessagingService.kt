@@ -104,8 +104,15 @@ class ClickFirebaseMessagingService : FirebaseMessagingService() {
             val title = message.data["title"] ?: message.notification?.title ?: "Click"
             val body = message.data["body"] ?: message.notification?.body ?: "Open Click"
             val launchIntent = launchIntentFor(PushRoutes.route(message.data)) ?: return
+            // device_approval is tagged by request (sheet 10 §A4) so a re-sent push replaces the first.
+            val tagKeys =
+                if (type == "device_approval") {
+                    listOf("request_id")
+                } else {
+                    listOf("beacon_id", "connection_id", "peer_user_id", "poster_id")
+                }
             val tag =
-                listOf("beacon_id", "connection_id", "peer_user_id", "poster_id")
+                tagKeys
                     .firstNotNullOfOrNull { key -> message.data[key]?.takeIf { it.isNotBlank() } }
                     ?: type
             showSimplePush(tag = "$type:$tag", title = title, body = body, launchIntent = launchIntent)
