@@ -1,5 +1,6 @@
 package compose.project.click.click.telemetry
 
+import compose.project.click.click.data.api.installClickWebPlatformHeader // pragma: allowlist secret
 import compose.project.click.click.data.SupabaseConfig
 import compose.project.click.click.data.api.ApiConfig
 import compose.project.click.click.util.chatMediaDispatcher
@@ -73,6 +74,7 @@ object TelemetryBatcher {
             install(ContentNegotiation) {
                 json(json)
             }
+            installClickWebPlatformHeader()
         }
     }
 

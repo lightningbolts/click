@@ -1,8 +1,6 @@
 package compose.project.click.click.notifications // pragma: allowlist secret
 
 import android.Manifest
-import android.app.NotificationChannel
-import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.pm.PackageManager
@@ -20,8 +18,7 @@ import compose.project.click.click.MainActivity // pragma: allowlist secret
 import compose.project.click.click.data.storage.androidStorageContextOrThrow // pragma: allowlist secret
 import java.util.concurrent.TimeUnit
 
-private const val REMINDERS_CHANNEL_ID = "click_plans_events"
-private const val REMINDERS_CHANNEL_NAME = "Plans & events"
+private const val REMINDERS_CHANNEL_ID = ClickNotificationChannels.PLANS_EVENTS
 private const val WORK_PREFIX = "click_reminder."
 private const val GROUP_TAG_PREFIX = "click_reminder_group."
 
@@ -41,16 +38,7 @@ private fun canPostNotifications(context: Context): Boolean {
         ActivityCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
 }
 
-private fun ensureRemindersChannel(context: Context) {
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-    val manager = context.getSystemService(NotificationManager::class.java) ?: return
-    if (manager.getNotificationChannel(REMINDERS_CHANNEL_ID) != null) return
-    manager.createNotificationChannel(
-        NotificationChannel(REMINDERS_CHANNEL_ID, REMINDERS_CHANNEL_NAME, NotificationManager.IMPORTANCE_DEFAULT).apply {
-            description = "Reminders for plans you're going to and events you saved."
-        },
-    )
-}
+private fun ensureRemindersChannel(context: Context) = ClickNotificationChannels.ensure(context)
 
 /** WorkManager-backed reminders: survive process death and reboots; timing is best-effort (Doze). */
 actual object LocalReminderScheduler {

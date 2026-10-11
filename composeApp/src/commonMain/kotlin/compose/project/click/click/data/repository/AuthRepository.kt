@@ -8,6 +8,7 @@ import compose.project.click.click.auth.SessionHydrationPolicy // pragma: allowl
 import compose.project.click.click.data.SupabaseConfig // pragma: allowlist secret
 import compose.project.click.click.data.api.ApiClient // pragma: allowlist secret
 import compose.project.click.click.data.auth.EnsureFreshAccessToken // pragma: allowlist secret
+import compose.project.click.click.data.auth.SessionEnd // pragma: allowlist secret
 import compose.project.click.click.data.auth.SessionRefreshCoordinator // pragma: allowlist secret
 import compose.project.click.click.data.auth.SessionResumeGate // pragma: allowlist secret
 import compose.project.click.click.data.storage.TokenStorage // pragma: allowlist secret
@@ -371,6 +372,20 @@ class AuthRepository(
 
     suspend fun refreshSession(forceRefresh: Boolean = false): Result<Unit> {
         val credential = supabase.auth.currentSessionOrNull()?.refreshToken ?: tokenStorage.getRefreshToken()
+        val refreshingUserId = runCatching { tokenStorage.getUserId() }.getOrNull() ?: supabase.auth.currentUserOrNull()?.id
+        val result = refreshSessionSingleFlight(credential, forceRefresh)
+        // G1-9: GoTrue rejected the refresh token: end the session cleanly (runs once per account).
+        // Outside the single-flight block, since the teardown itself may touch the session.
+        if (result.exceptionOrNull()?.isHardAuthFailure() == true) {
+            runCatching { SessionEnd.onRefreshRejected(refreshingUserId) }
+        }
+        return result
+    }
+
+    private suspend fun refreshSessionSingleFlight(
+        credential: String?,
+        forceRefresh: Boolean,
+    ): Result<Unit> {
         return SessionRefreshCoordinator.singleFlightRefresh(credential = credential) {
             try {
                 // Never skip GoTrue just because `exp` is still in the future. TestFlight updates

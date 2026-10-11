@@ -2,6 +2,7 @@
 
 package compose.project.click.click.data // pragma: allowlist secret
 
+import compose.project.click.click.core.AppSessionHooks // pragma: allowlist secret
 import compose.project.click.click.data.api.CommunityHubNearbyDto // pragma: allowlist secret
 import compose.project.click.click.data.chat.LocalMessageStore // pragma: allowlist secret
 import compose.project.click.click.data.chat.PendingSendStore // pragma: allowlist secret
@@ -68,16 +69,22 @@ internal fun AppDataManager.mergeCachedCommunityHubsFromDtoImpl(incoming: List<C
 }
 
 /**
- * Clear all data (on logout)
+ * Clear all data (on logout).
+ *
+ * @param keepLocalHistory true when the server ended the session (a rejected refresh, G1-9): the
+ * account's on-device message history stays for when they sign back in (iOS keeps `LocalStore`).
  */
-internal suspend fun AppDataManager.clearDataImpl() {
+internal suspend fun AppDataManager.clearDataImpl(keepLocalHistory: Boolean = false) {
     ChatMuteStore.clear()
     IdentityCache.clear()
     EventReminders.cancelAll()
     resetDeviceHistorySyncThrottle()
     // Unsent drafts and on-device history never carry over to another account.
     runCatching { PendingSendStore.clear(tokenStorage) }
-    runCatching { LocalMessageStore.wipeAll() }
+    if (!keepLocalHistory) runCatching { LocalMessageStore.wipeAll() }
+    // region G1 foundations: flags, Live updates, per-user disk caches
+    runCatching { AppSessionHooks.onSessionEnded() }
+    // endregion
     loadAllDataJob?.cancel()
     loadAllDataJob = null
     chatPrefetchJob?.cancel()

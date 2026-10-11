@@ -602,9 +602,7 @@ internal fun ChatViewModel.loadChatMessagesImpl(chatId: String) {
                     updateKeepStates(chatDetails.connection, userId)
                 }
 
-                if (hydratedChatDetails.groupClique == null && !chatDetails.connection.has_begun) {
-                    supabaseRepository.updateConnectionHasBegun(resolvedConnectionId, true)
-                }
+                // `has_begun` is written on the first successful send (G0-11), not on open.
                 ChatPushInboxBridge.consumeWarmMessage(resolvedConnectionId)
             } catch (e: CancellationException) {
                 throw e

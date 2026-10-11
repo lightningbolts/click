@@ -16,6 +16,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.tooling.preview.Preview
 import com.google.android.gms.maps.MapsInitializer
 import compose.project.click.click.calendar.initCalendarProvider // pragma: allowlist secret
+import compose.project.click.click.core.AppSessionHooks // pragma: allowlist secret
 import compose.project.click.click.data.SupabaseConfig // pragma: allowlist secret
 import compose.project.click.click.data.contacts.initContactBook // pragma: allowlist secret
 import compose.project.click.click.data.storage.initTokenStorage // pragma: allowlist secret
@@ -49,6 +50,7 @@ class MainActivity : ComponentActivity() {
         AndroidChatImageSaveContext.applicationContext = applicationContext
 
         initTokenStorage(applicationContext)
+        AppSessionHooks.onLaunch()
         initLocationService(applicationContext)
         initCalendarProvider(applicationContext)
         initContactBook(applicationContext)

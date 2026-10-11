@@ -11,6 +11,9 @@ import compose.project.click.click.auth.AuthBootFastPath // pragma: allowlist se
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.SupabaseConfig // pragma: allowlist secret
 import compose.project.click.click.data.auth.EnsureFreshAccessToken // pragma: allowlist secret
+import compose.project.click.click.data.auth.SessionEnd // pragma: allowlist secret
+import compose.project.click.click.data.auth.SessionEndCoordinator // pragma: allowlist secret
+import compose.project.click.click.data.auth.SessionRefreshCoordinator // pragma: allowlist secret
 import compose.project.click.click.data.displayNameFromMetadata // pragma: allowlist secret
 import compose.project.click.click.data.realtime.rebindRealtimeSocket // pragma: allowlist secret
 import compose.project.click.click.data.repository.AuthRepository // pragma: allowlist secret
@@ -56,6 +59,7 @@ class AuthViewModel(
     private var supabaseObserversStarted = false
 
     init {
+        installSessionEnd()
         checkAuthStatus()
         startBackgroundTokenRefresh()
     }
@@ -527,11 +531,44 @@ class AuthViewModel(
         println(
             "AuthViewModel: Hard auth failure — forcing re-login: ${error.redactedRestMessage()}",
         )
-        runCatching { AppDataManager.clearData() }
-        runCatching { tokenStorage.clearTokens() }
-        runCatching { authRepository.signOut() }
+        // G1-9: the same teardown as sign-out, minus the local message store ([SessionEnd]).
+        // An account already ended (or a different account now signed in) is left alone.
+        val userId = runCatching { tokenStorage.getUserId() }.getOrNull() ?: SupabaseConfig.client.auth.currentUserOrNull()?.id
+        if (userId != null) {
+            SessionEnd.onRefreshRejected(userId)
+            return
+        }
+        runCatching { AppDataManager.clearData(keepLocalHistory = true) }
+        runCatching { tokenStorage.clearSessionData() }
+        runCatching { SupabaseConfig.client.auth.clearSession() }
         isAuthenticated = false
-        authState = AuthState.Error("Your session expired. Please sign in again.")
+        authState = AuthState.Error(SESSION_EXPIRED_MESSAGE)
+    }
+
+    /** G1-9: wires [SessionEnd] to this app's teardown, and returns the UI to sign-in when it runs. */
+    private fun installSessionEnd() {
+        SessionEnd.install(
+            SessionEndCoordinator(
+                currentUserId = {
+                    runCatching { tokenStorage.getUserId() }.getOrNull()
+                        ?: runCatching { SupabaseConfig.client.auth.currentUserOrNull()?.id }.getOrNull()
+                },
+                teardown = {
+                    SessionRefreshCoordinator.clearSuccessfulRefresh()
+                    AppDataManager.clearData(keepLocalHistory = true)
+                },
+                clearCredentials = {
+                    runCatching { tokenStorage.clearSessionData() }
+                    runCatching { SupabaseConfig.client.auth.clearSession() }
+                },
+            ),
+        )
+        viewModelScope.launch {
+            SessionEnd.ended.collect {
+                isAuthenticated = false
+                authState = AuthState.Error(SESSION_EXPIRED_MESSAGE)
+            }
+        }
     }
 
     private fun isLikelyNetworkFailure(error: Throwable?): Boolean {
@@ -567,5 +604,9 @@ class AuthViewModel(
 
     fun resetAuthState() {
         authState = AuthState.Idle
+    }
+
+    private companion object {
+        const val SESSION_EXPIRED_MESSAGE = "Your session expired. Please sign in again."
     }
 }

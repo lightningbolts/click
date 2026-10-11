@@ -2,6 +2,8 @@
 
 package compose.project.click.click.viewmodel // pragma: allowlist secret
 
+import compose.project.click.click.data.realtime.LiveKind // pragma: allowlist secret
+import compose.project.click.click.data.realtime.LiveUpdates // pragma: allowlist secret
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
@@ -280,6 +282,14 @@ class HomeViewModel(
         viewModelScope.launch {
             AppDataManager.eventEngagementVersion.collect {
                 refreshEventSectionsAfterEngagement()
+            }
+        }
+        // Live updates (G1-2): refetch only the Home modules a hint names.
+        viewModelScope.launch {
+            LiveUpdates.batches.collect { batch ->
+                val catchUp = LiveKind.HOME in batch.kinds
+                if (catchUp || LiveKind.NUDGES in batch.kinds) loadHomeNudges()
+                if (catchUp || LiveKind.AVAILABILITY in batch.kinds) refreshHomeAvailabilityIntents()
             }
         }
     }

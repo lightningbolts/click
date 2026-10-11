@@ -716,7 +716,7 @@ object AppDataManager {
         startLoadAllDataJob()
     }
 
-    suspend fun clearData() = clearDataImpl()
+    suspend fun clearData(keepLocalHistory: Boolean = false) = clearDataImpl(keepLocalHistory)
 
     /**
      * Reset all cached data and reload from server.

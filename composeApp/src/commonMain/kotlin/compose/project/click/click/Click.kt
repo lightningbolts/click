@@ -1,5 +1,6 @@
 package compose.project.click.click
 
+import compose.project.click.click.core.AppSessionHooks
 import compose.project.click.click.data.AppDataManager
 import compose.project.click.click.deeplink.ConnectionDeepLinkRouter
 import compose.project.click.click.deeplink.EventDeepLinkRouter
@@ -12,11 +13,13 @@ import compose.project.click.click.telemetry.TelemetryBatcher
 fun onApplicationDidBecomeActive() {
     notifyPlatformApplicationForeground()
     AppDataManager.handleApplicationForegrounded()
+    AppSessionHooks.onForeground()
 }
 
 /** Called from platform lifecycle when the app moves to background. */
 fun onApplicationDidEnterBackground() {
     TelemetryBatcher.onAppBackgrounded()
+    AppSessionHooks.onBackground()
 }
 
 /** Parse and queue a connection URL. Returns true when recognized. */
