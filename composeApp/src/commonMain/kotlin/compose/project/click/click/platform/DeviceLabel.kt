@@ -14,7 +14,7 @@ const val DEVICE_LABEL_MAX_LENGTH = 64
  * Samsung reports model codes ("SM-S921U"); the region suffix after the 4-digit family is dropped
  * before the lookup. Families seen most in the field; anything else is "Galaxy phone".
  */
-private val SAMSUNG_FAMILIES: Map<String, String> =
+internal val SAMSUNG_FAMILIES: Map<String, String> =
     mapOf(
         "SM-S901" to "Galaxy S22",
         "SM-S906" to "Galaxy S22+",
@@ -40,7 +40,7 @@ private val SAMSUNG_FAMILIES: Map<String, String> =
         "SM-A556" to "Galaxy A55 5G",
     )
 
-private val BRAND_NAMES: Map<String, String> =
+internal val BRAND_NAMES: Map<String, String> =
     mapOf(
         "google" to "Google",
         "samsung" to "Samsung",
@@ -81,5 +81,16 @@ fun friendlyDeviceLabel(
             brand.isEmpty() || rawModel.startsWith(brand, ignoreCase = true) -> rawModel
             else -> "$brand $rawModel"
         }
-    return label.take(DEVICE_LABEL_MAX_LENGTH).trim()
+    return neverABrowserLabel(label.take(DEVICE_LABEL_MAX_LENGTH).trim())
+}
+
+/**
+ * click-web treats a label containing " on " or equal to "Web browser" as a browser and skips the
+ * approval request for browsers when the account has a passkey recovery vault
+ * (`web/lib/chat/deviceLabel.ts`, sheet 10 §A6). An app's label must never look like one.
+ */
+internal fun neverABrowserLabel(label: String): String {
+    var cleaned = label
+    while (cleaned.contains(" on ")) cleaned = cleaned.replace(" on ", " ")
+    return if (cleaned.isBlank() || cleaned.equals("web browser", ignoreCase = true)) "Android phone" else cleaned
 }
