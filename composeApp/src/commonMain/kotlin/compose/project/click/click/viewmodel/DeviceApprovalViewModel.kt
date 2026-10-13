@@ -4,24 +4,40 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import compose.project.click.click.chat.DeviceApprovalError // pragma: allowlist secret
 import compose.project.click.click.crypto.MessageCryptoV2 // pragma: allowlist secret
+import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.DeviceApi // pragma: allowlist secret
 import compose.project.click.click.data.DeviceApprovals // pragma: allowlist secret
 import compose.project.click.click.data.api.ClickWebCodedException // pragma: allowlist secret
 import compose.project.click.click.data.decideDeviceApproval // pragma: allowlist secret
 import compose.project.click.click.data.thisChatDeviceId // pragma: allowlist secret
 import compose.project.click.click.data.unwrapWithThisDevice // pragma: allowlist secret
+import compose.project.click.click.notifications.cancelDeviceApprovalNotification // pragma: allowlist secret
+import compose.project.click.click.platform.DEVICE_APPROVAL_AUTH_REASON // pragma: allowlist secret
+import compose.project.click.click.platform.OwnerAuthResult // pragma: allowlist secret
+import compose.project.click.click.platform.authenticateDeviceOwner // pragma: allowlist secret
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-/** "Approve new sign-in?" for one request (iOS `DeviceApprovalSheet`). */
+/**
+ * "Approve new sign-in?" for one request (iOS `DeviceApprovalSheet`). Approve asks the device
+ * owner to confirm it's them every time (Deny never does); the challenge is fetched meanwhile and
+ * the decision is posted only after the owner confirms on the same account (sheet 10 §A1).
+ */
 class DeviceApprovalViewModel(
     private val requestId: String,
     private val api: DeviceApi = DeviceApprovals.api,
     private val myDeviceId: () -> String? = ::thisChatDeviceId,
     private val unwrap: (MessageCryptoV2.EpochKeyWrapMetadata, String) -> ByteArray = ::unwrapWithThisDevice,
+    /** The signed-in user now; the sheet belongs to whoever it was when it opened. */
+    private val currentUserId: () -> String? = { AppDataManager.currentUser.value?.id },
+    private val authenticate: suspend (reason: String) -> OwnerAuthResult = ::authenticateDeviceOwner,
+    /** Outlives the sheet: sharing history after approval keeps going when it closes (§A2). */
+    private val backgroundScope: CoroutineScope = AppDataManager.scope,
+    private val dismissNotification: (requestId: String) -> Unit = ::cancelDeviceApprovalNotification,
     /** After approving: share this device's history with the approved one right away. */
     private val onApproved: suspend () -> Unit = {},
 ) : ViewModel() {
@@ -59,6 +75,14 @@ class DeviceApprovalViewModel(
 
     private val _state = MutableStateFlow(UiState())
     val state: StateFlow<UiState> = _state.asStateFlow()
+
+    private val openedForUserId: String? = currentUserId()
+
+    /** The owner dismissed the prompt, or the account changed while it was up: back to asking. */
+    private class OwnerAuthCancelled : Exception()
+
+    /** No screen lock, or the confirmation failed: fail closed. */
+    private class OwnerAuthUnavailable : Exception()
 
     init {
         viewModelScope.launch { load() }
@@ -104,16 +128,30 @@ class DeviceApprovalViewModel(
     private fun decide(approve: Boolean) {
         val current = _state.value
         if (current.busy || current.finished || !current.loaded) return
+        val userId = openedForUserId ?: return
         val deviceId =
             myDeviceId() ?: run {
                 _state.value = current.copy(phase = Phase.Failed(DeviceApprovalError.Unknown))
                 return
             }
         _state.value = current.copy(phase = if (approve) Phase.Approving else Phase.Denying)
+        val authorize: (suspend () -> Unit)? =
+            if (approve) {
+                {
+                    when (authenticate(DEVICE_APPROVAL_AUTH_REASON)) {
+                        // A session switch while the prompt was up must never approve for the old account.
+                        OwnerAuthResult.Success -> if (currentUserId() != userId) throw OwnerAuthCancelled()
+                        OwnerAuthResult.Cancelled -> throw OwnerAuthCancelled()
+                        OwnerAuthResult.Unavailable -> throw OwnerAuthUnavailable()
+                    }
+                }
+            } else {
+                null
+            }
         viewModelScope.launch {
             val result =
                 try {
-                    decideDeviceApproval(api, requestId, approve, deviceId, unwrap)
+                    decideDeviceApproval(api, requestId, approve, deviceId, authorize = authorize, unwrap = unwrap)
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -122,13 +160,24 @@ class DeviceApprovalViewModel(
             result.fold(
                 onSuccess = {
                     DeviceApprovals.decided(requestId)
+                    dismissNotification(requestId)
                     _state.value = _state.value.copy(phase = if (approve) Phase.Approved else Phase.Denied)
-                    if (approve) runCatching { onApproved() }
+                    if (approve) backgroundScope.launch { runCatching { onApproved() } }
                 },
                 onFailure = { e ->
-                    val error = DeviceApprovalError.from(e)
-                    if (!error.retryable && e is ClickWebCodedException) DeviceApprovals.decided(requestId)
-                    _state.value = _state.value.copy(phase = Phase.Failed(error))
+                    when (e) {
+                        is OwnerAuthCancelled -> _state.value = _state.value.copy(phase = Phase.Asking)
+                        is OwnerAuthUnavailable ->
+                            _state.value = _state.value.copy(phase = Phase.Failed(DeviceApprovalError.AuthenticationRequired))
+                        else -> {
+                            val error = DeviceApprovalError.from(e)
+                            if (!error.retryable && e is ClickWebCodedException) {
+                                DeviceApprovals.decided(requestId)
+                                dismissNotification(requestId)
+                            }
+                            _state.value = _state.value.copy(phase = Phase.Failed(error))
+                        }
+                    }
                 },
             )
         }

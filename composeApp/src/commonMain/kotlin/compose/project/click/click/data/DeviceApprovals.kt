@@ -22,6 +22,8 @@ import compose.project.click.click.data.api.removeChatDeviceImpl // pragma: allo
 import compose.project.click.click.navigation.AppRoute // pragma: allowlist secret
 import compose.project.click.click.navigation.AppRouter // pragma: allowlist secret
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -96,29 +98,37 @@ internal fun unwrapWithThisDevice(
 /**
  * Approves or denies [requestId] from [myDeviceId]: fetch a challenge, unwrap its nonce with
  * [unwrap] (proving this device holds its key) and send it back with the decision.
+ *
+ * The challenge is fetched while [authorize] (the device owner's confirmation) runs, so its round
+ * trip overlaps the system prompt (iOS `decideDeviceApproval`). Nothing is posted unless
+ * [authorize] returns; whatever it throws ends the call before the decision is sent.
  */
 internal suspend fun decideDeviceApproval(
     api: DeviceApi,
     requestId: String,
     approve: Boolean,
     myDeviceId: String,
+    authorize: (suspend () -> Unit)? = null,
     unwrap: (MessageCryptoV2.EpochKeyWrapMetadata, String) -> ByteArray = ::unwrapWithThisDevice,
-): Result<DeviceHistoryRequestDto?> {
-    val challenge = api.challenge(requestId, myDeviceId).getOrElse { return Result.failure(it) }
-    val proof =
-        runCatching {
-            encodeDeviceApprovalProof(unwrap(deviceApprovalWrapMetadata(requestId, myDeviceId, challenge), challenge.envelope))
-        }.getOrElse { return Result.failure(it) }
-    return api.decide(
-        requestId,
-        DeviceApprovalDecisionBody(
-            decision = if (approve) "approve" else "deny",
-            approvingDeviceId = myDeviceId,
-            challengeId = challenge.challengeId,
-            proof = proof,
-        ),
-    )
-}
+): Result<DeviceHistoryRequestDto?> =
+    coroutineScope {
+        val challengeCall = async { api.challenge(requestId, myDeviceId) }
+        authorize?.invoke()
+        val challenge = challengeCall.await().getOrElse { return@coroutineScope Result.failure(it) }
+        val proof =
+            runCatching {
+                encodeDeviceApprovalProof(unwrap(deviceApprovalWrapMetadata(requestId, myDeviceId, challenge), challenge.envelope))
+            }.getOrElse { return@coroutineScope Result.failure(it) }
+        api.decide(
+            requestId,
+            DeviceApprovalDecisionBody(
+                decision = if (approve) "approve" else "deny",
+                approvingDeviceId = myDeviceId,
+                challengeId = challenge.challengeId,
+                proof = proof,
+            ),
+        )
+    }
 
 data class DeviceApprovalsState(
     /** The account's newer devices this one can approve. */
@@ -177,6 +187,15 @@ object DeviceApprovals {
 
     /** Label and time of [requestId] when it's in the incoming list. */
     fun incoming(requestId: String): DeviceHistoryRequestDto? = _state.value.incoming.firstOrNull { it.id == requestId }
+
+    /**
+     * Settings › Devices reviews [requestId] itself: the global prompt won't also open for it,
+     * and one already waiting for it is dropped.
+     */
+    fun defer(requestId: String) {
+        presented.add(requestId)
+        (AppRouter.pending.value as? AppRoute.DeviceApproval)?.takeIf { it.requestId == requestId }?.let(AppRouter::consume)
+    }
 
     fun decided(requestId: String) {
         presented.add(requestId)

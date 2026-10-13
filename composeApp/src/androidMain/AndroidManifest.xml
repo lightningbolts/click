@@ -184,6 +184,14 @@
             </intent-filter>
         </activity>
 
+        <!-- Owner authentication before approving a device (sheet 10 §A1): hosts BiometricPrompt. -->
+        <activity
+            android:name=".platform.OwnerAuthActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
         <meta-data
             android:name="com.google.android.geo.API_KEY"
             android:value="${MAPS_API_KEY}" />

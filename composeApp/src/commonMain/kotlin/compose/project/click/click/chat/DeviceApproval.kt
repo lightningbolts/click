@@ -60,10 +60,13 @@ object DeviceLabels {
     /** Exactly "Web browser", or anything containing " on ". */
     fun isBrowser(label: String?): Boolean = label != null && (label == "Web browser" || label.contains(" on "))
 
-    /** Laptop for browsers, except a phone's browser (" on iphone" / " on android"); else a phone. */
+    /**
+     * A label containing "ipad" (or an Android tablet) is a tablet; browsers are a laptop, except a
+     * phone's browser (" on iphone" / " on android"); anything else is a phone (sheet 10 §A5).
+     */
     fun icon(label: String?): Icon {
         val lower = label?.lowercase().orEmpty()
-        if (lower == "ipad" || lower.contains("tablet") || lower.startsWith("galaxy tab")) return Icon.Tablet
+        if (lower.contains("ipad") || lower.contains("tablet") || lower.startsWith("galaxy tab")) return Icon.Tablet
         if (lower == "web browser" || lower.contains(" on ")) {
             return if (lower.endsWith(" on iphone") || lower.endsWith(" on android")) Icon.Phone else Icon.Laptop
         }
@@ -114,6 +117,9 @@ enum class DeviceApprovalError(
     AlreadyDecided("This sign-in was already approved or denied.", false),
     Expired("This request expired. The new device can ask again.", false),
     DeviceGone("That device is no longer signed in.", false),
+
+    /** No screen lock to confirm with, or the confirmation failed (iOS: fail closed). */
+    AuthenticationRequired("Device authentication is required to approve this request.", true),
     Unknown("Couldn't reach Click. Check your connection and try again.", true),
     ;
 

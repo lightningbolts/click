@@ -63,6 +63,8 @@ kotlin {
         androidMain.dependencies {
             implementation(compose.preview)
             implementation(libs.androidx.activity.compose)
+            // Owner authentication (Face unlock, fingerprint or the screen lock) before approving a device (sheet 10 §A1)
+            implementation(libs.androidx.biometric)
             implementation("androidx.core:core-ktx:1.17.0")
             implementation("jp.co.cyberagent.android:gpuimage:2.1.0")
 

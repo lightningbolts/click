@@ -81,12 +81,16 @@ private fun DeviceLabels.Icon.vector(): ImageVector =
         DeviceLabels.Icon.Laptop -> Icons.Default.Laptop
     }
 
-/** "Approve new sign-in?" with Approve and "This wasn't me" (iOS `DeviceApprovalSheet`). */
+/**
+ * "Approve new sign-in?" with Approve and "This wasn't me" (iOS `DeviceApprovalSheet`), from the
+ * global prompt or Settings › Devices. [onDecided] is told once the decision is saved.
+ */
 @Composable
-private fun DeviceApprovalDialog(
+internal fun DeviceApprovalDialog(
     requestId: String,
     currentUserId: String,
     onDismiss: () -> Unit,
+    onDecided: (approved: Boolean) -> Unit = {},
 ) {
     val vm: DeviceApprovalViewModel =
         viewModel(key = "device-approval-$requestId") {
@@ -98,6 +102,9 @@ private fun DeviceApprovalDialog(
     val state by vm.state.collectAsState()
     val label = state.deviceLabel
     val phase = state.phase
+    LaunchedEffect(phase) {
+        if (phase == Phase.Approved || phase == Phase.Denied) onDecided(phase == Phase.Approved)
+    }
     val title =
         when (phase) {
             Phase.Approved -> "Approved"
