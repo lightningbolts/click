@@ -12,6 +12,7 @@ import compose.project.click.click.data.models.IcebreakerRepository // pragma: a
 import compose.project.click.click.data.models.MessageDeliveryState // pragma: allowlist secret
 import compose.project.click.click.data.models.MessageWithUser // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
+import compose.project.click.click.data.models.isLockedHistory // pragma: allowlist secret
 import compose.project.click.click.data.repository.ChatSessionCaches
 import compose.project.click.click.notifications.ChatPushInboxBridge
 import compose.project.click.click.util.isPersistedApiChatId
@@ -170,7 +171,9 @@ internal fun ChatViewModel.mergeMessageTimelinesPreservingLiveState(
     for (mwu in current) {
         if (mwu.message.id.startsWith("temp-")) continue
         val existing = byId[mwu.message.id]
-        if (existing == null || mwu.message.timeCreated >= existing.message.timeCreated) {
+        // A row that was locked history and now decrypts (keys shared by another device) takes the fresh copy.
+        val unlocked = existing != null && mwu.message.isLockedHistory() && !existing.message.isLockedHistory()
+        if (!unlocked && (existing == null || mwu.message.timeCreated >= existing.message.timeCreated)) {
             byId[mwu.message.id] = mwu
         }
     }
@@ -246,6 +249,7 @@ internal fun ChatViewModel.scheduleBackgroundChatPayloadRefresh(
                     messages = mergedMessages,
                     isLoadingMessages = false,
                 )
+            scheduleLockedHistoryRetryIfNeeded()
         }
     }
 }
@@ -359,6 +363,7 @@ internal fun ChatViewModel.loadChatMessagesImpl(chatId: String) {
 
     val switchingConnection = currentConnectionId != null && currentConnectionId != connectionId
     if (switchingConnection) {
+        lockedHistoryRetry.cancel()
         currentApiChatId = null
         _messageSendError.value = null
         _stagedChatImages.value = emptyList()
@@ -558,6 +563,7 @@ internal fun ChatViewModel.loadChatMessagesImpl(chatId: String) {
                         )
                     }
 
+                var fetchedFromNetwork = false
                 if (!cacheFresh) {
                     if (payload != null && payload.messages.isNotEmpty()) {
                         scheduleBackgroundChatPayloadRefresh(
@@ -568,6 +574,7 @@ internal fun ChatViewModel.loadChatMessagesImpl(chatId: String) {
                         )
                     } else {
                         payload = buildChatPayloadWithRetry(hydratedChatDetails, persistedApiChatId, userId)
+                        fetchedFromNetwork = true
                     }
                 } else {
                     scheduleBackgroundChatPayloadRefresh(
@@ -590,6 +597,8 @@ internal fun ChatViewModel.loadChatMessagesImpl(chatId: String) {
                     connectionId = resolvedConnectionId,
                     payload = payload,
                 )
+                // A cached paint isn't a load: the background refresh above schedules its own retry.
+                if (fetchedFromNetwork) scheduleLockedHistoryRetryIfNeeded()
 
                 ephemeralDeferred.await()
 

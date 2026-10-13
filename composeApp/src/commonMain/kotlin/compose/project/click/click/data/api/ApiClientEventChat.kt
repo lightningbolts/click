@@ -6,6 +6,7 @@ import io.ktor.client.request.get
 import io.ktor.client.statement.HttpResponse
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlin.coroutines.cancellation.CancellationException
 
 @Serializable
 data class EventChatResolveDto(
@@ -56,6 +57,8 @@ internal suspend fun ApiClient.resolveEventChat(beaconId: String): Result<EventC
                 message = readClickWebErrorMessage(e.response),
             ),
         )
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }

@@ -12,7 +12,9 @@ import compose.project.click.click.collaboration.SharedDropAudience
 import compose.project.click.click.collaboration.SharedDropGroup
 import compose.project.click.click.collaboration.clickDropPreviewJpeg
 import compose.project.click.click.collaboration.encodedImageSize
+import compose.project.click.click.core.DiskFirstCache
 import compose.project.click.click.core.FeatureFlagGate
+import compose.project.click.click.core.UserDiskCache
 import compose.project.click.click.data.AppDataManager
 import compose.project.click.click.data.api.DropsApi
 import compose.project.click.click.data.api.ReactionTarget
@@ -34,7 +36,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 import kotlinx.serialization.builtins.ListSerializer
-import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
 import kotlin.random.Random
 
@@ -71,9 +72,14 @@ class SharedDropsViewModel(
     private val reactionsApi: ReactionsApi = ReactionsApi(),
     private val chatRepository: ChatRepository = SupabaseChatRepository(tokenStorage = createTokenStorage()),
 ) : ViewModel() {
-    private val json = Json { ignoreUnknownKeys = true }
+    /** The strip as last seen, per user, for the first frame (sheet 07 G1-5, G2-9). */
+    private val stripCache =
+        DiskFirstCache(UserDiskCache.Keys.SHARED_DROPS_STRIP, ListSerializer(SharedDrop.serializer())) {
+            it.take(STRIP_CACHE_MAX)
+        }
 
-    private val _state = MutableStateFlow(SharedDropsUiState())
+    // Seeded synchronously from disk so the strip paints on the first frame; [refresh] revalidates.
+    private val _state = MutableStateFlow(SharedDropsUiState(drops = cachedStrip()))
     val state: StateFlow<SharedDropsUiState> = _state.asStateFlow()
 
     private val _originals = MutableStateFlow<Map<String, ByteArray>>(emptyMap())
@@ -94,7 +100,18 @@ class SharedDropsViewModel(
 
     private fun userId(): String? = AppDataManager.currentUser.value?.id
 
-    private fun stripCacheKey(uid: String) = "shared-drops-strip-$uid"
+    /** The last strip from disk. Signed URLs expire, so a copy read back keeps only what the cache can paint. */
+    private fun cachedStrip(): List<SharedDrop> {
+        if (!isEnabled) return emptyList()
+        return stripCache
+            .seed(userId())
+            ?.map { it.copy(originalUrl = null, previewUrl = null) }
+            .orEmpty()
+    }
+
+    private fun persistStrip() {
+        stripCache.store(userId(), _state.value.drops)
+    }
 
     private fun originalKey(id: String) = "shared-drop-$id-original"
 
@@ -104,27 +121,18 @@ class SharedDropsViewModel(
     fun refresh() {
         if (!isEnabled) return
         val uid = userId() ?: return
-        if (!_state.value.loaded) {
-            readChatMediaVaultBytes(stripCacheKey(uid), "json")?.let { bytes ->
-                runCatching { json.decodeFromString(ListSerializer(SharedDrop.serializer()), bytes.decodeToString()) }
-                    .getOrNull()
-                    // Signed URLs expire: a copy read back from disk keeps only what the cache can paint.
-                    ?.map { it.copy(originalUrl = null, previewUrl = null) }
-                    ?.let { cached -> _state.update { it.copy(drops = cached) } }
-            }
+        // The user can resolve after this ViewModel was built (cold start): paint from disk now.
+        if (!_state.value.loaded && _state.value.drops.isEmpty()) {
+            cachedStrip().takeIf { it.isNotEmpty() }?.let { cached -> _state.update { it.copy(drops = cached) } }
         }
         viewModelScope.launch {
-            api
-                .strip()
-                .onSuccess { list ->
-                    _state.update { it.copy(drops = list, loaded = true) }
-                    writeChatMediaVaultFile(
-                        stripCacheKey(uid),
-                        json.encodeToString(ListSerializer(SharedDrop.serializer()), list).encodeToByteArray(),
-                        "json",
-                    )
-                    list.forEach { warmImages(it) }
-                }.onFailure { _state.update { s -> s.copy(loaded = true) } }
+            stripCache
+                .revalidate(
+                    userId = uid,
+                    fetch = { api.strip() },
+                    publish = { list -> _state.update { it.copy(drops = list, loaded = true) } },
+                ).onSuccess { list -> list.forEach { warmImages(it) } }
+                .onFailure { _state.update { s -> s.copy(loaded = true) } }
         }
     }
 
@@ -251,6 +259,7 @@ class SharedDropsViewModel(
                                 listOf(drop) + s.drops.filterNot { it.id == drop.id },
                         )
                     }
+                    persistStrip()
                 }.onFailure { error ->
                     val message = (error as? SharedDropPostException)?.message ?: "Couldn't share your drop. Try again."
                     // Past the cap a retry can't succeed: drop the pending photo.
@@ -280,6 +289,7 @@ class SharedDropsViewModel(
                                 },
                         )
                     }
+                    persistStrip()
                 }.onFailure { _state.update { it.copy(notice = "Couldn't delete it. Try again.") } }
         }
     }
@@ -388,6 +398,11 @@ class SharedDropsViewModel(
                     page.drops.forEach { warmImages(it) }
                 }.onFailure { _state.update { it.copy(archiveLoading = false) } }
         }
+    }
+
+    companion object {
+        /** The cached strip is bounded (sheet 07 G1-5). */
+        const val STRIP_CACHE_MAX = 240
     }
 
     private fun newClientDropId(): String {

@@ -9,6 +9,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import compose.project.click.click.chat.attachments.AttachmentCrypto // pragma: allowlist secret
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
+import compose.project.click.click.data.InboxUnreadBadge // pragma: allowlist secret
 import compose.project.click.click.data.SupabaseConfig // pragma: allowlist secret
 import compose.project.click.click.data.api.ChatApiClient // pragma: allowlist secret
 import compose.project.click.click.data.models.ChatMessageType // pragma: allowlist secret
@@ -296,6 +297,9 @@ class ChatViewModel(
     internal var debouncedChatListRefreshJob: Job? = null
     internal var vibeCheckTimerJob: Job? = null
     internal var loadChatMessagesJob: Job? = null
+
+    /** Visible-only reloads while the open chat shows locked history (sheet 10 A3). */
+    internal val lockedHistoryRetry = LockedHistoryRetryScheduler(viewModelScope) { reloadOpenChatForLockedHistory() }
     internal var pendingChatLoadId: String? = null
     internal var inFlightLoadConnectionId: String? = null
     internal var lastTypingSent: Long = 0L
@@ -340,6 +344,17 @@ class ChatViewModel(
                     patchChatListRowFromCachedThread(row.connection.id)
                 }
             }
+        }
+
+        // Clicks-tab unread badge (sheet 11 B2).
+        viewModelScope.launch {
+            combine(
+                _chatListState,
+                AppDataManager.archivedConnectionIds,
+                AppDataManager.hiddenConnectionIds,
+            ) { state, archived, hidden ->
+                (state as? ChatListState.Success)?.let { InboxUnreadBadge.total(it.chats, archived, hidden) }
+            }.collect { total -> total?.let(AppDataManager::publishInboxUnreadTotal) }
         }
 
         viewModelScope.launch {

@@ -12,6 +12,7 @@ import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlin.coroutines.cancellation.CancellationException
 
 /*
  * Account and Me endpoints on click-web: legacy Ghost Mode reset, blocked people, avatar
@@ -54,6 +55,8 @@ private suspend fun <T> ApiClient.clickWebCall(block: suspend () -> Result<T>): 
         block()
     } catch (e: ClientRequestException) {
         clickWebFailure(e.response)
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }

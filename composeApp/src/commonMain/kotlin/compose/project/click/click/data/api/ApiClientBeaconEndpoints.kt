@@ -18,6 +18,7 @@ import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.put
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * `GET /api/beacons` — proximity map beacons (PostGIS); bearer is the Supabase session JWT.
@@ -47,6 +48,8 @@ internal suspend fun ApiClient.getMapBeaconsImpl(
         } else {
             Result.failure(Exception(readClickWebErrorMessage(response)))
         }
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }
@@ -72,6 +75,8 @@ internal suspend fun ApiClient.getMapBeaconImpl(beaconId: String): Result<MapBea
         }
     } catch (e: ClientRequestException) {
         Result.failure(Exception(readClickWebErrorMessage(e.response)))
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }
@@ -99,6 +104,8 @@ internal suspend fun ApiClient.postMapBeaconImpl(insert: MapBeaconInsert): Resul
         }
     } catch (e: ClientRequestException) {
         Result.failure(Exception(readClickWebErrorMessage(e.response)))
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }
@@ -131,6 +138,8 @@ internal suspend fun ApiClient.patchMapBeaconImpl(
         }
     } catch (e: ClientRequestException) {
         Result.failure(Exception(readClickWebErrorMessage(e.response)))
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }
@@ -149,6 +158,8 @@ internal suspend fun ApiClient.deleteMapBeaconImpl(beaconId: String): Result<Uni
         }
     } catch (e: ClientRequestException) {
         Result.failure(Exception(readClickWebErrorMessage(e.response)))
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }
@@ -167,6 +178,8 @@ internal suspend fun ApiClient.getBeaconRsvpImpl(beaconId: String): Result<Beaco
         }
     } catch (e: ClientRequestException) {
         Result.failure(Exception(readClickWebErrorMessage(e.response)))
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }
@@ -186,6 +199,8 @@ internal suspend fun ApiClient.getBeaconAttendeeDirectoryImpl(beaconId: String):
         }
     } catch (e: ClientRequestException) {
         Result.failure(Exception(readClickWebErrorMessage(e.response)))
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }
@@ -229,6 +244,8 @@ internal suspend fun ApiClient.postBeaconRsvpImpl(
         }
     } catch (e: ClientRequestException) {
         Result.failure(Exception(readClickWebErrorMessage(e.response)))
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }
@@ -247,6 +264,8 @@ internal suspend fun ApiClient.deleteBeaconRsvpImpl(beaconId: String): Result<Un
         }
     } catch (e: ClientRequestException) {
         Result.failure(Exception(readClickWebErrorMessage(e.response)))
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }
@@ -265,6 +284,8 @@ internal suspend fun ApiClient.getBeaconEngagementImpl(beaconId: String): Result
         }
     } catch (e: ClientRequestException) {
         Result.failure(Exception(readClickWebErrorMessage(e.response)))
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }
@@ -290,6 +311,8 @@ internal suspend fun ApiClient.putBeaconBookmarkImpl(
         }
     } catch (e: ClientRequestException) {
         Result.failure(Exception(readClickWebErrorMessage(e.response)))
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }
@@ -324,6 +347,8 @@ internal suspend fun ApiClient.postBeaconCheckInImpl(
                 message = readClickWebErrorMessage(e.response),
             ),
         )
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }
@@ -342,6 +367,8 @@ internal suspend fun ApiClient.deleteBeaconCheckInImpl(beaconId: String): Result
         }
     } catch (e: ClientRequestException) {
         Result.failure(Exception(readClickWebErrorMessage(e.response)))
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }
@@ -364,6 +391,8 @@ internal suspend fun ApiClient.postBeaconImpressionImpl(
         } else {
             Result.failure(Exception(readClickWebErrorMessage(response)))
         }
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         // Fire-and-forget: soft-fail
         Result.failure(e)
@@ -400,6 +429,8 @@ internal suspend fun ApiClient.postBeaconShareImpl(
         } else {
             Result.failure(Exception(readClickWebErrorMessage(response)))
         }
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }
@@ -422,6 +453,8 @@ internal suspend fun ApiClient.getMyEventBookmarksImpl(
         }
     } catch (e: ClientRequestException) {
         Result.failure(Exception(readClickWebErrorMessage(e.response)))
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }
@@ -439,6 +472,8 @@ internal suspend fun ApiClient.getBeaconGuestListImpl(beaconId: String): Result<
         }
     } catch (e: ClientRequestException) {
         Result.failure(Exception(readClickWebErrorMessage(e.response)))
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }
@@ -464,6 +499,8 @@ internal suspend fun ApiClient.postBeaconGuestListImpl(
         }
     } catch (e: ClientRequestException) {
         Result.failure(Exception(readClickWebErrorMessage(e.response)))
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }
@@ -485,6 +522,8 @@ internal suspend fun ApiClient.matchBeaconGuestListImpl(beaconId: String): Resul
         }
     } catch (e: ClientRequestException) {
         Result.failure(Exception(readClickWebErrorMessage(e.response)))
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }
@@ -500,6 +539,8 @@ internal suspend fun ApiClient.getInboxNudgesImpl(): Result<InboxNudgesResponseD
         }
     } catch (e: ClientRequestException) {
         Result.failure(Exception(readClickWebErrorMessage(e.response)))
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }
@@ -523,6 +564,8 @@ internal suspend fun ApiClient.postInboxNudgeActionImpl(
         }
     } catch (e: ClientRequestException) {
         Result.failure(Exception(readClickWebErrorMessage(e.response)))
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }
@@ -547,6 +590,8 @@ internal suspend fun ApiClient.snoozeInboxNudgeImpl(
         }
     } catch (e: ClientRequestException) {
         Result.failure(Exception(readClickWebErrorMessage(e.response)))
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }

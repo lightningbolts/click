@@ -131,6 +131,7 @@ internal suspend fun AppDataManager.clearDataImpl(keepLocalHistory: Boolean = fa
     _cachedHubThreads.value = emptyMap()
     _revokedHubIds.value = emptySet()
     _inboxFeedChats.value = emptyList()
+    _liveInboxUnreadTotal.value = null
     groupInboxHydratedThisSession = false
     supabaseRepository.clearCachedUserPublicProfiles()
     supabaseRepository.clearCachedProfileTimelines()

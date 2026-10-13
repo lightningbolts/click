@@ -11,6 +11,7 @@ import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import io.ktor.http.encodeURLPathPart
 import kotlinx.serialization.json.JsonObject
+import kotlin.coroutines.cancellation.CancellationException
 
 /*
  * Relationship moments (click-web migration `20260926090000_relationship_moments.sql`):
@@ -31,6 +32,8 @@ private suspend inline fun <T> ApiClient.clickWebCall(
         }
     } catch (e: ClientRequestException) {
         clickWebFailure(e.response)
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }

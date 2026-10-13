@@ -16,6 +16,7 @@ import io.ktor.http.contentType
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
+import kotlin.coroutines.cancellation.CancellationException
 
 /*
  * Send Later (click-web `app/api/chat/scheduled/route.ts`, migration
@@ -81,6 +82,8 @@ private suspend fun <T> ChatApiClient.withClickWebToken(
                 first
             }
         }
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }

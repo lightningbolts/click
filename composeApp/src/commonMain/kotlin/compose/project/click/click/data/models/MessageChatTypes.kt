@@ -281,9 +281,26 @@ fun Message.audioCacheFileExtension(): String {
     }
 }
 
+/**
+ * Decrypted content for a v2 message whose epoch key this device was never given (it was sent
+ * before this device was added). Another of the user's devices can share it later, so the open
+ * chat retries (iOS `ChatMessageItem.lockedHistoryText`). Distinct from the "New message" fallback.
+ */
+const val LOCKED_HISTORY_TEXT = "Encrypted message unavailable on this device"
+
+/** The in-bubble copy for a locked row (iOS `MessageBubbleView`). */
+const val LOCKED_HISTORY_BUBBLE_TEXT = "Sent before this device was added"
+
+/** The inbox preview for a locked row (iOS `InboxFormatting.textPreview`). */
+const val LOCKED_HISTORY_PREVIEW_TEXT = "🔒 Message from before this device"
+
+/** Encrypted before this device existed: shown as a locked row, not as message text. */
+fun Message.isLockedHistory(): Boolean = content == LOCKED_HISTORY_TEXT
+
 /** Chat list / previews: short label independent of encryption noise in [Message.content]. */
 fun Message.previewLabel(): String =
     when {
+        isLockedHistory() -> LOCKED_HISTORY_PREVIEW_TEXT
         isBeaconChatMessage() -> {
             val title = beaconTitleFromMetadata(metadata)?.trim()?.takeIf { it.isNotEmpty() }
             when {

@@ -3,6 +3,7 @@ package compose.project.click.click.telemetry
 import compose.project.click.click.data.SupabaseConfig
 import compose.project.click.click.data.api.ApiConfig
 import compose.project.click.click.data.api.installClickWebPlatformHeader // pragma: allowlist secret
+import compose.project.click.click.data.api.installClickWebTransportPolicy
 import compose.project.click.click.data.storage.createTokenStorage
 import compose.project.click.click.util.chatMediaDispatcher
 import compose.project.click.click.util.redactedRestMessage
@@ -149,6 +150,7 @@ object ConnectionFlowTelemetry {
                 json(json)
             }
             installClickWebPlatformHeader()
+            installClickWebTransportPolicy()
         }
     }
 

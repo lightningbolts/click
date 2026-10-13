@@ -1,6 +1,7 @@
 package compose.project.click.click.notifications
 
 import compose.project.click.click.data.SupabaseConfig
+import compose.project.click.click.data.api.installClickWebTransportPolicy
 import compose.project.click.click.data.storage.TokenStorage
 import compose.project.click.click.data.storage.createTokenStorage
 import io.ktor.client.HttpClient
@@ -34,6 +35,7 @@ class ChatPushNotifier(
                     },
                 )
             }
+            installClickWebTransportPolicy()
         }
 
     suspend fun notifyNewMessage(

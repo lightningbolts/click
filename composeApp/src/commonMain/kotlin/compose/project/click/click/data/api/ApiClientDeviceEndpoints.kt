@@ -14,6 +14,7 @@ import io.ktor.http.encodeURLPathPart
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlin.coroutines.cancellation.CancellationException
 
 /*
  * The account's devices on click-web: approving a new sign-in from a device already in use
@@ -175,6 +176,8 @@ private suspend fun <T> deviceCall(block: suspend () -> Result<T>): Result<T> =
         block()
     } catch (e: ClientRequestException) {
         codedFailure(e.response)
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }

@@ -11,6 +11,7 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.contentType
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlin.coroutines.cancellation.CancellationException
 
 /*
  * Email-approved chat history for the user's newer devices (click-web
@@ -67,6 +68,8 @@ internal suspend fun ChatApiClient.getHistoryBackfill(
         } else {
             Result.failure(Exception(readClickWebErrorMessage(response)))
         }
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }
@@ -89,6 +92,8 @@ internal suspend fun ChatApiClient.postKeyTransfer(
         } else {
             Result.failure(Exception(readClickWebErrorMessage(response)))
         }
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }
