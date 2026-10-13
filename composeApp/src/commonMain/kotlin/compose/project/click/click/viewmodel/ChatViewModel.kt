@@ -297,6 +297,9 @@ class ChatViewModel(
     internal var vibeCheckTimerJob: Job? = null
     internal var loadChatMessagesJob: Job? = null
     internal var pendingChatLoadId: String? = null
+
+    /** Visible-only reloads while the open chat shows locked history (sheet 10 A3). */
+    internal val lockedHistoryRetry = LockedHistoryRetryScheduler(viewModelScope) { reloadOpenChatForLockedHistory() }
     internal var inFlightLoadConnectionId: String? = null
     internal var lastTypingSent: Long = 0L
     internal val prefetchedChatPayloads = mutableMapOf<String, PrefetchedChatPayload>()

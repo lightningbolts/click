@@ -589,6 +589,7 @@ internal fun ChatViewModel.leaveChatRoomImpl(clearMessageSurface: Boolean = true
             }
     }
     clearSecureChatMediaCache()
+    lockedHistoryRetry.cancel()
     realtimeJob?.cancel()
     realtimeJob = null
     // Remove the realtime channels from Supabase. Track the detach as the
