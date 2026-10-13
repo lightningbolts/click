@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -43,6 +44,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
+import androidx.compose.material3.pulltorefresh.pullToRefresh
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -159,6 +163,7 @@ internal fun SettingsPage.parent(): SettingsPage =
 internal const val ACCOUNT_DELETION_URL = "https://joinclick.co/?tab=settings"
 internal const val WEB_DASHBOARD_URL = "https://joinclick.co"
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     onSignOut: () -> Unit = {},
@@ -179,6 +184,9 @@ fun SettingsScreen(
     val hasResolvedActiveAvailabilityIntents by availabilityViewModel.hasResolvedActiveAvailabilityIntents.collectAsState()
     val intentListFeedback by availabilityViewModel.intentListFeedback.collectAsState()
     val currentUser by AppDataManager.currentUser.collectAsState()
+    val devicesState by devicesViewModel.state.collectAsState()
+    val devicesRefreshing = devicesState.loading && devicesState.devices != null
+    val devicesPullState = rememberPullToRefreshState()
     val notificationPreferences by AppDataManager.notificationPreferences.collectAsState()
     val locationPreferences by AppDataManager.locationPreferences.collectAsState()
     val connections by AppDataManager.connections.collectAsState()
@@ -524,9 +532,9 @@ fun SettingsScreen(
                             SettingsDivider()
                             MeNavRow(Icons.Default.PrivacyTip, "Privacy & data", onClick = { settingsPage = SettingsPage.Privacy })
                             SettingsDivider()
-                            MeNavRow(Icons.Default.Shield, "Permissions", onClick = { settingsPage = SettingsPage.Permissions })
-                            SettingsDivider()
                             MeNavRow(Icons.Default.Devices, "Devices", onClick = { settingsPage = SettingsPage.Devices })
+                            SettingsDivider()
+                            MeNavRow(Icons.Default.Shield, "Permissions", onClick = { settingsPage = SettingsPage.Permissions })
                             SettingsDivider()
                             MeNavRow(
                                 icon = Icons.Default.Star,
@@ -602,8 +610,22 @@ fun SettingsScreen(
                                 modifier =
                                     Modifier
                                         .fillMaxSize()
-                                        .background(MaterialTheme.colorScheme.background),
+                                        .background(MaterialTheme.colorScheme.background)
+                                        // Pull to refresh on Devices only (sheet 10 §A5).
+                                        .pullToRefresh(
+                                            isRefreshing = devicesRefreshing,
+                                            state = devicesPullState,
+                                            enabled = settingsPage == SettingsPage.Devices,
+                                            onRefresh = devicesViewModel::load,
+                                        ),
                             ) {
+                            if (settingsPage == SettingsPage.Devices) {
+                                PullToRefreshDefaults.Indicator(
+                                    state = devicesPullState,
+                                    isRefreshing = devicesRefreshing,
+                                    modifier = Modifier.align(Alignment.TopCenter).padding(top = 96.dp).zIndex(1f),
+                                )
+                            }
                             AppScreenScaffold(
                                 title = settingsPage.title(),
                                 onOpenSearch = null,
@@ -1046,7 +1068,7 @@ fun SettingsScreen(
 
                     SettingsPage.Devices -> {
                         item {
-                            SettingsDevicesSection(viewModel = devicesViewModel)
+                            SettingsDevicesSection(viewModel = devicesViewModel, currentUserId = currentUser?.id)
                         }
                     }
 

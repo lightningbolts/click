@@ -117,10 +117,25 @@ data class MyDeviceDto(
     @SerialName("last_seen_at") val lastSeenAt: String? = null,
 )
 
+/** A raw `devices[]` row: `device_id` may be missing, and such rows are skipped. */
+@Serializable
+internal data class MyDeviceRowDto(
+    @SerialName("device_id") val deviceId: String? = null,
+    val label: String? = null,
+    @SerialName("created_at") val createdAt: String? = null,
+    @SerialName("last_seen_at") val lastSeenAt: String? = null,
+)
+
 @Serializable
 internal data class MyDevicesDto(
-    val devices: List<MyDeviceDto> = emptyList(),
-)
+    val devices: List<MyDeviceRowDto> = emptyList(),
+) {
+    /** The rows with an ID (iOS `ChatDevice.parse`). */
+    fun rows(): List<MyDeviceDto> =
+        devices.mapNotNull { row ->
+            row.deviceId?.takeIf { it.isNotBlank() }?.let { MyDeviceDto(it, row.label, row.createdAt, row.lastSeenAt) }
+        }
+}
 
 @Serializable
 internal data class ClickWebErrorCodeDto(
@@ -245,10 +260,10 @@ internal suspend fun ApiClient.emailDeviceApprovalLinkImpl(requestId: String): R
 internal suspend fun ApiClient.getMyDevicesImpl(): Result<List<MyDeviceDto>> =
     deviceCall {
         val response = clickWebClient.get("${ApiClient.clickWebAuthOrigin}/api/me/devices")
-        if (response.status.value in 200..299) Result.success(response.decode<MyDevicesDto>().devices) else codedFailure(response)
+        if (response.status.value in 200..299) Result.success(response.decode<MyDevicesDto>().rows()) else codedFailure(response)
     }
 
-/** `DELETE /api/chat/devices?device_id=` — signs that device out of secure messaging. */
+/** `DELETE /api/chat/devices?device_id=` — stops that device reading new messages; its sign-in is untouched. */
 internal suspend fun ApiClient.removeChatDeviceImpl(deviceId: String): Result<Unit> =
     deviceCall {
         val response =
