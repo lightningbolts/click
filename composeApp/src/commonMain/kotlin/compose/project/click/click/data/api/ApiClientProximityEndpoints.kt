@@ -14,6 +14,7 @@ import io.ktor.http.contentType
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * POST `/api/connections/proximity` — tri-factor proximity bind (JWT bearer).
@@ -108,6 +109,8 @@ internal suspend fun ApiClient.postProximityHandshakeImpl(
             }
         }
         clickWebFailure(e.response)
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }
@@ -173,6 +176,8 @@ internal suspend fun ApiClient.postProximityConfirmSelectionImpl(
         }
     } catch (e: ClientRequestException) {
         clickWebFailure(e.response)
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }
@@ -209,6 +214,8 @@ internal suspend fun ApiClient.postProximitySelectionExclusionsImpl(
         if (response.status.value in 200..299) Result.success(Unit) else clickWebFailure(response)
     } catch (e: ClientRequestException) {
         clickWebFailure(e.response)
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }
@@ -250,6 +257,8 @@ internal suspend fun ApiClient.getPendingProximityHandshakeImpl(
         }
     } catch (e: ClientRequestException) {
         clickWebFailure(e.response)
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }

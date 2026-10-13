@@ -28,6 +28,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 
@@ -61,6 +62,7 @@ class ApiClient {
                 }
                 installClickWebBearerAuth(tokenStorage)
                 installClickWeb403RetryInterceptor(tokenStorage)
+                installClickWebTransportPolicy()
             }
         }
     internal val clickWebClient: HttpClient get() = clickWebClientLazy.value
@@ -72,6 +74,7 @@ class ApiClient {
                     json(json)
                 }
                 installClickWebPlatformHeader()
+                installClickWebTransportPolicy()
             }
         }
     internal val clickWebPlainClient: HttpClient get() = clickWebPlainClientLazy.value
@@ -94,6 +97,8 @@ class ApiClient {
                 println("ApiClient.testSecurePing: failed status=${response.status.value} body=$errText")
                 Result.failure(Exception("Ping failed (${response.status.value}): $errText"))
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             println("ApiClient.testSecurePing: exception ${e.redactedRestMessage()}")
             Result.failure(e)
@@ -149,6 +154,7 @@ class ApiClient {
                 )
             val response =
                 clickWebClient.post("$clickWebAuthOrigin/api/user/avatar") {
+                    longTransfer()
                     contentType(ContentType.Application.Json)
                     setBody(payload)
                 }
@@ -163,6 +169,8 @@ class ApiClient {
             } else {
                 Result.failure(Exception(readClickWebErrorMessage(response)))
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -186,6 +194,7 @@ class ApiClient {
                 )
             val response =
                 clickWebClient.post("$clickWebAuthOrigin/api/beacons/image") {
+                    longTransfer()
                     contentType(ContentType.Application.Json)
                     setBody(payload)
                 }
@@ -200,6 +209,8 @@ class ApiClient {
             } else {
                 Result.failure(Exception(readClickWebErrorMessage(response)))
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -213,6 +224,8 @@ class ApiClient {
         return try {
             val response = clickWebClient.delete("${ApiClient.clickWebAuthOrigin}/api/groups/$gid/avatar")
             if (response.status.value in 200..299) Result.success(Unit) else clickWebFailure(response)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -237,6 +250,7 @@ class ApiClient {
                 )
             val response =
                 clickWebClient.post("$clickWebAuthOrigin/api/groups/$gid/avatar") {
+                    longTransfer()
                     contentType(ContentType.Application.Json)
                     setBody(payload)
                 }
@@ -251,6 +265,8 @@ class ApiClient {
             } else {
                 Result.failure(Exception(readClickWebErrorMessage(response)))
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -326,6 +342,8 @@ class ApiClient {
             } else {
                 Result.failure(Exception(readClickWebErrorMessage(response)))
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -355,6 +373,8 @@ class ApiClient {
             } else {
                 Result.failure(Exception(readClickWebErrorMessage(response)))
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -380,6 +400,8 @@ class ApiClient {
             } else {
                 Result.failure(Exception(readClickWebErrorMessage(response)))
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -399,6 +421,8 @@ class ApiClient {
             } else {
                 Result.failure(Exception(readClickWebErrorMessage(response)))
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -429,6 +453,8 @@ class ApiClient {
             } else {
                 Result.failure(Exception(readClickWebErrorMessage(response)))
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -452,6 +478,8 @@ class ApiClient {
             } else {
                 Result.failure(Exception(readClickWebErrorMessage(response)))
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -496,6 +524,8 @@ class ApiClient {
             } else {
                 Result.failure(Exception(readClickWebErrorMessage(response)))
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -517,6 +547,8 @@ class ApiClient {
             }
         } catch (e: ClientRequestException) {
             Result.failure(Exception(readClickWebErrorMessage(e.response)))
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -537,6 +569,8 @@ class ApiClient {
             }
         } catch (e: ClientRequestException) {
             Result.failure(Exception(readClickWebErrorMessage(e.response)))
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -592,6 +626,8 @@ class ApiClient {
             }
         } catch (e: ClientRequestException) {
             Result.failure(Exception(readClickWebErrorMessage(e.response)))
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -616,6 +652,8 @@ class ApiClient {
             }
         } catch (e: ClientRequestException) {
             Result.failure(Exception(readClickWebErrorMessage(e.response)))
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -644,6 +682,8 @@ class ApiClient {
             }
         } catch (e: ClientRequestException) {
             Result.failure(Exception(readClickWebErrorMessage(e.response)))
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -677,6 +717,8 @@ class ApiClient {
             }
         } catch (e: ClientRequestException) {
             Result.failure(Exception(readClickWebErrorMessage(e.response)))
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Result.failure(e)
         }

@@ -39,12 +39,15 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -180,6 +183,21 @@ object AppDataManager {
                 .sortedByDescending { it.bookmarkedAt.orEmpty() }
                 .take(SAVED_EVENT_BOOKMARKS_LIMIT)
         schedulePersistSnapshot()
+        HomeDiskCaches.savedEvents.store(_currentUser.value?.id, _cachedEventBookmarks.value)
+    }
+
+    /**
+     * Saved events for the first frame (sheet 07 G1-5): when nothing is in memory yet (cold start,
+     * before the snapshot restores), read the user's disk copy synchronously. Returns what Home shows.
+     */
+    fun seedEventBookmarksFromDisk(userId: String?): List<compose.project.click.click.data.api.EventBookmarkItemDto> { // pragma: allowlist secret
+        if (_cachedEventBookmarks.value.isEmpty()) {
+            HomeDiskCaches.savedEvents
+                .seed(userId)
+                ?.takeIf { it.isNotEmpty() }
+                ?.let { _cachedEventBookmarks.value = it }
+        }
+        return _cachedEventBookmarks.value
     }
 
     /** True after the startup beacon/hub prefetch attempt finishes (success, empty, or failure). */
@@ -288,6 +306,23 @@ object AppDataManager {
      */
     internal val _inboxFeedChats = MutableStateFlow<List<ChatWithDetails>>(emptyList())
     val inboxFeedChats: StateFlow<List<ChatWithDetails>> = _inboxFeedChats.asStateFlow()
+
+    /** The live inbox's unread sum, once a [compose.project.click.click.viewmodel.ChatViewModel] has loaded it. */
+    internal val _liveInboxUnreadTotal = MutableStateFlow<Int?>(null)
+
+    /**
+     * The Clicks-tab badge count (sheet 11 B2): the live inbox when it has loaded, otherwise the
+     * inbox rows restored from disk, so the badge paints on the first frame.
+     */
+    val clicksUnreadTotal: StateFlow<Int> by lazy {
+        combine(_liveInboxUnreadTotal, _inboxFeedChats, _archivedConnectionIds, _hiddenConnectionIds) { live, feed, archived, hidden ->
+            live ?: InboxUnreadBadge.total(feed, archived, hidden)
+        }.stateIn(scope, SharingStarted.Eagerly, 0)
+    }
+
+    fun publishInboxUnreadTotal(total: Int) {
+        _liveInboxUnreadTotal.value = total.coerceAtLeast(0)
+    }
 
     fun persistInboxFeedChats(chats: List<ChatWithDetails>) {
         _inboxFeedChats.value = dedupeOneToOneChatsByPeer(chats)

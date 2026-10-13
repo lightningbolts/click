@@ -16,6 +16,7 @@ import io.ktor.http.contentType
 import kotlinx.datetime.Instant
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
+import kotlin.coroutines.cancellation.CancellationException
 
 /** Develop endpoints the develop flow needs (fakeable in tests). */
 interface ClickDropService {
@@ -95,6 +96,8 @@ class DropsApi(
             if (response.status.value in 200..299) Result.success(Unit) else api.clickWebFailure(response)
         } catch (e: ClientRequestException) {
             api.clickWebFailure(e.response)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Result.failure(e)
         }

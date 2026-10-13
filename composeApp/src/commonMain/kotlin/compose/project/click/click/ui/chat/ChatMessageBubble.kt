@@ -65,6 +65,7 @@ import compose.project.click.click.data.models.hubMediaPathOrNull
 import compose.project.click.click.data.models.isBeaconChatMessage
 import compose.project.click.click.data.models.isDeletedPlaceholder
 import compose.project.click.click.data.models.isEncryptedMedia
+import compose.project.click.click.data.models.isLockedHistory
 import compose.project.click.click.data.models.mediaUrlOrNull
 import compose.project.click.click.data.models.parsedMediaMetadata
 import compose.project.click.click.data.models.planOrNull
@@ -656,7 +657,9 @@ fun ChatMessageBubble(
                                                     allowNativeSelection = !enableMessageContextMenu,
                                                 ) {
                                                     Column {
-                                                        if (message.content.isNotBlank()) {
+                                                        if (message.isLockedHistory()) {
+                                                            LockedHistoryBubbleText(color = Color.White)
+                                                        } else if (message.content.isNotBlank()) {
                                                             ChatLinkifyText(
                                                                 text = message.content,
                                                                 color = Color.White,
@@ -854,7 +857,9 @@ fun ChatMessageBubble(
                                                     allowNativeSelection = !enableMessageContextMenu,
                                                 ) {
                                                     Column {
-                                                        if (message.content.isNotBlank()) {
+                                                        if (message.isLockedHistory()) {
+                                                            LockedHistoryBubbleText(color = onBody)
+                                                        } else if (message.content.isNotBlank()) {
                                                             ChatLinkifyText(
                                                                 text = message.content,
                                                                 color = onBody,

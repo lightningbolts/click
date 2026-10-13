@@ -64,11 +64,20 @@ private object E2eeV2HealThrottle {
     private val mutex = Mutex()
     private val lastAttemptMs = mutableMapOf<String, Long>()
 
-    suspend fun tryAcquire(chatId: String): Boolean =
+    /**
+     * Shared-history re-reads (iOS `ChatRepository.swift:484`): a key transfer can finish seconds
+     * after an email approval, so a locked thread re-reads its envelopes at most every 2 s.
+     */
+    const val SHARED_HISTORY_REFRESH_INTERVAL_MS = 2_000L
+
+    suspend fun tryAcquire(
+        chatId: String,
+        intervalMs: Long = HEAL_INTERVAL_MS,
+    ): Boolean =
         mutex.withLock {
             val now = Clock.System.now().toEpochMilliseconds()
             val last = lastAttemptMs[chatId]
-            if (last != null && now - last < HEAL_INTERVAL_MS) return@withLock false
+            if (last != null && now - last < intervalMs) return@withLock false
             lastAttemptMs[chatId] = now
             true
         }
@@ -128,13 +137,15 @@ internal fun missingV2Epochs(
 
 /**
  * Re-reads this device's epoch envelopes (no lifecycle changes) so keys shared by the user's other
- * devices after an email approval become usable. Throttled per chat like [healE2eeV2Access].
+ * devices after an email approval become usable. Throttled per chat to one read every 2 s.
  */
 internal suspend fun SupabaseChatRepository.refreshE2eeV2SessionForSharedHistory(
     chatId: String,
     viewerUserId: String,
 ): E2eeV2ChatSession? {
-    if (!E2eeV2HealThrottle.tryAcquire("history:$chatId")) return null
+    if (!E2eeV2HealThrottle.tryAcquire("history:$chatId", E2eeV2HealThrottle.SHARED_HISTORY_REFRESH_INTERVAL_MS)) {
+        return null
+    }
     return try {
         resolveE2eeV2ChatCrypto(chatId, viewerUserId, forceRefresh = true)
     } catch (e: CancellationException) {
@@ -630,8 +641,9 @@ internal fun SupabaseChatRepository.decryptMessageOnCurrentThread(
             message
         } else if (crypto == null) {
             if (MessageCrypto.isAnyE2eeWireContent(message.content)) {
-                if (MessageCrypto.isV2Encrypted(message.content) && effectiveV2Crypto != null) {
-                    decryptV2Message(message, effectiveV2Crypto)
+                if (MessageCrypto.isV2Encrypted(message.content)) {
+                    effectiveV2Crypto?.let { decryptV2Message(message, it) }
+                        ?: message.copy(content = LOCKED_HISTORY_TEXT)
                 } else {
                     message.copy(content = "New message")
                 }
@@ -647,7 +659,7 @@ internal fun SupabaseChatRepository.decryptMessageOnCurrentThread(
                         ) {
                             decryptV2Message(message, effectiveV2Crypto)
                         } else {
-                            message.copy(content = "New message")
+                            message.copy(content = LOCKED_HISTORY_TEXT)
                         }
                     } else if (!MessageCrypto.isGroupMessageEncrypted(message.content)) {
                         if (MessageCrypto.isEncrypted(message.content)) {
@@ -668,7 +680,7 @@ internal fun SupabaseChatRepository.decryptMessageOnCurrentThread(
                         ) {
                             decryptV2Message(message, effectiveV2Crypto)
                         } else {
-                            message.copy(content = "New message")
+                            message.copy(content = LOCKED_HISTORY_TEXT)
                         }
                     } else if (!MessageCrypto.isEncrypted(message.content)) {
                         message
@@ -696,7 +708,8 @@ private fun decryptV2Message(
                 senderDeviceId = envelope.senderDeviceId,
                 clientMessageId = envelope.clientMessageId,
             )
-        val epochKey = session.epochKeys[envelope.epoch] ?: error("E2EE v2 epoch key is unavailable")
+        // No key for this epoch: sent before this device was added (locked history), not a failure.
+        val epochKey = session.epochKeys[envelope.epoch] ?: return message.copy(content = LOCKED_HISTORY_TEXT)
         message.copy(content = MessageCryptoV2.decryptMessage(metadata, epochKey, message.content, session.replayGuard))
     }.getOrElse { e ->
         message.copy(content = "New message")

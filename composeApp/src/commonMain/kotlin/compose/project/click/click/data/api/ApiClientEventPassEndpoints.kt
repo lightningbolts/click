@@ -17,6 +17,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
+import kotlin.coroutines.cancellation.CancellationException
 
 @Serializable
 internal data class PassScanBody(
@@ -54,6 +55,8 @@ suspend fun ApiClient.getEventPass(beaconId: String): ClickPassFetch {
         passFetchFrom(response)
     } catch (e: ClientRequestException) {
         passFetchFrom(e.response)
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         ClickPassFetch.Failed(e.message ?: "Couldn't load your pass")
     }
@@ -108,6 +111,8 @@ suspend fun ApiClient.scanEventPass(
     } catch (e: ClientRequestException) {
         val error = readClickWebErrorBody(e.response)
         Result.failure(ClickWebRequestException(error.status, error.message))
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }

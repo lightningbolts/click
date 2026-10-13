@@ -12,6 +12,7 @@ import io.ktor.http.contentType
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import kotlin.coroutines.cancellation.CancellationException
 
 /** POST `/api/connections/archive` — per-user archive junction (`connection_archives`). */
 internal suspend fun ApiClient.postConnectionArchiveImpl(connectionId: String): Result<Unit> {
@@ -28,6 +29,8 @@ internal suspend fun ApiClient.postConnectionArchiveImpl(connectionId: String): 
         } else {
             Result.failure(Exception(readClickWebErrorMessage(response)))
         }
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }
@@ -48,6 +51,8 @@ internal suspend fun ApiClient.postConnectionUnarchiveImpl(connectionId: String)
         } else {
             Result.failure(Exception(readClickWebErrorMessage(response)))
         }
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }
@@ -68,6 +73,8 @@ internal suspend fun ApiClient.postConnectionCoreImpl(connectionId: String): Res
         } else {
             Result.failure(Exception(readClickWebErrorMessage(response)))
         }
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }
@@ -88,6 +95,8 @@ internal suspend fun ApiClient.fetchConnectionCoreIdsImpl(): Result<Set<String>>
         } else {
             Result.failure(Exception(readClickWebErrorMessage(response)))
         }
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }
@@ -106,6 +115,8 @@ internal suspend fun ApiClient.deleteConnectionCoreImpl(connectionId: String): R
         } else {
             Result.failure(Exception(readClickWebErrorMessage(response)))
         }
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }
@@ -126,6 +137,8 @@ internal suspend fun ApiClient.postConnectionHideImpl(connectionId: String): Res
         } else {
             Result.failure(Exception(readClickWebErrorMessage(response)))
         }
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }
@@ -150,6 +163,8 @@ internal suspend fun ApiClient.postOpenCollaborationSessionImpl(connectionId: St
         }
     } catch (e: ClientRequestException) {
         clickWebFailure(e.response)
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }
@@ -174,6 +189,8 @@ internal suspend fun ApiClient.postOpenCollaborationSessionForChatImpl(chatId: S
         }
     } catch (e: ClientRequestException) {
         clickWebFailure(e.response)
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }
@@ -206,6 +223,8 @@ internal suspend fun ApiClient.postOpenCollaborationSessionFallbackImpl(connecti
         }
     } catch (e: ClientRequestException) {
         clickWebFailure(e.response)
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }

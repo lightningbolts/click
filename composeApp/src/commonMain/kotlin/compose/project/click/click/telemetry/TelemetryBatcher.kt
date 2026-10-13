@@ -3,6 +3,7 @@ package compose.project.click.click.telemetry
 import compose.project.click.click.data.SupabaseConfig
 import compose.project.click.click.data.api.ApiConfig
 import compose.project.click.click.data.api.installClickWebPlatformHeader // pragma: allowlist secret
+import compose.project.click.click.data.api.installClickWebTransportPolicy
 import compose.project.click.click.util.chatMediaDispatcher
 import compose.project.click.click.util.redactedRestMessage
 import io.github.jan.supabase.auth.auth
@@ -76,6 +77,7 @@ object TelemetryBatcher {
                 json(json)
             }
             installClickWebPlatformHeader()
+            installClickWebTransportPolicy()
         }
     }
 

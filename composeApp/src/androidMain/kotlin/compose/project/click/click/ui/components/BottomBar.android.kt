@@ -27,6 +27,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -48,6 +50,13 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -57,6 +66,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import compose.project.click.click.data.AppDataManager
+import compose.project.click.click.data.InboxUnreadBadge
 import compose.project.click.click.navigation.NavigationItem
 import compose.project.click.click.ui.theme.NeonPurple
 import compose.project.click.click.ui.theme.PrimaryBlue
@@ -153,7 +163,15 @@ private fun MaterialBottomBarItem(
     val scheme = MaterialTheme.colorScheme
     val isAdd = item.route == NavigationItem.AddClick.route
     val isMe = item.route == NavigationItem.Settings.route
+    val isClicks = item.route == NavigationItem.Connections.route
     val currentUser by AppDataManager.currentUser.collectAsState()
+    // Clicks-tab unread badge (sheet 11 B2; iOS `.badge(conversations.unreadTotal)`).
+    val unreadTotal by AppDataManager.clicksUnreadTotal.collectAsState()
+    val unread = if (isClicks) unreadTotal else 0
+    val badgeLabel = InboxUnreadBadge.label(unread)
+    val itemDescription = InboxUnreadBadge.contentDescription(item.title, unread)
+    val isSelected = selected
+    val onItemClick = onClick
     val avatarUrl = currentUser?.image?.trim()?.takeIf { it.isNotEmpty() }
     val accent = if (isDark) NeonPurple else PrimaryBlue
 
@@ -188,7 +206,16 @@ private fun MaterialBottomBarItem(
                     indication = ripple(bounded = false, radius = 36.dp, color = accent.copy(alpha = 0.2f)),
                     enabled = enabled,
                     onClick = onClick,
-                ).padding(vertical = 6.dp),
+                ).clearAndSetSemantics {
+                    contentDescription = itemDescription
+                    role = Role.Tab
+                    this.selected = isSelected
+                    if (!enabled) disabled()
+                    onClick(label = null) {
+                        onItemClick()
+                        true
+                    }
+                }.padding(vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
@@ -221,6 +248,22 @@ private fun MaterialBottomBarItem(
                         contentDescription = item.title,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize(),
+                    )
+                }
+            } else if (badgeLabel != null) {
+                BadgedBox(
+                    badge = {
+                        Badge(
+                            containerColor = MaterialTheme.colorScheme.error,
+                            contentColor = MaterialTheme.colorScheme.onError,
+                        ) { Text(badgeLabel) }
+                    },
+                ) {
+                    Icon(
+                        imageVector = item.androidIcon(),
+                        contentDescription = null,
+                        tint = iconColor,
+                        modifier = Modifier.size(24.dp),
                     )
                 }
             } else {

@@ -12,6 +12,7 @@ import io.ktor.client.request.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.serialization.json.Json
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 
@@ -30,6 +31,7 @@ internal suspend fun ChatApiClient.uploadMediaImpl(
         val encoded = Base64.encode(fileBytes)
         val response =
             client.post("$clickWebBaseUrl/api/chat/media") {
+                longTransfer()
                 headers.append(HttpHeaders.Authorization, bearerAuthHeader(authToken))
                 contentType(ContentType.Application.Json)
                 setBody(
@@ -66,6 +68,8 @@ internal suspend fun ChatApiClient.uploadMediaImpl(
         } else {
             Result.failure(Exception("Failed to upload media: ${response.status}"))
         }
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }
@@ -92,6 +96,7 @@ internal suspend fun ChatApiClient.uploadAttachmentImpl(
         val encoded = Base64.encode(fileBytes)
         val response =
             client.post("$clickWebBaseUrl/api/chat/attachments") {
+                longTransfer()
                 headers.append(HttpHeaders.Authorization, bearerAuthHeader(authToken))
                 contentType(ContentType.Application.Json)
                 setBody(
@@ -119,6 +124,8 @@ internal suspend fun ChatApiClient.uploadAttachmentImpl(
         } else {
             Result.failure(Exception("Failed to upload attachment: ${response.status}"))
         }
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }
@@ -148,6 +155,8 @@ internal suspend fun ChatApiClient.signAttachmentUrlImpl(
         } else {
             Result.failure(Exception("Failed to sign attachment: ${response.status}"))
         }
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }
@@ -156,12 +165,14 @@ internal suspend fun ChatApiClient.signAttachmentUrlImpl(
 /** Download raw ciphertext bytes for a signed attachment URL. */
 internal suspend fun ChatApiClient.downloadAttachmentBytesImpl(signedUrl: String): Result<ByteArray> =
     try {
-        val response = client.get(signedUrl)
+        val response = client.get(signedUrl) { longTransfer() }
         if (response.status.value in 200..299) {
             Result.success(response.body<ByteArray>())
         } else {
             Result.failure(Exception("Attachment download failed: ${response.status}"))
         }
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }

@@ -15,6 +15,7 @@ import io.ktor.http.contentType
 import io.ktor.http.encodeURLPathPart
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 
@@ -98,6 +99,7 @@ class SharedDropsApi(
         call {
             val response =
                 api.clickWebClient.post(base) {
+                    longTransfer()
                     contentType(ContentType.Application.Json)
                     setBody(
                         SharedDropCreateBody(
@@ -132,7 +134,7 @@ class SharedDropsApi(
     /** A developed original's bytes from its signed URL (shared drops aren't E2EE). */
     suspend fun download(url: String): Result<ByteArray> =
         call {
-            val response = api.clickWebPlainClient.get(url)
+            val response = api.clickWebPlainClient.get(url) { longTransfer() }
             if (response.status.value in
                 200..299
             ) {
@@ -147,6 +149,8 @@ class SharedDropsApi(
             block()
         } catch (e: ClientRequestException) {
             if (e.response.status.value == 409) Result.failure(SharedDropPostException.CapReached()) else Result.failure(e)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Result.failure(e)
         }

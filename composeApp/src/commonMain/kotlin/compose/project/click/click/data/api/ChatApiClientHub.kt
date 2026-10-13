@@ -20,6 +20,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import kotlin.coroutines.cancellation.CancellationException
 
 internal const val EVENT_HUB_ACCESS_DENIED_MARKER = "EVENT_HUB_ACCESS_DENIED"
 internal const val HUB_ACCESS_DENIED_USER_MESSAGE = "Check in to this event to join the hub."
@@ -69,6 +70,8 @@ internal suspend fun ChatApiClient.sendHubMessageImpl(
                 }
             Result.failure(Exception(message))
         }
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         println("Error sending hub message: ${e.redactedRestMessage()}")
         Result.failure(e)
@@ -95,6 +98,8 @@ internal suspend fun ChatApiClient.addHubReactionImpl(
             val body = runCatching { response.bodyAsText() }.getOrNull().orEmpty()
             Result.failure(Exception(body.ifBlank { "Failed to add Hub reaction: ${response.status}" }))
         }
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }
@@ -120,6 +125,8 @@ internal suspend fun ChatApiClient.removeHubReactionImpl(
             val body = runCatching { response.bodyAsText() }.getOrNull().orEmpty()
             Result.failure(Exception(body.ifBlank { "Failed to remove Hub reaction: ${response.status}" }))
         }
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }
@@ -146,6 +153,8 @@ internal suspend fun ChatApiClient.editHubMessageImpl(
             val errorBody = runCatching { response.bodyAsText() }.getOrNull().orEmpty()
             Result.failure(Exception(errorBody.ifBlank { "Failed to edit Hub message: ${response.status}" }))
         }
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }
@@ -170,6 +179,8 @@ internal suspend fun ChatApiClient.deleteHubMessageImpl(
             val errorBody = runCatching { response.bodyAsText() }.getOrNull().orEmpty()
             Result.failure(Exception(errorBody.ifBlank { "Failed to delete Hub message: ${response.status}" }))
         }
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }
@@ -194,6 +205,7 @@ internal suspend fun ChatApiClient.uploadHubMediaImpl(
     return try {
         val response =
             client.post("$clickWebBaseUrl/api/hub/media") {
+                longTransfer()
                 headers.append(HttpHeaders.Authorization, bearerAuthHeader(authToken))
                 setBody(
                     MultiPartFormDataContent(
@@ -230,6 +242,8 @@ internal suspend fun ChatApiClient.uploadHubMediaImpl(
                 }
             Result.failure(Exception(message))
         }
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }
@@ -254,6 +268,8 @@ internal suspend fun ChatApiClient.resolveHubMediaUrlImpl(
         } else {
             Result.failure(Exception("Failed to access hub media: ${response.status}"))
         }
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }
@@ -281,6 +297,8 @@ internal suspend fun ChatApiClient.addCliqueMemberImpl(
             val errorBody = runCatching { response.bodyAsText() }.getOrNull().orEmpty()
             Result.failure(Exception(errorBody.ifBlank { "Failed to add member: ${response.status}" }))
         }
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }
@@ -308,6 +326,8 @@ internal suspend fun ChatApiClient.removeCliqueMemberImpl(
             val errorBody = runCatching { response.bodyAsText() }.getOrNull().orEmpty()
             Result.failure(Exception(errorBody.ifBlank { "Failed to remove member: ${response.status}" }))
         }
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }
@@ -335,6 +355,8 @@ internal suspend fun ChatApiClient.updateHubImpl(
         } else {
             Result.failure(Exception("Failed to update hub: ${response.status}"))
         }
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }
@@ -354,6 +376,8 @@ internal suspend fun ChatApiClient.getHubDetailsImpl(
             val message = runCatching { response.bodyAsText() }.getOrNull().orEmpty()
             Result.failure(Exception(message.ifBlank { "Failed to fetch hub: ${response.status}" }))
         }
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }
@@ -372,6 +396,8 @@ internal suspend fun ChatApiClient.deleteHubImpl(
         } else {
             Result.failure(Exception("Failed to delete hub: ${response.status}"))
         }
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }
@@ -393,6 +419,8 @@ internal suspend fun ChatApiClient.leaveHubImpl(
             val message = runCatching { response.bodyAsText() }.getOrNull().orEmpty()
             Result.failure(Exception(message.ifBlank { "Failed to leave hub: ${response.status}" }))
         }
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }
@@ -447,6 +475,8 @@ internal suspend fun ChatApiClient.fetchHubThreadImpl(
             if (!retry.isNullOrBlank()) return getOnce(retry)
         }
         first
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         println("Error fetching hub thread: ${e.redactedRestMessage()}")
         Result.failure(e)
@@ -494,6 +524,8 @@ internal suspend fun ChatApiClient.searchConversationsImpl(
             }
         }
         first
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         println("Error searching conversations: ${e.redactedRestMessage()}")
         Result.failure(e)

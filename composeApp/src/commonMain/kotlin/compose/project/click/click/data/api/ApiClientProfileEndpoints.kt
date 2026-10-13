@@ -19,6 +19,7 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * GET `/api/users/{userId}/profile` on click-web (JWT via Ktor Auth bearer).
@@ -41,6 +42,8 @@ internal suspend fun ApiClient.getUserProfileImpl(userId: String): Result<UserPr
         } else {
             Result.failure(Exception(readClickWebErrorMessage(response)))
         }
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }
@@ -68,6 +71,8 @@ internal suspend fun ApiClient.getProfileTimelineImpl(
         } else {
             Result.failure(Exception(readClickWebErrorMessage(response)))
         }
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }
@@ -107,6 +112,8 @@ internal suspend fun ApiClient.postProfileTimelineJournalEntryImpl(
         } else {
             Result.failure(Exception(readClickWebErrorMessage(response)))
         }
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }
@@ -137,6 +144,8 @@ internal suspend fun ApiClient.putProfileTimelineJournalEntryImpl(
         } else {
             Result.failure(Exception(readClickWebErrorMessage(response)))
         }
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }
@@ -160,6 +169,8 @@ internal suspend fun ApiClient.deleteProfileTimelineJournalEntryImpl(id: String)
         } else {
             Result.failure(Exception(readClickWebErrorMessage(response)))
         }
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }
@@ -180,6 +191,8 @@ internal suspend fun ApiClient.getActivityRecapImpl(window: String = "week"): Re
         } else {
             Result.failure(Exception(readClickWebErrorMessage(response)))
         }
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }
@@ -212,6 +225,8 @@ internal suspend fun ApiClient.getConnectionTabsImpl(
         } else {
             Result.failure(Exception(readClickWebErrorMessage(response)))
         }
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }
@@ -271,6 +286,8 @@ internal suspend fun ApiClient.patchUserProfileImpl(
         } else {
             Result.failure(Exception(readClickWebErrorMessage(response)))
         }
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }

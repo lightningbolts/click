@@ -18,6 +18,7 @@ kotlin = "2.3.21"
 kotlinx-coroutines = "1.10.2"
 kotlinx-serialization = "1.7.3"
 krypto = "4.0.10"
+ktor = "3.0.1"
 secrets = "2.0.1"
 spotless = "7.0.4"
 
@@ -38,6 +39,7 @@ androidx-arch-core-testing = { module = "androidx.arch.core:core-testing", versi
 androidx-test-core = { module = "androidx.test:core", version.ref = "androidx-test-core" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization" }
 krypto = { module = "com.soywiz.korlibs.krypto:krypto", version.ref = "krypto" }
+ktor-client-mock = { module = "io.ktor:ktor-client-mock", version.ref = "ktor" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }
