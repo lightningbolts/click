@@ -39,12 +39,15 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -304,6 +307,23 @@ object AppDataManager {
             it.connection.id == threadId || it.chat.id == threadId
         }
     }
+    /** The live inbox's unread sum, once a [compose.project.click.click.viewmodel.ChatViewModel] has loaded it. */
+    internal val _liveInboxUnreadTotal = MutableStateFlow<Int?>(null)
+
+    /**
+     * The Clicks-tab badge count (sheet 11 B2): the live inbox when it has loaded, otherwise the
+     * inbox rows restored from disk, so the badge paints on the first frame.
+     */
+    val clicksUnreadTotal: StateFlow<Int> by lazy {
+        combine(_liveInboxUnreadTotal, _inboxFeedChats, _archivedConnectionIds, _hiddenConnectionIds) { live, feed, archived, hidden ->
+            live ?: InboxUnreadBadge.total(feed, archived, hidden)
+        }.stateIn(scope, SharingStarted.Eagerly, 0)
+    }
+
+    fun publishInboxUnreadTotal(total: Int) {
+        _liveInboxUnreadTotal.value = total.coerceAtLeast(0)
+    }
+
 
     fun persistProfileTimelineCaches() {
         scope.launch { persistSnapshot() }
