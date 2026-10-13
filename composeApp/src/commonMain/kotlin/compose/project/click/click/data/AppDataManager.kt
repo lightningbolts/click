@@ -183,6 +183,21 @@ object AppDataManager {
                 .sortedByDescending { it.bookmarkedAt.orEmpty() }
                 .take(SAVED_EVENT_BOOKMARKS_LIMIT)
         schedulePersistSnapshot()
+        HomeDiskCaches.savedEvents.store(_currentUser.value?.id, _cachedEventBookmarks.value)
+    }
+
+    /**
+     * Saved events for the first frame (sheet 07 G1-5): when nothing is in memory yet (cold start,
+     * before the snapshot restores), read the user's disk copy synchronously. Returns what Home shows.
+     */
+    fun seedEventBookmarksFromDisk(userId: String?): List<compose.project.click.click.data.api.EventBookmarkItemDto> { // pragma: allowlist secret
+        if (_cachedEventBookmarks.value.isEmpty()) {
+            HomeDiskCaches.savedEvents
+                .seed(userId)
+                ?.takeIf { it.isNotEmpty() }
+                ?.let { _cachedEventBookmarks.value = it }
+        }
+        return _cachedEventBookmarks.value
     }
 
     /** True after the startup beacon/hub prefetch attempt finishes (success, empty, or failure). */
@@ -292,21 +307,6 @@ object AppDataManager {
     internal val _inboxFeedChats = MutableStateFlow<List<ChatWithDetails>>(emptyList())
     val inboxFeedChats: StateFlow<List<ChatWithDetails>> = _inboxFeedChats.asStateFlow()
 
-    fun persistInboxFeedChats(chats: List<ChatWithDetails>) {
-        _inboxFeedChats.value = dedupeOneToOneChatsByPeer(chats)
-        scope.launch { schedulePersistSnapshot() }
-    }
-
-    /** In-memory inbox row for opening a thread without refetching the full inbox. */
-    fun chatInboxRowForThread(
-        threadId: String,
-        userId: String,
-    ): ChatWithDetails? {
-        if (_currentUser.value?.id != userId || threadId.isBlank()) return null
-        return _inboxFeedChats.value.firstOrNull {
-            it.connection.id == threadId || it.chat.id == threadId
-        }
-    }
     /** The live inbox's unread sum, once a [compose.project.click.click.viewmodel.ChatViewModel] has loaded it. */
     internal val _liveInboxUnreadTotal = MutableStateFlow<Int?>(null)
 
@@ -324,6 +324,21 @@ object AppDataManager {
         _liveInboxUnreadTotal.value = total.coerceAtLeast(0)
     }
 
+    fun persistInboxFeedChats(chats: List<ChatWithDetails>) {
+        _inboxFeedChats.value = dedupeOneToOneChatsByPeer(chats)
+        scope.launch { schedulePersistSnapshot() }
+    }
+
+    /** In-memory inbox row for opening a thread without refetching the full inbox. */
+    fun chatInboxRowForThread(
+        threadId: String,
+        userId: String,
+    ): ChatWithDetails? {
+        if (_currentUser.value?.id != userId || threadId.isBlank()) return null
+        return _inboxFeedChats.value.firstOrNull {
+            it.connection.id == threadId || it.chat.id == threadId
+        }
+    }
 
     fun persistProfileTimelineCaches() {
         scope.launch { persistSnapshot() }

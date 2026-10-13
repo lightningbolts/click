@@ -6,6 +6,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.ClickWebAuthCoordinator // pragma: allowlist secret
+import compose.project.click.click.data.HomeDiskCaches // pragma: allowlist secret
+import compose.project.click.click.data.HomeFeedSnapshot // pragma: allowlist secret
 import compose.project.click.click.data.api.ApiClient // pragma: allowlist secret
 import compose.project.click.click.data.api.EventBookmarkItemDto // pragma: allowlist secret
 import compose.project.click.click.data.models.AvailabilityIntentRow // pragma: allowlist secret
@@ -41,6 +43,7 @@ import compose.project.click.click.util.redactedRestMessage // pragma: allowlist
 import compose.project.click.click.util.teardownBlocking // pragma: allowlist secret
 import io.github.jan.supabase.realtime.RealtimeChannel
 import io.github.jan.supabase.realtime.channel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -103,8 +106,9 @@ class HomeViewModel(
     private val _homeEventReminders = MutableStateFlow<List<HomeEventReminder>>(emptyList())
     val homeEventReminders: StateFlow<List<HomeEventReminder>> = _homeEventReminders.asStateFlow()
 
+    // Disk-first (sheet 07 G1-5): saved events paint on the first frame, then revalidate.
     private val _savedEventBookmarks =
-        MutableStateFlow(AppDataManager.cachedEventBookmarks.value)
+        MutableStateFlow(AppDataManager.seedEventBookmarksFromDisk(AppDataManager.currentUser.value?.id))
     val savedEventBookmarks: StateFlow<List<EventBookmarkItemDto>> = _savedEventBookmarks.asStateFlow()
 
     // Recap: explicit Loading / Loaded / Failed so a slow or failed request never renders zeros.
@@ -123,6 +127,9 @@ class HomeViewModel(
     private var homeNudges: List<InboxNudge> = emptyList()
     private val resolvedNudgeIds = mutableSetOf<String>()
 
+    /** The network-fed Home modules as last seen, written through to disk (sheet 07 G1-5). */
+    private var homeFeed = HomeFeedSnapshot()
+
     private fun publishHomeNudge() {
         _homeNudge.value =
             homeNudges
@@ -135,6 +142,7 @@ class HomeViewModel(
             apiClient.getInboxNudges().onSuccess { response ->
                 homeNudges = response.nudges.mapNotNull { it.typed() }
                 publishHomeNudge()
+                persistHomeFeed { it.copy(nudges = response.nudges) }
             }
         }
     }
@@ -202,6 +210,27 @@ class HomeViewModel(
 
     private val _dismissedEventReminderKeys = MutableStateFlow<Set<String>>(emptySet())
 
+    /** Paints the cached Home modules for [userId] synchronously; the loaders then revalidate them. */
+    private fun seedHomeFeedFromDisk(userId: String?) {
+        val cached = HomeDiskCaches.homeFeed.seed(userId) ?: return
+        homeFeed = cached
+        homeNudges = cached.nudges.mapNotNull { it.typed() }
+        publishHomeNudge()
+        _homeAvailabilityIntents.value = cached.availabilityIntents
+        _homeAvailabilityOverlapMessages.value = cached.availabilityOverlaps
+    }
+
+    private fun persistHomeFeed(transform: (HomeFeedSnapshot) -> HomeFeedSnapshot) {
+        val userId = AppDataManager.currentUser.value?.id ?: return
+        homeFeed = transform(homeFeed)
+        HomeDiskCaches.homeFeed.store(userId, homeFeed)
+    }
+
+    private fun publishHomeAvailabilityIntents(rows: List<AvailabilityIntentRow>) {
+        _homeAvailabilityIntents.value = rows
+        persistHomeFeed { it.copy(availabilityIntents = rows) }
+    }
+
     // Connection Insights
     private val _connectionInsights = MutableStateFlow<ConnectionInsights?>(null)
     val connectionInsights: StateFlow<ConnectionInsights?> = _connectionInsights.asStateFlow()
@@ -256,6 +285,7 @@ class HomeViewModel(
     private var lastHomeOverlapPeerSignature: String? = null
 
     init {
+        seedHomeFeedFromDisk(AppDataManager.currentUser.value?.id)
         observeAppData()
         subscribeToConnectionChanges()
         // Cold-start race: snapshot may restore after HomeViewModel is created.
@@ -304,7 +334,7 @@ class HomeViewModel(
                 ?.takeIf { it.isNotBlank() } ?: return
         viewModelScope.launch {
             runCatching {
-                _homeAvailabilityIntents.value = supabaseRepository.fetchActiveAvailabilityIntentsForUser(uid)
+                publishHomeAvailabilityIntents(supabaseRepository.fetchActiveAvailabilityIntentsForUser(uid))
             }
             val arch = AppDataManager.archivedConnectionIds.value
             val hid = AppDataManager.hiddenConnectionIds.value
@@ -350,9 +380,12 @@ class HomeViewModel(
                 lines.add("You and $who are both available right now!")
             }
             _homeAvailabilityOverlapMessages.value = lines.toList()
+            persistHomeFeed { it.copy(availabilityOverlaps = lines.toList()) }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
+            // Offline: keep what was painted (from disk or the last load) rather than blanking it.
             println("HomeViewModel: availability overlap lines: ${e.redactedRestMessage()}")
-            _homeAvailabilityOverlapMessages.value = emptyList()
         }
     }
 
@@ -412,6 +445,8 @@ class HomeViewModel(
                     homeNudges = emptyList()
                     resolvedNudgeIds.clear()
                     _homeNudge.value = null
+                    homeFeed = HomeFeedSnapshot()
+                    seedHomeFeedFromDisk(user?.id)
                     AvailabilityOverlapCache.clear()
                     ViewerAvailabilityBubblesCache.clear()
                     availabilityIntentRefreshJob?.cancel()
@@ -442,8 +477,9 @@ class HomeViewModel(
                                                     ?.id
                                                     ?.takeIf { it.isNotBlank() }
                                                     ?: return@runCatching
-                                            _homeAvailabilityIntents.value =
-                                                supabaseRepository.fetchActiveAvailabilityIntentsForUser(uid)
+                                            publishHomeAvailabilityIntents(
+                                                supabaseRepository.fetchActiveAvailabilityIntentsForUser(uid),
+                                            )
                                             val arch = AppDataManager.archivedConnectionIds.value
                                             val hid = AppDataManager.hiddenConnectionIds.value
                                             val conns =
