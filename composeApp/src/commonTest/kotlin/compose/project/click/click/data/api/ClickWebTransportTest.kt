@@ -53,7 +53,12 @@ class ClickWebTransportTest {
     fun getRecoversWhenTheRetrySucceeds() =
         runTest {
             val s = Scripted(HttpStatusCode.BadGateway, HttpStatusCode.OK)
-            assertEquals(200, s.client.get(url).status.value)
+            assertEquals(
+                200,
+                s.client
+                    .get(url)
+                    .status.value,
+            )
             assertEquals(2, s.calls)
         }
 
@@ -69,7 +74,12 @@ class ClickWebTransportTest {
     fun postIsNeverRetried() =
         runTest {
             val s = Scripted(HttpStatusCode.ServiceUnavailable)
-            assertEquals(503, s.client.post(url).status.value)
+            assertEquals(
+                503,
+                s.client
+                    .post(url)
+                    .status.value,
+            )
             assertEquals(1, s.calls)
         }
 

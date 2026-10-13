@@ -58,8 +58,15 @@ class DevicesSettingsViewModelTest {
                 )
             val vm = viewModel(api)
             vm.load()
-            assertEquals(2, vm.state.value.devices?.size)
-            assertTrue(vm.state.value.incoming.isEmpty())
+            assertEquals(
+                2,
+                vm.state.value.devices
+                    ?.size,
+            )
+            assertTrue(
+                vm.state.value.incoming
+                    .isEmpty(),
+            )
             assertFalse(vm.state.value.loadFailed)
         }
 
@@ -76,10 +83,18 @@ class DevicesSettingsViewModelTest {
             vm.load()
 
             vm.remove(phone)
-            assertEquals(listOf("android-1", "web-1"), vm.state.value.devices?.map { it.deviceId })
+            assertEquals(
+                listOf("android-1", "web-1"),
+                vm.state.value.devices
+                    ?.map { it.deviceId },
+            )
             api.removeGate!!.complete(Unit)
 
-            assertEquals(listOf("android-1", "ios-1", "web-1"), vm.state.value.devices?.map { it.deviceId })
+            assertEquals(
+                listOf("android-1", "ios-1", "web-1"),
+                vm.state.value.devices
+                    ?.map { it.deviceId },
+            )
             assertEquals("Couldn't remove iPhone. Could not remove device", vm.state.value.error)
             assertEquals(listOf("ios-1"), api.removed)
         }
@@ -95,7 +110,11 @@ class DevicesSettingsViewModelTest {
             val vm = viewModel(api)
             vm.load()
             vm.remove(web)
-            assertEquals(listOf("android-1", "web-1"), vm.state.value.devices?.map { it.deviceId })
+            assertEquals(
+                listOf("android-1", "web-1"),
+                vm.state.value.devices
+                    ?.map { it.deviceId },
+            )
             assertEquals("Couldn't remove that device. Check your connection and try again.", vm.state.value.error)
         }
 
@@ -108,7 +127,11 @@ class DevicesSettingsViewModelTest {
             vm.remove(me)
             assertTrue(api.removed.isEmpty())
             vm.remove(phone)
-            assertEquals(listOf("android-1"), vm.state.value.devices?.map { it.deviceId })
+            assertEquals(
+                listOf("android-1"),
+                vm.state.value.devices
+                    ?.map { it.deviceId },
+            )
             assertNull(vm.state.value.error)
         }
 
@@ -123,7 +146,10 @@ class DevicesSettingsViewModelTest {
             assertEquals(APPROVAL_REQUEST_ID, vm.state.value.reviewing)
 
             vm.reviewDecided(APPROVAL_REQUEST_ID)
-            assertTrue(vm.state.value.incoming.isEmpty())
+            assertTrue(
+                vm.state.value.incoming
+                    .isEmpty(),
+            )
 
             api.incoming = emptyList<DeviceHistoryRequestDto>()
             val before = api.devicesCalls
@@ -137,7 +163,8 @@ class DevicesSettingsViewModelTest {
         runTest {
             online.value = false
             var fail = true
-            val api = FakeDevicesApi(devices = { if (fail) Result.failure(IllegalStateException("offline")) else Result.success(listOf(me)) })
+            val api =
+                FakeDevicesApi(devices = { if (fail) Result.failure(IllegalStateException("offline")) else Result.success(listOf(me)) })
             val vm = viewModel(api)
             vm.load()
             assertTrue(vm.state.value.loadFailed)
@@ -146,7 +173,11 @@ class DevicesSettingsViewModelTest {
             fail = false
             online.value = true
             assertEquals(2, api.devicesCalls)
-            assertEquals(listOf("android-1"), vm.state.value.devices?.map { it.deviceId })
+            assertEquals(
+                listOf("android-1"),
+                vm.state.value.devices
+                    ?.map { it.deviceId },
+            )
             assertTrue(vm.state.value.online)
         }
 }

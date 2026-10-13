@@ -133,7 +133,11 @@ class OwnerAuthActivity : FragmentActivity() {
             } finally {
                 pending.remove(key)
                 withContext(NonCancellable + Dispatchers.Main) {
-                    running.remove(key)?.get()?.takeIf { !it.isFinishing }?.finishQuietly()
+                    running
+                        .remove(key)
+                        ?.get()
+                        ?.takeIf { !it.isFinishing }
+                        ?.finishQuietly()
                 }
             }
         }

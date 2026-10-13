@@ -77,7 +77,12 @@ class DevicesSettingsViewModel(
                 _state.update { s ->
                     devices.fold(
                         onSuccess = { list ->
-                            s.copy(devices = list.toList(), loading = false, loadFailed = false, incoming = incoming?.toList() ?: s.incoming)
+                            s.copy(
+                                devices = list.toList(),
+                                loading = false,
+                                loadFailed = false,
+                                incoming = incoming?.toList() ?: s.incoming,
+                            )
                         },
                         onFailure = { s.copy(loading = false, loadFailed = true, incoming = incoming?.toList() ?: s.incoming) },
                     )
