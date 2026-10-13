@@ -25,6 +25,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * API client for chat-related operations via the Next.js companion (`click-web`).
@@ -58,6 +59,7 @@ class ChatApiClient(
             }
             installClickWebBearerAuth(tokenStorage)
             installClickWeb403RetryInterceptor(tokenStorage)
+            installClickWebTransportPolicy()
         }
 
     internal fun bearerAuthHeader(rawToken: String): String {
@@ -68,12 +70,14 @@ class ChatApiClient(
     /** Public GET (e.g. Supabase Storage public URL for chat-media). */
     suspend fun downloadUrlBytes(url: String): Result<ByteArray> =
         try {
-            val response = client.get(url)
+            val response = client.get(url) { longTransfer() }
             if (response.status.value in 200..299) {
                 Result.success(response.body<ByteArray>())
             } else {
                 Result.failure(Exception("HTTP ${response.status} for media download"))
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -386,6 +390,8 @@ class ChatApiClient(
             } else {
                 Result.failure(Exception(readClickWebErrorMessage(response)))
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -411,6 +417,8 @@ class ChatApiClient(
             } else {
                 Result.failure(Exception(readClickWebErrorMessage(response)))
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -434,6 +442,8 @@ class ChatApiClient(
             } else {
                 Result.failure(Exception(readClickWebErrorMessage(response)))
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -471,6 +481,8 @@ class ChatApiClient(
             } else {
                 Result.failure(ClickWebRequestException(response.status.value, readClickWebErrorMessage(response)))
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -496,6 +508,8 @@ class ChatApiClient(
             } else {
                 Result.failure(Exception(readClickWebErrorMessage(response)))
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -519,6 +533,8 @@ class ChatApiClient(
             } else {
                 Result.failure(Exception(readClickWebErrorMessage(response)))
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -556,6 +572,8 @@ class ChatApiClient(
             } else {
                 Result.failure(ClickWebRequestException(response.status.value, readClickWebErrorMessage(response)))
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -621,6 +639,8 @@ class ChatApiClient(
                 }
             }
             return first
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             println("Error sending message: ${e.redactedRestMessage()}")
             Result.failure(e)
@@ -686,6 +706,8 @@ class ChatApiClient(
             } else {
                 Result.failure(Exception("Failed to update message: ${response.status}"))
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             println("Error updating message: ${e.redactedRestMessage()}")
             Result.failure(e)
@@ -723,6 +745,8 @@ class ChatApiClient(
                     Result.failure(Exception(readClickWebErrorMessage(response)))
                 }
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -758,6 +782,8 @@ class ChatApiClient(
                     Result.failure(Exception(readClickWebErrorMessage(response)))
                 }
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -782,6 +808,8 @@ class ChatApiClient(
             } else {
                 Result.failure(Exception("Failed to mark chat as read: ${response.status}"))
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             println("Error marking chat as read: ${e.redactedRestMessage()}")
             Result.failure(e)
@@ -808,6 +836,8 @@ class ChatApiClient(
             } else {
                 Result.failure(Exception("Failed to mark chat as unread: ${response.status}"))
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             println("Error marking chat as unread: ${e.redactedRestMessage()}")
             Result.failure(e)
@@ -839,6 +869,8 @@ class ChatApiClient(
                 }
             }
             Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             println("Error marking messages delivered: ${e.redactedRestMessage()}")
             Result.failure(e)
@@ -1054,6 +1086,8 @@ class ChatApiClient(
                 }
             }
             first
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             println("Error deleting message: ${e.redactedRestMessage()}")
             Result.failure(e)
@@ -1125,6 +1159,8 @@ class ChatApiClient(
             } else {
                 Result.failure(Exception("Failed to add reaction: ${response.status}"))
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -1154,6 +1190,8 @@ class ChatApiClient(
                     setBody(ClickWebReactionDeleteBody(messageId, reactionType))
                 }
             Result.success(response.status.value in 200..299)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Result.failure(e)
         }

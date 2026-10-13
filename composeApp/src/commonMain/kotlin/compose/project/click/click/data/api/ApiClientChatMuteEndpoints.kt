@@ -9,6 +9,7 @@ import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlin.coroutines.cancellation.CancellationException
 
 /*
  * Per-conversation push mutes (click-web `app/api/chat/notifications`, migration
@@ -45,6 +46,8 @@ internal suspend fun ApiClient.getChatMutesImpl(): Result<List<ChatMuteDto>> =
         }
     } catch (e: ClientRequestException) {
         clickWebFailure(e.response)
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }
@@ -66,6 +69,8 @@ internal suspend fun ApiClient.putChatMuteImpl(
         if (response.status.value in 200..299) Result.success(Unit) else clickWebFailure(response)
     } catch (e: ClientRequestException) {
         clickWebFailure(e.response)
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Result.failure(e)
     }

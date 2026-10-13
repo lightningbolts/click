@@ -10,6 +10,7 @@ import io.ktor.http.contentType
 import io.ktor.http.encodeURLPathPart
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlin.coroutines.cancellation.CancellationException
 
 /*
  * Emoji reactions on soundtracks and shared Click Drops (click-web
@@ -75,6 +76,8 @@ class ReactionsApi(
             if (response.status.value in 200..299) Result.success(response.body()) else api.clickWebFailure(response)
         } catch (e: ClientRequestException) {
             api.clickWebFailure(e.response)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -94,6 +97,8 @@ class ReactionsApi(
             if (response.status.value in 200..299) Result.success(response.body()) else api.clickWebFailure(response)
         } catch (e: ClientRequestException) {
             api.clickWebFailure(e.response)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Result.failure(e)
         }
