@@ -110,11 +110,13 @@ class Phase4HelpersTest {
     // region C3 event reminders
 
     @Test
-    fun eventRemindersAtSixtyAndFifteen() {
+    fun eventRemindersOnlyAtSixty() {
         val start = 10_000_000_000L
-        assertEquals(listOf(60 to start - 3_600_000L, 15 to start - 900_000L), EventReminders.triggers(start, start - 7_200_000L))
-        // 30 minutes out: only T-15 is still ahead.
-        assertEquals(listOf(15 to start - 900_000L), EventReminders.triggers(start, start - 1_800_000L))
+        // Only T-60, like iOS (#32 retired the 15-minute reminder).
+        assertEquals(listOf(60 to start - 3_600_000L), EventReminders.triggers(start, start - 7_200_000L))
+        // 30 minutes out: nothing left to schedule.
+        assertTrue(EventReminders.triggers(start, start - 1_800_000L).isEmpty())
+        assertEquals(listOf(15), EventReminders.RETIRED_OFFSETS_MINUTES)
         assertTrue(EventReminders.triggers(start, start).isEmpty())
         assertEquals("event.b1.60", EventReminders.reminderId("b1", 60))
         assertEquals("Starts in an hour · Pier 39", EventReminders.body(60, " Pier 39 "))
@@ -131,7 +133,7 @@ class Phase4HelpersTest {
         val subjects = EventReminders.subjects(goingBeaconIds = setOf("unknown"), bookmarks = saved, beaconById = { null })
         assertEquals(listOf("b1"), subjects.map { it.beaconId })
         assertEquals(Instant.parse("2030-01-01T20:00:00Z").toEpochMilliseconds(), subjects.single().startEpochMs)
-        assertEquals(2, EventReminders.reminders(subjects.single(), 0L).size)
+        assertEquals(1, EventReminders.reminders(subjects.single(), 0L).size)
     }
 
     // endregion

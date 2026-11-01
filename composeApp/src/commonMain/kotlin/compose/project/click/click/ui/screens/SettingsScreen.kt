@@ -766,7 +766,7 @@ fun SettingsScreen(
                                         SettingsToggleRow(
                                             icon = Icons.Default.Notifications,
                                             title = "Event reminders",
-                                            subtitle = "An hour and 15 minutes before events you're going to or saved",
+                                            subtitle = "An hour before events you're going to or saved",
                                             checked = notificationPreferences.eventReminderPushEnabled,
                                             enabled = !notificationPreferencesSaving,
                                             pending = pendingAlertKey == "events",
