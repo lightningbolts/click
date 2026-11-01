@@ -862,6 +862,12 @@ class ChatApiClient(
         authToken: String,
     ): Result<String> = signAttachmentUrlImpl(path = path, authToken = authToken)
 
+    /** POST `/api/drops/develop` — develops ready Click Drops for this viewer (see [developDropsImpl]). */
+    suspend fun developDrops(
+        refs: List<DropDevelopRef>,
+        authToken: String,
+    ): Result<List<DropDevelopResultDto>> = developDropsImpl(refs = refs, authToken = authToken)
+
     suspend fun downloadAttachmentBytes(signedUrl: String): Result<ByteArray> = downloadAttachmentBytesImpl(signedUrl = signedUrl)
 
     suspend fun sendHubMessage(

@@ -5,6 +5,8 @@
 
 package compose.project.click.click.viewmodel
 
+import compose.project.click.click.data.repository.GatedDropOriginals // pragma: allowlist secret
+import compose.project.click.click.data.repository.isGatedDropAwaitingOriginal // pragma: allowlist secret
 import androidx.lifecycle.viewModelScope
 import compose.project.click.click.data.models.ChatMessageType // pragma: allowlist secret
 import compose.project.click.click.data.models.Message // pragma: allowlist secret
@@ -38,6 +40,7 @@ internal fun ChatViewModel.clearSecureChatMediaCache(purgePersistentCache: Boole
         }
         secureAudioPathCache.clear()
         secureImageBytesCache.clear()
+        GatedDropOriginals.clear()
     }
 }
 
@@ -167,6 +170,8 @@ internal fun ChatViewModel.cacheSecureAudioOnDisk(
 }
 
 internal suspend fun ChatViewModel.fetchDecryptedChatMediaBytesImpl(message: Message): ByteArray? {
+    // Never hand out a gated drop's pixelated preview as the photo (save, share, expand).
+    if (message.isGatedDropAwaitingOriginal()) return null
     secureImageBytesCache.get(message.id)?.takeIf { it.isNotEmpty() }?.let { return it }
     readChatMediaVaultBytesForMessage(
         messageId = message.id,

@@ -75,6 +75,11 @@ import compose.project.click.click.viewmodel.SecureChatMediaHost
 import compose.project.click.click.viewmodel.SecureChatMediaLoadState
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
+import androidx.compose.runtime.collectAsState
+import compose.project.click.click.data.repository.GatedDropOriginals
+import compose.project.click.click.data.models.disposableRollRevealAtIso
+import compose.project.click.click.data.models.isGatedDrop
 
 /** The reaction a double-tap toggles. */
 internal const val DOUBLE_TAP_REACTION: String = "❤️"
@@ -261,6 +266,24 @@ fun ChatMessageBubble(
         if (mediaReference.isNullOrBlank()) return@LaunchedEffect
         val scopeId = activeChatId ?: return@LaunchedEffect
         val viewerId = currentUserId ?: return@LaunchedEffect
+        secureMediaHost?.ensureSecureChatImageLoaded(scopeId, viewerId, message)
+    }
+
+    // A gated Click Drop develops once it is due, including while this chat stays open.
+    val gatedDrop = isImageMessage && message.isGatedDrop()
+    val gatedOriginals = GatedDropOriginals.loaded.collectAsState().value
+    val gatedOriginalOnScreen = gatedDrop && message.id in gatedOriginals
+    LaunchedEffect(message.id, gatedDrop, gatedOriginalOnScreen, activeChatId, currentUserId) {
+        if (!gatedDrop || gatedOriginalOnScreen) return@LaunchedEffect
+        val scopeId = activeChatId ?: return@LaunchedEffect
+        val viewerId = currentUserId ?: return@LaunchedEffect
+        val revealAtMs =
+            message
+                .disposableRollRevealAtIso()
+                ?.let { runCatching { kotlinx.datetime.Instant.parse(it).toEpochMilliseconds() }.getOrNull() }
+                ?: return@LaunchedEffect
+        val waitMs = revealAtMs - kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
+        if (waitMs > 0) delay(waitMs + GATED_DROP_REVEAL_GRACE_MS)
         secureMediaHost?.ensureSecureChatImageLoaded(scopeId, viewerId, message)
     }
 
@@ -1273,3 +1296,6 @@ private fun ChatBubbleSelectableText(
         Box(modifier = modifier) { content() }
     }
 }
+
+/** Small wait after reveal so the server clock has passed it too (it never signs early). */
+private const val GATED_DROP_REVEAL_GRACE_MS = 1_500L

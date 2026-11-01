@@ -967,6 +967,14 @@ class SupabaseChatRepository(
         }
     }
 
+    override suspend fun loadGatedDropOriginal(
+        chatId: String,
+        viewerUserId: String,
+        message: Message,
+        extension: String,
+    ): GatedDropOriginalResult =
+        loadGatedDropOriginalImpl(chatId = chatId, viewerUserId = viewerUserId, message = message, extension = extension)
+
     override suspend fun downloadAndDecryptChatMedia(
         chatId: String,
         viewerUserId: String,

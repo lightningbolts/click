@@ -54,6 +54,7 @@ import compose.project.click.click.data.models.copyableText // pragma: allowlist
 import compose.project.click.click.data.models.hubMediaPathOrNull // pragma: allowlist secret
 import compose.project.click.click.data.models.isBeaconChatMessage // pragma: allowlist secret
 import compose.project.click.click.data.models.isDisposableRollLocked // pragma: allowlist secret
+import compose.project.click.click.data.repository.isGatedDropAwaitingOriginal // pragma: allowlist secret
 import compose.project.click.click.data.models.isEncryptedMedia // pragma: allowlist secret
 import compose.project.click.click.data.models.mediaUrlOrNull // pragma: allowlist secret
 import compose.project.click.click.data.models.originalMimeTypeOrNull // pragma: allowlist secret
@@ -91,7 +92,7 @@ internal fun canEditMessage(messageWithUser: MessageWithUser): Boolean {
 }
 
 /** A Click Drop stays unsaveable and unshareable until its collaboration window ends. */
-internal fun canExportMessageMedia(message: Message): Boolean = !message.isDisposableRollLocked()
+internal fun canExportMessageMedia(message: Message): Boolean = !message.isDisposableRollLocked() && !message.isGatedDropAwaitingOriginal()
 
 /** Saves an image message to the gallery (decrypting first when needed); true on success. */
 internal suspend fun saveMessageImage(
