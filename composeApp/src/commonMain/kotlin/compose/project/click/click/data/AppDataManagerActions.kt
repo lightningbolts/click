@@ -5,6 +5,7 @@ package compose.project.click.click.data // pragma: allowlist secret
 import compose.project.click.click.data.api.CommunityHubNearbyDto // pragma: allowlist secret
 import compose.project.click.click.data.chat.LocalMessageStore // pragma: allowlist secret
 import compose.project.click.click.data.chat.PendingSendStore // pragma: allowlist secret
+import compose.project.click.click.data.flags.FeatureFlags
 import compose.project.click.click.data.models.CachedAppSnapshot // pragma: allowlist secret
 import compose.project.click.click.data.models.Connection // pragma: allowlist secret
 import compose.project.click.click.data.models.LocationPreferences // pragma: allowlist secret
@@ -72,6 +73,9 @@ internal fun AppDataManager.mergeCachedCommunityHubsFromDtoImpl(incoming: List<C
  */
 internal suspend fun AppDataManager.clearDataImpl() {
     ChatMuteStore.clear()
+    // In-memory flags go off first; the cache write can fail (no keystore in some test runtimes).
+    FeatureFlags.reset(null)
+    runCatching { tokenStorage.saveFeatureFlagsCache(null) }
     IdentityCache.clear()
     EventReminders.cancelAll()
     resetDeviceHistorySyncThrottle()

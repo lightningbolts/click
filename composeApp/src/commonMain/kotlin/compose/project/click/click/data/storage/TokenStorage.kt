@@ -78,6 +78,11 @@ interface TokenStorage {
 
     suspend fun getHomeRecapCache(): String? = null
 
+    /** Last `GET /api/me/features` result for the signed-in user (JSON); cleared with the session. */
+    suspend fun saveFeatureFlagsCache(json: String?) {}
+
+    suspend fun getFeatureFlagsCache(): String? = null
+
     /** Per-chat push mutes (JSON map chatId -> muted-until ms); cleared with the session. */
     suspend fun saveChatMutesCache(json: String?) {}
 
