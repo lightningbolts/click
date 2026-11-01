@@ -54,10 +54,10 @@ import compose.project.click.click.data.models.copyableText // pragma: allowlist
 import compose.project.click.click.data.models.hubMediaPathOrNull // pragma: allowlist secret
 import compose.project.click.click.data.models.isBeaconChatMessage // pragma: allowlist secret
 import compose.project.click.click.data.models.isDisposableRollLocked // pragma: allowlist secret
-import compose.project.click.click.data.repository.isGatedDropAwaitingOriginal // pragma: allowlist secret
 import compose.project.click.click.data.models.isEncryptedMedia // pragma: allowlist secret
 import compose.project.click.click.data.models.mediaUrlOrNull // pragma: allowlist secret
 import compose.project.click.click.data.models.originalMimeTypeOrNull // pragma: allowlist secret
+import compose.project.click.click.data.repository.isGatedDropAwaitingOriginal // pragma: allowlist secret
 import compose.project.click.click.data.storage.createTokenStorage
 import compose.project.click.click.ui.components.BentoGlassOptionRow // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickActionBottomSheet // pragma: allowlist secret

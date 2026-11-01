@@ -5,8 +5,6 @@
 
 package compose.project.click.click.viewmodel
 
-import compose.project.click.click.data.repository.GatedDropOriginals // pragma: allowlist secret
-import compose.project.click.click.data.repository.isGatedDropAwaitingOriginal // pragma: allowlist secret
 import androidx.lifecycle.viewModelScope
 import compose.project.click.click.data.models.ChatMessageType // pragma: allowlist secret
 import compose.project.click.click.data.models.Message // pragma: allowlist secret
@@ -15,6 +13,8 @@ import compose.project.click.click.data.models.audioCacheFileExtension // pragma
 import compose.project.click.click.data.models.hasLocalMediaUri // pragma: allowlist secret
 import compose.project.click.click.data.models.isEncryptedMedia // pragma: allowlist secret
 import compose.project.click.click.data.models.mediaUrlOrNull // pragma: allowlist secret
+import compose.project.click.click.data.repository.GatedDropOriginals // pragma: allowlist secret
+import compose.project.click.click.data.repository.isGatedDropAwaitingOriginal // pragma: allowlist secret
 import compose.project.click.click.ui.chat.deleteSecureChatAudioTempFile // pragma: allowlist secret
 import compose.project.click.click.ui.chat.secureChatImageBitmapCache // pragma: allowlist secret
 import compose.project.click.click.ui.chat.writeSecureChatAudioTempFile // pragma: allowlist secret

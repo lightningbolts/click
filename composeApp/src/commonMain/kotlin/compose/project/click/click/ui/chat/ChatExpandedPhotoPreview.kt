@@ -23,10 +23,10 @@ import androidx.compose.ui.layout.ContentScale
 import coil3.compose.AsyncImage
 import compose.project.click.click.data.models.MessageWithUser // pragma: allowlist secret
 import compose.project.click.click.data.models.isDisposableRollLocked // pragma: allowlist secret
-import compose.project.click.click.data.repository.isGatedDropAwaitingOriginal // pragma: allowlist secret
 import compose.project.click.click.data.models.isEncryptedMedia // pragma: allowlist secret
 import compose.project.click.click.data.models.mediaUrlOrNull // pragma: allowlist secret
 import compose.project.click.click.data.models.originalMimeTypeOrNull // pragma: allowlist secret
+import compose.project.click.click.data.repository.isGatedDropAwaitingOriginal // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickZoomableMedia // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassFullscreenMediaOverlay // pragma: allowlist secret
 import compose.project.click.click.ui.components.MediaLightboxSaveShareTrailing // pragma: allowlist secret

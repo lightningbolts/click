@@ -53,6 +53,7 @@ fun Message.isGatedDropAwaitingOriginal(loaded: Set<String> = GatedDropOriginals
 /** `metadata.drop_original` = `{epoch, sender_device_id, client_message_id, media_ciphertext_sha256}`. */
 internal fun Message.dropOriginalV2MetadataOrNull(chatId: String): MessageCryptoV2.MediaMetadata? {
     val fields = (metadata as? JsonObject)?.get("drop_original") as? JsonObject ?: return null
+
     fun string(key: String): String? =
         (fields[key] as? JsonPrimitive)
             ?.takeIf { it.isString }
@@ -99,17 +100,19 @@ internal suspend fun SupabaseChatRepository.loadGatedDropOriginalImpl(
     val jwt = ensureFreshJwtForChat() ?: return GatedDropOriginalResult.Unavailable
     val refs = listOf(DropDevelopRef(kind = "chat", id = message.id))
     val result =
-        apiClient.developDrops(refs, jwt).getOrElse { first ->
-            val retry = refreshedJwtAfterAuthFailure()
-            if (retry == null) {
-                println("ChatRepository: drop develop failed: ${first.redactedRestMessage()}")
-                return GatedDropOriginalResult.Unavailable
-            }
-            apiClient.developDrops(refs, retry).getOrElse { err ->
-                println("ChatRepository: drop develop retry failed: ${err.redactedRestMessage()}")
-                return GatedDropOriginalResult.Unavailable
-            }
-        }.firstOrNull { it.id == message.id }
+        apiClient
+            .developDrops(refs, jwt)
+            .getOrElse { first ->
+                val retry = refreshedJwtAfterAuthFailure()
+                if (retry == null) {
+                    println("ChatRepository: drop develop failed: ${first.redactedRestMessage()}")
+                    return GatedDropOriginalResult.Unavailable
+                }
+                apiClient.developDrops(refs, retry).getOrElse { err ->
+                    println("ChatRepository: drop develop retry failed: ${err.redactedRestMessage()}")
+                    return GatedDropOriginalResult.Unavailable
+                }
+            }.firstOrNull { it.id == message.id }
             ?: return GatedDropOriginalResult.Unavailable
     when (result.status) {
         "pending" -> return GatedDropOriginalResult.Pending
