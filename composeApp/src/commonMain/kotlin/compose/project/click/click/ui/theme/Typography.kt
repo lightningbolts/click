@@ -8,6 +8,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.unit.sp
+import click.composeapp.generated.resources.Manrope_ExtraBold
 import click.composeapp.generated.resources.Res
 import click.composeapp.generated.resources.manrope_bold
 import click.composeapp.generated.resources.manrope_medium
@@ -17,133 +18,82 @@ import org.jetbrains.compose.resources.Font
 
 val ManropeFontFamily: FontFamily
     @Composable
-    get() = FontFamily(
-        Font(Res.font.manrope_regular, FontWeight.Normal),
-        Font(Res.font.manrope_medium, FontWeight.Medium),
-        Font(Res.font.manrope_semibold, FontWeight.SemiBold),
-        Font(Res.font.manrope_bold, FontWeight.Bold),
-    )
-
-private fun TextStyle.withManrope(family: FontFamily): TextStyle = copy(fontFamily = family)
+    get() =
+        FontFamily(
+            Font(Res.font.manrope_regular, FontWeight.Normal),
+            Font(Res.font.manrope_medium, FontWeight.Medium),
+            Font(Res.font.manrope_semibold, FontWeight.SemiBold),
+            Font(Res.font.manrope_bold, FontWeight.Bold),
+            Font(Res.font.Manrope_ExtraBold, FontWeight.ExtraBold),
+        )
 
 /**
- * Functional Clarity typography — Manrope with oversized headlines and
- * minimum 14sp body/label sizes.
+ * "Quiet Presence" type (click-web DESIGN.md, iOS DesignSystem/Typography.swift): Manrope ExtraBold
+ * for display and section titles only; every other role uses the platform face (Roboto) so body
+ * text reads like the rest of Android. Nothing is smaller than 12sp.
+ *
+ * | Role | Size/line | Face |
+ * |---|---|---|
+ * | display* | 44/48 · 40/44 · 34/40 | Manrope 800 |
+ * | headlineLarge / Medium / Small | 28/34 · 24/30 · 22/28 | Manrope 800 |
+ * | titleLarge | 22/28 | Manrope 800 |
+ * | titleMedium / Small | 17/24 · 15/20 | system 600 |
+ * | bodyLarge / Medium / Small | 17/24 · 15/22 · 13/18 | system 400 |
+ * | labelLarge / Medium / Small | 15/20 · 13/18 · 12/16 | system 600 |
  */
 @Composable
 fun clickTypography(): Typography {
-    val family = ManropeFontFamily
+    val display = ManropeFontFamily
+    val text = FontFamily.Default
+
+    fun heading(
+        size: Int,
+        line: Int,
+        tracking: Double = 0.0,
+    ) = TextStyle(
+        fontFamily = display,
+        fontWeight = FontWeight.ExtraBold,
+        fontSize = size.sp,
+        lineHeight = line.sp,
+        letterSpacing = tracking.sp,
+    )
+
+    fun body(
+        size: Int,
+        line: Int,
+        weight: FontWeight,
+    ) = TextStyle(fontFamily = text, fontWeight = weight, fontSize = size.sp, lineHeight = line.sp)
     return Typography(
-        displayLarge = TextStyle(
-            fontFamily = family,
-            fontWeight = FontWeight.Bold,
-            fontSize = 48.sp,
-            lineHeight = 52.sp,
-            letterSpacing = (-0.04).sp,
-        ),
-        displayMedium = TextStyle(
-            fontFamily = family,
-            fontWeight = FontWeight.Bold,
-            fontSize = 40.sp,
-            lineHeight = 44.sp,
-            letterSpacing = (-0.03).sp,
-        ),
-        displaySmall = TextStyle(
-            fontFamily = family,
-            fontWeight = FontWeight.Bold,
-            fontSize = 36.sp,
-            lineHeight = 40.sp,
-            letterSpacing = (-0.02).sp,
-        ),
-        headlineLarge = TextStyle(
-            fontFamily = family,
-            fontWeight = FontWeight.Bold,
-            fontSize = 32.sp,
-            lineHeight = 40.sp,
-            letterSpacing = (-0.02).sp,
-        ),
-        headlineMedium = TextStyle(
-            fontFamily = family,
-            fontWeight = FontWeight.Bold,
-            fontSize = 24.sp,
-            lineHeight = 32.sp,
-        ),
-        headlineSmall = TextStyle(
-            fontFamily = family,
-            fontWeight = FontWeight.Bold,
-            fontSize = 20.sp,
-            lineHeight = 28.sp,
-        ),
-        titleLarge = TextStyle(
-            fontFamily = family,
-            fontWeight = FontWeight.Bold,
-            fontSize = 20.sp,
-            lineHeight = 28.sp,
-        ),
-        titleMedium = TextStyle(
-            fontFamily = family,
-            fontWeight = FontWeight.SemiBold,
-            fontSize = 16.sp,
-            lineHeight = 24.sp,
-        ),
-        titleSmall = TextStyle(
-            fontFamily = family,
-            fontWeight = FontWeight.SemiBold,
-            fontSize = 14.sp,
-            lineHeight = 20.sp,
-        ),
-        bodyLarge = TextStyle(
-            fontFamily = family,
-            fontWeight = FontWeight.Medium,
-            fontSize = 18.sp,
-            lineHeight = 28.sp,
-        ),
-        bodyMedium = TextStyle(
-            fontFamily = family,
-            fontWeight = FontWeight.Medium,
-            fontSize = 16.sp,
-            lineHeight = 24.sp,
-        ),
-        bodySmall = TextStyle(
-            fontFamily = family,
-            fontWeight = FontWeight.Medium,
-            fontSize = 14.sp,
-            lineHeight = 20.sp,
-        ),
-        labelLarge = TextStyle(
-            fontFamily = family,
-            fontWeight = FontWeight.Bold,
-            fontSize = 14.sp,
-            lineHeight = 20.sp,
-        ),
-        labelMedium = TextStyle(
-            fontFamily = family,
-            fontWeight = FontWeight.SemiBold,
-            fontSize = 14.sp,
-            lineHeight = 20.sp,
-        ),
-        labelSmall = TextStyle(
-            fontFamily = family,
-            fontWeight = FontWeight.SemiBold,
-            fontSize = 14.sp,
-            lineHeight = 20.sp,
-        ),
+        displayLarge = heading(44, 48, -0.04),
+        displayMedium = heading(40, 44, -0.03),
+        displaySmall = heading(34, 40, -0.02),
+        headlineLarge = heading(28, 34, -0.02),
+        headlineMedium = heading(24, 30),
+        headlineSmall = heading(22, 28),
+        titleLarge = heading(22, 28),
+        titleMedium = body(17, 24, FontWeight.SemiBold),
+        titleSmall = body(15, 20, FontWeight.SemiBold),
+        bodyLarge = body(17, 24, FontWeight.Normal),
+        bodyMedium = body(15, 22, FontWeight.Normal),
+        bodySmall = body(13, 18, FontWeight.Normal),
+        labelLarge = body(15, 20, FontWeight.SemiBold),
+        labelMedium = body(13, 18, FontWeight.SemiBold),
+        labelSmall = body(12, 16, FontWeight.SemiBold),
     )
 }
 
 /**
  * Input text style for Material text fields.
  *
- * [clickTypography] bodyLarge uses 28sp line height for reading, which is too tall for
- * default Material field chrome. Fields use a shorter line box, centered, with no trim
- * so Manrope descenders (g/y/p) are not clipped.
+ * Fields use a centered 24sp line box with no trim, so descenders (g/y/p) are never clipped.
  */
 @Composable
 fun clickTextFieldTextStyle(): TextStyle =
     MaterialTheme.typography.bodyLarge.copy(
         lineHeight = 24.sp,
-        lineHeightStyle = LineHeightStyle(
-            alignment = LineHeightStyle.Alignment.Center,
-            trim = LineHeightStyle.Trim.None,
-        ),
+        lineHeightStyle =
+            LineHeightStyle(
+                alignment = LineHeightStyle.Alignment.Center,
+                trim = LineHeightStyle.Trim.None,
+            ),
     )
