@@ -365,7 +365,8 @@ class ChatApiClient(
             if (response.status.value in 200..299) {
                 Result.success(response.body<ClickWebChatDeviceEnvelope>().device)
             } else {
-                Result.failure(Exception(readClickWebErrorMessage(response)))
+                val body = runCatching { response.bodyAsText() }.getOrNull().orEmpty()
+                Result.failure(chatDeviceRegistrationFailure(response.status.value, body))
             }
         } catch (e: Exception) {
             Result.failure(e)

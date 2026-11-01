@@ -1,10 +1,12 @@
 package compose.project.click.click.viewmodel // pragma: allowlist secret
 
+import compose.project.click.click.crypto.DeviceIdentityStorage
 import compose.project.click.click.crypto.MessageCryptoV2 // pragma: allowlist secret
 import compose.project.click.click.crypto.PlatformCrypto // pragma: allowlist secret
 import compose.project.click.click.data.api.ClickWebChatDeviceDto // pragma: allowlist secret
 import compose.project.click.click.data.api.ClickWebHubEpochWriteEnvelope // pragma: allowlist secret
 import compose.project.click.click.data.models.Message // pragma: allowlist secret
+import compose.project.click.click.data.repository.registerE2eeDeviceRekeyingIfRevoked
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
@@ -51,11 +53,19 @@ internal suspend fun HubChatViewModel.ensureHubE2eeV2Session(
     forSend: Boolean = false,
 ): HubE2eeV2Session? {
     val token = requireFreshHubJwt()
-    val identity =
-        runCatching { MessageCryptoV2.loadOrCreateDeviceIdentity() }
-            .getOrElse { throw IllegalStateException("E2EE v2 device identity is unavailable") }
-    // Registration is idempotent from the caller's perspective: an existing identity returns 409.
-    chatApi.registerE2eeV2Device(identity.info.deviceId, identity.info.publicKeySpkiBase64, token)
+    // Registration is idempotent (409 "already registered"); a revoked key is replaced once.
+    val registration =
+        runCatching {
+            registerE2eeDeviceRekeyingIfRevoked(
+                loadIdentity = MessageCryptoV2::loadOrCreateDeviceIdentity,
+                infoOf = { it.info },
+                discardIdentity = DeviceIdentityStorage::discard,
+                onIdentityReplaced = { hubE2eeV2Session = null },
+                register = { info -> chatApi.registerE2eeV2Device(info.deviceId, info.publicKeySpkiBase64, token) },
+            )
+        }.getOrElse { throw IllegalStateException("E2EE v2 device identity is unavailable") }
+    if (registration.revoked) throw IllegalStateException("This device was removed from your account")
+    val identity = registration.identity
     var devices = chatApi.discoverHubE2eeV2Devices(hubId, token).getOrElse { throw it }
     val own =
         devices.firstOrNull { it.deviceId == identity.info.deviceId }
