@@ -16,6 +16,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
+import compose.project.click.click.data.activity.ActivityStore
 import compose.project.click.click.data.api.CommunityHubNearbyDto // pragma: allowlist secret
 import compose.project.click.click.data.models.AvailabilityIntentRow // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
@@ -86,6 +87,10 @@ fun HomeScreen(
     val reconnectReminders by homeViewModel.reconnectReminders.collectAsState()
     val homeEventReminders by homeViewModel.homeEventReminders.collectAsState()
     val savedEventBookmarks by homeViewModel.savedEventBookmarks.collectAsState()
+    // Activity inbox (iOS ActivityView): the bell's dot reads the store; refresh on Home appear.
+    var showActivity by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { ActivityStore.refresh() }
+    if (showActivity) ActivitySheet(onDismiss = { showActivity = false })
     val recapState by homeViewModel.recapState.collectAsState()
     val homeNudge by homeViewModel.homeNudge.collectAsState()
     val recapWindow by homeViewModel.recapWindow.collectAsState()
@@ -283,6 +288,7 @@ fun HomeScreen(
                         ?.takeIf { it.isNotBlank() }
                         ?: "there"
                 AppScreenScaffold(
+                    actions = { ActivityBellButton(onClick = { showActivity = true }) },
                     title = homeGreetingTitle(firstName),
                     subtitle = HomeGreetingSubtitle,
                     showFloatingHeader = true,
