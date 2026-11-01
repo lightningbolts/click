@@ -189,7 +189,7 @@ Where a sheet-07 row already specifies a task in detail, this document links to 
 | GIFs (KLIPY) | `KlipyClient.swift`, `GifViews.swift` | — | Missing | G6-8. A received GIF currently renders as a bare URL text message. |
 | Click Drop in chat, gated original, develop | `ClickDropBubble.swift`; `/api/drops/develop`, `/api/drops/views` | Legacy 24 h time lock (`KMP/collaboration/ClickDropReveal.kt`) | **Broken** | An iOS gated drop (`drop_gated:true`, `metadata.drop_original`) shows on Android as the 12-block preview forever. P0-4, then G2-1 and G2-2. |
 | Drop replies ("Replied to your drop") | `DropReplyViews.swift` | — | Missing | G2-8. |
-| Icebreakers (deterministic, under 5 messages, 15 s cooldown) and say-hi deadline | `iOS/Core/Chat/Icebreakers.swift`, `SayHiPanel` | `VibeCheckAndIcebreaker.kt`, `ChatViewModelVibeIcebreakers.kt` | Partial | Say-hi stops only on `isMutuallyKept()`; iOS stops when anyone writes (G0-11). The sources are keyword-based (G6-7). |
+| Icebreakers (deterministic, under 5 messages, 15 s cooldown) and say-hi deadline | `iOS/Core/Chat/Icebreakers.swift`, `SayHiPanel` | `VibeCheckAndIcebreaker.kt`, `ChatViewModelVibeIcebreakers.kt` | Partial | The say-hi banner already matches iOS: it shows only while `last_message_at == null` (`ConnectionArchiveNotice.kt`), and the vibe-check timer is disabled. Sheet 07's G0-11 premise was stale. The icebreaker sources are still keyword-based (G6-7). |
 | In-chat search and jump | `ChatView.swift` | `ConversationSearch.kt` | Done | |
 | Chat backgrounds (encounter backdrops) | `iOS/DesignSystem/Components/ChatBackground.swift` | — | Missing | G6-11 (P2). |
 | Header presence (last active) | #83 | `PresenceSessionTracker.kt` | Done | |
@@ -373,7 +373,7 @@ Each task is one PR, cut from `origin/main`, with `./gradlew :composeApp:assembl
 | **P0-2** | **Remove the phantom `InstantProfileActivity`.** Delete the manifest entry. Add `/connect` to MainActivity's https filter. Narrow `/c` to `/c/` so `/careers` and `/chat` stay in the browser. Check that `ConnectionDeepLinkRouter` parses `/connect/{id}`. | `composeApp/src/androidMain/AndroidManifest.xml`, `KMP/deeplink/ConnectionDeepLinkRouter.kt` (+ test) | Router unit test for `/connect/{uuid}` and `/c/{uuid}`; a manifest lint check that every declared activity class exists (Robolectric `PackageManager` resolve). |
 | **P0-3** | **Group-tap review sync.** Decode `existing_connection_id`. Show "Save this Click" and the existing-group copy. Each removal or add-back posts `POST /api/connections/proximity/selection` (debounced; it's the server's job to apply exclusions). Treat `409 Handshake already finalized` as "another phone confirmed": recover through `GET /api/connections/proximity?pending_handshake_id`. | `KMP/data/api/ApiClientModels.kt`, `ApiClientProximityEndpoints.kt`, `KMP/data/repository/ConnectionRepository.kt` / `ConnectionRepositoryProximity.kt`, `KMP/viewmodel/ConnectionViewModelConfirm.kt`, `KMP/ui/components/ConnectionContextSheet.kt` (copy) | DTO decode with and without `existing_connection_id`; a ViewModel test with a fake repository that removal triggers a selection call with the right exclusions; 409 path recovers. |
 | **P0-4** | **Receive gated drops.** Recognize `drop_gated` / `metadata.drop_original`. Show the preview with "Develops in …". After the reveal, `POST /api/drops/develop` and decrypt the original (v2 `drop_original` keys, v1 legacy). Never save or share the preview as the photo. | `KMP/data/models/Message*.kt`, `KMP/collaboration/ClickDropReveal.kt`, `KMP/viewmodel/ChatViewModelSecureMedia.kt`, `KMP/data/api/ChatApiClientMedia.kt`, `KMP/ui/chat/ChatPhotoBubble.kt` | Golden metadata JSON from iOS; state transitions with a fake clock; "save" is disabled until developed. |
-| **P0-5** | **Say-hi countdown semantics (G0-11).** Stop the deadline banner once either side has written. | `KMP/viewmodel/ChatViewModelVibeIcebreakers.kt` | Unit test. |
+| ~~P0-5~~ | ~~Say-hi countdown semantics (G0-11).~~ **Already at parity; no change needed** (see §2.7). | — | — |
 | **P0-6** | **Migration mirror sync (G0-8).** Run the sync script and commit; CI drift check goes green. | `supabase/migrations/*`, `supabase/functions/bind-proximity-connection` | `scripts/check-supabase-drift.sh` |
 
 ### P1: foundations and visual baseline (unblock everything after)
@@ -444,6 +444,24 @@ These need physical devices. The code goes behind interfaces with fakes so the l
 
 ---
 
-## 8. Environment note for Phase 3
+## 8. Phase 3 progress (2026-11-01)
+
+Each PR builds (`assembleDebug`), passes `spotlessCheck` and all unit tests locally, and is cut from `origin/main` unless stacked:
+
+| Task | PR | Notes |
+|---|---|---|
+| P0-1 Typing interop | lightningbolts/click#128 | Needs an iOS ↔ Android device check. |
+| P0-2 Phantom activity / link prefixes | lightningbolts/click#129 | Robolectric manifest test, verified to fail on the old manifest. |
+| P0-3 Group-tap review sync | lightningbolts/click#130 | Needs a mixed-device check. |
+| P0-4 Gated drop receive | lightningbolts/click#131 | Needs an iOS sender with `drops_develop` on. |
+| P0-5 Say-hi semantics | none | Already at parity. |
+| P0-6 Migration mirror | lightningbolts/click#132 | Fixes the `build-debug` / `build-signed-bundle` drift failures that every open PR currently shows. |
+| P1-1 Feature flags | lightningbolts/click#133 | |
+| P1-5 Screenshot tests | lightningbolts/click#134 | Baselines verified on the GitHub runner. |
+| P1-2 Theme colours | lightningbolts/click#135 | Stacked on #134. Also fixes unreadable dark Destructive buttons. |
+
+**Merge order:** #132 first (it clears the drift failure on every PR), then the rest in any order, except #135 after #134.
+
+## 9. Environment note for Phase 3
 
 `./gradlew assembleDebug` needs the Android SDK (platform 36, build-tools). The cloud environment used for this audit denies `dl.google.com`, so the SDK can't be installed and no build or unit test can run here. To run Phase 3 in that environment, add `dl.google.com` to the environment's allowed domains (see https://code.claude.com/docs/en/cloud-environments#network-access). Locally and in GitHub CI (`.github/workflows/android-ci.yml`) the build works as documented in `AGENTS.md`.
