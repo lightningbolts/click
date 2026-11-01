@@ -500,6 +500,31 @@ class ApiClient {
         }
     }
 
+    /**
+     * GET `/api/geo/weather?lat&lng[&at]` — public; now, plus the forecast for [atIso] when it is up to
+     * a week ahead. Weather is a nicety, so callers treat any failure as "no weather".
+     */
+    suspend fun getPlaceWeather(
+        latitude: Double,
+        longitude: Double,
+        atIso: String? = null,
+    ): Result<kotlinx.serialization.json.JsonElement> =
+        try {
+            val response: HttpResponse =
+                clickWebPlainClient.get("$clickWebAuthOrigin/api/geo/weather") {
+                    parameter("lat", latitude.toString())
+                    parameter("lng", longitude.toString())
+                    atIso?.let { parameter("at", it) }
+                }
+            if (response.status.value in 200..299) {
+                Result.success(json.parseToJsonElement(response.bodyAsText()))
+            } else {
+                Result.failure(Exception(readClickWebErrorMessage(response)))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+
     /** GET `/api/users/{userId}/public-profile` — unauthenticated. */
     suspend fun getPublicProfileUnauthenticated(userId: String): Result<PublicProfileUnauthenticatedResponse> {
         val id = userId.trim()

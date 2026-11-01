@@ -19,10 +19,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
+import compose.project.click.click.data.api.ApiClient
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
 import compose.project.click.click.data.models.withPreservedEventScheduleFrom // pragma: allowlist secret
@@ -30,18 +33,23 @@ import compose.project.click.click.events.EventChatOpenState // pragma: allowlis
 import compose.project.click.click.events.EventChatResolver // pragma: allowlist secret
 import compose.project.click.click.events.EventRsvpRequestStatus // pragma: allowlist secret
 import compose.project.click.click.events.JOIN_REQUEST_POLL_MS // pragma: allowlist secret
+import compose.project.click.click.events.PlaceWeather
+import compose.project.click.click.events.PlaceWeatherCache
+import compose.project.click.click.events.PlaceWeatherReading
 import compose.project.click.click.events.buildEventShareText // pragma: allowlist secret
 import compose.project.click.click.events.buildEventShareUrl // pragma: allowlist secret
 import compose.project.click.click.events.eventCheckInCtaLabel // pragma: allowlist secret
 import compose.project.click.click.events.eventSchedule // pragma: allowlist secret
 import compose.project.click.click.events.formatEventPostedAtLabel // pragma: allowlist secret
 import compose.project.click.click.events.formatEventScheduleRange // pragma: allowlist secret
+import compose.project.click.click.events.hasFiniteCoordinates
 import compose.project.click.click.events.isEnded // pragma: allowlist secret
 import compose.project.click.click.events.isLive // pragma: allowlist secret
 import compose.project.click.click.events.joinRequestDecisionMessage // pragma: allowlist secret
 import compose.project.click.click.events.label // pragma: allowlist secret
 import compose.project.click.click.events.openEventMapsRoute // pragma: allowlist secret
 import compose.project.click.click.events.parseEventListingOptions // pragma: allowlist secret
+import compose.project.click.click.events.weatherForecastStartOrNull
 import compose.project.click.click.notifications.ChatDeepLinkManager // pragma: allowlist secret
 import compose.project.click.click.platform.shareText // pragma: allowlist secret
 import compose.project.click.click.ui.components.AnimatedClickDialog // pragma: allowlist secret
@@ -65,6 +73,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 
 @Composable
 internal fun BeaconDetailSheetContent(
@@ -526,6 +536,14 @@ internal fun EventBeaconDetail(
             }
         }
 
+        EventWeatherLine(
+            latitude = displayBeacon.latitude,
+            longitude = displayBeacon.longitude,
+            startEpochMs = schedule?.startEpochMs,
+            border = border,
+            cardSurface = cardSurface,
+        )
+
         if (displayBeacon.showCreatorName && !hostDisplayName.isNullOrBlank()) {
             EventHostCard(
                 displayName = hostDisplayName,
@@ -905,3 +923,66 @@ internal fun EventBeaconDetail(
         )
     }
 }
+
+/** "64° Cloudy now · 58° Rain at 7:00 PM" under the location (iOS event page weather, #63). */
+@Composable
+private fun EventWeatherLine(
+    latitude: Double,
+    longitude: Double,
+    startEpochMs: Long?,
+    border: Color,
+    cardSurface: Color,
+) {
+    if (!hasFiniteCoordinates(latitude, longitude)) return
+    var weather by remember(latitude, longitude, startEpochMs) { mutableStateOf<PlaceWeather?>(null) }
+    LaunchedEffect(latitude, longitude, startEpochMs) {
+        val now = Clock.System.now().toEpochMilliseconds()
+        val forecastStart = weatherForecastStartOrNull(startEpochMs, now)
+        val key = PlaceWeatherCache.key(latitude, longitude, forecastStart)
+        PlaceWeatherCache.get(key, now)?.let {
+            weather = it
+            return@LaunchedEffect
+        }
+        val atIso = forecastStart?.let { Instant.fromEpochMilliseconds(it).toString() }
+        val fetched =
+            withContext(Dispatchers.Default) {
+                ApiClient().getPlaceWeather(latitude, longitude, atIso).getOrNull()?.let(PlaceWeather::parse)
+            } ?: return@LaunchedEffect
+        PlaceWeatherCache.put(key, fetched, now)
+        weather = fetched
+    }
+    val current = weather ?: return
+    val summary = current.summary(startEpochMs) ?: return
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .border(clickBorderWidth(), border, RoundedCornerShape(12.dp))
+                .background(cardSurface, RoundedCornerShape(12.dp))
+                .padding(16.dp)
+                .semantics(mergeDescendants = true) {},
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector = weatherIcon(current.leadReading),
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(18.dp),
+        )
+        Text(
+            text = summary,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f),
+        )
+    }
+}
+
+private fun weatherIcon(reading: PlaceWeatherReading?) =
+    when (reading?.icon) {
+        "cloudy" -> Icons.Filled.Cloud
+        "fog", "drizzle", "rain", "thunder" -> Icons.Filled.Umbrella
+        "snow" -> Icons.Filled.AcUnit
+        else -> if (reading?.isDay == false) Icons.Filled.NightsStay else Icons.Filled.WbSunny
+    }
