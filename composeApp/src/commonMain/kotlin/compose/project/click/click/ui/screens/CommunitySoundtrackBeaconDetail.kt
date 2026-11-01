@@ -26,6 +26,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage // pragma: allowlist secret
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
+import compose.project.click.click.data.flags.FeatureFlag
+import compose.project.click.click.data.flags.FeatureFlags
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
 import compose.project.click.click.events.buildEventShareText // pragma: allowlist secret
@@ -43,6 +45,7 @@ import compose.project.click.click.util.SoundtrackMatch // pragma: allowlist sec
 import compose.project.click.click.util.SoundtrackResolver // pragma: allowlist secret
 import compose.project.click.click.viewmodel.MapViewModel // pragma: allowlist secret
 import kotlinx.coroutines.delay
+import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
@@ -577,6 +580,13 @@ internal fun SoundtrackBeaconDetail(
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("Open in music app")
             }
+        }
+
+        // "Listening now" (flag `soundtrack_presence`, iOS F5).
+        val flags by FeatureFlags.state.collectAsState()
+        val soundtrackLive = displayBeacon.expiresAtEpochMs?.let { it > Clock.System.now().toEpochMilliseconds() } != false
+        if (soundtrackLive && flags.isEnabled(FeatureFlag.SOUNDTRACK_PRESENCE)) {
+            ListeningNowSection(beaconId = displayBeacon.id)
         }
 
         if (displayBeacon.showCreatorName && !hostDisplayName.isNullOrBlank()) {
