@@ -11,6 +11,7 @@ import compose.project.click.click.chat.attachments.AttachmentCrypto // pragma: 
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.SupabaseConfig // pragma: allowlist secret
 import compose.project.click.click.data.api.ChatApiClient // pragma: allowlist secret
+import compose.project.click.click.data.api.ChatPinDto // pragma: allowlist secret
 import compose.project.click.click.data.models.ChatMessageType // pragma: allowlist secret
 import compose.project.click.click.data.models.IcebreakerPrompt // pragma: allowlist secret
 import compose.project.click.click.data.models.Message // pragma: allowlist secret
@@ -665,7 +666,29 @@ class ChatViewModel(
 
     fun leaveChatRoom(clearMessageSurface: Boolean = true) = leaveChatRoomImpl(clearMessageSurface = clearMessageSurface)
 
-    fun startTypingMonitoring(chatId: String) = startTypingMonitoringImpl(chatId = chatId)
+    fun startTypingMonitoring(chatId: String) {
+        startTypingMonitoringImpl(chatId = chatId)
+        loadPinsImpl(chatId)
+    }
+
+    // ── Pinned messages (iOS banner + long-press Pin) ──────────────────────────
+    internal var pinsChatId: String? = null
+    internal val _pinnedMessages = MutableStateFlow<List<ChatPinDto>>(emptyList())
+    val pinnedMessages: StateFlow<List<ChatPinDto>> = _pinnedMessages.asStateFlow()
+
+    fun togglePin(messageId: String) = togglePinImpl(messageId)
+
+    /** A message the timeline should scroll to and highlight (pin banner taps). */
+    internal val _jumpToMessageRequest = MutableStateFlow<String?>(null)
+    val jumpToMessageRequest: StateFlow<String?> = _jumpToMessageRequest.asStateFlow()
+
+    fun requestJumpToMessage(messageId: String) {
+        _jumpToMessageRequest.value = messageId
+    }
+
+    fun consumeJumpToMessage() {
+        _jumpToMessageRequest.value = null
+    }
 
     fun onUserTyping(chatId: String) = onUserTypingImpl(chatId = chatId)
 
