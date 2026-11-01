@@ -359,6 +359,8 @@ internal fun EventBeaconDetail(
 
     // While a join request is pending, re-check every 30 s, only while this screen is showing (F86).
     var joinDecisionNotice by remember(beacon.id) { mutableStateOf<String?>(null) }
+    var showClickPass by remember(beacon.id) { mutableStateOf(false) }
+    var showPassScanner by remember(beacon.id) { mutableStateOf(false) }
     var lastRequestStatus by remember(beacon.id) { mutableStateOf(rsvpRequestStatus) }
     LaunchedEffect(displayBeacon.id, rsvpRequestStatus) {
         if (rsvpRequestStatus != EventRsvpRequestStatus.PENDING) return@LaunchedEffect
@@ -802,6 +804,39 @@ internal fun EventBeaconDetail(
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text("Join Event Route", fontWeight = FontWeight.SemiBold)
+        }
+
+        // Click Pass for people going; the door scanner for the host (iOS #63).
+        if (isEventCreator) {
+            ClickButton(
+                onClick = { showPassScanner = true },
+                modifier = Modifier.fillMaxWidth(),
+                variant = ClickButtonVariant.Secondary,
+            ) {
+                Icon(Icons.Filled.QrCodeScanner, contentDescription = null, modifier = Modifier.size(20.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Scan Click Passes", fontWeight = FontWeight.SemiBold)
+            }
+        } else if (currentUserSignedUp) {
+            ClickButton(
+                onClick = { showClickPass = true },
+                modifier = Modifier.fillMaxWidth(),
+                variant = ClickButtonVariant.Secondary,
+            ) {
+                Icon(Icons.Filled.QrCode2, contentDescription = null, modifier = Modifier.size(20.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Click Pass", fontWeight = FontWeight.SemiBold)
+            }
+        }
+        if (showClickPass) {
+            ClickPassSheet(
+                beaconId = displayBeacon.id,
+                eventTitle = displayBeacon.displayDynamicTitle(),
+                onDismiss = { showClickPass = false },
+            )
+        }
+        if (showPassScanner) {
+            PassScannerSheet(beaconId = displayBeacon.id, onDismiss = { showPassScanner = false })
         }
 
         joinDecisionNotice?.let { notice ->
