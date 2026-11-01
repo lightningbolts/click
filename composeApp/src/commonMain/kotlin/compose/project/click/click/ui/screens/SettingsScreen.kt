@@ -21,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.EventAvailable
 import androidx.compose.material.icons.filled.Height
@@ -62,12 +63,20 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.appVersionLabel // pragma: allowlist secret
 import compose.project.click.click.calendar.CalendarProvider // pragma: allowlist secret
 import compose.project.click.click.calendar.DeviceCalendar // pragma: allowlist secret
+import compose.project.click.click.crypto.MessageCryptoV2
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.IdentityCache // pragma: allowlist secret
 import compose.project.click.click.data.api.ApiClient
 import compose.project.click.click.data.api.BlockedUserDto // pragma: allowlist secret
+import compose.project.click.click.data.api.ChatApiClient
 import compose.project.click.click.data.api.EventBookmarkItemDto // pragma: allowlist secret
+import compose.project.click.click.data.api.MyChatDeviceDto
 import compose.project.click.click.data.api.PROFILE_BIO_MAX_LENGTH
+import compose.project.click.click.data.api.getMyChatDevicesImpl
+import compose.project.click.click.data.api.removeChatDeviceImpl
+import compose.project.click.click.data.devices.REMOVE_DEVICE_MESSAGE
+import compose.project.click.click.data.devices.deviceDisplayName
+import compose.project.click.click.data.devices.removeDeviceTitle
 import compose.project.click.click.data.models.AvailabilityIntentRow // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
 import compose.project.click.click.data.repository.AuthRepository // pragma: allowlist secret
@@ -111,8 +120,10 @@ import compose.project.click.click.utils.LocationService // pragma: allowlist se
 import compose.project.click.click.utils.readLocationPermissionDisplayState // pragma: allowlist secret
 import compose.project.click.click.viewmodel.AvailabilityViewModel // pragma: allowlist secret
 import compose.project.click.click.viewmodel.MapViewModel // pragma: allowlist secret
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 internal enum class SettingsPage {
     Hub,
@@ -121,6 +132,7 @@ internal enum class SettingsPage {
     Privacy,
     Permissions,
     Blocked,
+    Devices,
     Calendar,
     Interests,
     Personality,
@@ -135,6 +147,7 @@ internal fun SettingsPage.title(): String =
         SettingsPage.Privacy -> "Privacy & data"
         SettingsPage.Permissions -> "Permissions"
         SettingsPage.Blocked -> "Blocked people"
+        SettingsPage.Devices -> "Devices"
         SettingsPage.Calendar -> "Calendar"
         SettingsPage.Interests -> "Interests"
         SettingsPage.Personality -> "Personality"
@@ -286,6 +299,15 @@ fun SettingsScreen(
     var confirmSignOut by remember { mutableStateOf(false) }
     var signingOut by remember { mutableStateOf(false) }
     var confirmDeleteAccount by remember { mutableStateOf(false) }
+    // Me → Devices
+    val chatDevicesApi = remember { ChatApiClient() }
+    val online by AppDataManager.networkConnectivityMonitor.isOnline.collectAsState()
+    var devicesLoad by remember { mutableStateOf<PageLoad<List<MyChatDeviceDto>>>(PageLoad.Loading) }
+    var devicesEpoch by remember { mutableStateOf(0) }
+    var thisDeviceId by remember { mutableStateOf<String?>(null) }
+    var removingDevices by remember { mutableStateOf(emptySet<String>()) }
+    var devicesError by remember { mutableStateOf<String?>(null) }
+    var confirmRemoveDevice by remember { mutableStateOf<MyChatDeviceDto?>(null) }
     var pendingAlertKey by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(notificationPreferencesSaving) {
         if (!notificationPreferencesSaving) pendingAlertKey = null
@@ -344,6 +366,20 @@ fun SettingsScreen(
     var showPermissionsHub by remember { mutableStateOf(false) }
     var settingsPage by currentSettingsPage
 
+    LaunchedEffect(settingsPage, devicesEpoch, online) {
+        if (settingsPage != SettingsPage.Devices) return@LaunchedEffect
+        if (thisDeviceId == null) {
+            thisDeviceId =
+                withContext(Dispatchers.Default) {
+                    runCatching { MessageCryptoV2.loadOrCreateDeviceIdentity().info.deviceId }.getOrNull()
+                }
+        }
+        if (devicesLoad !is PageLoad.Loaded) devicesLoad = PageLoad.Loading
+        chatDevicesApi.getMyChatDevicesImpl().fold(
+            onSuccess = { devicesLoad = PageLoad.Loaded(it) },
+            onFailure = { if (devicesLoad !is PageLoad.Loaded) devicesLoad = PageLoad.Failed },
+        )
+    }
     LaunchedEffect(settingsPage, blockedEpoch) {
         if (settingsPage != SettingsPage.Blocked) return@LaunchedEffect
         if (blockedLoad !is PageLoad.Loaded) blockedLoad = PageLoad.Loading
@@ -511,6 +547,8 @@ fun SettingsScreen(
                             MeNavRow(Icons.Default.PrivacyTip, "Privacy & data", onClick = { settingsPage = SettingsPage.Privacy })
                             SettingsDivider()
                             MeNavRow(Icons.Default.Shield, "Permissions", onClick = { settingsPage = SettingsPage.Permissions })
+                            SettingsDivider()
+                            MeNavRow(Icons.Default.Devices, "Devices", onClick = { settingsPage = SettingsPage.Devices })
                             SettingsDivider()
                             MeNavRow(
                                 icon = Icons.Default.Star,
@@ -826,6 +864,20 @@ fun SettingsScreen(
                                 states = permissionStates,
                                 onAllow = ::requestPermission,
                                 onOpenSettings = { permissionController.openSettings(it) },
+                            )
+                        }
+                    }
+
+                    SettingsPage.Devices -> {
+                        item {
+                            DevicesPageContent(
+                                load = devicesLoad,
+                                thisDeviceId = thisDeviceId,
+                                removing = removingDevices,
+                                errorMessage = devicesError,
+                                online = online,
+                                onRemove = { confirmRemoveDevice = it },
+                                onRetry = { devicesEpoch++ },
                             )
                         }
                     }
@@ -1263,6 +1315,38 @@ fun SettingsScreen(
                 },
                 dismissButton = {
                     TextButton(onClick = { confirmSignOut = false }) { Text("Cancel", color = GlassSheetTokens.OnOledMuted()) }
+                },
+            )
+        }
+
+        confirmRemoveDevice?.let { device ->
+            val name = deviceDisplayName(device, isThisDevice = false)
+            GlassAlertDialog(
+                onDismissRequest = { confirmRemoveDevice = null },
+                title = { Text(removeDeviceTitle(name)) },
+                text = { Text(REMOVE_DEVICE_MESSAGE) },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            confirmRemoveDevice = null
+                            val before = (devicesLoad as? PageLoad.Loaded)?.value ?: return@TextButton
+                            // Gone from the list at once; back, with the reason, if the server says no.
+                            devicesError = null
+                            removingDevices = removingDevices + device.deviceId
+                            devicesLoad = PageLoad.Loaded(before.filterNot { it.deviceId == device.deviceId })
+                            settingsScope.launch {
+                                chatDevicesApi.removeChatDeviceImpl(device.deviceId).onFailure { err ->
+                                    devicesLoad = PageLoad.Loaded(before)
+                                    devicesError = "Couldn't remove $name. ${err.message.orEmpty()}".trim()
+                                }
+                                removingDevices = removingDevices - device.deviceId
+                            }
+                        },
+                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                    ) { Text("Remove") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { confirmRemoveDevice = null }) { Text("Keep Device", color = GlassSheetTokens.OnOledMuted()) }
                 },
             )
         }
