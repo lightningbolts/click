@@ -21,6 +21,8 @@ import kotlinx.serialization.json.put
 internal object TypingBroadcast {
     const val EVENT = "typing"
 
+    private val USER_ID_KEYS = listOf("user_id", "userId")
+
     fun encode(userId: String): JsonObject =
         buildJsonObject {
             put("userId", userId)
@@ -34,11 +36,15 @@ internal object TypingBroadcast {
      */
     fun decode(payload: JsonObject): TypingStatus? {
         val userId =
-            (payload.stringOrNull("user_id") ?: payload.stringOrNull("userId"))
-                ?.trim()
-                ?.takeIf { it.isNotEmpty() }
-                ?: return null
-        val isTyping = (payload["is_typing"] as? JsonPrimitive)?.booleanOrNull ?: true
+            USER_ID_KEYS.firstNotNullOfOrNull { key ->
+                payload.stringOrNull(key)?.trim()?.takeIf { it.isNotEmpty() }
+            } ?: return null
+        // Only a real JSON boolean counts; a quoted "false" is not a stop event.
+        val isTyping =
+            (payload["is_typing"] as? JsonPrimitive)
+                ?.takeIf { !it.isString }
+                ?.booleanOrNull
+                ?: true
         return TypingStatus(userId = userId, isTyping = isTyping)
     }
 

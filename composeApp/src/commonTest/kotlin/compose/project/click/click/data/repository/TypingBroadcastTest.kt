@@ -60,4 +60,16 @@ class TypingBroadcastTest {
         // Round-trips through our own decoder.
         assertEquals(TypingStatus("me", true), TypingBroadcast.decode(payload))
     }
+
+    @Test
+    fun quotedFalseIsNotAStopEvent() {
+        val status = TypingBroadcast.decode(parse("""{"user_id":"u","is_typing":"false"}"""))
+        assertEquals(TypingStatus(userId = "u", isTyping = true), status)
+    }
+
+    @Test
+    fun blankSnakeCaseIdFallsBackToCamelCase() {
+        val status = TypingBroadcast.decode(parse("""{"user_id":"  ","userId":"web-user"}"""))
+        assertEquals(TypingStatus(userId = "web-user", isTyping = true), status)
+    }
 }
