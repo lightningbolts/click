@@ -14,7 +14,11 @@ class HostSelectionExclusionSyncTest {
     fun coalescesQuickChangesIntoOneSave() =
         runTest {
             val sent = mutableListOf<Pair<String, List<String>>>()
-            val sync = HostSelectionExclusionSync(this, debounceMs = 300) { id, ex -> sent += id to ex; Result.success(Unit) }
+            val sync =
+                HostSelectionExclusionSync(this, debounceMs = 300) { id, ex ->
+                    sent += id to ex
+                    Result.success(Unit)
+                }
             sync.submit("ph", listOf("u3"))
             advanceTimeBy(100)
             sync.submit("ph", listOf("u4", "u3"))
@@ -26,7 +30,11 @@ class HostSelectionExclusionSyncTest {
     fun removeThenAddBackBeforeDebounceSendsNothing() =
         runTest {
             val sent = mutableListOf<List<String>>()
-            val sync = HostSelectionExclusionSync(this, debounceMs = 300) { _, ex -> sent += ex; Result.success(Unit) }
+            val sync =
+                HostSelectionExclusionSync(this, debounceMs = 300) { _, ex ->
+                    sent += ex
+                    Result.success(Unit)
+                }
             sync.submit("ph", listOf("u3"))
             advanceTimeBy(100)
             sync.submit("ph", emptyList())
@@ -38,7 +46,11 @@ class HostSelectionExclusionSyncTest {
     fun addingBackAfterASaveClearsTheExclusionOnTheServer() =
         runTest {
             val sent = mutableListOf<List<String>>()
-            val sync = HostSelectionExclusionSync(this, debounceMs = 300) { _, ex -> sent += ex; Result.success(Unit) }
+            val sync =
+                HostSelectionExclusionSync(this, debounceMs = 300) { _, ex ->
+                    sent += ex
+                    Result.success(Unit)
+                }
             sync.submit("ph", listOf("u3"))
             advanceUntilIdle()
             sync.submit("ph", emptyList())
@@ -50,7 +62,11 @@ class HostSelectionExclusionSyncTest {
     fun repeatedSameChoiceIsNotResent() =
         runTest {
             var calls = 0
-            val sync = HostSelectionExclusionSync(this, debounceMs = 300) { _, _ -> calls++; Result.success(Unit) }
+            val sync =
+                HostSelectionExclusionSync(this, debounceMs = 300) { _, _ ->
+                    calls++
+                    Result.success(Unit)
+                }
             sync.submit("ph", listOf("u3"))
             advanceUntilIdle()
             sync.submit("ph", listOf("u3"))
@@ -78,7 +94,11 @@ class HostSelectionExclusionSyncTest {
     fun resetCancelsAQueuedSave() =
         runTest {
             var calls = 0
-            val sync = HostSelectionExclusionSync(this, debounceMs = 300) { _, _ -> calls++; Result.success(Unit) }
+            val sync =
+                HostSelectionExclusionSync(this, debounceMs = 300) { _, _ ->
+                    calls++
+                    Result.success(Unit)
+                }
             sync.submit("ph", listOf("u3"))
             runCurrent()
             sync.reset()
