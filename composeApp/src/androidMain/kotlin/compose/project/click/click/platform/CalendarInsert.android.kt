@@ -28,6 +28,9 @@ actual fun openSystemCalendarInsert(draft: EventCalendarDraft): Boolean {
 actual fun openMapsChooser(geoUri: String): Boolean {
     val ctx = AndroidChatImageSaveContext.applicationContext
     val intent = Intent(Intent.ACTION_VIEW, Uri.parse(geoUri))
+    // An empty chooser is a dead end; let the caller fall back to the Google Maps web link.
+    // Package visibility for `geo:` is declared in the manifest's <queries>.
+    if (intent.resolveActivity(ctx.packageManager) == null) return false
     return try {
         ctx.startActivity(Intent.createChooser(intent, "Open in").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         true
