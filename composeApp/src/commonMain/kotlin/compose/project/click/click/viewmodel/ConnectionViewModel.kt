@@ -123,6 +123,8 @@ sealed class ConnectionState {
         val requiresSelection: Boolean = false,
         /** Currently selected peer ids when [requiresSelection] is true. */
         val selectedPeerIds: Set<String> = emptySet(),
+        /** Everyone in the tap already shares this group connection; the review saves to it. */
+        val existingConnectionId: String? = null,
     ) : ConnectionState()
 
     /** QR parsed locally; user fills context before any redeem/create network work. */
@@ -173,6 +175,12 @@ class ConnectionViewModel : ViewModel() {
      * Used for diagnostics; per-edge encounter logging is taken from each [ConnectionRepository.createConnection] result.
      */
     internal var lastProximityEncounterLoggedAggregate: Boolean = true
+
+    /** Saves removals made while reviewing a group tap so the confirming phone honours them. */
+    internal val hostSelectionSync =
+        HostSelectionExclusionSync(scope = viewModelScope) { pendingId, excluded ->
+            repository.recordProximitySelectionExclusions(pendingId, excluded)
+        }
 
     internal var lastProximityLat: Double? = null
     internal var lastProximityLng: Double? = null
@@ -386,6 +394,7 @@ class ConnectionViewModel : ViewModel() {
     )
 
     fun resetConnectionState() {
+        hostSelectionSync.reset()
         val tagging = _connectionState.value as? ConnectionState.TaggingContext
         if (tagging?.requiresSelection == true) {
             ConnectionFlowTelemetry.recordHostSelectionAbandoned(
@@ -457,6 +466,12 @@ class ConnectionViewModel : ViewModel() {
     )
 
     fun toggleHostSelectionPeer(peerId: String) = toggleHostSelectionPeerImpl(peerId = peerId)
+
+    /** The review sheet's current choice; saves removals for whichever phone confirms first. */
+    fun updateHostSelection(
+        selectedPeerIds: Set<String>,
+        currentUserId: String,
+    ) = updateHostSelectionImpl(selectedPeerIds = selectedPeerIds, currentUserId = currentUserId)
 
     fun promotePendingConfirmationToHostSelection(currentUserId: String) =
         promotePendingConfirmationToHostSelectionImpl(currentUserId = currentUserId)
