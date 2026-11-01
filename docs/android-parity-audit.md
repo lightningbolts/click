@@ -473,11 +473,13 @@ Each PR builds (`assembleDebug`), passes `spotlessCheck` and all unit tests loca
 | P2-10 In-app account deletion | lightningbolts/click#140 | |
 | P2-11 Alert confirmations and Report | lightningbolts/click#145 | Stacked on #133. |
 | P2-12 Listening now | lightningbolts/click#150 | Stacked on #133. |
+| G6-1 Activity inbox | lightningbolts/click#151 | |
+| G6-9 Pinned messages | lightningbolts/click#152 | |
 | (found) Plan map link escaping | lightningbolts/click#144 | |
 
 **Merge order:** #132, then #134 → #135 → #148, then #133 → #145 / #150. The rest are independent.
 
-**Still open** (larger, each needs its own PRs): Activity inbox (G6-1), Click Drops develop/send, shared drops and story (G2), device approval from another phone (G7-1), Places (G5), ticketing purchase (P2-16), GIFs, pins and mute menu (G6-8…10), server search (`/api/search`), connect capture quality and `sensor_observation` (G4), live updates (G1-2), product telemetry (G1-6), Nearby paging and pin stacking (G3-7), shape and spacing tokens with a screen sweep (P1-4).
+**Still open** (larger, each needs its own PRs): Click Drops develop/send, shared drops and story (G2), device approval from another phone (G7-1), Places (G5), ticketing purchase (P2-16), GIFs and mute menu (G6-8, G6-10), server search (`/api/search`), connect capture quality and `sensor_observation` (G4), live updates (G1-2), product telemetry (G1-6), Nearby paging and pin stacking (G3-7), shape and spacing tokens with a screen sweep (P1-4).
 
 ## 9. Environment note for Phase 3
 
