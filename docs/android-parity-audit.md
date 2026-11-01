@@ -92,7 +92,7 @@ Where a sheet-07 row already specifies a task in detail, this document links to 
 | Shared Click Drops strip | `SharedDropsStrip.swift` | — | Missing | Flag `shared_drops` (G2-3). |
 | Upcoming (hosting/going/saved) and Recommended for you | `HomeComponents.swift` (`UpcomingEventsView`, `HomeEventCard`); `GET /api/beacons/mine` | `FeaturedEventSection`, `SavedEventsSection`, `ExploreNearbyBeaconsSection` | Partial | Android doesn't call `/api/beacons/mine`, so hosted and RSVP'd events are missing from Upcoming. There is no on-device "because you like…" ranking. |
 | "Get started" setup card | `HomeSetupCard.swift` | — | Missing | Pairs with G6-5. |
-| Recent connections strip with Core ring | `HomeComponents.swift`, `iOS/DesignSystem/Colors.swift` (`coreRing`) | `RecentClickCard`, `OnlineFriendItem` | Partial | Core ring gradient (`#F5C451 → #E39A3B → #A855F7 → #7C3AED`) is missing on avatars. |
+| Recent connections strip with Core ring | `HomeComponents.swift`, `iOS/DesignSystem/Colors.swift` (`coreRing`) | `RecentClickCard`, `OnlineFriendItem` | Partial | Android already rings Core avatars, but in solid purple; #149 switches to iOS's gradient. |
 | Event recap card | `GET /api/me/event-history/recap-card` | — | Missing | Flag `event_history` (G3-3). |
 | Your recap (day/week) | `GET /api/me/recap` | `ActivityRecapSection`, `KMP/viewmodel/ActivityRecapController` | Done | |
 | Explore nearby | `GET /api/beacons`, `/api/hub/nearby`, `/api/places/nearby` | `ExploreNearbyBeaconsSection` | Done | Places count is absent until Places lands. |
@@ -227,7 +227,7 @@ Where a sheet-07 row already specifies a task in detail, this document links to 
 
 | Feature | iOS | Android | Status | Notes |
 |---|---|---|---|---|
-| Event page (hero, colours, host, tiles, location, going pile, markdown About) | `BeaconDetailView.swift`, `iOS/DesignSystem/Components/MarkdownText.swift` | `EventBeaconDetail*.kt` | Partial | No markdown rendering of the description (#67), no weather, no still-map location card. |
+| Event page (hero, colours, host, tiles, location, going pile, markdown About) | `BeaconDetailView.swift`, `iOS/DesignSystem/Components/MarkdownText.swift` | `EventBeaconDetail*.kt`, `KMP/ui/components/EventMarkdownText.kt` | Partial | Markdown descriptions **already render** (correction: this audit first said they didn't). Weather: #143. Still missing: the still-map location card. |
 | Create / edit, including recurring | `CreateBeaconSheet.swift` | `EventEditSheet.kt`, `KMP/events/EventRecurrence.kt` | Done | |
 | RSVP states: request, waitlist, declined, withdraw | `/api/beacons/{id}/rsvp` | `BeaconRsvpPersistence` | Done | Check the 30 s request-status watch. |
 | Save / bookmark | `PUT /api/beacons/{id}/bookmark` | Same | Done | |
@@ -446,21 +446,38 @@ These need physical devices. The code goes behind interfaces with fakes so the l
 
 ## 8. Phase 3 progress (2026-11-01)
 
-Each PR builds (`assembleDebug`), passes `spotlessCheck` and all unit tests locally, and is cut from `origin/main` unless stacked:
+Each PR builds (`assembleDebug`), passes `spotlessCheck` and all unit tests locally, and is cut from `origin/main` unless stacked. Device checks are listed in each PR.
 
 | Task | PR | Notes |
 |---|---|---|
-| P0-1 Typing interop | lightningbolts/click#128 | Needs an iOS ↔ Android device check. |
-| P0-2 Phantom activity / link prefixes | lightningbolts/click#129 | Robolectric manifest test, verified to fail on the old manifest. |
-| P0-3 Group-tap review sync | lightningbolts/click#130 | Needs a mixed-device check. |
-| P0-4 Gated drop receive | lightningbolts/click#131 | Needs an iOS sender with `drops_develop` on. |
+| P0-1 Typing interop | lightningbolts/click#128 | |
+| P0-2 Phantom activity, link prefixes | lightningbolts/click#129 | |
+| P0-3 Group-tap review sync | lightningbolts/click#130 | |
+| P0-4 Gated drop receive | lightningbolts/click#131 | |
 | P0-5 Say-hi semantics | none | Already at parity. |
-| P0-6 Migration mirror | lightningbolts/click#132 | Fixes the `build-debug` / `build-signed-bundle` drift failures that every open PR currently shows. |
-| P1-1 Feature flags | lightningbolts/click#133 | |
-| P1-5 Screenshot tests | lightningbolts/click#134 | Baselines verified on the GitHub runner. |
-| P1-2 Theme colours | lightningbolts/click#135 | Stacked on #134. Also fixes unreadable dark Destructive buttons. |
+| P0-6 Migration mirror | lightningbolts/click#132 | **Merge first:** it fixes the drift failure every PR's `build-debug` job shows. |
+| P1-1 Feature flags | lightningbolts/click#133 | Base of #145 and #150. |
+| P1-2 Theme colours | lightningbolts/click#135 | Stacked on #134. |
+| P1-3 Typography | lightningbolts/click#148 | Stacked on #135. |
+| P1-5 Screenshot tests (Roborazzi) | lightningbolts/click#134 | Baselines verified on the GitHub runner. |
+| P1-6 Re-key after `DEVICE_REVOKED` | lightningbolts/click#138 | |
+| P1-7 Push routes and server text | lightningbolts/click#137 | Also fixes non-chat pushes showing as "Sent you a message". |
+| P1-9 Core ring gradient | lightningbolts/click#149 | |
+| P2-1 T-60 reminders only | lightningbolts/click#139 | |
+| P2-2 Home Upcoming | lightningbolts/click#147 | |
+| P2-3 Directions and Add to Calendar | lightningbolts/click#142 | |
+| P2-4 Event weather | lightningbolts/click#143 | |
+| P2-5 Markdown descriptions | none | Already implemented. |
+| P2-6, P2-7 Click Pass and door scanner | lightningbolts/click#146 | |
+| P2-8 Settings › Devices | lightningbolts/click#141 | |
+| P2-10 In-app account deletion | lightningbolts/click#140 | |
+| P2-11 Alert confirmations and Report | lightningbolts/click#145 | Stacked on #133. |
+| P2-12 Listening now | lightningbolts/click#150 | Stacked on #133. |
+| (found) Plan map link escaping | lightningbolts/click#144 | |
 
-**Merge order:** #132 first (it clears the drift failure on every PR), then the rest in any order, except #135 after #134.
+**Merge order:** #132, then #134 → #135 → #148, then #133 → #145 / #150. The rest are independent.
+
+**Still open** (larger, each needs its own PRs): Activity inbox (G6-1), Click Drops develop/send, shared drops and story (G2), device approval from another phone (G7-1), Places (G5), ticketing purchase (P2-16), GIFs, pins and mute menu (G6-8…10), server search (`/api/search`), connect capture quality and `sensor_observation` (G4), live updates (G1-2), product telemetry (G1-6), Nearby paging and pin stacking (G3-7), shape and spacing tokens with a screen sweep (P1-4).
 
 ## 9. Environment note for Phase 3
 
