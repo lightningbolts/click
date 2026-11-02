@@ -72,13 +72,13 @@ import compose.project.click.click.data.api.ChatApiClient
 import compose.project.click.click.data.api.EventBookmarkItemDto // pragma: allowlist secret
 import compose.project.click.click.data.api.MyChatDeviceDto
 import compose.project.click.click.data.api.PROFILE_BIO_MAX_LENGTH
+import compose.project.click.click.data.api.accountDeletionFailureMessage
+import compose.project.click.click.data.api.deleteAccountImpl
 import compose.project.click.click.data.api.getMyChatDevicesImpl
 import compose.project.click.click.data.api.removeChatDeviceImpl
 import compose.project.click.click.data.devices.REMOVE_DEVICE_MESSAGE
 import compose.project.click.click.data.devices.deviceDisplayName
 import compose.project.click.click.data.devices.removeDeviceTitle
-import compose.project.click.click.data.api.accountDeletionFailureMessage
-import compose.project.click.click.data.api.deleteAccountImpl
 import compose.project.click.click.data.models.AvailabilityIntentRow // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
 import compose.project.click.click.data.repository.AuthRepository // pragma: allowlist secret
