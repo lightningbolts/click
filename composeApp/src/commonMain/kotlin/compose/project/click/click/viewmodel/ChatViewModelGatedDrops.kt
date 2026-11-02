@@ -1,16 +1,20 @@
 package compose.project.click.click.viewmodel
 
 import androidx.lifecycle.viewModelScope
+import compose.project.click.click.data.flags.FeatureFlag
+import compose.project.click.click.data.flags.FeatureFlags
 import compose.project.click.click.data.models.Message
 import compose.project.click.click.data.models.mediaUrlOrNull // pragma: allowlist secret
 import compose.project.click.click.data.models.originalMimeTypeOrNull // pragma: allowlist secret
 import compose.project.click.click.data.repository.GatedDropOriginalResult
 import compose.project.click.click.data.repository.GatedDropOriginals
+import compose.project.click.click.data.repository.gatedDropOriginalVaultKey
 import compose.project.click.click.ui.chat.secureChatImageBitmapCache // pragma: allowlist secret
 import compose.project.click.click.util.chatMediaDispatcher // pragma: allowlist secret
 import compose.project.click.click.util.chatMediaVaultExtensionForMessage // pragma: allowlist secret
 import compose.project.click.click.util.imageVaultFileExtension // pragma: allowlist secret
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
+import compose.project.click.click.util.writeChatMediaVaultFile
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withPermit
@@ -52,4 +56,24 @@ internal fun ChatViewModel.ensureGatedDropOriginalLoaded(
             gatedDropLoadsInFlight.remove(message.id)
         }
     }
+}
+
+/**
+ * True when this sender's Click Drop goes out gated: `drops_develop` is on and it's a photo. Mirrors
+ * iOS `ChatComposerDraft.gatesOriginal`; with the flag off, drops send as before (original as media).
+ */
+internal fun gatesClickDropOriginal(
+    mimeType: String,
+    flagEnabled: Boolean = FeatureFlags.isEnabled(FeatureFlag.DROPS_DEVELOP),
+): Boolean = flagEnabled && mimeType.trim().lowercase().startsWith("image/")
+
+/** Keeps the sender's own original under the developed-original vault key (as iOS does after send). */
+internal fun storeOwnGatedDropOriginal(
+    message: Message,
+    original: ByteArray,
+) {
+    val extension =
+        chatMediaVaultExtensionForMessage(message)
+            ?: imageVaultFileExtension(message.originalMimeTypeOrNull(), message.mediaUrlOrNull().orEmpty())
+    writeChatMediaVaultFile(gatedDropOriginalVaultKey(message.id), original, extension)
 }

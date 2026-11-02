@@ -903,6 +903,12 @@ object AppDataManager {
         )
     }
 
+    fun setDropReleaseNotificationsEnabled(enabled: Boolean) {
+        updateNotificationPreferences(
+            _notificationPreferences.value.copy(dropReleasePushEnabled = enabled),
+        )
+    }
+
     fun setMessageNotificationsEnabled(enabled: Boolean) {
         updateNotificationPreferences(
             _notificationPreferences.value.copy(messagePushEnabled = enabled),
