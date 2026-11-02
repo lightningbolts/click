@@ -153,6 +153,35 @@
                     android:host="e"/>
             </intent-filter>
 
+            <!-- Click Place Universal Link: https://joinclick.co/p/{slug}?t={anchorToken} (the trailing slash keeps /privacy and /pricing on the web) -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data
+                    android:scheme="https"
+                    android:host="joinclick.co"
+                    android:pathPrefix="/p/"/>
+                <data
+                    android:scheme="https"
+                    android:host="www.joinclick.co"
+                    android:pathPrefix="/p/"/>
+                <data
+                    android:scheme="https"
+                    android:host="click-us.vercel.app"
+                    android:pathPrefix="/p/"/>
+            </intent-filter>
+
+            <!-- Click Place custom scheme: click://p/{slug}?t={anchorToken} -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data
+                    android:scheme="click"
+                    android:host="p"/>
+            </intent-filter>
+
             <!-- In-app routes: click://chat/{id}, profile/{id} (u), myqr, scan, tap, search?q= -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW"/>

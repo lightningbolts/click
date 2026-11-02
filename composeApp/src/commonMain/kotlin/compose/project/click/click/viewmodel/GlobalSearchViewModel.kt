@@ -14,12 +14,17 @@ import compose.project.click.click.data.api.GlobalSearchPerson
 import compose.project.click.click.data.api.GlobalSearchService
 import compose.project.click.click.data.chat.LocalMessageStore // pragma: allowlist secret
 import compose.project.click.click.data.chat.StoredChatMessage // pragma: allowlist secret
+import compose.project.click.click.data.flags.FeatureFlag // pragma: allowlist secret
+import compose.project.click.click.data.flags.FeatureFlags // pragma: allowlist secret
 import compose.project.click.click.data.models.AvailabilityIntentRow
 import compose.project.click.click.data.models.ChatWithDetails
 import compose.project.click.click.data.models.MapBeacon
 import compose.project.click.click.data.models.Message
 import compose.project.click.click.data.models.collapseOneToOneChatsByPeer
 import compose.project.click.click.data.models.isArchivedChannelForUser
+import compose.project.click.click.data.places.PlaceSummaryDto // pragma: allowlist secret
+import compose.project.click.click.data.places.PlacesMapCache // pragma: allowlist secret
+import compose.project.click.click.data.places.matchPlaces // pragma: allowlist secret
 import compose.project.click.click.data.repository.ChatRepository
 import compose.project.click.click.data.repository.ConversationSearchHit // pragma: allowlist secret
 import compose.project.click.click.data.repository.MapBeaconRepository
@@ -172,6 +177,17 @@ sealed class SearchResult {
         override val sortKey: Long = event.startEpochMs() ?: Long.MAX_VALUE
     }
 
+    /**
+     * A Click Place near you, matched on-device from the Places the map last loaded (iOS
+     * `SearchResult.place`). Opens the Place page.
+     */
+    data class PlaceMatch(
+        val place: PlaceSummaryDto,
+    ) : SearchResult() {
+        override val categories = setOf(SearchResultCategory.Nearby)
+        override val sortKey: Long = place.distanceMeters?.toLong() ?: Long.MAX_VALUE
+    }
+
     /** Server: a hub you joined (`/api/search` `hubs`), with the channel the hub screen needs. */
     data class JoinedHub(
         val hub: GlobalSearchHub,
@@ -248,6 +264,7 @@ fun SearchResult.toChatOpenTarget(): SearchChatOpenTarget? =
         is SearchResult.OwnAvailabilityIntentMatch,
         is SearchResult.SharedContextPerson,
         is SearchResult.RemoteEvent,
+        is SearchResult.PlaceMatch,
         -> null
     }
 
@@ -287,15 +304,16 @@ private fun typeRank(r: SearchResult): Int =
         is SearchResult.IntentMatch -> 1
         is SearchResult.BeaconMatch -> 2
         is SearchResult.RemoteEvent -> 3
-        is SearchResult.InterestMatch -> 4
-        is SearchResult.MemoryContextMatch -> 5
-        is SearchResult.ActiveConnection -> 6
-        is SearchResult.ArchivedConnection -> 7
-        is SearchResult.SharedContextPerson -> 8
-        is SearchResult.MessageHit -> 9
-        is SearchResult.LocationBucket -> 10
-        is SearchResult.Clique -> 11
-        is SearchResult.JoinedHub -> 12
+        is SearchResult.PlaceMatch -> 4
+        is SearchResult.InterestMatch -> 5
+        is SearchResult.MemoryContextMatch -> 6
+        is SearchResult.ActiveConnection -> 7
+        is SearchResult.ArchivedConnection -> 8
+        is SearchResult.SharedContextPerson -> 9
+        is SearchResult.MessageHit -> 10
+        is SearchResult.LocationBucket -> 11
+        is SearchResult.Clique -> 12
+        is SearchResult.JoinedHub -> 13
     }
 
 // ── ViewModel ─────────────────────────────────────────────────────────────────
@@ -494,6 +512,7 @@ class GlobalSearchViewModel(
             userLon = cachedLocation?.second,
             out = out,
         )
+        emitPlaceMatches(lowerQuery, out)
 
         // Search the currently cached message windows immediately. Remote/server search may add
         // older matches later, but typing never waits for it.
@@ -543,6 +562,7 @@ class GlobalSearchViewModel(
                         is SearchResult.SharedContextPerson -> "user:${result.person.userId}"
                         is SearchResult.RemoteEvent -> "beacon:${result.event.beaconId}"
                         is SearchResult.JoinedHub -> "hub:${result.hub.hubId}"
+                        is SearchResult.PlaceMatch -> "place:${result.place.id}"
                     }
                 },
         )
@@ -633,6 +653,7 @@ class GlobalSearchViewModel(
                         searchLocation?.second,
                         out,
                     )
+                    emitPlaceMatches(lowerQuery, out)
                     emitInterestMatches(
                         lowerQuery,
                         supplement,
@@ -1087,6 +1108,15 @@ private fun emitBeaconMatches(
         val distance = beaconDistanceMeters(beacon, userLat, userLon)
         out.add(SearchResult.BeaconMatch(beacon = beacon, distanceMeters = distance))
     }
+}
+
+/** Places from the map's last load (iOS matches cached discovery, not `GET /api/me/places`). */
+private fun emitPlaceMatches(
+    lowerQuery: String,
+    out: MutableList<SearchResult>,
+) {
+    if (!FeatureFlags.isEnabled(FeatureFlag.CLICK_PLACES)) return
+    matchPlaces(lowerQuery, PlacesMapCache.places.value).mapTo(out) { SearchResult.PlaceMatch(it) }
 }
 
 private fun emitInterestMatches(

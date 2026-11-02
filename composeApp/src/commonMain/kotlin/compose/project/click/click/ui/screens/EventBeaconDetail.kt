@@ -33,6 +33,8 @@ import compose.project.click.click.data.flags.FeatureFlags
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
 import compose.project.click.click.data.models.withPreservedEventScheduleFrom // pragma: allowlist secret
+import compose.project.click.click.data.places.PlaceOpenRequests // pragma: allowlist secret
+import compose.project.click.click.data.places.eventHostPlace // pragma: allowlist secret
 import compose.project.click.click.events.EventChatOpenState // pragma: allowlist secret
 import compose.project.click.click.events.EventChatResolver // pragma: allowlist secret
 import compose.project.click.click.events.EventRsvpRequestStatus // pragma: allowlist secret
@@ -579,7 +581,21 @@ internal fun EventBeaconDetail(
             cardSurface = cardSurface,
         )
 
-        if (displayBeacon.showCreatorName && !hostDisplayName.isNullOrBlank()) {
+        // A Place hosting its own event is the host: its photo and name, opening its page (iOS
+        // `BeaconDetailView.hostLine`).
+        val hostPlace = eventHostPlace(displayBeacon, featureFlags.isEnabled(FeatureFlag.CLICK_PLACES))
+        if (hostPlace != null) {
+            EventHostCard(
+                displayName = hostPlace.name,
+                userId = hostPlace.id,
+                avatarUrl = hostPlace.photoUrl,
+                border = border,
+                cardSurface = cardSurface,
+                label = "Hosted by",
+                subtitle = hostPlace.city,
+                onClick = { PlaceOpenRequests.open(hostPlace.id, source = "event") },
+            )
+        } else if (displayBeacon.showCreatorName && !hostDisplayName.isNullOrBlank()) {
             EventHostCard(
                 displayName = hostDisplayName,
                 userId = hostUserId ?: "host:$hostDisplayName",

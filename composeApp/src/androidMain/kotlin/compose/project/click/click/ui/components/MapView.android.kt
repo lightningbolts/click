@@ -232,7 +232,7 @@ actual fun PlatformMap(
                         "${pin.id}|${pin.avatarInitials}|$markerHue|${pin.avatarFillArgb}|${pin.pinShape}|${photo?.generationId ?: 0}|${pin.stackCount}"
                     val icon =
                         avatarPinCache.getOrPut(avatarCacheKey) {
-                            if (pin.beaconKind != null) {
+                            if (pin.beaconKind != null || pin.kind == MapPinKind.PLACE) {
                                 bitmapDescriptorForShapedBeaconPin(
                                     density = density,
                                     shape = pin.pinShape,
