@@ -733,6 +733,11 @@ class ChatViewModel(
         targets: List<compose.project.click.click.data.models.ChatWithDetails>,
     ) = forwardMessageImpl(message, targets)
 
+    // ── GIFs ──────────────────────────────────────────────────────────────────
+
+    /** Sends a GIF picked from KLIPY into the open chat (replying when a reply is staged). */
+    fun sendGif(gif: compose.project.click.click.data.models.ChatGif) = sendGifImpl(gif)
+
     // ── Plans ─────────────────────────────────────────────────────────────────
 
     /** Sends a hangout plan into the open chat; the sender is RSVP'd going. */

@@ -78,9 +78,9 @@ class Phase3HelpersTest {
         assertFalse(ChatMuteStore.isMuted(mutes, null, 0))
         assertEquals("Muted", muteStatusLine(ChatMuteStore.FOREVER, 0))
         assertNull(muteStatusLine(500, 1_000))
-        assertEquals("Muted for 1 hour", muteResultMessage(ChatMuteDuration.ONE_HOUR, true))
+        assertEquals("Notifications muted", muteResultMessage(ChatMuteDuration.ONE_HOUR, true))
         assertEquals("Notifications on", muteResultMessage(null, true))
-        assertEquals("Couldn't mute", muteResultMessage(ChatMuteDuration.FOREVER, false))
+        assertEquals("Couldn't change notifications. Try again.", muteResultMessage(ChatMuteDuration.FOREVER, false))
     }
 
     // endregion
