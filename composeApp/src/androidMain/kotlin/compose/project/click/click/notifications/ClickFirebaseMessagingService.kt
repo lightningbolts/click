@@ -235,6 +235,8 @@ class ClickFirebaseMessagingService : FirebaseMessagingService() {
             "reconnect_nudge", "shared_upcoming_event" -> prefs.reconnectNudgeNotificationsEnabled
             "availability_match" -> prefs.availabilityMatchNotificationsEnabled
             "hub_message" -> prefs.hubMessageNotificationsEnabled
+            // A sign-in waiting for approval is a security prompt; always show it.
+            "device_approval" -> true
             else -> prefs.messageNotificationsEnabled
         }
 
