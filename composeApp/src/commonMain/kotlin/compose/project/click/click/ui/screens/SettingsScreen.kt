@@ -325,7 +325,6 @@ fun SettingsScreen(
     var devicesError by remember { mutableStateOf<String?>(null) }
     var confirmRemoveDevice by remember { mutableStateOf<MyChatDeviceDto?>(null) }
     // Me → Places (iOS MyPlacesView; flag click_places)
-    val featureFlags by FeatureFlags.state.collectAsState()
     val placesEnabled = featureFlags.isEnabled(FeatureFlag.CLICK_PLACES)
     val placesRepository = remember { ClickWebPlacesRepository() }
     var myPlacesLoad by remember { mutableStateOf<MyPlacesLoad>(MyPlacesLoad.Loading) }
