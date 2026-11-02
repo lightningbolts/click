@@ -642,14 +642,12 @@ internal fun ConnectionViewModel.onProximityHandshakeRecoveredFromBackgroundImpl
         others.size >= 2
     ) {
         PlatformHapticsPolicy.successNotification()
-        viewModelScope.launch {
-            _verifiedCliqueFromProximity.emit(
-                VerifiedCliqueProximityIntent(
-                    preselectFriendIds = others.take(PROXIMITY_HOST_SELECTION_MAX_PEERS),
-                    matchedUsers = users,
-                ),
-            )
-        }
+        // P2-19: find or create the group chat (prefilled sheet only if that fails).
+        startMultiTapGroupPreparation(
+            currentUserId = currentUserId,
+            groupMemberIds = groupIds,
+            peers = users.filter { it.id in others }.map { it.toUserProfile() },
+        )
         return
     }
     val cur = _connectionState.value
@@ -733,11 +731,11 @@ internal fun ConnectionViewModel.tryFlushPendingProximityHandshakesImpl(
                     g != null &&
                     others.size >= 2
                 ) {
-                    _verifiedCliqueFromProximity.emit(
-                        VerifiedCliqueProximityIntent(
-                            preselectFriendIds = others.take(PROXIMITY_HOST_SELECTION_MAX_PEERS),
-                            matchedUsers = r.recoveredUsers,
-                        ),
+                    // P2-19: find or create the group chat (prefilled sheet only if that fails).
+                    startMultiTapGroupPreparation(
+                        currentUserId = currentUserId,
+                        groupMemberIds = g,
+                        peers = r.recoveredUsers.filter { it.id in others }.map { it.toUserProfile() },
                     )
                     _connectionState.value = ConnectionState.Idle
                 } else {

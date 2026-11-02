@@ -215,6 +215,15 @@ class ConnectionViewModel : ViewModel() {
     internal var reviewWatchJob: Job? = null
     internal var groupWatchJob: Job? = null
 
+    /** Multi-Tap `prepareGroup` (P2-19): find or create the group chat of the latest group Click. */
+    internal val _multiTapGroupState =
+        MutableStateFlow<compose.project.click.click.domain.MultiTapGroupState>(
+            compose.project.click.click.domain.MultiTapGroupState.Idle,
+        )
+    val multiTapGroupState: StateFlow<compose.project.click.click.domain.MultiTapGroupState> =
+        _multiTapGroupState.asStateFlow()
+    internal var multiTapGroupJob: Job? = null
+
     init {
         // G4-7: the follow-up is confirmed or cancelled as each flow settles.
         viewModelScope.launch { _connectionState.collect { syncFollowUpWith(it) } }
