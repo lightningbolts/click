@@ -312,3 +312,6 @@ private var locationContext: Context? = null
 fun initLocationService(context: Context) {
     locationContext = context.applicationContext
 }
+
+/** Application context set by [initLocationService]; null before MainActivity starts. */
+internal fun locationAppContextOrNull(): Context? = locationContext

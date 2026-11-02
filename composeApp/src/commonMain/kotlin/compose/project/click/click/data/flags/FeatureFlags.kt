@@ -42,6 +42,12 @@ enum class FeatureFlag(
 
     /** Your own tickets; stays on for ticket holders while sales are off. */
     TICKET_WALLET("ticket_wallet"),
+
+    /**
+     * Kill switch (one release): when on, QR / manual connects fall back to the legacy direct
+     * PostgREST inserts instead of `POST /api/connections` (G4-10). Off unless the server sends it.
+     */
+    CONNECT_POSTGREST_FALLBACK("connect_postgrest_fallback"),
 }
 
 /** One user's resolved flags: wire key → that flag's `config` (present only when enabled). */
