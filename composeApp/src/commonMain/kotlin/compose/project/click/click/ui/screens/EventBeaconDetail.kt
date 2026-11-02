@@ -28,6 +28,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.api.ApiClient
+import compose.project.click.click.data.flags.FeatureFlag
+import compose.project.click.click.data.flags.FeatureFlags
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
 import compose.project.click.click.data.models.withPreservedEventScheduleFrom // pragma: allowlist secret
@@ -55,6 +57,8 @@ import compose.project.click.click.events.joinRequestDecisionMessage // pragma: 
 import compose.project.click.click.events.label // pragma: allowlist secret
 import compose.project.click.click.events.outlookCalendarUrl
 import compose.project.click.click.events.parseEventListingOptions // pragma: allowlist secret
+import compose.project.click.click.events.tickets.ApiTicketingClient
+import compose.project.click.click.events.tickets.EventTicketing
 import compose.project.click.click.events.weatherForecastStartOrNull
 import compose.project.click.click.notifications.ChatDeepLinkManager // pragma: allowlist secret
 import compose.project.click.click.platform.openMapsChooser
@@ -379,6 +383,27 @@ internal fun EventBeaconDetail(
     var joinDecisionNotice by remember(beacon.id) { mutableStateOf<String?>(null) }
     var showClickPass by remember(beacon.id) { mutableStateOf(false) }
     var showPassScanner by remember(beacon.id) { mutableStateOf(false) }
+    // Ticketing (P2-16, iOS `BeaconDetailView`): when the server sends `beacon.ticketing`, a ticket replaces the RSVP.
+    val featureFlags by FeatureFlags.state.collectAsState()
+    val ticketSalesOn = featureFlags.isEnabled(FeatureFlag.TICKET_SALES)
+    val ticketingClient = remember { ApiTicketingClient() }
+    var ticketing by remember(beacon.id) { mutableStateOf<EventTicketing?>(null) }
+    var ticketingEpoch by remember(beacon.id) { mutableIntStateOf(0) }
+    var showTicketPicker by remember(beacon.id) { mutableStateOf(false) }
+    LaunchedEffect(displayBeacon.id, ticketSalesOn, ticketingEpoch) {
+        if (!ticketSalesOn) {
+            ticketing = null
+            return@LaunchedEffect
+        }
+        try {
+            ticketing = ticketingClient.eventTicketing(displayBeacon.id)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            // Keep what we had; the RSVP path stays until ticketing is known.
+        }
+    }
+    val ticketed = ticketing != null
     var lastRequestStatus by remember(beacon.id) { mutableStateOf(rsvpRequestStatus) }
     LaunchedEffect(displayBeacon.id, rsvpRequestStatus) {
         if (rsvpRequestStatus != EventRsvpRequestStatus.PENDING) return@LaunchedEffect
@@ -828,7 +853,7 @@ internal fun EventBeaconDetail(
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("Scan Click Passes", fontWeight = FontWeight.SemiBold)
             }
-        } else if (currentUserSignedUp) {
+        } else if (currentUserSignedUp || (ticketing?.myTicketCount ?: 0) > 0) {
             ClickButton(
                 onClick = { showClickPass = true },
                 modifier = Modifier.fillMaxWidth(),
@@ -844,6 +869,23 @@ internal fun EventBeaconDetail(
                 beaconId = displayBeacon.id,
                 eventTitle = displayBeacon.displayDynamicTitle(),
                 onDismiss = { showClickPass = false },
+                ticketed = ticketed,
+                eventCancelled = ticketing?.cancelled == true,
+            )
+        }
+        if (showTicketPicker) {
+            TicketPickerSheet(
+                beaconId = displayBeacon.id,
+                client = ticketingClient,
+                onConfirmed = { ticketingEpoch++ },
+                onSeeTickets = {
+                    showTicketPicker = false
+                    showClickPass = true
+                },
+                onDismiss = {
+                    showTicketPicker = false
+                    ticketingEpoch++
+                },
             )
         }
         if (showPassScanner) {
@@ -863,7 +905,10 @@ internal fun EventBeaconDetail(
             EventEndedBanner()
         }
 
-        if (!ended) {
+        val currentTicketing = ticketing
+        if (!ended && currentTicketing != null) {
+            EventTicketButton(ticketing = currentTicketing, onClick = { showTicketPicker = true })
+        } else if (!ended) {
             if (currentUserSignedUp || pendingOrWaitlisted) {
                 ClickButton(
                     onClick = {

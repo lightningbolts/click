@@ -24,6 +24,7 @@ import compose.project.click.click.deeplink.AppDeepLinkRouter
 import compose.project.click.click.deeplink.ConnectionDeepLinkRouter // pragma: allowlist secret
 import compose.project.click.click.deeplink.EventDeepLinkRouter // pragma: allowlist secret
 import compose.project.click.click.encounter.initEncounterTetherWidgetBridge // pragma: allowlist secret
+import compose.project.click.click.events.tickets.TicketCheckoutReturns
 import compose.project.click.click.notifications.ChatDeepLinkManager // pragma: allowlist secret
 import compose.project.click.click.notifications.ChatNotificationDismisser // pragma: allowlist secret
 import compose.project.click.click.notifications.initPushNotificationService // pragma: allowlist secret
@@ -122,6 +123,8 @@ class MainActivity : ComponentActivity() {
     private fun handleEventUniversalLinkIntent(intent: Intent?) {
         if (intent?.action != Intent.ACTION_VIEW) return
         val uriString = intent.dataString ?: return
+        // Stripe's return (/e/{id}/tickets/return) goes to the open ticket picker, not the map.
+        if (TicketCheckoutReturns.handleIncomingUrl(uriString)) return
         EventDeepLinkRouter.handleIncomingUrl(uriString)
     }
 
