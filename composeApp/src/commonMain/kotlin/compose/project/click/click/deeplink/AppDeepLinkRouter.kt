@@ -31,6 +31,20 @@ sealed interface AppDeepLink {
 
     /** The Add Click tab (public profile "Open Add Click"); not parsed from a URL. */
     data object AddClick : AppDeepLink
+
+    /**
+     * A Click Place page: `click://p/{slug}` or `https://joinclick.co/p/{slug}`. A check-in
+     * poster's QR adds `?t={anchorToken}`, which the page uses to ask "Check in at …?".
+     */
+    data class Place(
+        val idOrSlug: String,
+        val anchorToken: String? = null,
+    ) : AppDeepLink
+
+    /** A shared Click Drop's story on Home; only reached from push taps and Activity rows. */
+    data class SharedDrop(
+        val dropId: String,
+    ) : AppDeepLink
 }
 
 /** Minimal URL split; enough for `click://` and joinclick.co links without platform URI types. */
@@ -93,7 +107,8 @@ private val WEB_HOSTS = setOf("joinclick.co", "www.joinclick.co", "click-us.verc
 /**
  * Routes the URLs iOS handles beyond `/c`, `/e` and `/hub` (which keep their own routers):
  * `click://chat/{chatId}?m=`, `click://profile/{userId}` (alias `u`), `click://myqr`,
- * `click://scan`, `click://tap`, `click://search?q=` and `https://joinclick.co/search?q=`.
+ * `click://scan`, `click://tap`, `click://search?q=`, `https://joinclick.co/search?q=` and Click
+ * Places at `click://p/{slug}?t=` and `https://joinclick.co/p/{slug}?t=`.
  */
 object AppDeepLinkRouter {
     private val _pending = MutableStateFlow<AppDeepLink?>(null)
@@ -113,13 +128,15 @@ object AppDeepLinkRouter {
                     "scan" -> AppDeepLink.Scan
                     "tap" -> AppDeepLink.TapConnect
                     "search" -> AppDeepLink.Search(link.query["q"].orEmpty().trim())
+                    "p" -> first?.let { AppDeepLink.Place(it, placeAnchorToken(link)) }
                     else -> null
                 }
             "https", "http" ->
-                if (link.host in WEB_HOSTS && first == "search") {
-                    AppDeepLink.Search(link.query["q"].orEmpty().trim())
-                } else {
-                    null
+                when {
+                    link.host !in WEB_HOSTS -> null
+                    first == "search" -> AppDeepLink.Search(link.query["q"].orEmpty().trim())
+                    first == "p" -> link.segments.getOrNull(1)?.let { AppDeepLink.Place(it, placeAnchorToken(link)) }
+                    else -> null
                 }
             else -> null
         }?.takeIf { it.isValid() }
@@ -129,8 +146,21 @@ object AppDeepLinkRouter {
         when (this) {
             is AppDeepLink.Chat -> chatId.isNotBlank()
             is AppDeepLink.Profile -> userId.isNotBlank()
+            is AppDeepLink.Place -> idOrSlug.isNotBlank()
             else -> true
         }
+
+    /** iOS `placeAnchorToken`: the `t` query item, empty treated as absent. */
+    private fun placeAnchorToken(link: ParsedLink): String? = link.query["t"]?.trim()?.takeIf { it.isNotEmpty() }
+
+    /**
+     * A check-in poster (`…/p/{slug}?t=…`) read by the in-app scanner opens the Place, which asks
+     * before checking in. With Places off it isn't a Click code (iOS `AddClickView.handleScan`).
+     */
+    fun placeLinkFromScan(
+        raw: String,
+        placesEnabled: Boolean,
+    ): AppDeepLink.Place? = if (placesEnabled) parse(raw) as? AppDeepLink.Place else null
 
     /** Returns true when [url] was one of these routes. */
     fun handleIncomingUrl(url: String): Boolean {
@@ -168,5 +198,27 @@ object AppDeepLinkRouter {
         val value = searchQuery
         searchQuery = null
         return value
+    }
+}
+
+/**
+ * The shared drop a push asked to open (iOS `AppEnvironment.pendingSharedDropID`). Home's strip
+ * opens its story once the drop is in the strip and has developed, then clears it.
+ */
+object SharedDropOpenRequests {
+    private val _pending = MutableStateFlow<String?>(null)
+    val pending: StateFlow<String?> = _pending.asStateFlow()
+
+    fun request(dropId: String) {
+        _pending.value = dropId.trim().takeIf { it.isNotEmpty() }
+    }
+
+    /** Clears [dropId] if it's still the pending one (a newer request is kept). */
+    fun consume(dropId: String) {
+        if (_pending.value == dropId) _pending.value = null
+    }
+
+    fun clear() {
+        _pending.value = null
     }
 }

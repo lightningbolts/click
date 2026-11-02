@@ -223,7 +223,44 @@ data class MapBeacon(
     val visibilityAudience: BeaconVisibilityAudience = BeaconVisibilityAudience.EVERYONE,
     /** Event hub id from `map_beacons.hub_id`, API JSON, or legacy metadata `hub_id`. */
     val hubId: String? = null,
+    /** `rsvp_count` that `GET /api/beacons` adds to event rows ("12 going"); null when absent. */
+    val rsvpCount: Int? = null,
+    /** The Place hosting an official event (`venue_id` always means `places.id`). */
+    val venueId: String? = null,
+    /** Set only when that Place is listed (click-web §5.11); older servers omit it. */
+    val place: MapBeaconPlace? = null,
 )
+
+/**
+ * The listed Click Place an official event belongs to (`place` on event payloads). iOS
+ * `MapBeaconPlace` (click-ios `Core/Beacons/MapBeacon.swift`).
+ */
+data class MapBeaconPlace(
+    val id: String,
+    val slug: String,
+    val name: String,
+    val photoUrl: String? = null,
+    val city: String? = null,
+)
+
+internal fun parseMapBeaconPlace(element: JsonElement?): MapBeaconPlace? {
+    val obj = element as? JsonObject ?: return null
+
+    fun str(key: String): String? =
+        (obj[key] as? JsonPrimitive)
+            ?.takeIf { it.isString }
+            ?.contentOrNull
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+    val id = str("id") ?: return null
+    return MapBeaconPlace(
+        id = id,
+        slug = str("slug") ?: id,
+        name = str("name") ?: "Place",
+        photoUrl = str("photo_url"),
+        city = str("city"),
+    )
+}
 
 fun parseMapBeaconRows(element: JsonElement): List<MapBeacon> =
     when (element) {
@@ -319,6 +356,9 @@ private fun parseMapBeaconRow(element: JsonElement): MapBeacon? {
         creatorDisplayName = creatorDisplayName,
         visibilityAudience = visibilityAudience,
         hubId = hubId,
+        rsvpCount = dbl("rsvp_count", "rsvpCount")?.toInt()?.takeIf { it >= 0 },
+        venueId = strKey("venue_id", "venueId"),
+        place = parseMapBeaconPlace(obj["place"]),
     )
 }
 

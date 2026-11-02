@@ -766,7 +766,15 @@ internal fun ChatViewModel.startTypingMonitoringImpl(chatId: String) {
         viewModelScope.launch {
             chatRepository.observeTypingStatus(chatId).collect { status ->
                 val currentUser = _currentUserId.value
-                if (status.userId != currentUser && status.isTyping) {
+                if (status.userId != currentUser && !status.isTyping) {
+                    // iOS sends an explicit stop; clear that person right away.
+                    typingExpiryJobs.remove(status.userId)?.cancel()
+                    _typingUserIds.value = _typingUserIds.value - status.userId
+                    if (_typingUserIds.value.isEmpty()) {
+                        peerTypingTimeoutJob?.cancel()
+                        _isPeerTyping.value = false
+                    }
+                } else if (status.userId != currentUser) {
                     _isPeerTyping.value = true
                     _typingUserIds.value = _typingUserIds.value + status.userId
                     typingExpiryJobs.remove(status.userId)?.cancel()

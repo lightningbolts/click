@@ -7,16 +7,23 @@ package compose.project.click.click.viewmodel // pragma: allowlist secret
 
 import androidx.lifecycle.viewModelScope
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
+import compose.project.click.click.data.flags.FeatureFlag // pragma: allowlist secret
+import compose.project.click.click.data.flags.FeatureFlags // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.ui.components.MapPin // pragma: allowlist secret
 import compose.project.click.click.ui.components.MapPinKind // pragma: allowlist secret
 import compose.project.click.click.ui.utils.CommunityHubPin // pragma: allowlist secret
 import compose.project.click.click.ui.utils.ConnectionMapPoint // pragma: allowlist secret
 import compose.project.click.click.ui.utils.MapCluster // pragma: allowlist secret
+import compose.project.click.click.ui.utils.MapPinStack // pragma: allowlist secret
+import compose.project.click.click.ui.utils.MapPinStacking // pragma: allowlist secret
+import compose.project.click.click.ui.utils.MapPlacesLayer // pragma: allowlist secret
 import compose.project.click.click.ui.utils.MapRenderData // pragma: allowlist secret
 import compose.project.click.click.ui.utils.calculateZoomForBounds // pragma: allowlist secret
+import compose.project.click.click.ui.utils.findMapPinStack // pragma: allowlist secret
 import compose.project.click.click.ui.utils.haversineDistance // pragma: allowlist secret
 import compose.project.click.click.ui.utils.overlappingMapPins // pragma: allowlist secret
+import compose.project.click.click.ui.utils.zoomInTarget // pragma: allowlist secret
 import compose.project.click.click.utils.HUB_GATEKEEPER_HIGH_ACCURACY_TIMEOUT_MS // pragma: allowlist secret
 import compose.project.click.click.utils.LocationResult // pragma: allowlist secret
 import compose.project.click.click.utils.resolveHubGatekeeperLocation // pragma: allowlist secret
@@ -133,6 +140,20 @@ internal suspend fun MapViewModel.resolveFastMapLocation(): LocationResult? =
     )
 
 internal fun MapViewModel.onMapPinTappedImpl(pin: MapPin) {
+    // A stack's lead (count badge): list every member, most important first (iOS stack sheet).
+    if (pin.stackCount > 1) {
+        val stack =
+            findMapPinStack(
+                leadId = pin.id,
+                pins = currentVisibleMapPins(),
+                zoom = MapPinStacking.zoomStep(_zoomLevel.value),
+                nowEpochMs = Clock.System.now().toEpochMilliseconds(),
+            )
+        if (stack != null) {
+            _selection.value = MapSelection.OverlappingPinsSelected(stack.members)
+            return
+        }
+    }
     val overlaps =
         overlappingMapPins(
             tapped = pin,
@@ -146,13 +167,33 @@ internal fun MapViewModel.onMapPinTappedImpl(pin: MapPin) {
     openResolvedMapPin(pin)
 }
 
+/**
+ * "Zoom In" from a stack's list: frames the members so they draw apart
+ * (iOS `ClickMapView.zoom(into:)`).
+ */
+internal fun MapViewModel.zoomIntoPinStackImpl(pins: List<MapPin>) {
+    if (pins.isEmpty()) return
+    val (lat, lon, zoom) = MapPinStack(id = "zoom", members = pins).zoomInTarget()
+    _selection.value = MapSelection.None
+    _cameraTarget.value = CameraTarget(latitude = lat, longitude = lon, zoom = zoom)
+    pendingProgrammaticZoomTarget = zoom
+    pendingProgrammaticZoomSetAtMs = Clock.System.now().toEpochMilliseconds()
+    _zoomLevel.value = zoom
+}
+
 /** User picked one pin from an overlapping stack chooser. */
 internal fun MapViewModel.onOverlappingPinChosenImpl(pin: MapPin) {
     openResolvedMapPin(pin)
 }
 
 internal fun MapViewModel.currentVisibleMapPins(): List<MapPin> {
-    val hubs = _communityHubs.value.map { MapPin.fromCommunityHub(it) }
+    val places =
+        MapPlacesLayer.visiblePlaces(
+            _mapPlaces.value,
+            _selectedLayerFilters.value,
+            FeatureFlags.isEnabled(FeatureFlag.CLICK_PLACES),
+        )
+    val hubs = _communityHubs.value.map { MapPin.fromCommunityHub(it) } + places.map { MapPin.fromPlace(it) }
     val currentUserId = AppDataManager.currentUser.value?.id
     val connectedUsers = AppDataManager.connectedUsers.value
     return when (val state = _renderData.value) {
@@ -167,16 +208,20 @@ internal fun MapViewModel.currentVisibleMapPins(): List<MapPin> {
                         avatarSeed = peerId ?: point.connection.id,
                     )
                 }
-            val beacons = state.beacons.map { MapPin.fromBeacon(it) }
+            val beacons = MapPlacesLayer.beaconsOutsidePlaces(state.beacons, places).map { MapPin.fromBeacon(it) }
             connections + beacons + hubs
         }
         is MapRenderData.Clusters -> {
-            state.standaloneBeacons.map { MapPin.fromBeacon(it) } + hubs
+            MapPlacesLayer.beaconsOutsidePlaces(state.standaloneBeacons, places).map { MapPin.fromBeacon(it) } + hubs
         }
     }
 }
 
 internal fun MapViewModel.openResolvedMapPin(pin: MapPin) {
+    if (pin.kind == MapPinKind.PLACE) {
+        MapPlacesLayer.placeIdFromPinId(pin.id)?.let { openPlaceFromPin(it) }
+        return
+    }
     if (pin.kind == MapPinKind.COMMUNITY_HUB || pin.id.startsWith("hub:")) {
         val raw = pin.id.removePrefix("hub:")
         val hub = _communityHubs.value.firstOrNull { it.hubId == raw } ?: return

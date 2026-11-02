@@ -96,6 +96,7 @@ fun MapScreen(
 ) {
     val mapState by viewModel.mapState.collectAsState()
     val mapBindingZoom by viewModel.mapBindingZoom.collectAsState()
+    val pinStackZoom by viewModel.zoomLevel.collectAsState()
     val renderData by viewModel.renderData.collectAsState()
     val selection by viewModel.selection.collectAsState()
     val mapFabAboveNav = rememberFabAboveNavPadding()
@@ -106,6 +107,7 @@ fun MapScreen(
     val beaconSubmitInFlight by viewModel.beaconSubmitInFlight.collectAsState()
     val currentUser by AppDataManager.currentUser.collectAsState()
     val communityHubs by viewModel.discoveryFeedHubs.collectAsState()
+    val mapPlaces by viewModel.visibleMapPlaces.collectAsState()
     val mapBeacons by viewModel.discoveryFeedBeacons.collectAsState()
     val discoveryFeedPending by viewModel.discoveryFeedPending.collectAsState()
     val discoveryFeedLoading by viewModel.discoveryFeedLoading.collectAsState()
@@ -307,6 +309,12 @@ fun MapScreen(
                         pins = stack.pins,
                         onChoose = { viewModel.onOverlappingPinChosen(it) },
                         onDismiss = { viewModel.clearSelection() },
+                        onZoomIn =
+                            if (MapPinStack(id = "sheet", members = stack.pins).canSeparate()) {
+                                { viewModel.zoomIntoPinStack(stack.pins) }
+                            } else {
+                                null
+                            },
                         modifier =
                             Modifier
                                 .fillMaxWidth()
@@ -520,7 +528,9 @@ fun MapScreen(
                                 modifier = Modifier.fillMaxSize(),
                                 renderData = renderData,
                                 communityHubs = communityHubs,
+                                places = mapPlaces,
                                 zoom = cameraTarget?.zoom ?: mapBindingZoom,
+                                stackZoom = pinStackZoom,
                                 mapGesturesEnabled = true,
                                 showCompass = true,
                                 cameraTarget = cameraTarget,

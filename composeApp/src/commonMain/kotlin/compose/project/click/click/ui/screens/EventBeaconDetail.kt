@@ -19,30 +19,52 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
+import compose.project.click.click.data.api.ApiClient
+import compose.project.click.click.data.flags.FeatureFlag
+import compose.project.click.click.data.flags.FeatureFlags
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
 import compose.project.click.click.data.models.withPreservedEventScheduleFrom // pragma: allowlist secret
+import compose.project.click.click.data.places.PlaceOpenRequests // pragma: allowlist secret
+import compose.project.click.click.data.places.eventHostPlace // pragma: allowlist secret
 import compose.project.click.click.events.EventChatOpenState // pragma: allowlist secret
 import compose.project.click.click.events.EventChatResolver // pragma: allowlist secret
 import compose.project.click.click.events.EventRsvpRequestStatus // pragma: allowlist secret
 import compose.project.click.click.events.JOIN_REQUEST_POLL_MS // pragma: allowlist secret
+import compose.project.click.click.events.PlaceWeather
+import compose.project.click.click.events.PlaceWeatherCache
+import compose.project.click.click.events.PlaceWeatherReading
 import compose.project.click.click.events.buildEventShareText // pragma: allowlist secret
 import compose.project.click.click.events.buildEventShareUrl // pragma: allowlist secret
+import compose.project.click.click.events.calendarDraftOrNull
 import compose.project.click.click.events.eventCheckInCtaLabel // pragma: allowlist secret
+import compose.project.click.click.events.eventMapsGeoUri
 import compose.project.click.click.events.eventSchedule // pragma: allowlist secret
 import compose.project.click.click.events.formatEventPostedAtLabel // pragma: allowlist secret
 import compose.project.click.click.events.formatEventScheduleRange // pragma: allowlist secret
+import compose.project.click.click.events.googleCalendarUrl
+import compose.project.click.click.events.googleMapsDirectionsUrl
+import compose.project.click.click.events.hasFiniteCoordinates
 import compose.project.click.click.events.isEnded // pragma: allowlist secret
 import compose.project.click.click.events.isLive // pragma: allowlist secret
 import compose.project.click.click.events.joinRequestDecisionMessage // pragma: allowlist secret
 import compose.project.click.click.events.label // pragma: allowlist secret
-import compose.project.click.click.events.openEventMapsRoute // pragma: allowlist secret
+import compose.project.click.click.events.outlookCalendarUrl
 import compose.project.click.click.events.parseEventListingOptions // pragma: allowlist secret
+import compose.project.click.click.events.tickets.ApiTicketingClient
+import compose.project.click.click.events.tickets.EventTicketing
+import compose.project.click.click.events.weatherForecastStartOrNull
 import compose.project.click.click.notifications.ChatDeepLinkManager // pragma: allowlist secret
+import compose.project.click.click.platform.openMapsChooser
+import compose.project.click.click.platform.openSystemCalendarInsert
 import compose.project.click.click.platform.shareText // pragma: allowlist secret
 import compose.project.click.click.ui.components.AnimatedClickDialog // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickButton // pragma: allowlist secret
@@ -65,6 +87,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 
 @Composable
 internal fun BeaconDetailSheetContent(
@@ -359,6 +383,29 @@ internal fun EventBeaconDetail(
 
     // While a join request is pending, re-check every 30 s, only while this screen is showing (F86).
     var joinDecisionNotice by remember(beacon.id) { mutableStateOf<String?>(null) }
+    var showClickPass by remember(beacon.id) { mutableStateOf(false) }
+    var showPassScanner by remember(beacon.id) { mutableStateOf(false) }
+    // Ticketing (P2-16, iOS `BeaconDetailView`): when the server sends `beacon.ticketing`, a ticket replaces the RSVP.
+    val featureFlags by FeatureFlags.state.collectAsState()
+    val ticketSalesOn = featureFlags.isEnabled(FeatureFlag.TICKET_SALES)
+    val ticketingClient = remember { ApiTicketingClient() }
+    var ticketing by remember(beacon.id) { mutableStateOf<EventTicketing?>(null) }
+    var ticketingEpoch by remember(beacon.id) { mutableIntStateOf(0) }
+    var showTicketPicker by remember(beacon.id) { mutableStateOf(false) }
+    LaunchedEffect(displayBeacon.id, ticketSalesOn, ticketingEpoch) {
+        if (!ticketSalesOn) {
+            ticketing = null
+            return@LaunchedEffect
+        }
+        try {
+            ticketing = ticketingClient.eventTicketing(displayBeacon.id)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            // Keep what we had; the RSVP path stays until ticketing is known.
+        }
+    }
+    val ticketed = ticketing != null
     var lastRequestStatus by remember(beacon.id) { mutableStateOf(rsvpRequestStatus) }
     LaunchedEffect(displayBeacon.id, rsvpRequestStatus) {
         if (rsvpRequestStatus != EventRsvpRequestStatus.PENDING) return@LaunchedEffect
@@ -526,7 +573,29 @@ internal fun EventBeaconDetail(
             }
         }
 
-        if (displayBeacon.showCreatorName && !hostDisplayName.isNullOrBlank()) {
+        EventWeatherLine(
+            latitude = displayBeacon.latitude,
+            longitude = displayBeacon.longitude,
+            startEpochMs = schedule?.startEpochMs,
+            border = border,
+            cardSurface = cardSurface,
+        )
+
+        // A Place hosting its own event is the host: its photo and name, opening its page (iOS
+        // `BeaconDetailView.hostLine`).
+        val hostPlace = eventHostPlace(displayBeacon, featureFlags.isEnabled(FeatureFlag.CLICK_PLACES))
+        if (hostPlace != null) {
+            EventHostCard(
+                displayName = hostPlace.name,
+                userId = hostPlace.id,
+                avatarUrl = hostPlace.photoUrl,
+                border = border,
+                cardSurface = cardSurface,
+                label = "Hosted by",
+                subtitle = hostPlace.city,
+                onClick = { PlaceOpenRequests.open(hostPlace.id, source = "event") },
+            )
+        } else if (displayBeacon.showCreatorName && !hostDisplayName.isNullOrBlank()) {
             EventHostCard(
                 displayName = hostDisplayName,
                 userId = hostUserId ?: "host:$hostDisplayName",
@@ -783,25 +852,60 @@ internal fun EventBeaconDetail(
             else -> Unit
         }
 
-        ClickButton(
-            onClick = {
-                openEventMapsRoute(
-                    openUri = { uriHandler.openUri(it) },
-                    latitude = displayBeacon.latitude,
-                    longitude = displayBeacon.longitude,
-                    label = displayBeacon.displayDynamicTitle(),
-                )
-            },
-            modifier = Modifier.fillMaxWidth(),
-            variant = ClickButtonVariant.Secondary,
-        ) {
-            Icon(
-                imageVector = Icons.Filled.Directions,
-                contentDescription = null,
-                modifier = Modifier.size(20.dp),
+        EventDirectionsAndCalendarRow(
+            beacon = displayBeacon,
+            openUri = { uriHandler.openUri(it) },
+            onNotice = { joinDecisionNotice = it },
+        )
+
+        // Click Pass for people going; the door scanner for the host (iOS #63).
+        if (isEventCreator) {
+            ClickButton(
+                onClick = { showPassScanner = true },
+                modifier = Modifier.fillMaxWidth(),
+                variant = ClickButtonVariant.Secondary,
+            ) {
+                Icon(Icons.Filled.QrCodeScanner, contentDescription = null, modifier = Modifier.size(20.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Scan Click Passes", fontWeight = FontWeight.SemiBold)
+            }
+        } else if (currentUserSignedUp || (ticketing?.myTicketCount ?: 0) > 0) {
+            ClickButton(
+                onClick = { showClickPass = true },
+                modifier = Modifier.fillMaxWidth(),
+                variant = ClickButtonVariant.Secondary,
+            ) {
+                Icon(Icons.Filled.QrCode2, contentDescription = null, modifier = Modifier.size(20.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Click Pass", fontWeight = FontWeight.SemiBold)
+            }
+        }
+        if (showClickPass) {
+            ClickPassSheet(
+                beaconId = displayBeacon.id,
+                eventTitle = displayBeacon.displayDynamicTitle(),
+                onDismiss = { showClickPass = false },
+                ticketed = ticketed,
+                eventCancelled = ticketing?.cancelled == true,
             )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text("Join Event Route", fontWeight = FontWeight.SemiBold)
+        }
+        if (showTicketPicker) {
+            TicketPickerSheet(
+                beaconId = displayBeacon.id,
+                client = ticketingClient,
+                onConfirmed = { ticketingEpoch++ },
+                onSeeTickets = {
+                    showTicketPicker = false
+                    showClickPass = true
+                },
+                onDismiss = {
+                    showTicketPicker = false
+                    ticketingEpoch++
+                },
+            )
+        }
+        if (showPassScanner) {
+            PassScannerSheet(beaconId = displayBeacon.id, onDismiss = { showPassScanner = false })
         }
 
         joinDecisionNotice?.let { notice ->
@@ -817,7 +921,10 @@ internal fun EventBeaconDetail(
             EventEndedBanner()
         }
 
-        if (!ended) {
+        val currentTicketing = ticketing
+        if (!ended && currentTicketing != null) {
+            EventTicketButton(ticketing = currentTicketing, onClick = { showTicketPicker = true })
+        } else if (!ended) {
             if (currentUserSignedUp || pendingOrWaitlisted) {
                 ClickButton(
                     onClick = {
@@ -903,5 +1010,172 @@ internal fun EventBeaconDetail(
             requestStatus = rsvpRequestStatus,
             errorMessage = rsvpError,
         )
+    }
+}
+
+/** "64° Cloudy now · 58° Rain at 7:00 PM" under the location (iOS event page weather, #63). */
+@Composable
+private fun EventWeatherLine(
+    latitude: Double,
+    longitude: Double,
+    startEpochMs: Long?,
+    border: Color,
+    cardSurface: Color,
+) {
+    if (!hasFiniteCoordinates(latitude, longitude)) return
+    var weather by remember(latitude, longitude, startEpochMs) { mutableStateOf<PlaceWeather?>(null) }
+    LaunchedEffect(latitude, longitude, startEpochMs) {
+        val now = Clock.System.now().toEpochMilliseconds()
+        val forecastStart = weatherForecastStartOrNull(startEpochMs, now)
+        val key = PlaceWeatherCache.key(latitude, longitude, forecastStart)
+        PlaceWeatherCache.get(key, now)?.let {
+            weather = it
+            return@LaunchedEffect
+        }
+        val atIso = forecastStart?.let { Instant.fromEpochMilliseconds(it).toString() }
+        val fetched =
+            withContext(Dispatchers.Default) {
+                ApiClient().getPlaceWeather(latitude, longitude, atIso).getOrNull()?.let(PlaceWeather::parse)
+            } ?: return@LaunchedEffect
+        PlaceWeatherCache.put(key, fetched, now)
+        weather = fetched
+    }
+    val current = weather ?: return
+    val summary = current.summary(startEpochMs) ?: return
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .border(clickBorderWidth(), border, RoundedCornerShape(12.dp))
+                .background(cardSurface, RoundedCornerShape(12.dp))
+                .padding(16.dp)
+                .semantics(mergeDescendants = true) {},
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector = weatherIcon(current.leadReading),
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(18.dp),
+        )
+        Text(
+            text = summary,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f),
+        )
+    }
+}
+
+private fun weatherIcon(reading: PlaceWeatherReading?) =
+    when (reading?.icon) {
+        "cloudy" -> Icons.Filled.Cloud
+        "fog", "drizzle", "rain", "thunder" -> Icons.Filled.Umbrella
+        "snow" -> Icons.Filled.AcUnit
+        else -> if (reading?.isDay == false) Icons.Filled.NightsStay else Icons.Filled.WbSunny
+    }
+
+/**
+ * Directions and Add to Calendar (iOS `DirectionsDialog`, `EventCalendar`): each opens a short menu.
+ * Directions: Google Maps, another maps app, or copy the address. Calendar: this phone's calendar
+ * (no permission; the user saves it there), Google Calendar or Outlook.
+ */
+@Composable
+private fun EventDirectionsAndCalendarRow(
+    beacon: MapBeacon,
+    openUri: (String) -> Unit,
+    onNotice: (String) -> Unit,
+) {
+    val clipboard = LocalClipboardManager.current
+    val hasPoint = hasFiniteCoordinates(beacon.latitude, beacon.longitude)
+    val draft = remember(beacon.id, beacon.metadata) { beacon.calendarDraftOrNull() }
+    val address =
+        listOfNotNull(beacon.metadata.locationName, beacon.metadata.formattedAddress)
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .distinct()
+            .joinToString(", ")
+            .takeIf { it.isNotEmpty() }
+    var directionsOpen by remember { mutableStateOf(false) }
+    var calendarOpen by remember { mutableStateOf(false) }
+    if (!hasPoint && draft == null) return
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+        if (hasPoint) {
+            Box(modifier = Modifier.weight(1f)) {
+                ClickButton(
+                    onClick = { directionsOpen = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    variant = ClickButtonVariant.Secondary,
+                ) {
+                    Icon(Icons.Filled.Directions, contentDescription = null, modifier = Modifier.size(20.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Directions", fontWeight = FontWeight.SemiBold)
+                }
+                DropdownMenu(expanded = directionsOpen, onDismissRequest = { directionsOpen = false }) {
+                    DropdownMenuItem(
+                        text = { Text("Google Maps") },
+                        onClick = {
+                            directionsOpen = false
+                            openUri(googleMapsDirectionsUrl(beacon.latitude, beacon.longitude))
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Other maps app") },
+                        onClick = {
+                            directionsOpen = false
+                            val geo = eventMapsGeoUri(beacon.latitude, beacon.longitude, beacon.displayDynamicTitle())
+                            if (!openMapsChooser(geo)) openUri(googleMapsDirectionsUrl(beacon.latitude, beacon.longitude))
+                        },
+                    )
+                    if (address != null) {
+                        DropdownMenuItem(
+                            text = { Text("Copy Address") },
+                            onClick = {
+                                directionsOpen = false
+                                clipboard.setText(AnnotatedString(address))
+                                onNotice("Address copied")
+                            },
+                        )
+                    }
+                }
+            }
+        }
+        if (draft != null) {
+            Box(modifier = Modifier.weight(1f)) {
+                ClickButton(
+                    onClick = { calendarOpen = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    variant = ClickButtonVariant.Secondary,
+                ) {
+                    Icon(Icons.Filled.CalendarMonth, contentDescription = null, modifier = Modifier.size(20.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Add to Calendar", fontWeight = FontWeight.SemiBold, maxLines = 1)
+                }
+                DropdownMenu(expanded = calendarOpen, onDismissRequest = { calendarOpen = false }) {
+                    DropdownMenuItem(
+                        text = { Text("This phone's calendar") },
+                        onClick = {
+                            calendarOpen = false
+                            if (!openSystemCalendarInsert(draft)) openUri(googleCalendarUrl(draft))
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Google Calendar") },
+                        onClick = {
+                            calendarOpen = false
+                            openUri(googleCalendarUrl(draft))
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Outlook") },
+                        onClick = {
+                            calendarOpen = false
+                            openUri(outlookCalendarUrl(draft))
+                        },
+                    )
+                }
+            }
+        }
     }
 }

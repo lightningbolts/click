@@ -31,6 +31,7 @@ import androidx.compose.ui.zIndex
 import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
+import compose.project.click.click.data.places.PlaceSummaryDto // pragma: allowlist secret
 import compose.project.click.click.platform.rememberReduceMotionEnabled // pragma: allowlist secret
 import compose.project.click.click.telemetry.TelemetryBatcher // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionListUserAvatarFace // pragma: allowlist secret
@@ -49,7 +50,11 @@ internal fun MapContent(
     modifier: Modifier = Modifier.fillMaxSize(),
     renderData: MapRenderData,
     communityHubs: List<CommunityHubPin>,
+    /** Click Places to draw (already gated by flag and layer; see [MapViewModel.visibleMapPlaces]). */
+    places: List<PlaceSummaryDto> = emptyList(),
     zoom: Double,
+    /** Live camera zoom that overlapping pins are stacked at (see [stackMapPins]). */
+    stackZoom: Double = zoom,
     mapGesturesEnabled: Boolean = true,
     showCompass: Boolean = true,
     cameraTarget: compose.project.click.click.viewmodel.CameraTarget?, // pragma: allowlist secret
@@ -65,11 +70,11 @@ internal fun MapContent(
 ) {
     val connectedUsers by AppDataManager.connectedUsers.collectAsState()
     val hubPins =
-        remember(communityHubs) {
-            communityHubs.map { MapPin.fromCommunityHub(it) }
+        remember(communityHubs, places) {
+            communityHubs.map { MapPin.fromCommunityHub(it) } + places.map { MapPin.fromPlace(it) }
         }
-    val pins =
-        remember(renderData, connectedUsers, currentUserId, hubPins) {
+    val rawPins =
+        remember(renderData, connectedUsers, currentUserId, hubPins, places) {
             when (renderData) {
                 is MapRenderData.IndividualPins -> {
                     val conn =
@@ -84,14 +89,30 @@ internal fun MapContent(
                                     avatarSeed = peerId ?: point.connection.id,
                                 )
                             }
-                    val bc = renderData.beacons.map { MapPin.fromBeacon(it) }
+                    // An event at a Place on the map rides in the Place's pin (iOS `mergingPlaceEvents`).
+                    val bc = MapPlacesLayer.beaconsOutsidePlaces(renderData.beacons, places).map { MapPin.fromBeacon(it) }
                     (conn + bc + hubPins).sortedByDescending { it.zIndex }
                 }
                 is MapRenderData.Clusters -> {
-                    val standalone = renderData.standaloneBeacons.map { MapPin.fromBeacon(it) }
+                    val standalone =
+                        MapPlacesLayer.beaconsOutsidePlaces(renderData.standaloneBeacons, places).map { MapPin.fromBeacon(it) }
                     (standalone + hubPins).sortedByDescending { it.zIndex }
                 }
             }
+        }
+
+    // Overlapping pins draw as one stack led by the most important pin, with a count badge
+    // (iOS `MapFeatureModel.clusters`). Rebuilt only when the pins or the quarter zoom step change.
+    val stackZoomStep = MapPinStacking.zoomStep(stackZoom)
+    val pins =
+        remember(rawPins, stackZoomStep) {
+            val now =
+                kotlinx.datetime.Clock.System
+                    .now()
+                    .toEpochMilliseconds()
+            stackMapPins(rawPins, stackZoomStep, now)
+                .map { it.toRenderedPin() }
+                .sortedByDescending { it.zIndex }
         }
 
     val clusters =
@@ -191,22 +212,33 @@ internal fun OverlappingMapPinsChooser(
     onChoose: (MapPin) -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
+    /** "Zoom In" when the members can be drawn apart (iOS `MapStackSheet`); null hides it. */
+    onZoomIn: (() -> Unit)? = null,
 ) {
     Column(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Text(
-            text = "Which pin?",
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
-        Text(
-            text = "A few pins are stacked here — pick the one you meant.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // "5 Events", "3 Clicks", or "4 Here" (iOS `MapStackSheet.title`).
+            Text(
+                text = mapPinStackTitle(pins),
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f),
+            )
+            if (onZoomIn != null) {
+                TextButton(onClick = onZoomIn) {
+                    Icon(Icons.Filled.ZoomIn, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Zoom In")
+                }
+            }
+        }
         pins.forEach { pin ->
             val kindLabel =
                 when (pin.kind) {
@@ -216,6 +248,7 @@ internal fun OverlappingMapPinsChooser(
                     MapPinKind.BEACON_ALERT -> "Alert"
                     MapPinKind.BEACON_SOCIAL -> "Event"
                     MapPinKind.BEACON_OTHER -> "Beacon"
+                    MapPinKind.PLACE -> "Place"
                 }
             val shape = RoundedCornerShape(16.dp)
             val rowSurface = clickCardSurface()

@@ -10,6 +10,7 @@ plugins {
     alias(libs.plugins.composeCompiler)
     alias(libs.plugins.kotlinSerialization)
     alias(libs.plugins.googleSecrets)
+    alias(libs.plugins.roborazzi)
     id("com.google.gms.google-services") version "4.4.2" apply false
 }
 
@@ -93,6 +94,9 @@ kotlin {
 
             // Jetpack Glance for home-screen widgets
             implementation("androidx.glance:glance-appwidget:1.1.1")
+
+            // Animated GIF / WebP decoding for KLIPY GIF messages
+            implementation("io.coil-kt.coil3:coil-gif:3.0.4")
         }
         commonMain.dependencies {
             implementation(compose.runtime)
@@ -147,6 +151,9 @@ kotlin {
             implementation(libs.kotlin.test)
             implementation(libs.kotlinx.coroutines.test)
             implementation(libs.robolectric)
+            implementation(libs.roborazzi)
+            implementation(libs.roborazzi.compose)
+            implementation(libs.roborazzi.junit.rule)
             implementation(libs.androidx.arch.core.testing)
             implementation(libs.androidx.test.core)
         }
@@ -210,4 +217,9 @@ dependencies {
 
 compose.resources {
     publicResClass = true
+}
+
+// Screenshot baselines are committed next to the tests that render them.
+roborazzi {
+    outputDir.set(file("src/androidUnitTest/screenshots"))
 }

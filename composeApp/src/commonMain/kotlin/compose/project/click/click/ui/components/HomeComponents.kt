@@ -660,6 +660,10 @@ fun SavedEventsSection(
     modifier: Modifier = Modifier,
     onExploreMap: () -> Unit = {},
     title: String = "Saved events",
+    /** Per-event label ("Hosting", "Going", "Saved") shown before the time, for Upcoming. */
+    tags: Map<String, String> = emptyMap(),
+    emptyTitle: String = "No saved events yet",
+    emptyBody: String = "Explore the map and bookmark something you want to go to.",
 ) {
     Column(
         modifier = modifier.fillMaxWidth(),
@@ -669,8 +673,8 @@ fun SavedEventsSection(
         if (bookmarks.isEmpty()) {
             AppEmptyState(
                 icon = Icons.Filled.Event,
-                title = "No saved events yet",
-                body = "Explore the map and bookmark something you want to go to.",
+                title = emptyTitle,
+                body = emptyBody,
                 modifier =
                     Modifier
                         .fillMaxWidth()
@@ -687,6 +691,7 @@ fun SavedEventsSection(
                 rowBookmarks.forEach { bookmark ->
                     SavedEventCategoryTile(
                         bookmark = bookmark,
+                        tag = tags[bookmark.beaconId],
                         onClick = { onBookmarkClick(bookmark) },
                         modifier = Modifier.weight(1f),
                     )
@@ -702,6 +707,7 @@ fun SavedEventsSection(
 @Composable
 private fun SavedEventCategoryTile(
     bookmark: compose.project.click.click.data.api.EventBookmarkItemDto, // pragma: allowlist secret
+    tag: String?,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -711,10 +717,12 @@ private fun SavedEventCategoryTile(
         icon = Icons.Filled.Event,
         title = bookmark.title?.takeIf { it.isNotBlank() } ?: "Saved event",
         caption =
-            bookmark.eventStartAt
-                ?.let { iso -> runCatching { Instant.parse(iso).toEpochMilliseconds() }.getOrNull() }
-                ?.let { formatHomeSavedEventTimeBadge(it) }
-                ?: "Bookmarked",
+            listOfNotNull(
+                tag,
+                bookmark.eventStartAt
+                    ?.let { iso -> runCatching { Instant.parse(iso).toEpochMilliseconds() }.getOrNull() }
+                    ?.let { formatHomeSavedEventTimeBadge(it) },
+            ).joinToString(" · ").ifEmpty { "Bookmarked" },
         onClick = onClick,
         modifier = modifier,
     )

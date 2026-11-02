@@ -5,6 +5,7 @@ package compose.project.click.click.data.repository
 import compose.project.click.click.data.api.ClickWebRequestException
 import compose.project.click.click.data.api.ProximityHandshakePostBody
 import compose.project.click.click.data.api.ProximityHandshakePostResult
+import compose.project.click.click.data.api.postProximityHandshakeImpl
 import compose.project.click.click.data.auth.EnsureFreshAccessToken // pragma: allowlist secret
 import compose.project.click.click.data.models.HeightCategory
 import compose.project.click.click.data.models.NoiseLevelCategory
@@ -20,6 +21,7 @@ import kotlinx.datetime.Clock
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.offsetIn
 import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.JsonObject
 import kotlin.math.*
 
 /**
@@ -59,6 +61,7 @@ internal suspend fun ConnectionRepository.bindProximityHandshakeImpl(
     bindExactNoiseLevelDb: Double? = null,
     bindHeightCategory: HeightCategory? = null,
     simulatorMock: Boolean = false,
+    observationKeys: JsonObject? = null,
 ): Result<BindProximityHandshakeResult> {
     return try {
         @Suppress("UNUSED_PARAMETER")
@@ -112,12 +115,12 @@ internal suspend fun ConnectionRepository.bindProximityHandshakeImpl(
             )
         val outgoingJson = json.encodeToString(ProximityHandshakePostBody.serializer(), request)
         println("OUTGOING_HANDSHAKE_PAYLOAD: $outgoingJson")
-        val firstResult = apiClient.postProximityHandshake(request, bearerJwt = bearerJwt)
+        val firstResult = apiClient.postProximityHandshakeImpl(request, bearerJwt = bearerJwt, extraKeys = observationKeys)
         val apiResult =
             firstResult.getOrElse { firstError ->
                 val refreshed = if (firstError.isClickWebAuthFailure()) refreshedJwtAfterAuthFailure() else null
                 refreshed?.let { freshJwt ->
-                    apiClient.postProximityHandshake(request, bearerJwt = freshJwt).getOrNull()
+                    apiClient.postProximityHandshakeImpl(request, bearerJwt = freshJwt, extraKeys = observationKeys).getOrNull()
                 } ?: return Result.failure(firstError)
             }
         when (apiResult) {
@@ -218,23 +221,74 @@ internal suspend fun ConnectionRepository.confirmProximitySelectionImpl(
                 selectedMemberIds = members,
                 contextTags = contextTags,
             )
+        var activeJwt: String = jwt
         val dto =
             firstResult.getOrElse { firstError ->
                 val refreshed = if (firstError.isClickWebAuthFailure()) refreshedJwtAfterAuthFailure() else null
-                refreshed?.let { freshJwt ->
-                    apiClient
-                        .postProximityConfirmSelection(
-                            bearerJwt = freshJwt,
-                            pendingHandshakeId = pendingId,
-                            selectedMemberIds = members,
-                            contextTags = contextTags,
-                        ).getOrNull()
-                } ?: return Result.failure(firstError)
+                if (refreshed == null) {
+                    return recoverAfterConfirmFailure(firstError, pendingId, activeJwt)
+                }
+                activeJwt = refreshed
+                apiClient
+                    .postProximityConfirmSelection(
+                        bearerJwt = refreshed,
+                        pendingHandshakeId = pendingId,
+                        selectedMemberIds = members,
+                        contextTags = contextTags,
+                    ).getOrElse { retryError ->
+                        return recoverAfterConfirmFailure(retryError, pendingId, activeJwt)
+                    }
             }
         Result.success(dto.toBindOutcome())
     } catch (e: Exception) {
         Result.failure(e)
     }
+}
+
+/**
+ * Another phone confirmed first: load the finished Click from the pending row. Every other
+ * failure passes through unchanged, except "everyone was removed", which gets friendly copy.
+ */
+private suspend fun ConnectionRepository.recoverAfterConfirmFailure(
+    error: Throwable,
+    pendingHandshakeId: String,
+    bearerJwt: String,
+): Result<BindProximityHandshakeOutcome> {
+    if (error.isProximityNoMembersAfterExclusions()) {
+        return Result.failure(IllegalStateException(PROXIMITY_EVERYONE_REMOVED_MESSAGE))
+    }
+    if (!error.isProximityHandshakeAlreadyFinalized()) return Result.failure(error)
+    return when (val recovered = recoverPendingProximityHandshakeImpl(bearerJwt, pendingHandshakeId).getOrNull()) {
+        is BindProximityHandshakeResult.InstantMatch -> Result.success(recovered.outcome)
+        else -> Result.failure(error)
+    }
+}
+
+/**
+ * Saves who this person removed while reviewing a group tap
+ * (`POST /api/connections/proximity/selection`). A 409 means the tap is already final, which the
+ * confirm step recovers from, so it counts as success here.
+ */
+internal suspend fun ConnectionRepository.recordProximitySelectionExclusionsImpl(
+    pendingHandshakeId: String,
+    excludedMemberIds: List<String>,
+): Result<Unit> {
+    val pendingId = pendingHandshakeId.trim()
+    if (pendingId.isEmpty()) {
+        return Result.failure(IllegalArgumentException("pendingHandshakeId required"))
+    }
+    val jwt = EnsureFreshAccessToken.get(tokenStorage) // pragma: allowlist secret
+    if (jwt.isNullOrBlank()) {
+        return Result.failure(IllegalStateException("Please sign in again."))
+    }
+    val first = apiClient.postProximitySelectionExclusions(jwt, pendingId, excludedMemberIds)
+    val result =
+        first.exceptionOrNull()?.let { err ->
+            val refreshed = if (err.isClickWebAuthFailure()) refreshedJwtAfterAuthFailure() else null
+            refreshed?.let { apiClient.postProximitySelectionExclusions(it, pendingId, excludedMemberIds) } ?: first
+        } ?: first
+    val err = result.exceptionOrNull() ?: return Result.success(Unit)
+    return if (err.isProximityHandshakeAlreadyFinalized()) Result.success(Unit) else Result.failure(err)
 }
 
 internal suspend fun ConnectionRepository.enqueuePendingProximityHandshakeImpl(

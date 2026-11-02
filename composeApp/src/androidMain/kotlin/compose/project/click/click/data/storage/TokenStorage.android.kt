@@ -74,6 +74,7 @@ class AndroidTokenStorage(
         private const val KEY_HANGOUT_DETECTION_OPT_IN = "hangout_detection_opt_in"
         private const val KEY_HOME_RECAP_CACHE = "home_recap_cache"
         private const val KEY_CHAT_MUTES_CACHE = "chat_mutes_cache"
+        private const val KEY_FEATURE_FLAGS_CACHE = "feature_flags_cache"
         private const val KEY_PUSH_PREVIEW_KEYS = "push_preview_epoch_keys"
         private const val KEY_RECENT_EMOJI = "recent_emoji"
         private const val KEY_LOCATION_EXPLAINER_SEEN = "location_explainer_seen"
@@ -236,6 +237,15 @@ class AndroidTokenStorage(
 
     override suspend fun getChatMutesCache(): String? = sharedPreferences.getString(KEY_CHAT_MUTES_CACHE, null)
 
+    override suspend fun saveFeatureFlagsCache(json: String?) {
+        sharedPreferences.edit().apply {
+            if (json == null) remove(KEY_FEATURE_FLAGS_CACHE) else putString(KEY_FEATURE_FLAGS_CACHE, json)
+            apply()
+        }
+    }
+
+    override suspend fun getFeatureFlagsCache(): String? = sharedPreferences.getString(KEY_FEATURE_FLAGS_CACHE, null)
+
     override suspend fun savePushPreviewKeys(json: String?) {
         sharedPreferences.edit().apply {
             if (json == null) remove(KEY_PUSH_PREVIEW_KEYS) else putString(KEY_PUSH_PREVIEW_KEYS, json)
@@ -375,6 +385,7 @@ class AndroidTokenStorage(
                     KEY_HANGOUT_DETECTION_OPT_IN,
                     KEY_HOME_RECAP_CACHE,
                     KEY_CHAT_MUTES_CACHE,
+                    KEY_FEATURE_FLAGS_CACHE,
                     KEY_PUSH_PREVIEW_KEYS,
                     KEY_LOCATION_EXPLAINER_SEEN,
                     KEY_ONBOARDING_STATE,

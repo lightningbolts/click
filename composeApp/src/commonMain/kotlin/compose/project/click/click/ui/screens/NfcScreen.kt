@@ -44,6 +44,7 @@ import compose.project.click.click.ui.components.ClickButtonVariant // pragma: a
 import compose.project.click.click.ui.components.ClickScreenSpacing // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionContextPresentation // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionContextSheet // pragma: allowlist secret
+import compose.project.click.click.ui.components.EncounterDetailsCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.HeaderBackIconButton // pragma: allowlist secret
 import compose.project.click.click.ui.components.HeaderChromeIconButton // pragma: allowlist secret
 import compose.project.click.click.ui.components.PageHeader // pragma: allowlist secret
@@ -55,6 +56,8 @@ import compose.project.click.click.ui.utils.rememberProximityHardwarePermissionR
 import compose.project.click.click.utils.LocationService // pragma: allowlist secret
 import compose.project.click.click.viewmodel.ConnectionState // pragma: allowlist secret
 import compose.project.click.click.viewmodel.ConnectionViewModel // pragma: allowlist secret
+import compose.project.click.click.viewmodel.stopConnectionCapture // pragma: allowlist secret
+import compose.project.click.click.viewmodel.warmUpConnectionCapture // pragma: allowlist secret
 import io.ktor.client.HttpClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -110,6 +113,12 @@ fun NfcScreen(
 
     LaunchedEffect(authToken) {
         connectionViewModel.prewarmBindProximityEdgeFunction(httpClient, authToken)
+    }
+
+    // G4-1: warm location + pressure while Tap is visible (never prompts); dropped on leave.
+    DisposableEffect(Unit) {
+        connectionViewModel.warmUpConnectionCapture("tap")
+        onDispose { connectionViewModel.stopConnectionCapture() }
     }
 
     // GPS warm-up when the NFC sheet is visible (non-blocking).
@@ -396,6 +405,8 @@ fun NfcScreen(
                     val tagging = connectionState as ConnectionState.TaggingContext
                     var calendarLockInProgress by remember { mutableStateOf(false) }
                     val supabaseRepo = remember { SupabaseRepository() }
+                    val lastVerification by connectionViewModel.lastVerification.collectAsState()
+                    val followUpAccuracy by connectionViewModel.followUpAccuracyMeters.collectAsState()
                     val reconnectConnectionId = tagging.newConnections.firstOrNull()?.id
                     val reconnectPeerId =
                         tagging.targetUsers.firstOrNull { it.id != userId }?.id
@@ -406,9 +417,13 @@ fun NfcScreen(
                             tagging.targetUsers.size >= 2 -> tagging.targetUsers
                             else -> emptyList()
                         }
+                    // In the review the choice is authoritative (an empty one means everyone was removed).
                     val sheetInitialSelectedIds =
-                        tagging.selectedPeerIds
-                            .ifEmpty { sheetSelectableUsers.map { it.id }.toSet() }
+                        if (tagging.requiresSelection) {
+                            tagging.selectedPeerIds
+                        } else {
+                            tagging.selectedPeerIds.ifEmpty { sheetSelectableUsers.map { it.id }.toSet() }
+                        }
                     // requiresSelection must use Connect → confirmHostProximitySelection (not Save Encounter).
                     val presentation =
                         if (!tagging.isNewConnection && !tagging.requiresSelection) {
@@ -478,6 +493,32 @@ fun NfcScreen(
                         encounterSaveInProgress = tagging.encounterSubmitting,
                         selectableUsers = sheetSelectableUsers,
                         initialSelectedUserIds = sheetInitialSelectedIds,
+                        onSelectionChanged =
+                            if (tagging.requiresSelection) {
+                                { ids -> connectionViewModel.updateHostSelection(ids, userId) }
+                            } else {
+                                null
+                            },
+                        existingGroup = tagging.requiresSelection && !tagging.existingConnectionId.isNullOrBlank(),
+                        encounterDetails =
+                            if (reconnectConnectionId != null && !tagging.requiresSelection) {
+                                {
+                                    EncounterDetailsCard(
+                                        connectionId = reconnectConnectionId,
+                                        groupPeerNames =
+                                            if (tagging.isGroup) {
+                                                tagging.targetUsers.filter { it.id != userId }.map { it.displayName }
+                                            } else {
+                                                emptyList()
+                                            },
+                                        verification = lastVerification,
+                                        isQr = false,
+                                        refinedAccuracyMeters = followUpAccuracy,
+                                    )
+                                }
+                            } else {
+                                null
+                            },
                         onSaveEncounter = { selectedIds ->
                             scope.launch {
                                 connectionViewModel.saveReconnectEncounter(

@@ -9,6 +9,7 @@ import compose.project.click.click.data.CHAT_ATTACHMENTS_BUCKET
 import compose.project.click.click.data.CHAT_MEDIA_BUCKET
 import compose.project.click.click.data.SupabaseConfig
 import compose.project.click.click.data.api.ChatApiClient
+import compose.project.click.click.data.api.DropDevelopResultDto
 import compose.project.click.click.data.models.*
 import compose.project.click.click.data.models.ReadCursor
 import compose.project.click.click.data.storage.TokenStorage
@@ -116,11 +117,6 @@ class SupabaseChatRepository(
         val trackedUserId: String,
         val scope: CoroutineScope,
         val jobs: List<Job>,
-    )
-
-    @Serializable
-    internal data class TypingBroadcastPayload(
-        val userId: String,
     )
 
     internal data class ChatEphemeralSession(
@@ -590,8 +586,8 @@ class SupabaseChatRepository(
         val session = ephemeralMutex.withLock { ephemeralSessions[chatId] } ?: return
         try {
             session.channel.broadcast(
-                event = "typing",
-                message = buildJsonObject { put("userId", userId) },
+                event = TypingBroadcast.EVENT,
+                message = TypingBroadcast.encode(userId),
             )
         } catch (e: Exception) {
             println("ChatRepository: typing broadcast failed: ${e.redactedRestMessage()}")
@@ -966,6 +962,34 @@ class SupabaseChatRepository(
             }
         }
     }
+
+    override suspend fun loadGatedDropOriginal(
+        chatId: String,
+        viewerUserId: String,
+        message: Message,
+        extension: String,
+        signedUrl: String?,
+    ): GatedDropOriginalResult =
+        loadGatedDropOriginalImpl(
+            chatId = chatId,
+            viewerUserId = viewerUserId,
+            message = message,
+            extension = extension,
+            signedUrl = signedUrl,
+        )
+
+    override suspend fun developChatDrops(messageIds: List<String>): Result<List<DropDevelopResultDto>> = developChatDropsImpl(messageIds)
+
+    override suspend fun loadChatDropDevelopedAt(messageIds: List<String>): Result<Map<String, String>> =
+        loadChatDropDevelopedAtImpl(messageIds)
+
+    override suspend fun uploadClickDropOriginal(
+        plainBytes: ByteArray,
+        chatId: String,
+        senderUserId: String,
+        mimeType: String,
+        previewMediaReference: String,
+    ): ClickDropOriginalUpload? = uploadClickDropOriginalImpl(plainBytes, chatId, senderUserId, mimeType, previewMediaReference)
 
     override suspend fun downloadAndDecryptChatMedia(
         chatId: String,

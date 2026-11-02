@@ -71,6 +71,7 @@ class ApiClient {
                 install(ContentNegotiation) {
                     json(json)
                 }
+                installClickWebPlatformHeader()
             }
         }
     internal val clickWebPlainClient: HttpClient get() = clickWebPlainClientLazy.value
@@ -461,7 +462,10 @@ class ApiClient {
         lon: Double,
         radiusMeters: Double,
         filters: String? = null,
-    ): Result<String> = getMapBeaconsImpl(lat = lat, lon = lon, radiusMeters = radiusMeters, filters = filters)
+        cursor: String? = null,
+        limit: Int? = null,
+    ): Result<String> =
+        getMapBeaconsImpl(lat = lat, lon = lon, radiusMeters = radiusMeters, filters = filters, cursor = cursor, limit = limit)
 
     suspend fun getMapBeacon(beaconId: String): Result<MapBeacon> = getMapBeaconImpl(beaconId = beaconId)
 
@@ -499,6 +503,31 @@ class ApiClient {
             Result.failure(e)
         }
     }
+
+    /**
+     * GET `/api/geo/weather?lat&lng[&at]` — public; now, plus the forecast for [atIso] when it is up to
+     * a week ahead. Weather is a nicety, so callers treat any failure as "no weather".
+     */
+    suspend fun getPlaceWeather(
+        latitude: Double,
+        longitude: Double,
+        atIso: String? = null,
+    ): Result<kotlinx.serialization.json.JsonElement> =
+        try {
+            val response: HttpResponse =
+                clickWebPlainClient.get("$clickWebAuthOrigin/api/geo/weather") {
+                    parameter("lat", latitude.toString())
+                    parameter("lng", longitude.toString())
+                    atIso?.let { parameter("at", it) }
+                }
+            if (response.status.value in 200..299) {
+                Result.success(json.parseToJsonElement(response.bodyAsText()))
+            } else {
+                Result.failure(Exception(readClickWebErrorMessage(response)))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
 
     /** GET `/api/users/{userId}/public-profile` — unauthenticated. */
     suspend fun getPublicProfileUnauthenticated(userId: String): Result<PublicProfileUnauthenticatedResponse> {
@@ -556,6 +585,17 @@ class ApiClient {
             pendingHandshakeId = pendingHandshakeId,
             selectedMemberIds = selectedMemberIds,
             contextTags = contextTags,
+        )
+
+    suspend fun postProximitySelectionExclusions(
+        bearerJwt: String,
+        pendingHandshakeId: String,
+        excludedMemberIds: List<String>,
+    ): Result<Unit> =
+        postProximitySelectionExclusionsImpl(
+            bearerJwt = bearerJwt,
+            pendingHandshakeId = pendingHandshakeId,
+            excludedMemberIds = excludedMemberIds,
         )
 
     suspend fun getPendingProximityHandshake(

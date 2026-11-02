@@ -23,6 +23,7 @@ import compose.project.click.click.data.models.collapseOneToOneConnectionsByPeer
 import compose.project.click.click.data.models.homePriority
 import compose.project.click.click.data.models.isActiveForUser // pragma: allowlist secret
 import compose.project.click.click.data.models.typed
+import compose.project.click.click.data.realtime.LiveUpdates // pragma: allowlist secret
 import compose.project.click.click.data.repository.ChatRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.ConnectionRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.MapBeaconRepository // pragma: allowlist secret
@@ -32,6 +33,8 @@ import compose.project.click.click.data.storage.BeaconRsvpPersistence // pragma:
 import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
 import compose.project.click.click.events.EventReminderCoordinator // pragma: allowlist secret
 import compose.project.click.click.events.HomeEventReminder // pragma: allowlist secret
+import compose.project.click.click.events.MineEventDto
+import compose.project.click.click.events.getMyEvents
 import compose.project.click.click.util.AvailabilityOverlapCache // pragma: allowlist secret
 import compose.project.click.click.util.ViewerAvailabilityBubblesCache // pragma: allowlist secret
 import compose.project.click.click.util.prefetchAvailabilityOverlapsForPeers // pragma: allowlist secret
@@ -104,6 +107,15 @@ class HomeViewModel(
     private val _savedEventBookmarks =
         MutableStateFlow(AppDataManager.cachedEventBookmarks.value)
     val savedEventBookmarks: StateFlow<List<EventBookmarkItemDto>> = _savedEventBookmarks.asStateFlow()
+
+    /** Events the viewer hosts or RSVP'd to (`GET /api/beacons/mine`), for Home's Upcoming. */
+    private val _myEvents = MutableStateFlow<List<MineEventDto>>(emptyList())
+    val myEvents: StateFlow<List<MineEventDto>> = _myEvents.asStateFlow()
+
+    private suspend fun loadMyEvents() {
+        // Failures keep what's shown; Upcoming still lists saved events.
+        ApiClient().getMyEvents().onSuccess { _myEvents.value = it }
+    }
 
     // Recap: explicit Loading / Loaded / Failed so a slow or failed request never renders zeros.
     private val recapController =
@@ -280,6 +292,13 @@ class HomeViewModel(
         viewModelScope.launch {
             AppDataManager.eventEngagementVersion.collect {
                 refreshEventSectionsAfterEngagement()
+            }
+        }
+        // Live updates: refetch only the Home modules a hint names (iOS `LiveUpdates.flush`).
+        viewModelScope.launch {
+            LiveUpdates.batches.collect { batch ->
+                if (batch.refetchesNudges) loadHomeNudges()
+                if (batch.refetchesAvailability) refreshHomeAvailabilityIntents()
             }
         }
     }
@@ -594,6 +613,7 @@ class HomeViewModel(
             loadReconnectReminders(userId, connections, lastMessageByConnectionId)
             loadHomeEventReminders(userId)
             loadSavedEventBookmarks()
+            loadMyEvents()
             recapController.start(userId)
             loadHomeNudges()
             loadConnectionInsights(userId, connections, lastMessageByConnectionId)
@@ -704,6 +724,7 @@ class HomeViewModel(
         bookmarksFetchPending = true
         viewModelScope.launch {
             loadSavedEventBookmarks()
+            loadMyEvents()
         }
     }
 
@@ -717,6 +738,7 @@ class HomeViewModel(
             loadHomeEventReminders(userId)
             bookmarksFetchPending = true
             loadSavedEventBookmarks()
+            loadMyEvents()
         }
     }
 

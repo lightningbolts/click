@@ -31,6 +31,7 @@ Requires `local.properties` with `sdk.dir=/opt/android-sdk` and `MAPS_API_KEY=<k
 
 - **Kotlin unit tests (Android JVM):** `./gradlew :composeApp:testDebugUnitTest`
 - **All Kotlin tests:** `./gradlew :composeApp:allTests`
+- **Compose screenshot tests (Roborazzi, Robolectric native graphics):** baselines live in `composeApp/src/androidUnitTest/screenshots/`. Verify with `./gradlew :composeApp:verifyRoborazziDebug` (CI runs this); after an intended UI change, re-record with `./gradlew :composeApp:recordRoborazziDebug` and commit the PNGs. Record on Linux so baselines match CI.
 - **Maestro E2E (device/emulator + CLI):** `bash scripts/maestro-smoke-android.sh` (assembleDebug, uninstall snapshot APK, install, then `maestro test .maestro --include-tags smoke`). Do not run Maestro against an emulator that already has an old Click install. Smoke flows: `launch_login`, `login_signup_toggle`. Auth (onboarded user **with avatar**): `maestro test .maestro/auth --include-tags auth -e TEST_EMAIL=... -e TEST_PASSWORD=...` (`tabs.yaml` asserts no `onboarding-avatar` and map chrome). Do not add Maestro Cloud to PR CI.
 - **Supabase drift (when `../click-web` is present):** `bash scripts/check-supabase-drift.sh`
 - Shared prefs/personality migration lives in click-web (`20260813180000_notification_prefs_personality.sql`) and is mirrored here.
@@ -39,7 +40,7 @@ CI: Android job runs on Linux (`testDebugUnitTest` + `assembleDebug`).
 
 ### Non-obvious caveats
 
-- The `google-secrets` Gradle plugin reads `MAPS_API_KEY` from `local.properties`, with `local.defaults.properties` as a checked-in fallback for CI when the gitignored file is absent. A placeholder value is sufficient for compilation but Google Maps features won't work at runtime without a real key.
+- The `google-secrets` Gradle plugin reads `MAPS_API_KEY` from `local.properties`, with `local.defaults.properties` as a checked-in fallback for CI when the gitignored file is absent. A placeholder value is sufficient for compilation but Google Maps features won't work at runtime without a real key. `KLIPY_APP_KEY` (KLIPY GIF search in chat) works the same way; left empty, the GIF picker is hidden.
 - The `click-web` Next.js companion app (QR flows, chat gatekeeper) is a **separate repository**. Prefer checking it out as a sibling `../click-web`.
 - **`click-web/supabase` is the source of truth** for shared migrations and `bind-proximity-connection`. Sync mirrors with `bash scripts/sync-supabase-from-click-web.sh`. Mobile-only functions (`send-push-notification`, `expire-*`, `verify-hub-proximity`) stay in this repo.
 - Supabase Edge Functions require the Supabase CLI to deploy/serve locally; they are not needed for basic mobile build testing.

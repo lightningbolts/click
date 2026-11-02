@@ -132,6 +132,8 @@ data class NotificationPreferencesPatchBody(
     val hubMessagePushEnabled: Boolean = true,
     @SerialName("reconnect_nudge_push_enabled")
     val reconnectNudgePushEnabled: Boolean = true,
+    @SerialName("drop_release_push_enabled")
+    val dropReleasePushEnabled: Boolean = true,
 )
 
 @Serializable
@@ -355,6 +357,21 @@ data class ProximityBindOkResponseDto(
     @SerialName("awaiting_selection") val awaitingSelection: Boolean? = null,
     @SerialName("pending_handshake_id") val pendingHandshakeId: String? = null,
     @SerialName("expires_at") val expiresAt: String? = null,
+    /**
+     * Set with `awaiting_selection` when everyone in the tap already shares a group connection.
+     * The review then saves this Click to that group instead of creating a new one.
+     */
+    @SerialName("existing_connection_id") val existingConnectionId: String? = null,
+)
+
+/**
+ * JSON body for `POST /api/connections/proximity/selection`: who this person removed while
+ * reviewing a group tap. The server applies it whichever phone confirms first.
+ */
+@Serializable
+data class ProximitySelectionExclusionsPostBody(
+    @SerialName("pending_handshake_id") val pendingHandshakeId: String,
+    @SerialName("excluded_member_ids") val excludedMemberIds: List<String>,
 )
 
 /** JSON body for `POST /api/connections/proximity/confirm`. */

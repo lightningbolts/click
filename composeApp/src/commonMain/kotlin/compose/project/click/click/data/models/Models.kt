@@ -252,7 +252,35 @@ data class LocationPreferences(
     val showOnMapEnabled: Boolean = false,
     @SerialName("location_include_in_insights_enabled")
     val includeInInsightsEnabled: Boolean = false,
-)
+    /**
+     * Click Places: your Clicks see you under "Clicks who've been here" (never when). Read and
+     * written only while `click_places` is on (iOS `LocationPrivacy.placeVisitsVisible`).
+     */
+    @SerialName("place_visits_visible_to_connections")
+    val placeVisitsVisible: Boolean = false,
+) {
+    companion object {
+        const val PLACE_VISITS_COLUMN = "place_visits_visible_to_connections"
+
+        /** Columns read from `users`; the Places one only with Places on (iOS `LocationPrivacy.keys`). */
+        fun columns(includePlaceVisits: Boolean): List<String> =
+            listOfNotNull(
+                "location_connection_snap_enabled",
+                "location_show_on_map_enabled",
+                "location_include_in_insights_enabled",
+                PLACE_VISITS_COLUMN.takeIf { includePlaceVisits },
+            )
+    }
+
+    /** Values written to `users` (iOS `LocationPrivacy.writeRow`). */
+    fun writeRow(includePlaceVisits: Boolean): Map<String, Boolean> =
+        buildMap {
+            put("location_connection_snap_enabled", connectionSnapEnabled)
+            put("location_show_on_map_enabled", showOnMapEnabled)
+            put("location_include_in_insights_enabled", includeInInsightsEnabled)
+            if (includePlaceVisits) put(PLACE_VISITS_COLUMN, placeVisitsVisible)
+        }
+}
 
 /** One row per user in `public.user_interests`; canonical source for interest tags and onboarding completion. */
 @Serializable
@@ -364,6 +392,12 @@ data class ConnectionRequest(
     /** Human-readable weather from the client (e.g. `15°C, Clear`) for `/api/qr` and encounter rows. */
     @SerialName("weather_snapshot")
     val weatherSnapshotLabel: String? = null,
+    /**
+     * This phone's own `gps_*` / `barometric_*` quality keys and `sensor_observation` (G4-2/G4-3),
+     * merged at the top level of the `/api/qr` redeem and `POST /api/connections` bodies.
+     */
+    @SerialName("observation_keys")
+    val observationKeys: kotlinx.serialization.json.JsonObject? = null,
 )
 
 @Serializable

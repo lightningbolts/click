@@ -37,14 +37,18 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.Celebration
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -58,7 +62,6 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -93,7 +96,6 @@ import compose.project.click.click.ui.components.ClickPlatformSheet // pragma: a
 import compose.project.click.click.ui.components.ClickSearchField // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickSheetDefaults // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionListUserAvatarFace // pragma: allowlist secret
-import compose.project.click.click.ui.components.DiscoverySortSegmentBar // pragma: allowlist secret
 import compose.project.click.click.ui.components.DraggableLazyListScrollbar // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
 import compose.project.click.click.ui.components.LocalSheetOnDismissRequest // pragma: allowlist secret
@@ -284,8 +286,7 @@ internal fun EventsDiscoveryFullScreen(
     detailContent: @Composable () -> Unit = {},
     interactiveBackSwipeOffsetPx: androidx.compose.runtime.MutableFloatState? = null,
 ) {
-    var sortMode by remember { mutableIntStateOf(0) }
-    val discoverySortMode = if (sortMode == 0) DiscoverySortMode.Distance else DiscoverySortMode.Recent
+    val nearbySort by viewModel.nearbySort.collectAsState()
     var eventsQuery by remember { mutableStateOf("") }
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -308,39 +309,16 @@ internal fun EventsDiscoveryFullScreen(
     }
 
     val discoverySections =
-        remember(feedItems, discoverySortMode, eventsQuery) {
-            val sorted = sortDiscoveryFeedItems(feedItems, discoverySortMode)
-            val q = eventsQuery.trim()
-            val filtered =
-                if (q.isEmpty()) {
-                    sorted
-                } else {
-                    sorted.filter { item ->
-                        when (item) {
-                            is DiscoveryFeedItem.Beacon ->
-                                item.beacon.displayDynamicTitle().contains(q, ignoreCase = true) ||
-                                    item.ttlLabel.contains(q, ignoreCase = true) ||
-                                    item.beacon.metadata.description
-                                        .orEmpty()
-                                        .contains(q, ignoreCase = true) ||
-                                    item.beacon.metadata.trackName
-                                        .orEmpty()
-                                        .contains(q, ignoreCase = true) ||
-                                    item.beacon.metadata.artistName
-                                        .orEmpty()
-                                        .contains(q, ignoreCase = true) ||
-                                    item.beacon.creatorDisplayName
-                                        .orEmpty()
-                                        .contains(q, ignoreCase = true)
-                            is DiscoveryFeedItem.Hub ->
-                                item.hub.name.contains(q, ignoreCase = true) ||
-                                    item.ttlLabel.contains(q, ignoreCase = true)
-                            is DiscoveryFeedItem.Connection ->
-                                item.point.displayName.contains(q, ignoreCase = true)
-                        }
-                    }
-                }
-            groupDiscoveryFeedIntoSections(filtered)
+        remember(feedItems, nearbySort, eventsQuery) {
+            nearbySections(
+                items = feedItems,
+                sort = nearbySort,
+                query = eventsQuery,
+                nowEpochMs =
+                    kotlinx.datetime.Clock.System
+                        .now()
+                        .toEpochMilliseconds(),
+            )
         }
     val discoveryItemCount =
         remember(discoverySections) {
@@ -405,6 +383,10 @@ internal fun EventsDiscoveryFullScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
+                    NearbySortMenu(
+                        sort = nearbySort,
+                        onSortChange = { viewModel.setNearbySort(it) },
+                    )
                     IconButton(
                         onClick = {
                             PlatformHapticsPolicy.lightImpact()
@@ -427,10 +409,6 @@ internal fun EventsDiscoveryFullScreen(
                     query = eventsQuery,
                     onQueryChange = { eventsQuery = it },
                     modifier = Modifier.fillMaxWidth(),
-                )
-                DiscoverySortSegmentBar(
-                    selectedTabIndex = sortMode,
-                    onTabSelected = { sortMode = it },
                 )
                 EventsSheetLayerChips(
                     layerFilters = layerFilters,
@@ -473,6 +451,16 @@ internal fun EventsDiscoveryFullScreen(
                                             Modifier
                                                 .fillMaxWidth()
                                                 .padding(vertical = 32.dp),
+                                    )
+                                }
+                            }
+                            discoveryItemCount == 0 && eventsQuery.isNotBlank() && feedItems.isNotEmpty() -> {
+                                item(key = "events_no_results") {
+                                    AppEmptyState(
+                                        icon = Icons.Default.Place,
+                                        title = nearbyNoResultsTitle(eventsQuery),
+                                        body = NEARBY_NO_RESULTS_HINT,
+                                        modifier = Modifier.fillMaxWidth(),
                                     )
                                 }
                             }
@@ -570,6 +558,48 @@ internal fun EventsDiscoveryFullScreen(
     }
 }
 
+/**
+ * Row order picker (iOS `NearbyListView.sortMenu`): one icon button opening the five orders, the
+ * current one checked.
+ */
+@Composable
+private fun NearbySortMenu(
+    sort: NearbySort,
+    onSortChange: (NearbySort) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { expanded = true }) {
+            Icon(Icons.Filled.SwapVert, contentDescription = "Sort by ${sort.label}")
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            NearbySort.entries.forEach { option ->
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = option.label,
+                            fontWeight = if (option == sort) FontWeight.SemiBold else FontWeight.Normal,
+                        )
+                    },
+                    trailingIcon =
+                        if (option == sort) {
+                            { Icon(Icons.Filled.Check, contentDescription = null) }
+                        } else {
+                            null
+                        },
+                    onClick = {
+                        expanded = false
+                        if (option != sort) {
+                            PlatformHapticsPolicy.lightImpact()
+                            onSortChange(option)
+                        }
+                    },
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun EventsSheetSearchField(
     query: String,
@@ -579,7 +609,7 @@ private fun EventsSheetSearchField(
     ClickSearchField(
         value = query,
         onValueChange = onQueryChange,
-        placeholder = "Search nearby…",
+        placeholder = NEARBY_SEARCH_PROMPT,
         modifier = modifier,
     )
 }

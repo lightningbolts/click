@@ -4,7 +4,9 @@ package compose.project.click.click.viewmodel // pragma: allowlist secret
  * Map overlay layers (connections + community beacons). Multiple selections combine (union).
  * [ALL] is a shortcut to show every layer.
  */
-enum class MapLayerFilter(val label: String) {
+enum class MapLayerFilter(
+    val label: String,
+) {
     ALL("All"),
     MY_CONNECTIONS("My Connections"),
     SOUNDTRACKS("Soundtracks"),
@@ -12,7 +14,14 @@ enum class MapLayerFilter(val label: String) {
     EVENTS("Events"),
     SOCIAL_VIBES("Social Vibes"),
     COMMUNITY_HUBS("Community Hubs"),
+
+    /** Click Places (G5-2); listed only while `click_places` is on. */
+    PLACES("Places"),
 }
+
+/** Layers the map's layer menu lists: Places only while `click_places` is on. */
+fun visibleMapLayerFilters(placesEnabled: Boolean): List<MapLayerFilter> =
+    MapLayerFilter.entries.filter { placesEnabled || it != MapLayerFilter.PLACES }
 
 fun defaultMapLayerFilters(): Set<MapLayerFilter> =
     setOf(
@@ -22,6 +31,7 @@ fun defaultMapLayerFilters(): Set<MapLayerFilter> =
         MapLayerFilter.EVENTS,
         MapLayerFilter.SOCIAL_VIBES,
         MapLayerFilter.COMMUNITY_HUBS,
+        MapLayerFilter.PLACES,
     )
 
 fun layersWantHubFetch(layers: Set<MapLayerFilter>): Boolean =

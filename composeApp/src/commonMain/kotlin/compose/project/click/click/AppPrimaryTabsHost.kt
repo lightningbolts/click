@@ -55,6 +55,8 @@ import compose.project.click.click.viewmodel.HomeViewModel // pragma: allowlist 
 import compose.project.click.click.viewmodel.MapLayerFilter // pragma: allowlist secret
 import compose.project.click.click.viewmodel.MapViewModel // pragma: allowlist secret
 import compose.project.click.click.viewmodel.VerifiedCliqueProximityIntent // pragma: allowlist secret
+import compose.project.click.click.viewmodel.stopConnectionCapture // pragma: allowlist secret
+import compose.project.click.click.viewmodel.warmUpConnectionCapture // pragma: allowlist secret
 import io.ktor.client.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.serialization.kotlinx.json.*
@@ -498,7 +500,10 @@ internal fun AppPrimaryTabsHost(
                     transitionMode = mode
                     when (overlayKey) {
                         "my_qr" -> showMyQRCode = false
-                        "qr_scanner" -> showQRScanner = false
+                        "qr_scanner" -> {
+                            showQRScanner = false
+                            connectionViewModel.stopConnectionCapture()
+                        }
                         "nfc" -> showNfcScreen = false
                     }
                 }
@@ -523,7 +528,10 @@ internal fun AppPrimaryTabsHost(
                                         dismissAddClickOverlay(NavigationTransitionMode.Tap)
                                     },
                                 )
-                            "qr_scanner" ->
+                            "qr_scanner" -> {
+                                // G4-1: warm location + pressure while the scanner is visible (never prompts).
+                                // It keeps running through the context sheet; the connect takes its snapshot.
+                                LaunchedEffect(Unit) { connectionViewModel.warmUpConnectionCapture("qr") }
                                 QRScannerScreen(
                                     onQRCodeScanned = { userId ->
                                         showQRScanner = false
@@ -547,12 +555,14 @@ internal fun AppPrimaryTabsHost(
                                     },
                                     onCommunityHubScanned = { hubId ->
                                         showQRScanner = false
+                                        connectionViewModel.stopConnectionCapture()
                                         launchCommunityHubJoin(hubId, null)
                                     },
                                     onNavigateBack = {
                                         dismissAddClickOverlay(NavigationTransitionMode.Tap)
                                     },
                                 )
+                            }
                             "nfc" -> {
                                 val userId =
                                     when (val state = authViewModel.authState) {

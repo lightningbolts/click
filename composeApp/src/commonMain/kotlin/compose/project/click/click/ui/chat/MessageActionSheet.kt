@@ -23,6 +23,7 @@ import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material.icons.outlined.Share
@@ -57,6 +58,7 @@ import compose.project.click.click.data.models.isDisposableRollLocked // pragma:
 import compose.project.click.click.data.models.isEncryptedMedia // pragma: allowlist secret
 import compose.project.click.click.data.models.mediaUrlOrNull // pragma: allowlist secret
 import compose.project.click.click.data.models.originalMimeTypeOrNull // pragma: allowlist secret
+import compose.project.click.click.data.repository.isGatedDropAwaitingOriginal // pragma: allowlist secret
 import compose.project.click.click.data.storage.createTokenStorage
 import compose.project.click.click.ui.components.BentoGlassOptionRow // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickActionBottomSheet // pragma: allowlist secret
@@ -78,6 +80,9 @@ internal data class MessageActionCapabilities(
     val canForward: Boolean = false,
     val canRetry: Boolean = false,
     val canDiscard: Boolean = false,
+    /** Pin/Unpin (direct and group chats; not hubs). */
+    val canPin: Boolean = false,
+    val isPinned: Boolean = false,
 )
 
 /** Edit is offered only for your own plain-text messages (not media, beacons, call logs). */
@@ -91,7 +96,7 @@ internal fun canEditMessage(messageWithUser: MessageWithUser): Boolean {
 }
 
 /** A Click Drop stays unsaveable and unshareable until its collaboration window ends. */
-internal fun canExportMessageMedia(message: Message): Boolean = !message.isDisposableRollLocked()
+internal fun canExportMessageMedia(message: Message): Boolean = !message.isDisposableRollLocked() && !message.isGatedDropAwaitingOriginal()
 
 /** Saves an image message to the gallery (decrypting first when needed); true on success. */
 internal suspend fun saveMessageImage(
@@ -137,6 +142,7 @@ internal class MessageActionHandlers(
     val onForward: (MessageWithUser) -> Unit = {},
     val onRetry: (MessageWithUser) -> Unit = {},
     val onDiscard: (MessageWithUser) -> Unit = {},
+    val onTogglePin: (MessageWithUser) -> Unit = {},
 )
 
 /**
@@ -472,6 +478,27 @@ internal fun MessageActionSheet(
                                 imageVector = Icons.Default.Delete,
                                 contentDescription = "Discard unsent message",
                                 tint = Color(0xFFFF4444),
+                            )
+                        },
+                    )
+                }
+
+                if (capabilities.canPin) {
+                    BentoGlassOptionRow(
+                        title = if (capabilities.isPinned) "Unpin" else "Pin",
+                        onClick = {
+                            handlers.onTogglePin(messageWithUser)
+                            onDismiss()
+                        },
+                        cornerRadius = optionRadius,
+                        showBorder = false,
+                        horizontalInset = 0.dp,
+                        verticalInset = 0.dp,
+                        leading = {
+                            Icon(
+                                imageVector = Icons.Default.PushPin,
+                                contentDescription = null,
+                                tint = onVariant,
                             )
                         },
                     )

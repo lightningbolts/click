@@ -11,6 +11,7 @@ import compose.project.click.click.chat.attachments.AttachmentCrypto // pragma: 
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.SupabaseConfig // pragma: allowlist secret
 import compose.project.click.click.data.api.ChatApiClient // pragma: allowlist secret
+import compose.project.click.click.data.api.ChatPinDto // pragma: allowlist secret
 import compose.project.click.click.data.models.ChatMessageType // pragma: allowlist secret
 import compose.project.click.click.data.models.IcebreakerPrompt // pragma: allowlist secret
 import compose.project.click.click.data.models.Message // pragma: allowlist secret
@@ -18,11 +19,13 @@ import compose.project.click.click.data.models.MessageReaction // pragma: allowl
 import compose.project.click.click.data.models.MessageWithUser // pragma: allowlist secret
 import compose.project.click.click.data.models.hasLocalMediaUri // pragma: allowlist secret
 import compose.project.click.click.data.models.isEncryptedMedia // pragma: allowlist secret
+import compose.project.click.click.data.models.isGatedDrop // pragma: allowlist secret
 import compose.project.click.click.data.models.mediaUrlOrNull // pragma: allowlist secret
 import compose.project.click.click.data.models.originalMimeTypeOrNull // pragma: allowlist secret
 import compose.project.click.click.data.realtime.RealtimeCoordinator
 import compose.project.click.click.data.repository.ChatMessageSubscription // pragma: allowlist secret
 import compose.project.click.click.data.repository.ChatRepository // pragma: allowlist secret
+import compose.project.click.click.data.repository.GatedDropOriginals // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseChatRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.e2eeV2MediaMetadataOrNull // pragma: allowlist secret
@@ -265,6 +268,13 @@ class ChatViewModel(
     internal val secureImageBytesCache =
         LruMemoryCache<String, ByteArray>(SECURE_CHAT_IMAGE_CACHE_MAX_ENTRIES)
     internal val secureImageNetworkLoads = Semaphore(SECURE_CHAT_IMAGE_NETWORK_CONCURRENCY)
+
+    /** Gated Click Drop ids whose original is being developed right now (main-thread only). */
+    internal val gatedDropLoadsInFlight = mutableSetOf<String>()
+
+    /** Tap to develop, "Develop all" and live develop for gated Click Drops (iOS `ConversationModel`). */
+    internal val clickDropHost by lazy { ChatViewModelClickDropHost(this) }
+    override val clickDropDevelop: ClickDropDevelopHost get() = clickDropHost
     internal val secureAudioPathCache =
         LruMemoryCache<String, String>(SECURE_CHAT_AUDIO_CACHE_MAX_ENTRIES)
 
@@ -481,6 +491,10 @@ class ChatViewModel(
         if (message.messageType.lowercase() != ChatMessageType.IMAGE) return
         val url = message.mediaUrlOrNull() ?: return
         if (url.isBlank()) return
+        if (message.isGatedDrop() && clickDropHost.isDeveloped(message.id) && !GatedDropOriginals.isLoaded(message.id)) {
+            // Developed by this viewer: load the original. The preview below keeps the bubble filled meanwhile.
+            ensureGatedDropOriginalLoaded(scopeId, viewerUserId, message)
+        }
         val cachedBytes = secureImageBytesCache.get(message.id)
         if (cachedBytes != null && cachedBytes.isNotEmpty()) {
             _secureChatMediaLoadState.update {
@@ -665,7 +679,29 @@ class ChatViewModel(
 
     fun leaveChatRoom(clearMessageSurface: Boolean = true) = leaveChatRoomImpl(clearMessageSurface = clearMessageSurface)
 
-    fun startTypingMonitoring(chatId: String) = startTypingMonitoringImpl(chatId = chatId)
+    fun startTypingMonitoring(chatId: String) {
+        startTypingMonitoringImpl(chatId = chatId)
+        loadPinsImpl(chatId)
+    }
+
+    // ── Pinned messages (iOS banner + long-press Pin) ──────────────────────────
+    internal var pinsChatId: String? = null
+    internal val _pinnedMessages = MutableStateFlow<List<ChatPinDto>>(emptyList())
+    val pinnedMessages: StateFlow<List<ChatPinDto>> = _pinnedMessages.asStateFlow()
+
+    fun togglePin(messageId: String) = togglePinImpl(messageId)
+
+    /** A message the timeline should scroll to and highlight (pin banner taps). */
+    internal val _jumpToMessageRequest = MutableStateFlow<String?>(null)
+    val jumpToMessageRequest: StateFlow<String?> = _jumpToMessageRequest.asStateFlow()
+
+    fun requestJumpToMessage(messageId: String) {
+        _jumpToMessageRequest.value = messageId
+    }
+
+    fun consumeJumpToMessage() {
+        _jumpToMessageRequest.value = null
+    }
 
     fun onUserTyping(chatId: String) = onUserTypingImpl(chatId = chatId)
 
@@ -699,6 +735,11 @@ class ChatViewModel(
         message: compose.project.click.click.data.models.Message,
         targets: List<compose.project.click.click.data.models.ChatWithDetails>,
     ) = forwardMessageImpl(message, targets)
+
+    // ── GIFs ──────────────────────────────────────────────────────────────────
+
+    /** Sends a GIF picked from KLIPY into the open chat (replying when a reply is staged). */
+    fun sendGif(gif: compose.project.click.click.data.models.ChatGif) = sendGifImpl(gif)
 
     // ── Plans ─────────────────────────────────────────────────────────────────
 

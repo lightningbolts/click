@@ -10,9 +10,15 @@ import androidx.lifecycle.viewModelScope
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.ClickWebAuthCoordinator // pragma: allowlist secret
 import compose.project.click.click.data.api.ApiClient // pragma: allowlist secret
+import compose.project.click.click.data.flags.FeatureFlag // pragma: allowlist secret
+import compose.project.click.click.data.flags.FeatureFlags // pragma: allowlist secret
 import compose.project.click.click.data.models.BeaconVisibilityAudience // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
+import compose.project.click.click.data.places.ClickWebPlacesRepository // pragma: allowlist secret
+import compose.project.click.click.data.places.PlaceSummaryDto // pragma: allowlist secret
+import compose.project.click.click.data.places.PlacesRepository // pragma: allowlist secret
+import compose.project.click.click.data.realtime.LiveUpdates // pragma: allowlist secret
 import compose.project.click.click.data.repository.AuthRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.ChatRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.MapBeaconRepository // pragma: allowlist secret
@@ -24,11 +30,14 @@ import compose.project.click.click.events.EventSchedule // pragma: allowlist sec
 import compose.project.click.click.events.EventVenueScale // pragma: allowlist secret
 import compose.project.click.click.events.eventSchedule // pragma: allowlist secret
 import compose.project.click.click.ui.components.MapPin // pragma: allowlist secret
+import compose.project.click.click.ui.screens.NearbySort // pragma: allowlist secret
 import compose.project.click.click.ui.utils.BoundingBox // pragma: allowlist secret
 import compose.project.click.click.ui.utils.CommunityHubPin // pragma: allowlist secret
 import compose.project.click.click.ui.utils.ConnectionMapPoint // pragma: allowlist secret
 import compose.project.click.click.ui.utils.MapCluster // pragma: allowlist secret
+import compose.project.click.click.ui.utils.MapPlacesLayer // pragma: allowlist secret
 import compose.project.click.click.ui.utils.MapRenderData // pragma: allowlist secret
+import compose.project.click.click.ui.utils.PlacesFetchMark // pragma: allowlist secret
 import compose.project.click.click.ui.utils.determineMapRenderData // pragma: allowlist secret
 import compose.project.click.click.util.teardownBlocking // pragma: allowlist secret
 import compose.project.click.click.utils.GeocodedPlace // pragma: allowlist secret
@@ -74,6 +83,16 @@ class MapViewModel : ViewModel() {
     internal val _zoomLevel = MutableStateFlow(10.0)
     val zoomLevel: StateFlow<Double> = _zoomLevel.asStateFlow()
 
+    /** Nearby row order; kept here so it survives the sheet closing (iOS `MapFeatureModel.sort`). */
+    internal val _nearbySort =
+        MutableStateFlow(NearbySort.Relevance)
+    internal val nearbySort: StateFlow<NearbySort> =
+        _nearbySort.asStateFlow()
+
+    internal fun setNearbySort(sort: NearbySort) {
+        _nearbySort.value = sort
+    }
+
     // What to render on the map (clusters or individual pins)
     internal val _renderData = MutableStateFlow<MapRenderData>(MapRenderData.Clusters(emptyList()))
     val renderData: StateFlow<MapRenderData> = _renderData.asStateFlow()
@@ -104,6 +123,22 @@ class MapViewModel : ViewModel() {
 
     internal val _communityHubs = MutableStateFlow<List<CommunityHubPin>>(emptyList())
     val communityHubs: StateFlow<List<CommunityHubPin>> = _communityHubs.asStateFlow()
+
+    /** Click Places loaded around the map (G5-2); shown only with the flag and layer on. */
+    internal val _mapPlaces = MutableStateFlow<List<PlaceSummaryDto>>(emptyList())
+
+    /** Places to draw: `click_places` on and the Places layer (or All) selected. */
+    val visibleMapPlaces: StateFlow<List<PlaceSummaryDto>> =
+        combine(_mapPlaces, _selectedLayerFilters, FeatureFlags.state) { places, layers, flags ->
+            MapPlacesLayer.visiblePlaces(places, layers, flags.isEnabled(FeatureFlag.CLICK_PLACES))
+        }.stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = emptyList(),
+        )
+    internal val placesRepository: PlacesRepository by lazy { ClickWebPlacesRepository() }
+    internal var lastPlacesFetch: PlacesFetchMark? = null
+    internal var placesFetchJob: Job? = null
 
     /** Layer-filtered beacons for the discovery feed (matches map chip filters). */
     val discoveryFeedBeacons: StateFlow<List<MapBeacon>> =
@@ -334,6 +369,15 @@ class MapViewModel : ViewModel() {
                 if (done) warmDiscoveryFeed()
             }
         }
+        // Live updates: a beacon changed near the last fix → silent discovery refetch
+        // (iOS `ClickMapView` `onChange(of: env.live.beaconChange)`).
+        viewModelScope.launch {
+            LiveUpdates.batches.collect { batch ->
+                val change = batch.beaconChange ?: return@collect
+                val here = AppDataManager.lastKnownDeviceLocation.value
+                if (change.affects(here?.first, here?.second)) refreshDiscoveryFromMapInteraction()
+            }
+        }
         viewModelScope.launch {
             AppDataManager.dismissedCommunityHubIds.collect { dismissed ->
                 if (dismissed.isEmpty()) return@collect
@@ -525,6 +569,8 @@ class MapViewModel : ViewModel() {
     fun onMapPinTapped(pin: MapPin) = onMapPinTappedImpl(pin = pin)
 
     fun onOverlappingPinChosen(pin: MapPin) = onOverlappingPinChosenImpl(pin = pin)
+
+    fun zoomIntoPinStack(pins: List<MapPin>) = zoomIntoPinStackImpl(pins = pins)
 
     /**
      * Clear current selection

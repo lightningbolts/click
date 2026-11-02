@@ -229,10 +229,10 @@ actual fun PlatformMap(
                             ?.let { loadedAvatarBitmaps[it] }
                     // Fixed 44dp diameter for all avatar pins (squad only bumps z-index / pulse).
                     val avatarCacheKey =
-                        "${pin.id}|${pin.avatarInitials}|$markerHue|${pin.avatarFillArgb}|${pin.pinShape}|${photo?.generationId ?: 0}"
+                        "${pin.id}|${pin.avatarInitials}|$markerHue|${pin.avatarFillArgb}|${pin.pinShape}|${photo?.generationId ?: 0}|${pin.stackCount}"
                     val icon =
                         avatarPinCache.getOrPut(avatarCacheKey) {
-                            if (pin.beaconKind != null) {
+                            if (pin.beaconKind != null || pin.kind == MapPinKind.PLACE) {
                                 bitmapDescriptorForShapedBeaconPin(
                                     density = density,
                                     shape = pin.pinShape,
@@ -243,6 +243,7 @@ actual fun PlatformMap(
                                     fillArgb2 = pin.visualFillArgb2,
                                     initials = pin.avatarInitials,
                                     photo = photo,
+                                    stackCount = pin.stackCount,
                                 )
                             } else {
                                 bitmapDescriptorForCircularAvatarPin(
@@ -252,12 +253,13 @@ actual fun PlatformMap(
                                     photo = photo,
                                     scale = 1f,
                                     fillArgb = pin.avatarFillArgb,
+                                    stackCount = pin.stackCount,
                                 )
                             }
                         }
                     Marker(
                         state = markerState,
-                        title = pin.title,
+                        title = if (pin.stackCount > 1) "${pin.title} +${pin.stackCount - 1}" else pin.title,
                         alpha = pin.opacity,
                         zIndex = pin.zIndex + if (squadScale > 1f) 500f else 0f,
                         icon = icon,
@@ -326,6 +328,7 @@ private fun bitmapDescriptorForCircularAvatarPin(
     photo: Bitmap?,
     scale: Float,
     fillArgb: Int? = null,
+    stackCount: Int = 1,
 ): BitmapDescriptor {
     val sizePx = with(density) { (44.dp * scale).roundToPx() }.coerceAtLeast(36)
     val borderPx = with(density) { 2.dp.toPx() }.coerceAtLeast(2f)
@@ -381,6 +384,7 @@ private fun bitmapDescriptorForCircularAvatarPin(
             strokeWidth = borderPx
         }
     canvas.drawCircle(cx, cy, radius, borderPaint)
+    drawStackBadge(canvas, sizePx, stackCount)
 
     return BitmapDescriptorFactory.fromBitmap(bmp)
 }
@@ -392,6 +396,7 @@ private fun bitmapDescriptorForShapedBeaconPin(
     fillArgb2: Int?,
     initials: String,
     photo: Bitmap?,
+    stackCount: Int = 1,
 ): BitmapDescriptor {
     val sizePx = with(density) { 44.dp.roundToPx() }.coerceAtLeast(36)
     val bmp = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
@@ -446,7 +451,45 @@ private fun bitmapDescriptorForShapedBeaconPin(
             strokeWidth = with(density) { 2.dp.toPx() }.coerceAtLeast(2f)
         }
     canvas.drawPath(path, border)
+    drawStackBadge(canvas, sizePx, stackCount)
     return BitmapDescriptorFactory.fromBitmap(bmp)
+}
+
+/**
+ * Count badge on a stack's lead pin (top-right), so overlapping pins read as one stack
+ * (iOS `MapStackPin`). Nothing is drawn for a lone pin.
+ */
+private fun drawStackBadge(
+    canvas: Canvas,
+    sizePx: Int,
+    stackCount: Int,
+) {
+    if (stackCount <= 1) return
+    val r = sizePx * 0.22f
+    val cx = sizePx - r
+    val cy = r
+    val fill =
+        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.argb(240, 17, 17, 17)
+            style = Paint.Style.FILL
+        }
+    val ring =
+        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.WHITE
+            style = Paint.Style.STROKE
+            strokeWidth = (sizePx * 0.035f).coerceAtLeast(1.5f)
+        }
+    canvas.drawCircle(cx, cy, r - ring.strokeWidth / 2f, fill)
+    canvas.drawCircle(cx, cy, r - ring.strokeWidth / 2f, ring)
+    val label = if (stackCount > 99) "99+" else stackCount.toString()
+    val text =
+        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.WHITE
+            textAlign = Paint.Align.CENTER
+            textSize = r * if (label.length > 2) 0.8f else 1.05f
+            isFakeBoldText = true
+        }
+    canvas.drawText(label, cx, cy - (text.descent() + text.ascent()) / 2f, text)
 }
 
 private fun beaconShapePath(

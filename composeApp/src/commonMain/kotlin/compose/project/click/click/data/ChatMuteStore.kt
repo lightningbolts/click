@@ -53,6 +53,25 @@ object ChatMuteStore {
         return until > nowEpochMs
     }
 
+    /** Muted under any of [ids] (a direct chat's mute may be stored under its connection id; iOS `isMuted(_:)`). */
+    fun isMuted(
+        mutes: Map<String, Long>,
+        ids: List<String?>,
+        nowEpochMs: Long,
+    ): Boolean = ids.any { isMuted(mutes, it, nowEpochMs) }
+
+    /** When a mute picked [nowEpochMs] for [duration] ends; [FOREVER] for "until I turn it back on". */
+    fun muteUntilEpochMs(
+        duration: ChatMuteDuration,
+        nowEpochMs: Long,
+    ): Long = duration.durationMs?.let { nowEpochMs + it } ?: FOREVER
+
+    /** The soonest timed mute still running after [nowEpochMs] (when a muted bell should clear), or null. */
+    fun nextExpiryEpochMs(
+        mutes: Map<String, Long>,
+        nowEpochMs: Long,
+    ): Long? = mutes.values.filter { it in (nowEpochMs + 1) until FOREVER }.minOrNull()
+
     suspend fun refresh(
         api: ApiClient = ApiClient(),
         storage: TokenStorage = createTokenStorage(),
@@ -67,22 +86,37 @@ object ChatMuteStore {
         }
     }
 
-    /** Mutes (or with [duration] null, unmutes) [chatId]. Returns false and rolls back on failure. */
+    /**
+     * Mutes (or with [duration] null, unmutes) [chatId]. Unmuting also clears a mute stored under
+     * any of [aliases] (a direct chat's connection id) so the conversation really turns back on.
+     * Returns false and rolls back on failure.
+     */
     suspend fun setMuted(
         chatId: String,
         duration: ChatMuteDuration?,
         api: ApiClient = ApiClient(),
         storage: TokenStorage = createTokenStorage(),
         nowEpochMs: Long = Clock.System.now().toEpochMilliseconds(),
+        aliases: List<String?> = emptyList(),
     ): Boolean {
         val before = _mutes.value
-        val until = duration?.let { d -> d.durationMs?.let { nowEpochMs + it } ?: FOREVER }
-        _mutes.value = if (until == null) before - chatId else before + (chatId to until)
-        val iso = until?.takeIf { it != FOREVER }?.let { Instant.fromEpochMilliseconds(it).toString() }
-        val ok = api.putChatMuteImpl(chatId, muted = until != null, mutedUntilIso = iso).isSuccess
+        val until = duration?.let { muteUntilEpochMs(it, nowEpochMs) }
+        if (until == null) {
+            val ids = (listOf(chatId) + aliases.filterNotNull().filter { it.isNotBlank() && it in before }).distinct()
+            _mutes.value = before - ids.toSet()
+            val ok = ids.all { api.putChatMuteImpl(it, muted = false, mutedUntilIso = null).isSuccess }
+            if (!ok) _mutes.value = before else persist(storage, _mutes.value)
+            return ok
+        }
+        _mutes.value = before + (chatId to until)
+        val ok = api.putChatMuteImpl(chatId, muted = true, mutedUntilIso = mutedUntilIso(until)).isSuccess
         if (!ok) _mutes.value = before else persist(storage, _mutes.value)
         return ok
     }
+
+    /** The `muted_until` sent to the server: ISO-8601, or null for "until I turn it back on". */
+    fun mutedUntilIso(untilEpochMs: Long): String? =
+        untilEpochMs.takeIf { it != FOREVER }?.let { Instant.fromEpochMilliseconds(it).toString() }
 
     /** Reads the persisted mutes (used by the FCM service, which may run without the UI). */
     suspend fun loadPersisted(storage: TokenStorage): Map<String, Long> =

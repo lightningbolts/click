@@ -21,6 +21,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.ConfirmationNumber
+import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.EventAvailable
 import androidx.compose.material.icons.filled.Height
@@ -29,6 +31,8 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.PrivacyTip
 import androidx.compose.material.icons.filled.QrCode
 import androidx.compose.material.icons.filled.Shield
@@ -62,20 +66,37 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.appVersionLabel // pragma: allowlist secret
 import compose.project.click.click.calendar.CalendarProvider // pragma: allowlist secret
 import compose.project.click.click.calendar.DeviceCalendar // pragma: allowlist secret
+import compose.project.click.click.crypto.MessageCryptoV2
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.IdentityCache // pragma: allowlist secret
 import compose.project.click.click.data.api.ApiClient
 import compose.project.click.click.data.api.BlockedUserDto // pragma: allowlist secret
+import compose.project.click.click.data.api.ChatApiClient
 import compose.project.click.click.data.api.EventBookmarkItemDto // pragma: allowlist secret
+import compose.project.click.click.data.api.MyChatDeviceDto
 import compose.project.click.click.data.api.PROFILE_BIO_MAX_LENGTH
+import compose.project.click.click.data.api.accountDeletionFailureMessage
+import compose.project.click.click.data.api.deleteAccountImpl
+import compose.project.click.click.data.api.getMyChatDevicesImpl
+import compose.project.click.click.data.api.removeChatDeviceImpl
+import compose.project.click.click.data.devices.REMOVE_DEVICE_MESSAGE
+import compose.project.click.click.data.devices.deviceDisplayName
+import compose.project.click.click.data.devices.removeDeviceTitle
+import compose.project.click.click.data.flags.FeatureFlag
+import compose.project.click.click.data.flags.FeatureFlags
 import compose.project.click.click.data.models.AvailabilityIntentRow // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
+import compose.project.click.click.data.places.ClickWebPlacesRepository
+import compose.project.click.click.data.places.PlaceApiException
+import compose.project.click.click.data.places.PlaceOpenRequests // pragma: allowlist secret
 import compose.project.click.click.data.repository.AuthRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.HangoutPresence
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
 import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
 import compose.project.click.click.deeplink.AppDeepLink // pragma: allowlist secret
 import compose.project.click.click.deeplink.AppDeepLinkRouter // pragma: allowlist secret
+import compose.project.click.click.events.tickets.ApiTicketingClient
+import compose.project.click.click.events.tickets.MyTicketsGroup
 import compose.project.click.click.notifications.ChatDeepLinkManager // pragma: allowlist secret
 import compose.project.click.click.openInAppBrowser // pragma: allowlist secret
 import compose.project.click.click.platformForegroundTickFlow // pragma: allowlist secret
@@ -111,8 +132,10 @@ import compose.project.click.click.utils.LocationService // pragma: allowlist se
 import compose.project.click.click.utils.readLocationPermissionDisplayState // pragma: allowlist secret
 import compose.project.click.click.viewmodel.AvailabilityViewModel // pragma: allowlist secret
 import compose.project.click.click.viewmodel.MapViewModel // pragma: allowlist secret
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 internal enum class SettingsPage {
     Hub,
@@ -121,10 +144,13 @@ internal enum class SettingsPage {
     Privacy,
     Permissions,
     Blocked,
+    Devices,
+    Places,
     Calendar,
     Interests,
     Personality,
     Saved,
+    Tickets,
 }
 
 internal fun SettingsPage.title(): String =
@@ -135,10 +161,13 @@ internal fun SettingsPage.title(): String =
         SettingsPage.Privacy -> "Privacy & data"
         SettingsPage.Permissions -> "Permissions"
         SettingsPage.Blocked -> "Blocked people"
+        SettingsPage.Devices -> "Devices"
+        SettingsPage.Places -> "Places"
         SettingsPage.Calendar -> "Calendar"
         SettingsPage.Interests -> "Interests"
         SettingsPage.Personality -> "Personality"
         SettingsPage.Saved -> "Saved events"
+        SettingsPage.Tickets -> "Tickets"
     }
 
 /** Pages pushed from Privacy go back to Privacy; everything else goes back to Me. */
@@ -171,6 +200,7 @@ fun SettingsScreen(
     val intentListFeedback by availabilityViewModel.intentListFeedback.collectAsState()
     val currentUser by AppDataManager.currentUser.collectAsState()
     val notificationPreferences by AppDataManager.notificationPreferences.collectAsState()
+    val featureFlags by FeatureFlags.state.collectAsState()
     val locationPreferences by AppDataManager.locationPreferences.collectAsState()
     val connections by AppDataManager.connections.collectAsState()
     val coreConnectionIds by AppDataManager.coreConnectionIds.collectAsState()
@@ -286,6 +316,22 @@ fun SettingsScreen(
     var confirmSignOut by remember { mutableStateOf(false) }
     var signingOut by remember { mutableStateOf(false) }
     var confirmDeleteAccount by remember { mutableStateOf(false) }
+    // Me → Devices
+    val chatDevicesApi = remember { ChatApiClient() }
+    val online by AppDataManager.networkConnectivityMonitor.isOnline.collectAsState()
+    var devicesLoad by remember { mutableStateOf<PageLoad<List<MyChatDeviceDto>>>(PageLoad.Loading) }
+    var devicesEpoch by remember { mutableStateOf(0) }
+    var thisDeviceId by remember { mutableStateOf<String?>(null) }
+    var removingDevices by remember { mutableStateOf(emptySet<String>()) }
+    var devicesError by remember { mutableStateOf<String?>(null) }
+    var confirmRemoveDevice by remember { mutableStateOf<MyChatDeviceDto?>(null) }
+    // Me → Places (iOS MyPlacesView; flag click_places)
+    val placesEnabled = featureFlags.isEnabled(FeatureFlag.CLICK_PLACES)
+    val placesRepository = remember { ClickWebPlacesRepository() }
+    var myPlacesLoad by remember { mutableStateOf<MyPlacesLoad>(MyPlacesLoad.Loading) }
+    var myPlacesEpoch by remember { mutableStateOf(0) }
+    var deletingAccount by remember { mutableStateOf(false) }
+    var accountDeletionError by remember { mutableStateOf<String?>(null) }
     var pendingAlertKey by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(notificationPreferencesSaving) {
         if (!notificationPreferencesSaving) pendingAlertKey = null
@@ -344,6 +390,32 @@ fun SettingsScreen(
     var showPermissionsHub by remember { mutableStateOf(false) }
     var settingsPage by currentSettingsPage
 
+    LaunchedEffect(settingsPage, devicesEpoch, online) {
+        if (settingsPage != SettingsPage.Devices) return@LaunchedEffect
+        if (thisDeviceId == null) {
+            thisDeviceId =
+                withContext(Dispatchers.Default) {
+                    runCatching { MessageCryptoV2.loadOrCreateDeviceIdentity().info.deviceId }.getOrNull()
+                }
+        }
+        if (devicesLoad !is PageLoad.Loaded) devicesLoad = PageLoad.Loading
+        chatDevicesApi.getMyChatDevicesImpl().fold(
+            onSuccess = { devicesLoad = PageLoad.Loaded(it) },
+            onFailure = { if (devicesLoad !is PageLoad.Loaded) devicesLoad = PageLoad.Failed },
+        )
+    }
+    LaunchedEffect(settingsPage, myPlacesEpoch, placesEnabled) {
+        if (settingsPage != SettingsPage.Places || !placesEnabled) return@LaunchedEffect
+        if (myPlacesLoad !is MyPlacesLoad.Loaded) myPlacesLoad = MyPlacesLoad.Loading
+        placesRepository.myPlaces().fold(
+            onSuccess = { myPlacesLoad = MyPlacesLoad.Loaded(it) },
+            onFailure = { e ->
+                if (myPlacesLoad !is MyPlacesLoad.Loaded) {
+                    myPlacesLoad = MyPlacesLoad.Failed((e as? PlaceApiException)?.error?.message() ?: "Something went wrong. Try again.")
+                }
+            },
+        )
+    }
     LaunchedEffect(settingsPage, blockedEpoch) {
         if (settingsPage != SettingsPage.Blocked) return@LaunchedEffect
         if (blockedLoad !is PageLoad.Loaded) blockedLoad = PageLoad.Loading
@@ -377,6 +449,8 @@ fun SettingsScreen(
     val mapBeacons by mapViewModel.mapBeacons.collectAsState()
     val prefetchedBeacons by AppDataManager.prefetchedMapBeacons.collectAsState()
     var selectedSavedEventBeacon by remember { mutableStateOf<MapBeacon?>(null) }
+    val ticketingClient = remember { ApiTicketingClient() }
+    var ticketPassGroup by remember { mutableStateOf<MyTicketsGroup?>(null) }
     // One host state means tap-back and swipe-back share a single animation and the hub behind gets
     // the same parallax either way, instead of tap-back using a separate slide-out with no underlay.
     val backHost = rememberInteractiveBackHostState()
@@ -497,6 +571,15 @@ fun SettingsScreen(
                                 onClick = { settingsPage = SettingsPage.Saved },
                             )
                             SettingsDivider()
+                            // Me → Tickets (iOS `MeView`): your own tickets, on while you hold any or sales are on.
+                            if (featureFlags.isEnabled(FeatureFlag.TICKET_WALLET)) {
+                                MeNavRow(
+                                    icon = Icons.Default.ConfirmationNumber,
+                                    title = "Tickets",
+                                    onClick = { settingsPage = SettingsPage.Tickets },
+                                )
+                                SettingsDivider()
+                            }
                             MeNavRow(
                                 icon = Icons.Default.CalendarMonth,
                                 title = "Calendar",
@@ -511,6 +594,12 @@ fun SettingsScreen(
                             MeNavRow(Icons.Default.PrivacyTip, "Privacy & data", onClick = { settingsPage = SettingsPage.Privacy })
                             SettingsDivider()
                             MeNavRow(Icons.Default.Shield, "Permissions", onClick = { settingsPage = SettingsPage.Permissions })
+                            SettingsDivider()
+                            MeNavRow(Icons.Default.Devices, "Devices", onClick = { settingsPage = SettingsPage.Devices })
+                            if (placesEnabled) {
+                                SettingsDivider()
+                                MeNavRow(Icons.Default.Place, "Places", onClick = { settingsPage = SettingsPage.Places })
+                            }
                             SettingsDivider()
                             MeNavRow(
                                 icon = Icons.Default.Star,
@@ -763,10 +852,25 @@ fun SettingsScreen(
                                             },
                                         )
                                         SettingsDivider()
+                                        // iOS lists "Click Drops" after messages; hidden while shared drops are off.
+                                        if (featureFlags.isEnabled(FeatureFlag.SHARED_DROPS)) {
+                                            SettingsToggleRow(
+                                                icon = Icons.Default.PhotoCamera,
+                                                title = "Click Drops",
+                                                subtitle = "When a connection's shared drop develops",
+                                                checked = notificationPreferences.dropReleasePushEnabled,
+                                                enabled = !notificationPreferencesSaving,
+                                                pending = pendingAlertKey == "drops",
+                                                onCheckedChange = { on ->
+                                                    setAlert("drops") { AppDataManager.setDropReleaseNotificationsEnabled(on) }
+                                                },
+                                            )
+                                            SettingsDivider()
+                                        }
                                         SettingsToggleRow(
                                             icon = Icons.Default.Notifications,
                                             title = "Event reminders",
-                                            subtitle = "An hour and 15 minutes before events you're going to or saved",
+                                            subtitle = "An hour before events you're going to or saved",
                                             checked = notificationPreferences.eventReminderPushEnabled,
                                             enabled = !notificationPreferencesSaving,
                                             pending = pendingAlertKey == "events",
@@ -826,6 +930,34 @@ fun SettingsScreen(
                                 states = permissionStates,
                                 onAllow = ::requestPermission,
                                 onOpenSettings = { permissionController.openSettings(it) },
+                            )
+                        }
+                    }
+
+                    SettingsPage.Places -> {
+                        item {
+                            if (placesEnabled) {
+                                MyPlacesPageContent(
+                                    load = myPlacesLoad,
+                                    onOpenPlace = { PlaceOpenRequests.open(it.place.id, source = "history") },
+                                    onRetry = { myPlacesEpoch++ },
+                                )
+                            } else {
+                                Text("Not available", style = MaterialTheme.typography.bodyLarge)
+                            }
+                        }
+                    }
+
+                    SettingsPage.Devices -> {
+                        item {
+                            DevicesPageContent(
+                                load = devicesLoad,
+                                thisDeviceId = thisDeviceId,
+                                removing = removingDevices,
+                                errorMessage = devicesError,
+                                online = online,
+                                onRemove = { confirmRemoveDevice = it },
+                                onRetry = { devicesEpoch++ },
                             )
                         }
                     }
@@ -1008,6 +1140,12 @@ fun SettingsScreen(
                         }
                     }
 
+                    SettingsPage.Tickets -> {
+                        item {
+                            MyTicketsPage(client = ticketingClient, onOpenPass = { ticketPassGroup = it })
+                        }
+                    }
+
                     SettingsPage.Saved -> {
                         val sections = savedEventSections(savedEventBookmarks, nowEpochMs())
                         val openBookmark: (EventBookmarkItemDto) -> Unit = { bookmark ->
@@ -1082,6 +1220,16 @@ fun SettingsScreen(
                     seedAvailabilityIntent = null
                     availabilityViewModel.resetAvailabilityIntentSheet()
                 },
+            )
+        }
+
+        ticketPassGroup?.let { group ->
+            ClickPassSheet(
+                beaconId = group.event.beaconId,
+                eventTitle = group.event.title,
+                onDismiss = { ticketPassGroup = null },
+                ticketed = true,
+                eventCancelled = group.event.cancelled,
             )
         }
 
@@ -1267,29 +1415,91 @@ fun SettingsScreen(
             )
         }
 
-        if (confirmDeleteAccount) {
+        confirmRemoveDevice?.let { device ->
+            val name = deviceDisplayName(device, isThisDevice = false)
             GlassAlertDialog(
-                onDismissRequest = { confirmDeleteAccount = false },
-                title = { Text("Delete your Click account?") },
-                text = {
-                    Text(
-                        "Deleting your account permanently removes your profile, connections, and messages. For your " +
-                            "security, you'll confirm deletion on joinclick.co while signed in there.",
-                    )
-                },
+                onDismissRequest = { confirmRemoveDevice = null },
+                title = { Text(removeDeviceTitle(name)) },
+                text = { Text(REMOVE_DEVICE_MESSAGE) },
                 confirmButton = {
                     TextButton(
                         onClick = {
-                            confirmDeleteAccount = false
+                            confirmRemoveDevice = null
+                            val before = (devicesLoad as? PageLoad.Loaded)?.value ?: return@TextButton
+                            // Gone from the list at once; back, with the reason, if the server says no.
+                            devicesError = null
+                            removingDevices = removingDevices + device.deviceId
+                            devicesLoad = PageLoad.Loaded(before.filterNot { it.deviceId == device.deviceId })
+                            settingsScope.launch {
+                                chatDevicesApi.removeChatDeviceImpl(device.deviceId).onFailure { err ->
+                                    devicesLoad = PageLoad.Loaded(before)
+                                    devicesError = "Couldn't remove $name. ${err.message.orEmpty()}".trim()
+                                }
+                                removingDevices = removingDevices - device.deviceId
+                            }
+                        },
+                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                    ) { Text("Remove") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { confirmRemoveDevice = null }) { Text("Keep Device", color = GlassSheetTokens.OnOledMuted()) }
+                },
+            )
+        }
+
+        if (confirmDeleteAccount) {
+            GlassAlertDialog(
+                onDismissRequest = { if (!deletingAccount) confirmDeleteAccount = false },
+                title = { Text("Delete your Click account?") },
+                text = {
+                    Text("This permanently removes your profile, connections, and messages. It can't be undone.")
+                },
+                confirmButton = {
+                    TextButton(
+                        enabled = !deletingAccount,
+                        onClick = {
+                            deletingAccount = true
+                            settingsScope.launch {
+                                val result = ApiClient().deleteAccountImpl()
+                                deletingAccount = false
+                                confirmDeleteAccount = false
+                                if (result.isSuccess) {
+                                    // The account is gone: sign out locally and wipe every on-device store.
+                                    onSignOut()
+                                } else {
+                                    accountDeletionError = accountDeletionFailureMessage(result.exceptionOrNull())
+                                }
+                            }
+                        },
+                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                    ) { Text(if (deletingAccount) "Deleting…" else "Delete Account") }
+                },
+                dismissButton = {
+                    TextButton(enabled = !deletingAccount, onClick = { confirmDeleteAccount = false }) {
+                        Text("Keep Account", color = GlassSheetTokens.OnOledMuted())
+                    }
+                },
+            )
+        }
+
+        accountDeletionError?.let { message ->
+            GlassAlertDialog(
+                onDismissRequest = { accountDeletionError = null },
+                title = { Text("Something went wrong") },
+                text = { Text(message) },
+                confirmButton = {
+                    TextButton(onClick = { accountDeletionError = null }) { Text("OK") }
+                },
+                dismissButton = {
+                    // Fallback: the same deletion from the web dashboard while signed in there.
+                    TextButton(
+                        onClick = {
+                            accountDeletionError = null
                             if (!openInAppBrowser(ACCOUNT_DELETION_URL)) {
                                 toastState.show(settingsScope, "Open joinclick.co in your browser to delete your account.")
                             }
                         },
-                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                    ) { Text("Continue on joinclick.co") }
-                },
-                dismissButton = {
-                    TextButton(onClick = { confirmDeleteAccount = false }) { Text("Cancel", color = GlassSheetTokens.OnOledMuted()) }
+                    ) { Text("Use joinclick.co", color = GlassSheetTokens.OnOledMuted()) }
                 },
             )
         }

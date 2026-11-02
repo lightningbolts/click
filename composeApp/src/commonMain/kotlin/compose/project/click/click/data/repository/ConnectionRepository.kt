@@ -11,6 +11,7 @@ import compose.project.click.click.data.WeatherService
 import compose.project.click.click.data.api.ClickWebRequestException
 import compose.project.click.click.data.api.CollaborationSessionPostResponse
 import compose.project.click.click.data.api.ProximityBindOkResponseDto
+import compose.project.click.click.data.api.installClickWebPlatformHeader // pragma: allowlist secret
 import compose.project.click.click.data.auth.EnsureFreshAccessToken // pragma: allowlist secret
 import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.ConnectionActivityStatus
@@ -145,6 +146,8 @@ data class BindProximityHandshakeOutcome(
     val groupCliqueCandidateMemberIds: List<String>? = null,
     val connectionId: String? = null,
     val isGroup: Boolean = false,
+    /** This phone's stored tap; polled for a late joiner turning a 1:1 into a group (G4-5). */
+    val pendingHandshakeId: String? = null,
 )
 
 /** Result of `POST /api/connections/proximity` — instant match vs async pending. */
@@ -163,6 +166,8 @@ sealed class BindProximityHandshakeResult {
         val candidates: List<User>,
         val isAggregateNewConnection: Boolean = true,
         val groupCliqueCandidateMemberIds: List<String>? = null,
+        /** The group everyone already shares; confirming saves this Click to it ("Save this Click"). */
+        val existingConnectionId: String? = null,
     ) : BindProximityHandshakeResult()
 
     data class PendingServerMatch(
@@ -196,6 +201,7 @@ internal fun ProximityBindOkResponseDto.toBindOutcome(): BindProximityHandshakeO
         isGroup = isGroup == true,
         encounterId = encounterId?.trim()?.takeIf { it.isNotEmpty() },
         collaborationTtl = collaborationTtl?.trim()?.takeIf { it.isNotEmpty() },
+        pendingHandshakeId = pendingHandshakeId?.trim()?.takeIf { it.isNotEmpty() },
     )
 }
 
@@ -214,8 +220,42 @@ internal fun ProximityBindOkResponseDto.toAwaitingHostSelectionOrNull(): BindPro
         candidates = rows,
         isAggregateNewConnection = aggregateNewConnection,
         groupCliqueCandidateMemberIds = groupCliqueCandidate?.memberUserIds?.takeIf { it.isNotEmpty() },
+        existingConnectionId = existingConnectionId?.trim()?.takeIf { it.isNotEmpty() },
     )
 }
+
+/**
+ * True when confirm failed because another phone in the tap confirmed first
+ * (`409 {"error":"Handshake already finalized"}`). The group exists; recover it instead of erroring.
+ */
+internal fun Throwable.isProximityHandshakeAlreadyFinalized(): Boolean =
+    this is ClickWebRequestException &&
+        statusCode == 409 &&
+        message.orEmpty().contains("already finalized", ignoreCase = true)
+
+/** True when every member was removed by someone, so no Click was made (`409 no_members_after_exclusions`). */
+internal fun Throwable.isProximityNoMembersAfterExclusions(): Boolean =
+    this is ClickWebRequestException &&
+        statusCode == 409 &&
+        message.orEmpty().contains("no_members_after_exclusions", ignoreCase = true)
+
+/** User-facing copy when the tap ended with nobody left to connect with. */
+const val PROXIMITY_EVERYONE_REMOVED_MESSAGE = "Everyone was removed from this Click, so nothing was saved."
+
+/**
+ * Peer ids this person removed while reviewing a group tap: every candidate who isn't selected.
+ * Sorted so repeated saves of the same choice send the same body.
+ */
+internal fun hostSelectionExclusions(
+    candidateIds: Collection<String>,
+    selectedIds: Set<String>,
+    currentUserId: String,
+): List<String> =
+    candidateIds
+        .map { it.trim() }
+        .filter { it.isNotEmpty() && it != currentUserId && it !in selectedIds }
+        .distinct()
+        .sorted()
 
 internal fun buildUtcTimeOfDayLabel(epochMillis: Long): String {
     val utcTime =
@@ -515,6 +555,7 @@ class ConnectionRepository(
             install(ContentNegotiation) {
                 json(this@ConnectionRepository.json)
             }
+            installClickWebPlatformHeader()
         }
     }
     internal val connectionsSelectWithEncounters = Columns.raw("*, connection_encounters(*)")
@@ -584,6 +625,7 @@ class ConnectionRepository(
         bindExactNoiseLevelDb: Double? = null,
         bindHeightCategory: HeightCategory? = null,
         simulatorMock: Boolean = false,
+        observationKeys: JsonObject? = null,
     ): Result<BindProximityHandshakeResult> =
         bindProximityHandshakeImpl(
             httpClient = httpClient,
@@ -602,6 +644,7 @@ class ConnectionRepository(
             bindExactNoiseLevelDb = bindExactNoiseLevelDb,
             bindHeightCategory = bindHeightCategory,
             simulatorMock = simulatorMock,
+            observationKeys = observationKeys,
         )
 
     suspend fun recoverPendingProximityHandshake(
@@ -609,6 +652,15 @@ class ConnectionRepository(
         pendingHandshakeId: String,
     ): Result<BindProximityHandshakeResult> =
         recoverPendingProximityHandshakeImpl(bearerJwt = bearerJwt, pendingHandshakeId = pendingHandshakeId)
+
+    suspend fun recordProximitySelectionExclusions(
+        pendingHandshakeId: String,
+        excludedMemberIds: List<String>,
+    ): Result<Unit> =
+        recordProximitySelectionExclusionsImpl(
+            pendingHandshakeId = pendingHandshakeId,
+            excludedMemberIds = excludedMemberIds,
+        )
 
     suspend fun confirmProximitySelection(
         pendingHandshakeId: String,

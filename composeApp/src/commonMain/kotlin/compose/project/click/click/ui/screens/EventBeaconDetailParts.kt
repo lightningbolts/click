@@ -9,6 +9,7 @@ package compose.project.click.click.ui.screens // pragma: allowlist secret
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -334,6 +335,11 @@ internal fun EventHostCard(
     avatarUrl: String?,
     border: Color,
     cardSurface: Color,
+    label: String = "Host",
+    /** A line under the name (a hosting Place's city). */
+    subtitle: String? = null,
+    /** Set when the host has a page to open (a Place hosting its own event); adds a chevron. */
+    onClick: (() -> Unit)? = null,
 ) {
     Row(
         modifier =
@@ -341,6 +347,8 @@ internal fun EventHostCard(
                 .fillMaxWidth()
                 .border(clickBorderWidth(), border, RoundedCornerShape(12.dp))
                 .background(cardSurface, RoundedCornerShape(12.dp))
+                .clip(RoundedCornerShape(12.dp))
+                .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
                 .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -358,7 +366,7 @@ internal fun EventHostCard(
         )
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = "Host",
+                text = label,
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -367,6 +375,20 @@ internal fun EventHostCard(
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,
+            )
+            if (!subtitle.isNullOrBlank()) {
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        if (onClick != null) {
+            Icon(
+                imageVector = Icons.Filled.ChevronRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }

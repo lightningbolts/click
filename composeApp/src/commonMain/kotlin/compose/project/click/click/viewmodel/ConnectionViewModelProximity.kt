@@ -2,6 +2,7 @@ package compose.project.click.click.viewmodel
 
 import androidx.lifecycle.viewModelScope
 import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
+import compose.project.click.click.connect.ConnectionVerification // pragma: allowlist secret
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.WeatherService // pragma: allowlist secret
 import compose.project.click.click.data.models.Connection // pragma: allowlist secret
@@ -47,6 +48,8 @@ import kotlin.random.Random
 internal fun ConnectionViewModel.handleInstantProximityOutcome(
     outcome: BindProximityHandshakeOutcome,
     currentUserId: String,
+    /** Keeps a G4-5 group watch's original window when it replaces the shown result. */
+    groupWatchDeadlineMs: Long? = null,
 ) {
     activateCollaborationSessionIfPresent(outcome)
     lastProximityEncounterLoggedAggregate = outcome.encounterLogged
@@ -88,6 +91,8 @@ internal fun ConnectionViewModel.handleInstantProximityOutcome(
             peerUserIds = others,
             connectionIds = listOfNotNull(outcome.connectionId),
         )
+        // G4-5: someone who tapped a moment later can still grow this group.
+        startGroupWatchFor(outcome, currentUserId, groupWatchDeadlineMs)
         _connectionState.value =
             ConnectionState.TaggingContext(
                 newConnections = listOf(groupConnection),
@@ -123,6 +128,8 @@ internal fun ConnectionViewModel.handleInstantProximityOutcome(
             peerUserIds = listOf(peer.id),
             connectionIds = listOf(outcome.connectionId),
         )
+        // G4-5: someone who tapped a moment later can still turn this into a group.
+        startGroupWatchFor(outcome, currentUserId, groupWatchDeadlineMs)
         _connectionState.value =
             ConnectionState.TaggingContext(
                 newConnections = listOf(connection),
@@ -211,7 +218,23 @@ internal fun ConnectionViewModel.handleAwaitingHostSelection(
             pendingHandshakeId = awaiting.pendingHandshakeId,
             requiresSelection = true,
             selectedPeerIds = selected,
+            existingConnectionId = awaiting.existingConnectionId,
         )
+    hostSelectionSync.reset()
+    // G4-4: another phone's confirm or a late joiner updates this review.
+    startReviewWatch(awaiting.pendingHandshakeId, currentUserId)
+}
+
+private fun ConnectionViewModel.startGroupWatchFor(
+    outcome: BindProximityHandshakeOutcome,
+    currentUserId: String,
+    deadlineMs: Long?,
+) {
+    if (deadlineMs != null) {
+        startGroupWatch(outcome.pendingHandshakeId, outcome.connectionId, currentUserId, deadlineMs)
+    } else {
+        startGroupWatch(outcome.pendingHandshakeId, outcome.connectionId, currentUserId)
+    }
 }
 
 internal fun ConnectionViewModel.startPendingProximityRecovery(
@@ -418,8 +441,27 @@ internal fun ConnectionViewModel.startTapProximityHandshakeImpl(
                     val heardTokensAudio = listenResult.heardTokens
                     val detectedDevicesBle = listenResult.detectedDevices
 
+                    // G4-1..3: the connection moment is the end of this phone's BLE/ultrasonic
+                    // exchange (iOS `TapConnectModel`): its best fix around now, quality keys and
+                    // sensor_observation. Falls back to the legacy one-shot fix when none is useful.
+                    val captured =
+                        runCatching {
+                            captureConnectContext(
+                                method = "tap",
+                                momentMs = Clock.System.now().toEpochMilliseconds(),
+                                includeLocation = shouldFetchLocation,
+                            )
+                        }.getOrNull()
+                    val capturedFix = captured?.fix
                     val location =
-                        locationDeferred?.await()
+                        capturedFix?.let {
+                            LocationResult(
+                                latitude = it.latitude,
+                                longitude = it.longitude,
+                                altitudeMeters = it.ellipsoidalAltitudeMeters,
+                                accuracyMeters = it.horizontalAccuracyMeters,
+                            )
+                        } ?: locationDeferred?.await()
                             ?: if (shouldFetchLocation) {
                                 runCatching { locationService.getCurrentLocation() }.getOrNull()
                                     ?: AppDataManager.lastKnownDeviceLocation.value?.let { (la, lo) ->
@@ -436,6 +478,16 @@ internal fun ConnectionViewModel.startTapProximityHandshakeImpl(
                     val proximitySensorContext = sensorDeferred?.awaitWithin(PROXIMITY_SENSOR_WAIT_MS)
                     val vibe = vibeDeferred.awaitWithin(PROXIMITY_SENSOR_WAIT_MS)
                     lastProximityHardwareVibe = vibe
+                    // G4-6: what confirmed this tap on this phone, for the result's "Verified by".
+                    _lastVerification.value =
+                        ConnectionVerification.forTap(
+                            bluetooth = detectedDevicesBle.isNotEmpty(),
+                            sound = heardTokensAudio.isNotEmpty(),
+                            locationAccuracyMeters =
+                                capturedFix?.horizontalAccuracyMeters ?: location?.accuracyMeters,
+                            hasLocation = location != null,
+                            simulator = simulatorMock,
+                        )
 
                     _connectionState.value = ConnectionState.ProximityResolving
                     val bindResult =
@@ -463,6 +515,7 @@ internal fun ConnectionViewModel.startTapProximityHandshakeImpl(
                                                 bindExactNoiseLevelDb = proximitySensorContext?.exactNoiseLevelDb,
                                                 bindHeightCategory = proximitySensorContext?.heightCategory,
                                                 simulatorMock = simulatorMock,
+                                                observationKeys = captured?.observationKeys,
                                             ).getOrThrow()
                                     },
                                 )
@@ -474,6 +527,8 @@ internal fun ConnectionViewModel.startTapProximityHandshakeImpl(
                         }
 
                     if (bindResult.isSuccess) {
+                        // G4-7: tighten this phone's fix while still; sent once the flow confirms its IDs.
+                        captured?.let { beginEncounterFollowUp(it) }
                         when (val handshake = bindResult.getOrNull()!!) {
                             is BindProximityHandshakeResult.PendingServerMatch -> {
                                 ConnectionFlowTelemetry.recordPending()
@@ -587,14 +642,12 @@ internal fun ConnectionViewModel.onProximityHandshakeRecoveredFromBackgroundImpl
         others.size >= 2
     ) {
         PlatformHapticsPolicy.successNotification()
-        viewModelScope.launch {
-            _verifiedCliqueFromProximity.emit(
-                VerifiedCliqueProximityIntent(
-                    preselectFriendIds = others.take(PROXIMITY_HOST_SELECTION_MAX_PEERS),
-                    matchedUsers = users,
-                ),
-            )
-        }
+        // P2-19: find or create the group chat (prefilled sheet only if that fails).
+        startMultiTapGroupPreparation(
+            currentUserId = currentUserId,
+            groupMemberIds = groupIds,
+            peers = users.filter { it.id in others }.map { it.toUserProfile() },
+        )
         return
     }
     val cur = _connectionState.value
@@ -678,11 +731,11 @@ internal fun ConnectionViewModel.tryFlushPendingProximityHandshakesImpl(
                     g != null &&
                     others.size >= 2
                 ) {
-                    _verifiedCliqueFromProximity.emit(
-                        VerifiedCliqueProximityIntent(
-                            preselectFriendIds = others.take(PROXIMITY_HOST_SELECTION_MAX_PEERS),
-                            matchedUsers = r.recoveredUsers,
-                        ),
+                    // P2-19: find or create the group chat (prefilled sheet only if that fails).
+                    startMultiTapGroupPreparation(
+                        currentUserId = currentUserId,
+                        groupMemberIds = g,
+                        peers = r.recoveredUsers.filter { it.id in others }.map { it.toUserProfile() },
                     )
                     _connectionState.value = ConnectionState.Idle
                 } else {

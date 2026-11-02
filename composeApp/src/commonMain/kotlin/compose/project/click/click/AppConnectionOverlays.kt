@@ -41,6 +41,7 @@ import compose.project.click.click.ui.components.ConnectionContextSheet // pragm
 import compose.project.click.click.ui.components.ConnectionRevealOverlay // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionRevealPhase // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionRevealUiState // pragma: allowlist secret
+import compose.project.click.click.ui.components.EncounterDetailsCard // pragma: allowlist secret
 import compose.project.click.click.ui.screens.* // pragma: allowlist secret
 import compose.project.click.click.ui.theme.* // pragma: allowlist secret
 import compose.project.click.click.utils.LocationResult // pragma: allowlist secret
@@ -122,6 +123,8 @@ internal fun AppConnectionOverlays(
     ) {
         val tagging = connectionState as ConnectionState.TaggingContext
         var calendarLockInProgress by remember { mutableStateOf(false) }
+        val lastVerification by connectionViewModel.lastVerification.collectAsState()
+        val followUpAccuracy by connectionViewModel.followUpAccuracyMeters.collectAsState()
         val reconnectConnectionId = tagging.newConnections.firstOrNull()?.id
         val reconnectPeerId =
             tagging.targetUsers.firstOrNull { it.id != currentUser.id }?.id
@@ -132,9 +135,13 @@ internal fun AppConnectionOverlays(
                 tagging.targetUsers.size >= 2 -> tagging.targetUsers
                 else -> emptyList()
             }
+        // In the review the choice is authoritative (an empty one means everyone was removed).
         val sheetInitialSelectedIds =
-            tagging.selectedPeerIds
-                .ifEmpty { sheetSelectableUsers.map { it.id }.toSet() }
+            if (tagging.requiresSelection) {
+                tagging.selectedPeerIds
+            } else {
+                tagging.selectedPeerIds.ifEmpty { sheetSelectableUsers.map { it.id }.toSet() }
+            }
         // requiresSelection must use Connect → confirmHostProximitySelection (not Save Encounter).
         val presentation =
             if (!tagging.isNewConnection && !tagging.requiresSelection) {
@@ -206,6 +213,32 @@ internal fun AppConnectionOverlays(
             encounterSaveInProgress = tagging.encounterSubmitting,
             selectableUsers = sheetSelectableUsers,
             initialSelectedUserIds = sheetInitialSelectedIds,
+            onSelectionChanged =
+                if (tagging.requiresSelection) {
+                    { ids -> connectionViewModel.updateHostSelection(ids, currentUser.id) }
+                } else {
+                    null
+                },
+            existingGroup = tagging.requiresSelection && !tagging.existingConnectionId.isNullOrBlank(),
+            encounterDetails =
+                if (reconnectConnectionId != null && !tagging.requiresSelection) {
+                    {
+                        EncounterDetailsCard(
+                            connectionId = reconnectConnectionId,
+                            groupPeerNames =
+                                if (tagging.isGroup) {
+                                    tagging.targetUsers.filter { it.id != currentUser.id }.map { it.displayName }
+                                } else {
+                                    emptyList()
+                                },
+                            verification = lastVerification,
+                            isQr = false,
+                            refinedAccuracyMeters = followUpAccuracy,
+                        )
+                    }
+                } else {
+                    null
+                },
             onSaveEncounter = { selectedIds ->
                 connectionScope.launch {
                     connectionViewModel.saveReconnectEncounter(

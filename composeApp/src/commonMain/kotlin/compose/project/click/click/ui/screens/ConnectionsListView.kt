@@ -59,7 +59,9 @@ import compose.project.click.click.ui.chat.GroupMembersPickerContext // pragma: 
 import compose.project.click.click.ui.chat.MuteDurationDialog
 import compose.project.click.click.ui.chat.RememberMeStrip // pragma: allowlist secret
 import compose.project.click.click.ui.chat.connectionListActivityTs // pragma: allowlist secret
+import compose.project.click.click.ui.chat.muteIds
 import compose.project.click.click.ui.chat.muteResultMessage
+import compose.project.click.click.ui.chat.rememberMuteNowEpochMs
 import compose.project.click.click.ui.components.AdaptiveBackground // pragma: allowlist secret
 import compose.project.click.click.ui.components.AppEmptyState // pragma: allowlist secret
 import compose.project.click.click.ui.components.AppScreenScaffold // pragma: allowlist secret
@@ -85,7 +87,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext // pragma: allowlist secret
 import kotlinx.coroutines.withTimeoutOrNull
-import kotlinx.datetime.Clock
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -156,7 +157,7 @@ fun ConnectionsListView(
     val inboxNudgeApi = remember { ApiClient() }
     var inboxNudges by remember { mutableStateOf<List<InboxNudge>>(emptyList()) }
     val chatMutes by ChatMuteStore.mutes.collectAsState()
-    val muteNowMs = remember(chatMutes) { Clock.System.now().toEpochMilliseconds() }
+    val muteNowMs = rememberMuteNowEpochMs(chatMutes)
     var muteDialogChatId by remember { mutableStateOf<String?>(null) }
     muteDialogChatId?.let { chat ->
         MuteDurationDialog(
@@ -555,6 +556,10 @@ fun ConnectionsListView(
                             alpha = tabContentAlpha.value
                         },
                 ) {
+                    // This device waits for another of the account's devices to share history.
+                    item(key = "clicks_device_history", contentType = "device_history") {
+                        DeviceHistoryBanner(modifier = Modifier.padding(bottom = 8.dp))
+                    }
                     if (effectiveChats.isNotEmpty() || activeHubs.isNotEmpty()) {
                         item(key = "clicks_segment_bar", contentType = "segment_bar") {
                             Box(modifier = Modifier.padding(bottom = 8.dp)) {
@@ -771,7 +776,7 @@ fun ConnectionsListView(
                                     chatDetails.groupClique == null &&
                                         chatDetails.otherUser.id in onlineUsers,
                                 decryptedPreview = decryptedPreviews[connectionId] ?: cachedPreviewLabel,
-                                isMuted = ChatMuteStore.isMuted(chatMutes, chatDetails.chat.id, muteNowMs),
+                                isMuted = ChatMuteStore.isMuted(chatMutes, chatDetails.muteIds(), muteNowMs),
                                 hasCachedThreadPreview = !cachedThread?.messages.isNullOrEmpty(),
                                 onAvatarClick = {
                                     if (chatDetails.groupClique == null) {
@@ -962,7 +967,7 @@ fun ConnectionsListView(
                 isArchived = isUserArchived,
                 isServerLifecycleArchived = isServerArchived,
                 isCore = selected.connection.id in coreConnectionIds,
-                isMuted = selected.chat.id?.let { ChatMuteStore.isMuted(chatMutes, it, muteNowMs) },
+                isMuted = selected.chat.id?.let { ChatMuteStore.isMuted(chatMutes, selected.muteIds(), muteNowMs) },
                 onDismiss = { pendingMenuChat = null },
                 onMenuAction = { action ->
                     val connId = selected.connection.id
@@ -998,11 +1003,11 @@ fun ConnectionsListView(
                         ConnectionMenuAction.ToggleMute -> {
                             val chat = selected.chat.id
                             if (chat != null) {
-                                if (ChatMuteStore.isMuted(chatMutes, chat, muteNowMs)) {
+                                if (ChatMuteStore.isMuted(chatMutes, selected.muteIds(), muteNowMs)) {
                                     listScope.launch {
                                         toastState.show(
                                             listScope,
-                                            muteResultMessage(null, ChatMuteStore.setMuted(chat, null)),
+                                            muteResultMessage(null, ChatMuteStore.setMuted(chat, null, aliases = selected.muteIds())),
                                         )
                                     }
                                 } else {

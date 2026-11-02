@@ -16,12 +16,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
+import compose.project.click.click.data.activity.ActivityStore
 import compose.project.click.click.data.api.CommunityHubNearbyDto // pragma: allowlist secret
+import compose.project.click.click.data.flags.FeatureFlag
+import compose.project.click.click.data.flags.FeatureFlags
 import compose.project.click.click.data.models.AvailabilityIntentRow // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
 import compose.project.click.click.data.models.NudgeAction
 import compose.project.click.click.data.models.isActiveForUser // pragma: allowlist secret
 import compose.project.click.click.data.models.mostUrgentArchiveNotice // pragma: allowlist secret
+import compose.project.click.click.events.upcomingEvents
 import compose.project.click.click.notifications.ChatDeepLinkManager
 import compose.project.click.click.ui.components.ActivityRecapSection // pragma: allowlist secret
 import compose.project.click.click.ui.components.AppScreenScaffold // pragma: allowlist secret
@@ -43,6 +47,7 @@ import compose.project.click.click.ui.components.UnifiedToastHost // pragma: all
 import compose.project.click.click.ui.components.homeGreetingTitle // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberBottomChromePadding // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberUnifiedToastState // pragma: allowlist secret
+import compose.project.click.click.ui.drops.SharedDropsHomeSection
 import compose.project.click.click.ui.theme.* // pragma: allowlist secret
 import compose.project.click.click.ui.utils.mergeMapBeaconLists // pragma: allowlist secret
 import compose.project.click.click.viewmodel.AvailabilityViewModel // pragma: allowlist secret
@@ -50,6 +55,7 @@ import compose.project.click.click.viewmodel.HomeState // pragma: allowlist secr
 import compose.project.click.click.viewmodel.HomeViewModel // pragma: allowlist secret
 import compose.project.click.click.viewmodel.MapLayerFilter // pragma: allowlist secret
 import compose.project.click.click.viewmodel.MapViewModel // pragma: allowlist secret
+import compose.project.click.click.viewmodel.SharedDropsViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.datetime.Clock
@@ -86,6 +92,11 @@ fun HomeScreen(
     val reconnectReminders by homeViewModel.reconnectReminders.collectAsState()
     val homeEventReminders by homeViewModel.homeEventReminders.collectAsState()
     val savedEventBookmarks by homeViewModel.savedEventBookmarks.collectAsState()
+    // Activity inbox (iOS ActivityView): the bell's dot reads the store; refresh on Home appear.
+    var showActivity by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { ActivityStore.refresh() }
+    if (showActivity) ActivitySheet(onDismiss = { showActivity = false })
+    val myEvents by homeViewModel.myEvents.collectAsState()
     val recapState by homeViewModel.recapState.collectAsState()
     val homeNudge by homeViewModel.homeNudge.collectAsState()
     val recapWindow by homeViewModel.recapWindow.collectAsState()
@@ -99,6 +110,9 @@ fun HomeScreen(
     val icebreakerSendCooldownSec by homeViewModel.icebreakerSendCooldownRemainingSec.collectAsState()
     val availabilityViewModel: AvailabilityViewModel =
         viewModel(key = "home-availability") { AvailabilityViewModel() }
+    // Shared Click Drops strip (flag `shared_drops`; iOS SharedDropsStrip on Home).
+    val featureFlags by FeatureFlags.state.collectAsState()
+    val sharedDropsViewModel: SharedDropsViewModel = viewModel(key = "home-shared-drops") { SharedDropsViewModel() }
     var showAvailabilityIntentSheet by remember { mutableStateOf(false) }
     var seedAvailabilityIntent by remember { mutableStateOf<AvailabilityIntentRow?>(null) }
     val homeAvailabilityIntents by availabilityViewModel.activeAvailabilityIntents.collectAsState()
@@ -165,6 +179,11 @@ fun HomeScreen(
     val displayedSavedBookmarks =
         remember(savedEventBookmarks, cachedEventBookmarks) {
             if (savedEventBookmarks.isNotEmpty()) savedEventBookmarks else cachedEventBookmarks
+        }
+    // Upcoming (iOS #69): hosting, going and saved events still ahead, soonest first.
+    val upcoming =
+        remember(myEvents, displayedSavedBookmarks) {
+            upcomingEvents(myEvents, displayedSavedBookmarks, Clock.System.now().toEpochMilliseconds())
         }
 
     val exploreTiles =
@@ -283,6 +302,7 @@ fun HomeScreen(
                         ?.takeIf { it.isNotBlank() }
                         ?: "there"
                 AppScreenScaffold(
+                    actions = { ActivityBellButton(onClick = { showActivity = true }) },
                     title = homeGreetingTitle(firstName),
                     subtitle = HomeGreetingSubtitle,
                     showFloatingHeader = true,
@@ -294,6 +314,14 @@ fun HomeScreen(
                     if (onOpenSearch != null) {
                         item(key = "home_search_pill") {
                             HomeSearchPill(onClick = onOpenSearch)
+                        }
+                    }
+                    if (featureFlags.isEnabled(FeatureFlag.SHARED_DROPS)) {
+                        item(key = "shared_drops_strip") {
+                            SharedDropsHomeSection(
+                                viewModel = sharedDropsViewModel,
+                                onToast = { toastState.show(scope, it) },
+                            )
                         }
                     }
                     homeNudge?.let { nudge ->
@@ -370,7 +398,11 @@ fun HomeScreen(
 
                     item(key = "saved_events") {
                         SavedEventsSection(
-                            bookmarks = displayedSavedBookmarks,
+                            bookmarks = upcoming.map { it.event },
+                            title = "Upcoming",
+                            tags = upcoming.associate { it.event.beaconId to it.tag.label },
+                            emptyTitle = "Nothing coming up",
+                            emptyBody = "Find events on the map, RSVP or save one, and it shows up here.",
                             onBookmarkClick = { bookmark ->
                                 selectedSavedEventBeacon =
                                     resolveSavedEventBeacon(

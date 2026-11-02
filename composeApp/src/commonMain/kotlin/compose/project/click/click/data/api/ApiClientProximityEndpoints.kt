@@ -13,6 +13,8 @@ import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
 
 /**
  * POST `/api/connections/proximity` — tri-factor proximity bind (JWT bearer).
@@ -23,6 +25,8 @@ import kotlinx.serialization.json.Json
 internal suspend fun ApiClient.postProximityHandshakeImpl(
     body: ProximityHandshakePostBody,
     bearerJwt: String? = null,
+    /** G4-2/G4-3: this phone's `gps_*` / `barometric_*` keys and `sensor_observation`, at the top level. */
+    extraKeys: JsonObject? = null,
 ): Result<ProximityHandshakePostResult> {
     return try {
         val response: HttpResponse =
@@ -33,7 +37,12 @@ internal suspend fun ApiClient.postProximityHandshakeImpl(
                 bearerJwt?.trim()?.takeIf { it.isNotEmpty() }?.let { token ->
                     header("Authorization", "Bearer $token")
                 }
-                setBody(body)
+                if (extraKeys.isNullOrEmpty()) {
+                    setBody(body)
+                } else {
+                    val encoded = json.encodeToJsonElement(ProximityHandshakePostBody.serializer(), body).jsonObject
+                    setBody(withTopLevelKeys(encoded, extraKeys))
+                }
             }
         when (response.status.value) {
             200 -> {
@@ -170,6 +179,51 @@ internal suspend fun ApiClient.postProximityConfirmSelectionImpl(
     }
 }
 
+/**
+ * POST `/api/connections/proximity/selection` — save who this person removed while reviewing a
+ * group tap, so the confirm step leaves them out no matter which phone confirms first.
+ */
+internal suspend fun ApiClient.postProximitySelectionExclusionsImpl(
+    bearerJwt: String,
+    pendingHandshakeId: String,
+    excludedMemberIds: List<String>,
+): Result<Unit> {
+    val pendingId = pendingHandshakeId.trim()
+    if (pendingId.isEmpty()) {
+        return Result.failure(IllegalArgumentException("pendingHandshakeId required"))
+    }
+    val excluded =
+        excludedMemberIds
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .distinct()
+            .sorted()
+            // Server schema caps the list at 32 and keeps at most PROXIMITY_HOST_SELECTION_MAX_MEMBERS.
+            .take(32)
+    return try {
+        val response: HttpResponse =
+            clickWebClient.post(
+                "${ApiClient.clickWebAuthOrigin}/api/connections/proximity/selection",
+            ) {
+                contentType(ContentType.Application.Json)
+                bearerJwt.trim().takeIf { it.isNotEmpty() }?.let { token ->
+                    header("Authorization", "Bearer $token")
+                }
+                setBody(
+                    ProximitySelectionExclusionsPostBody(
+                        pendingHandshakeId = pendingId,
+                        excludedMemberIds = excluded,
+                    ),
+                )
+            }
+        if (response.status.value in 200..299) Result.success(Unit) else clickWebFailure(response)
+    } catch (e: ClientRequestException) {
+        clickWebFailure(e.response)
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
+}
+
 /** GET `/api/connections/proximity` — recover a previously accepted pending handshake. */
 internal suspend fun ApiClient.getPendingProximityHandshakeImpl(
     pendingHandshakeId: String,
@@ -226,3 +280,12 @@ internal suspend fun ApiClient.prewarmProximityHandshakeImpl() {
         }
     }
 }
+
+/**
+ * [base] with [extra] merged at the top level (G4-2/G4-3 quality keys and `sensor_observation`).
+ * Keys already in [base] win, so the extras never override the request's own fields.
+ */
+internal fun withTopLevelKeys(
+    base: JsonObject,
+    extra: JsonObject?,
+): JsonObject = if (extra.isNullOrEmpty()) base else JsonObject(extra + base)

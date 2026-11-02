@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import compose.project.click.click.collaboration.CollaborationSession // pragma: allowlist secret
 import compose.project.click.click.collaboration.CollaborationSessionManager // pragma: allowlist secret
+import compose.project.click.click.connect.ConnectionVerification // pragma: allowlist secret
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.WeatherService // pragma: allowlist secret
 import compose.project.click.click.data.models.Connection // pragma: allowlist secret
@@ -123,6 +124,8 @@ sealed class ConnectionState {
         val requiresSelection: Boolean = false,
         /** Currently selected peer ids when [requiresSelection] is true. */
         val selectedPeerIds: Set<String> = emptySet(),
+        /** Everyone in the tap already shares this group connection; the review saves to it. */
+        val existingConnectionId: String? = null,
     ) : ConnectionState()
 
     /** QR parsed locally; user fills context before any redeem/create network work. */
@@ -174,12 +177,64 @@ class ConnectionViewModel : ViewModel() {
      */
     internal var lastProximityEncounterLoggedAggregate: Boolean = true
 
+    /** Saves removals made while reviewing a group tap so the confirming phone honours them. */
+    internal val hostSelectionSync =
+        HostSelectionExclusionSync(scope = viewModelScope) { pendingId, excluded ->
+            repository.recordProximitySelectionExclusions(pendingId, excluded)
+        }
+
     internal var lastProximityLat: Double? = null
     internal var lastProximityLng: Double? = null
     internal var lastProximityAltitudeMeters: Double? = null
     internal var lastProximityHardwareVibe: HardwareVibeSnapshot? = null
     internal var lastTapProximityStartedAtMs: Long = 0L
     internal var activeTapProximityJob: Job? = null
+
+    /** This phone's warm capture for the visible Tap / QR flow (G4-1). */
+    internal var captureSession: compose.project.click.click.connect.ConnectionCaptureSession? = null
+
+    /** `capture_quality` aggregates of the latest capture, for connect telemetry (G4-8). */
+    internal var lastCaptureQuality: Map<String, kotlinx.serialization.json.JsonPrimitive>? = null
+
+    /** When the QR / link was recognized: the connection moment for that flow. */
+    internal var qrScanMomentMs: Long? = null
+
+    /** The location follow-up of the latest connect (G4-7). */
+    internal var activeFollowUp: compose.project.click.click.connect.EncounterFollowUp? = null
+    internal var followUpAccuracyJob: Job? = null
+    internal val _followUpAccuracyMeters = MutableStateFlow<Double?>(null)
+
+    /** Live "Location ±N m" once the follow-up tightened the moment's fix. */
+    val followUpAccuracyMeters: StateFlow<Double?> = _followUpAccuracyMeters.asStateFlow()
+
+    /** What confirmed the latest connection on this phone ("Bluetooth · Sound · Location ±8 m"; G4-6). */
+    internal val _lastVerification = MutableStateFlow<ConnectionVerification?>(null)
+    val lastVerification: StateFlow<ConnectionVerification?> = _lastVerification.asStateFlow()
+
+    /** G4-4 review poll and G4-5 late-joiner watch. */
+    internal var reviewWatchJob: Job? = null
+    internal var groupWatchJob: Job? = null
+
+    /** Multi-Tap `prepareGroup` (P2-19): find or create the group chat of the latest group Click. */
+    internal val _multiTapGroupState =
+        MutableStateFlow<compose.project.click.click.domain.MultiTapGroupState>(
+            compose.project.click.click.domain.MultiTapGroupState.Idle,
+        )
+    val multiTapGroupState: StateFlow<compose.project.click.click.domain.MultiTapGroupState> =
+        _multiTapGroupState.asStateFlow()
+    internal var multiTapGroupJob: Job? = null
+
+    init {
+        // G4-7: the follow-up is confirmed or cancelled as each flow settles.
+        viewModelScope.launch { _connectionState.collect { syncFollowUpWith(it) } }
+    }
+
+    override fun onCleared() {
+        // Sensors never outlive the flow's view model.
+        captureSession?.stop()
+        captureSession = null
+        super.onCleared()
+    }
 
     fun lastProximityCoordinates(): Pair<Double?, Double?> = lastProximityLat to lastProximityLng
 
@@ -250,6 +305,12 @@ class ConnectionViewModel : ViewModel() {
         venueId: String?,
     ) {
         if (scannedUserId.isBlank()) return
+        qrScanMomentMs =
+            kotlinx.datetime.Clock.System
+                .now()
+                .toEpochMilliseconds()
+        // A Click link opened outside the scanner captures cold from here (never prompts).
+        if (captureSession?.isRunning != true) warmUpConnectionCapture(if (qrToken == null) "link" else "qr")
         viewModelScope.launch {
             val profile =
                 repository.getUserById(scannedUserId).getOrNull()?.toUserProfile()
@@ -386,6 +447,7 @@ class ConnectionViewModel : ViewModel() {
     )
 
     fun resetConnectionState() {
+        hostSelectionSync.reset()
         val tagging = _connectionState.value as? ConnectionState.TaggingContext
         if (tagging?.requiresSelection == true) {
             ConnectionFlowTelemetry.recordHostSelectionAbandoned(
@@ -394,9 +456,17 @@ class ConnectionViewModel : ViewModel() {
                         ?: tagging.targetUsers.size,
                 reason = "dismissed",
             )
+            // Leaving the review means not joining: nobody else's confirm adds this person (iOS `cancel()`).
+            leaveReview(tagging)
         }
         activeTapProximityJob?.cancel()
         activeTapProximityJob = null
+        reviewWatchJob?.cancel()
+        reviewWatchJob = null
+        groupWatchJob?.cancel()
+        groupWatchJob = null
+        // Ignored once the flow confirmed its connections, so closing the result never drops a reading.
+        cancelEncounterFollowUp()
         lastTapProximityStartedAtMs = 0L
         lastProximityEncounterLoggedAggregate = true
         lastProximityHardwareVibe = null
@@ -457,6 +527,12 @@ class ConnectionViewModel : ViewModel() {
     )
 
     fun toggleHostSelectionPeer(peerId: String) = toggleHostSelectionPeerImpl(peerId = peerId)
+
+    /** The review sheet's current choice; saves removals for whichever phone confirms first. */
+    fun updateHostSelection(
+        selectedPeerIds: Set<String>,
+        currentUserId: String,
+    ) = updateHostSelectionImpl(selectedPeerIds = selectedPeerIds, currentUserId = currentUserId)
 
     fun promotePendingConfirmationToHostSelection(currentUserId: String) =
         promotePendingConfirmationToHostSelectionImpl(currentUserId = currentUserId)

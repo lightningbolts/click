@@ -168,6 +168,7 @@ internal fun MapViewModel.prefetchDiscoveryProximityDataImpl(
                 if (centers.isEmpty()) return@launch
                 if (seq != discoveryFetchSeq) return@launch
 
+                centers.firstOrNull()?.let { (lat, lon) -> refreshMapPlacesAround(lat, lon) }
                 val layers = _selectedLayerFilters.value
                 val wantHubs = layersWantHubFetch(layers)
                 val wantBeacons = layersWantBeaconFetch(layers)
@@ -224,6 +225,12 @@ internal fun MapViewModel.prefetchDiscoveryProximityDataImpl(
                                                 minLon = bounds.minLon,
                                                 maxLon = bounds.maxLon,
                                                 beaconTypeFilters = beaconTypesQueryForLayers(layers),
+                                                // Later pages fill in behind the first (G3-7).
+                                                onPage = { soFar ->
+                                                    if (seq == discoveryFetchSeq && soFar.isNotEmpty()) {
+                                                        _mapBeacons.update { current -> mergeMapBeaconLists(current, soFar) }
+                                                    }
+                                                },
                                             ).getOrNull()
                                             .orEmpty()
                                     }
@@ -386,6 +393,7 @@ internal fun MapViewModel.fetchProximityLayersForBounds(
                 MapViewModel.DiscoveryFetchSlot.MapViewport -> if (seq != beaconFetchSeq) return@launch
                 MapViewModel.DiscoveryFetchSlot.Discovery -> if (seq != discoveryFetchSeq) return@launch
             }
+            refreshMapPlacesAround(bounds.centerLat, bounds.centerLon)
             val layers = _selectedLayerFilters.value
             val wantHubs = layersWantHubFetch(layers)
             val wantBeacons = layersWantBeaconFetch(layers)
@@ -414,6 +422,12 @@ internal fun MapViewModel.fetchProximityLayersForBounds(
                                 minLon = bounds.minLon,
                                 maxLon = bounds.maxLon,
                                 beaconTypeFilters = beaconTypesQueryForLayers(layers),
+                                // Busy areas page through `next_cursor`; pins fill in per page (G3-7).
+                                onPage = { soFar ->
+                                    if (soFar.isNotEmpty()) {
+                                        _mapBeacons.update { current -> mergeMapBeaconLists(current, soFar) }
+                                    }
+                                },
                             )
                         }
                     } else {

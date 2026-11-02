@@ -29,11 +29,15 @@ import compose.project.click.click.data.AppDataManager // pragma: allowlist secr
 import compose.project.click.click.data.ChatMuteStore
 import compose.project.click.click.data.OpenMeteoWeatherService // pragma: allowlist secret
 import compose.project.click.click.data.api.ApiClient
+import compose.project.click.click.data.api.getMeFeaturesImpl
 import compose.project.click.click.data.auth.EnsureFreshAccessToken // pragma: allowlist secret
+import compose.project.click.click.data.flags.FeatureFlags
 import compose.project.click.click.data.hub.HubConnectionManager // pragma: allowlist secret
 import compose.project.click.click.data.hub.HubVerifyResult // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.models.isPendingSync // pragma: allowlist secret
+import compose.project.click.click.data.places.PlaceOpenRequest // pragma: allowlist secret
+import compose.project.click.click.data.places.PlaceOpenRequests // pragma: allowlist secret
 import compose.project.click.click.data.repository.HangoutPresence
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
 import compose.project.click.click.data.runEventReminderSync // pragma: allowlist secret
@@ -43,6 +47,7 @@ import compose.project.click.click.deeplink.AppDeepLink // pragma: allowlist sec
 import compose.project.click.click.deeplink.AppDeepLinkRouter // pragma: allowlist secret
 import compose.project.click.click.deeplink.ConnectionDeepLinkRouter // pragma: allowlist secret
 import compose.project.click.click.deeplink.EventDeepLinkRouter // pragma: allowlist secret
+import compose.project.click.click.deeplink.SharedDropOpenRequests // pragma: allowlist secret
 import compose.project.click.click.encounter.EncounterTetherManager // pragma: allowlist secret
 import compose.project.click.click.navigation.NavigationItem // pragma: allowlist secret
 import compose.project.click.click.navigation.RouteHistory // pragma: allowlist secret
@@ -345,6 +350,20 @@ internal fun AppMainShell(
             }
             AppDeepLink.Clicks -> navigateTo(NavigationItem.Connections.route)
             AppDeepLink.AddClick -> navigateTo(NavigationItem.AddClick.route)
+            is AppDeepLink.SharedDrop -> {
+                navigateTo(NavigationItem.Home.route)
+                SharedDropOpenRequests.request(link.dropId)
+            }
+            is AppDeepLink.Place -> {
+                showQRScanner = false
+                PlaceOpenRequests.open(
+                    PlaceOpenRequest(
+                        idOrSlug = link.idOrSlug,
+                        anchorToken = link.anchorToken,
+                        source = if (link.anchorToken != null) "qr" else "link",
+                    ),
+                )
+            }
             is AppDeepLink.Chat, is AppDeepLink.Profile -> Unit
         }
     }
@@ -370,6 +389,8 @@ internal fun AppMainShell(
     val presenceDeps = remember { Triple(createTokenStorage(), LocationService(), ApiClient()) }
     LaunchedEffect(foregroundTick, currentUser.id) {
         if (currentUser.id.isBlank()) return@LaunchedEffect
+        // Feature flags: last known first (instant paint), then the server (sign-in and each foreground).
+        FeatureFlags.refresh(currentUser.id, presenceDeps.first) { presenceDeps.third.getMeFeaturesImpl() }
         ConnectionFlowTelemetry.flush()
         val (storage, location, api) = presenceDeps
         HangoutPresence.reportIfEnabled(storage, location, api)
@@ -945,5 +966,11 @@ internal fun AppMainShell(
             pendingTargetMessageIdState = pendingTargetMessageIdState,
             pendingBeaconIdState = pendingBeaconIdState,
         )
+        // Click Places: one Place page for every entry point (map, search, events, links, QR).
+        compose.project.click.click.ui.screens
+            .PlaceSheetHost()
+        // "Approve new sign-in?" when another of this account's devices asks for history.
+        compose.project.click.click.ui.screens
+            .DeviceApprovalHost()
     }
 }
