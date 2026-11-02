@@ -422,7 +422,18 @@ interface ChatRepository {
         viewerUserId: String,
         message: Message,
         extension: String,
+        signedUrl: String? = null,
     ): GatedDropOriginalResult = GatedDropOriginalResult.Unavailable
+
+    /**
+     * Develops ready chat Click Drops for this viewer (`POST /api/drops/develop`, batched by 50).
+     * The server decides which are developed; pending ones come back `pending`.
+     */
+    suspend fun developChatDrops(messageIds: List<String>): Result<List<compose.project.click.click.data.api.DropDevelopResultDto>> =
+        Result.failure(UnsupportedOperationException("developChatDrops"))
+
+    /** This viewer's developed-at (ISO) per chat drop id, from any device (`GET /api/drops/views`). */
+    suspend fun loadChatDropDevelopedAt(messageIds: List<String>): Result<Map<String, String>> = Result.success(emptyMap())
 
     /**
      * Encrypts and uploads a gated Click Drop's original (`drop_original: true`) for the message whose

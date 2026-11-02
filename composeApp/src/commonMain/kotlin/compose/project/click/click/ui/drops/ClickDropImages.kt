@@ -3,7 +3,7 @@
 package compose.project.click.click.ui.drops
 
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
@@ -15,23 +15,26 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Canvas
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Paint
-import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
+import compose.project.click.click.collaboration.ClickDropBloom
 import compose.project.click.click.collaboration.ClickDropDevelopState
 import compose.project.click.click.collaboration.ClickDropPixelation
 import compose.project.click.click.hapticSmallCommit
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
-import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.roundToInt
 
@@ -40,10 +43,6 @@ import kotlin.math.roundToInt
  * bitmap scaled up with `FilterQuality.None` on a plain Canvas — no RenderEffect, which re-rasters
  * every frame and flickers under scroll and swipe.
  */
-
-/** Develop layers, coarse to fine, that bloom from the centre before the photo itself. */
-private val DEVELOP_LAYERS = listOf(12, 24, 48, 96)
-private const val DEVELOP_DURATION_MS = 900
 
 /** [this] reduced so its longest side has [blocks] pixels (one per block). */
 fun ImageBitmap.downscaledForBlocks(blocks: Int = ClickDropPixelation.BLOCKS_PER_SIDE): ImageBitmap {
@@ -81,8 +80,9 @@ fun ClickDropPixelatedImage(
 }
 
 /**
- * The develop moment: 12/24/48/96-block layers and then the photo bloom from the centre over about
- * 0.9 s with a light haptic. With reduce motion on, the pixels cross-fade to the photo instead.
+ * The develop moment: 12/24/48/96-block layers and then the photo bloom from the centre with soft
+ * edges, each [ClickDropBloom.STAGGER_MS] after the one before (0.92 s in all, timing in
+ * [ClickDropBloom]), with a light haptic. With reduce motion on, the pixels cross-fade to the photo.
  */
 @Composable
 fun ClickDropDevelopEffect(
@@ -92,11 +92,13 @@ fun ClickDropDevelopEffect(
     onFinished: () -> Unit,
 ) {
     val finished by rememberUpdatedState(onFinished)
-    val progress = remember(original) { Animatable(0f) }
-    val layers = remember(original) { DEVELOP_LAYERS.map { original.downscaledForBlocks(it) } }
+    // Milliseconds since the develop started (linear; each stage eases on its own).
+    val elapsed = remember(original) { Animatable(0f) }
+    val layers = remember(original) { ClickDropBloom.LAYER_BLOCKS.map { original.downscaledForBlocks(it) } }
     LaunchedEffect(original) {
         hapticSmallCommit()
-        progress.animateTo(1f, tween(if (reduceMotion) 300 else DEVELOP_DURATION_MS, easing = LinearOutSlowInEasing))
+        val total = if (reduceMotion) ClickDropBloom.REDUCED_FADE_MS else ClickDropBloom.DURATION_MS
+        elapsed.animateTo(total.toFloat(), tween(total, easing = LinearEasing))
         finished()
     }
     if (reduceMotion) {
@@ -105,30 +107,35 @@ fun ClickDropDevelopEffect(
             Image(
                 original,
                 "Photo",
-                Modifier.fillMaxSize().graphicsLayer { alpha = progress.value },
+                Modifier.fillMaxSize().graphicsLayer { alpha = elapsed.value / ClickDropBloom.REDUCED_FADE_MS },
                 contentScale = ContentScale.Crop,
             )
         }
         return
     }
     Canvas(modifier) {
-        val p = progress.value
+        val ms = elapsed.value.toLong()
         drawCropped(layers.first(), FilterQuality.None)
-        val maxRadius = hypot(size.width, size.height) / 2f
         val stages = layers.drop(1) + original
         stages.forEachIndexed { index, image ->
-            // Each finer stage starts a little after the coarser one and grows to cover the frame.
-            val start = index * 0.16f
-            val t = ((p - start) / (1f - start)).coerceIn(0f, 1f)
-            if (t <= 0f) return@forEachIndexed
-            val path =
-                Path().apply {
-                    addOval(
-                        androidx.compose.ui.geometry
-                            .Rect(center, maxRadius * t),
-                    )
-                }
-            clipPath(path) { drawCropped(image, if (image === original) FilterQuality.Medium else FilterQuality.None) }
+            val radius = ClickDropBloom.stageRadius(index, ms, size.width, size.height)
+            if (radius <= 0f) return@forEachIndexed
+            val photo = image === original
+            // Draw the stage in its own layer, then keep only a soft-edged circle of it.
+            drawContext.canvas.saveLayer(Rect(Offset.Zero, size), Paint())
+            drawCropped(image, if (photo) FilterQuality.Medium else FilterQuality.None)
+            drawRect(
+                brush =
+                    Brush.radialGradient(
+                        0f to Color.Black,
+                        ClickDropBloom.SOFT_EDGE_START to Color.Black,
+                        1f to Color.Transparent,
+                        center = center,
+                        radius = radius,
+                    ),
+                blendMode = BlendMode.DstIn,
+            )
+            drawContext.canvas.restore()
         }
     }
 }
@@ -170,3 +177,23 @@ fun clickDropCountdownLabel(
         else -> "Develops in a moment"
     }
 }
+
+/**
+ * The label over a gated chat drop that isn't on screen as a photo yet (iOS `ClickDropImageView.stateLabel`):
+ * "Click Drop · develops in 3h 12m" while pending, "Tap to develop" when ready, "Developing…" in flight.
+ */
+fun chatClickDropLabel(
+    state: ClickDropDevelopState,
+    developing: Boolean,
+    now: Instant = Clock.System.now(),
+): String =
+    when (state) {
+        is ClickDropDevelopState.Pending ->
+            if (state.revealAt == null) {
+                "Click Drop"
+            } else {
+                "Click Drop · " + clickDropCountdownLabel(state, now).orEmpty().replaceFirstChar { it.lowercaseChar() }
+            }
+        ClickDropDevelopState.Ready -> if (developing) "Developing…" else "Tap to develop"
+        ClickDropDevelopState.Developed -> "Developing…"
+    }

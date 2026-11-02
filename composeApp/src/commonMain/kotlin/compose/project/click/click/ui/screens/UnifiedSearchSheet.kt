@@ -51,6 +51,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import compose.project.click.click.data.flags.FeatureFlag // pragma: allowlist secret
+import compose.project.click.click.data.flags.FeatureFlags // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickChip // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickDropdownMenu // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickLogoPulse // pragma: allowlist secret
@@ -86,6 +88,8 @@ fun UnifiedSearchSheet(
     onNavigateToSettings: () -> Unit = {},
     /** A server "people" row: someone you share a group or hub with (opens their profile). */
     onNavigateToProfile: (userId: String) -> Unit = {},
+    /** A Click Place row (matched from the Places the map loaded). */
+    onNavigateToPlace: (placeId: String) -> Unit = {},
     /** Prefilled from `click://search?q=` / `joinclick.co/search?q=`. */
     initialQuery: String? = null,
     viewModel: GlobalSearchViewModel = viewModel { GlobalSearchViewModel() },
@@ -114,6 +118,7 @@ fun UnifiedSearchSheet(
             onNavigateToBeacon = onNavigateToBeacon,
             onNavigateToSettings = onNavigateToSettings,
             onNavigateToProfile = onNavigateToProfile,
+            onNavigateToPlace = onNavigateToPlace,
         )
     }
 }
@@ -128,12 +133,15 @@ private fun UnifiedSearchSheetContent(
     onNavigateToBeacon: (String) -> Unit,
     onNavigateToSettings: () -> Unit,
     onNavigateToProfile: (String) -> Unit,
+    onNavigateToPlace: (String) -> Unit,
 ) {
     val query by viewModel.searchQuery.collectAsState()
     val serverState by viewModel.serverState.collectAsState()
     val results by viewModel.results.collectAsState()
     val isSearching by viewModel.isSearching.collectAsState()
     val visibleCategories by viewModel.visibleCategories.collectAsState()
+    val flags by FeatureFlags.state.collectAsState()
+    val placesEnabled = flags.isEnabled(FeatureFlag.CLICK_PLACES)
 
     val visibleResults =
         remember(results, visibleCategories) {
@@ -192,7 +200,7 @@ private fun UnifiedSearchSheetContent(
             ClickSearchField(
                 value = query,
                 onValueChange = { viewModel.search(it, userId) },
-                placeholder = "People, messages, events, hubs",
+                placeholder = if (placesEnabled) "People, messages, places, events" else "People, messages, events, hubs",
                 onSearch = { focusManager.clearFocus() },
                 focusRequester = focusRequester,
             )
@@ -317,6 +325,7 @@ private fun UnifiedSearchSheetContent(
                                     onNavigateToBeacon = onNavigateToBeacon,
                                     onNavigateToSettings = onNavigateToSettings,
                                     onNavigateToProfile = onNavigateToProfile,
+                                    onNavigateToPlace = onNavigateToPlace,
                                 )
                             }
                             if (serverStatus != null) {

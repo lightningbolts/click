@@ -31,6 +31,7 @@ import androidx.compose.ui.zIndex
 import com.mohamedrejeb.calf.ui.progress.AdaptiveCircularProgressIndicator
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
+import compose.project.click.click.data.places.PlaceSummaryDto // pragma: allowlist secret
 import compose.project.click.click.platform.rememberReduceMotionEnabled // pragma: allowlist secret
 import compose.project.click.click.telemetry.TelemetryBatcher // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionListUserAvatarFace // pragma: allowlist secret
@@ -49,6 +50,8 @@ internal fun MapContent(
     modifier: Modifier = Modifier.fillMaxSize(),
     renderData: MapRenderData,
     communityHubs: List<CommunityHubPin>,
+    /** Click Places to draw (already gated by flag and layer; see [MapViewModel.visibleMapPlaces]). */
+    places: List<PlaceSummaryDto> = emptyList(),
     zoom: Double,
     /** Live camera zoom that overlapping pins are stacked at (see [stackMapPins]). */
     stackZoom: Double = zoom,
@@ -67,11 +70,11 @@ internal fun MapContent(
 ) {
     val connectedUsers by AppDataManager.connectedUsers.collectAsState()
     val hubPins =
-        remember(communityHubs) {
-            communityHubs.map { MapPin.fromCommunityHub(it) }
+        remember(communityHubs, places) {
+            communityHubs.map { MapPin.fromCommunityHub(it) } + places.map { MapPin.fromPlace(it) }
         }
     val rawPins =
-        remember(renderData, connectedUsers, currentUserId, hubPins) {
+        remember(renderData, connectedUsers, currentUserId, hubPins, places) {
             when (renderData) {
                 is MapRenderData.IndividualPins -> {
                     val conn =
@@ -86,11 +89,13 @@ internal fun MapContent(
                                     avatarSeed = peerId ?: point.connection.id,
                                 )
                             }
-                    val bc = renderData.beacons.map { MapPin.fromBeacon(it) }
+                    // An event at a Place on the map rides in the Place's pin (iOS `mergingPlaceEvents`).
+                    val bc = MapPlacesLayer.beaconsOutsidePlaces(renderData.beacons, places).map { MapPin.fromBeacon(it) }
                     (conn + bc + hubPins).sortedByDescending { it.zIndex }
                 }
                 is MapRenderData.Clusters -> {
-                    val standalone = renderData.standaloneBeacons.map { MapPin.fromBeacon(it) }
+                    val standalone =
+                        MapPlacesLayer.beaconsOutsidePlaces(renderData.standaloneBeacons, places).map { MapPin.fromBeacon(it) }
                     (standalone + hubPins).sortedByDescending { it.zIndex }
                 }
             }
@@ -243,6 +248,7 @@ internal fun OverlappingMapPinsChooser(
                     MapPinKind.BEACON_ALERT -> "Alert"
                     MapPinKind.BEACON_SOCIAL -> "Event"
                     MapPinKind.BEACON_OTHER -> "Beacon"
+                    MapPinKind.PLACE -> "Place"
                 }
             val shape = RoundedCornerShape(16.dp)
             val rowSurface = clickCardSurface()

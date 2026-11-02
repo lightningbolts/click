@@ -36,6 +36,8 @@ import compose.project.click.click.data.hub.HubConnectionManager // pragma: allo
 import compose.project.click.click.data.hub.HubVerifyResult // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.models.isPendingSync // pragma: allowlist secret
+import compose.project.click.click.data.places.PlaceOpenRequest // pragma: allowlist secret
+import compose.project.click.click.data.places.PlaceOpenRequests // pragma: allowlist secret
 import compose.project.click.click.data.repository.HangoutPresence
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
 import compose.project.click.click.data.runEventReminderSync // pragma: allowlist secret
@@ -351,6 +353,16 @@ internal fun AppMainShell(
             is AppDeepLink.SharedDrop -> {
                 navigateTo(NavigationItem.Home.route)
                 SharedDropOpenRequests.request(link.dropId)
+            }
+            is AppDeepLink.Place -> {
+                showQRScanner = false
+                PlaceOpenRequests.open(
+                    PlaceOpenRequest(
+                        idOrSlug = link.idOrSlug,
+                        anchorToken = link.anchorToken,
+                        source = if (link.anchorToken != null) "qr" else "link",
+                    ),
+                )
             }
             is AppDeepLink.Chat, is AppDeepLink.Profile -> Unit
         }
@@ -954,6 +966,9 @@ internal fun AppMainShell(
             pendingTargetMessageIdState = pendingTargetMessageIdState,
             pendingBeaconIdState = pendingBeaconIdState,
         )
+        // Click Places: one Place page for every entry point (map, search, events, links, QR).
+        compose.project.click.click.ui.screens
+            .PlaceSheetHost()
         // "Approve new sign-in?" when another of this account's devices asks for history.
         compose.project.click.click.ui.screens
             .DeviceApprovalHost()

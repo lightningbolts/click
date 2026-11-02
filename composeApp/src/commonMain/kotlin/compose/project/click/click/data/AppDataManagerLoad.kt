@@ -4,6 +4,8 @@ package compose.project.click.click.data // pragma: allowlist secret
 
 import compose.project.click.click.auth.LocalSessionCache // pragma: allowlist secret
 import compose.project.click.click.data.auth.EnsureFreshAccessToken // pragma: allowlist secret
+import compose.project.click.click.data.flags.FeatureFlag // pragma: allowlist secret
+import compose.project.click.click.data.flags.FeatureFlags // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.models.UserAvailability // pragma: allowlist secret
 import compose.project.click.click.data.models.resolveDisplayName // pragma: allowlist secret
@@ -228,8 +230,12 @@ internal suspend fun AppDataManager.loadAllData() {
                 }
 
             // Load location preferences from Supabase
-            runCatching { supabaseRepository.fetchLocationPreferences(loadedUser.id) }
-                .onSuccess { _locationPreferences.value = it }
+            runCatching {
+                supabaseRepository.fetchLocationPreferences(
+                    loadedUser.id,
+                    includePlaceVisits = FeatureFlags.isEnabled(FeatureFlag.CLICK_PLACES),
+                )
+            }.onSuccess { _locationPreferences.value = it }
                 .onFailure { println("AppDataManager: Failed to load location preferences: ${it.message}") }
 
             val localNotificationPreferences =

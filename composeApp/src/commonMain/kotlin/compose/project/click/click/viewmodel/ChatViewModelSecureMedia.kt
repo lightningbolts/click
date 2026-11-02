@@ -41,6 +41,7 @@ internal fun ChatViewModel.clearSecureChatMediaCache(purgePersistentCache: Boole
         secureAudioPathCache.clear()
         secureImageBytesCache.clear()
         GatedDropOriginals.clear()
+        clickDropHost.clear()
     }
 }
 

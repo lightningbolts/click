@@ -38,6 +38,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
+import compose.project.click.click.collaboration.clickDropDevelopAllLabel
+import compose.project.click.click.collaboration.clickDropNextRevealDelayMs
 import compose.project.click.click.data.models.ChatWithDetails // pragma: allowlist secret
 import compose.project.click.click.data.models.HangoutPlan
 import compose.project.click.click.data.models.IcebreakerPrompt // pragma: allowlist secret
@@ -54,6 +56,7 @@ import compose.project.click.click.ui.chat.ChatMessageTimeline // pragma: allowl
 import compose.project.click.click.ui.chat.ChatSearchBar
 import compose.project.click.click.ui.chat.ChatTypingDots // pragma: allowlist secret
 import compose.project.click.click.ui.chat.ConnectionChatMessageComposer // pragma: allowlist secret
+import compose.project.click.click.ui.chat.DevelopAllDropsButton
 import compose.project.click.click.ui.chat.IcebreakerPanel // pragma: allowlist secret
 import compose.project.click.click.ui.chat.JumpToLatestButton
 import compose.project.click.click.ui.chat.PlanResponsesSheet
@@ -83,6 +86,7 @@ import compose.project.click.click.ui.components.rememberIdentityNames // pragma
 import compose.project.click.click.ui.theme.* // pragma: allowlist secret
 import compose.project.click.click.viewmodel.ChatMessagesState // pragma: allowlist secret
 import compose.project.click.click.viewmodel.ChatViewModel // pragma: allowlist secret
+import compose.project.click.click.viewmodel.clickDropRevealRefOrNull
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
@@ -545,6 +549,17 @@ internal fun ColumnScope.ChatViewTimelinePane(
                                             .padding(end = 16.dp, bottom = ChatComposerStripReserve + 16.dp),
                                 )
                             }
+                            // "Develop all (n)" when several Click Drops are ready (iOS ChatView overlay).
+                            ChatDevelopAllDrops(
+                                viewModel = viewModel,
+                                messages = messages,
+                                activeApiChatId = activeApiChatId,
+                                currentUserId = currentUserId,
+                                modifier =
+                                    Modifier
+                                        .align(Alignment.BottomStart)
+                                        .padding(start = 16.dp, bottom = ChatComposerStripReserve + 16.dp),
+                            )
                             // In-conversation search over loaded (decrypted) messages.
                             val searchOpen by viewModel.chatSearchOpen.collectAsState()
                             if (searchOpen) {
@@ -776,4 +791,53 @@ private fun ChatTypingIndicator(
             }
         }
     }
+}
+
+/**
+ * Checks which revealed Click Drops this viewer already developed, and offers "Develop all" once
+ * more than one is ready. Only drops the server has answered for count, so a drop developed on
+ * another device never shows up here.
+ */
+@Composable
+private fun ChatDevelopAllDrops(
+    viewModel: ChatViewModel,
+    messages: List<MessageWithUser>,
+    activeApiChatId: String?,
+    currentUserId: String?,
+    modifier: Modifier = Modifier,
+) {
+    val host = viewModel.clickDropHost
+    val book by host.clickDropBook.collectAsState()
+    val drops =
+        remember(messages) {
+            messages.mapNotNull { mwu -> mwu.message.clickDropRevealRefOrNull()?.let { it to mwu.message } }
+        }
+    if (drops.isEmpty()) return
+    val refs = remember(drops) { drops.map { it.first } }
+    // Pending drops turn ready right on time.
+    val now by produceState(
+        kotlinx.datetime.Clock.System
+            .now(),
+        refs,
+    ) {
+        while (true) {
+            value =
+                kotlinx.datetime.Clock.System
+                    .now()
+            delay(clickDropNextRevealDelayMs(refs, value))
+        }
+    }
+    LaunchedEffect(drops, now) { host.checkClickDrops(drops.map { it.second }) }
+    val ready = remember(book, refs, now) { book.ready(refs, now).filter { it.id in book.checked } }
+    val label = clickDropDevelopAllLabel(ready.size) ?: return
+    DevelopAllDropsButton(
+        label = label,
+        onClick = {
+            val scopeId = activeApiChatId ?: return@DevelopAllDropsButton
+            val viewerId = currentUserId ?: return@DevelopAllDropsButton
+            val readyIds = ready.map { it.id }.toSet()
+            host.developClickDrops(scopeId, viewerId, drops.filter { it.first.id in readyIds }.map { it.second })
+        },
+        modifier = modifier,
+    )
 }

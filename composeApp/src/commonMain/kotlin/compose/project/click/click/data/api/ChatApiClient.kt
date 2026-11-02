@@ -879,6 +879,13 @@ class ChatApiClient(
         authToken: String,
     ): Result<List<DropDevelopResultDto>> = developDropsImpl(refs = refs, authToken = authToken)
 
+    /** GET `/api/drops/views` — this viewer's developed-at per drop id (see [dropViewsImpl]). */
+    suspend fun dropViews(
+        kind: String,
+        ids: Collection<String>,
+        authToken: String,
+    ): Result<Map<String, String>> = dropViewsImpl(kind = kind, ids = ids, authToken = authToken)
+
     suspend fun downloadAttachmentBytes(signedUrl: String): Result<ByteArray> = downloadAttachmentBytesImpl(signedUrl = signedUrl)
 
     suspend fun sendHubMessage(

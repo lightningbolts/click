@@ -8,6 +8,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -46,11 +47,15 @@ import coil3.compose.AsyncImage
 import coil3.compose.LocalPlatformContext
 import coil3.request.ImageRequest
 import coil3.size.Size
+import compose.project.click.click.collaboration.ClickDropDevelopState
 import compose.project.click.click.data.models.Message
 import compose.project.click.click.data.models.disposableRollRevealAtIso
 import compose.project.click.click.data.models.isDisposableRollLocked
 import compose.project.click.click.data.repository.GatedDropOriginals
 import compose.project.click.click.data.repository.isGatedDropAwaitingOriginal
+import compose.project.click.click.platform.rememberReduceMotionEnabled
+import compose.project.click.click.ui.drops.ClickDropDevelopEffect
+import compose.project.click.click.ui.drops.chatClickDropLabel
 import compose.project.click.click.ui.theme.PrimaryBlue
 import compose.project.click.click.util.LruMemoryCache
 import compose.project.click.click.util.redactedRestMessage
@@ -149,20 +154,27 @@ internal fun ChatBubblePhotoContent(
     borderIfReceived: Boolean = false,
     onPhotoClick: (() -> Unit)? = null,
     onPhotoLongPress: (() -> Unit)? = null,
+    clickDropControls: ClickDropBubbleControls? = null,
 ) {
     val gatedOriginals by GatedDropOriginals.loaded.collectAsState()
     // A gated drop stays pixelated until its original is on screen, even after its reveal time.
     val awaitingOriginal = message.isGatedDropAwaitingOriginal(gatedOriginals)
     val rollLocked = message.isDisposableRollLocked() || awaitingOriginal
     val canExpand = onPhotoClick != null && !rollLocked
-    val expandClick = onPhotoClick.takeIf { canExpand }
+    // A ready drop develops on tap (iOS `ClickDropImageView.lockedImage`).
+    val developClick =
+        clickDropControls
+            ?.takeIf { awaitingOriginal && it.state == ClickDropDevelopState.Ready && !it.developing }
+            ?.onDevelop
+    val expandClick = onPhotoClick.takeIf { canExpand } ?: developClick
+    val tapLabel = if (developClick != null && !canExpand) "Develop Click Drop" else "Open photo"
     val photoLongPress = onPhotoLongPress
     val photoGestureModifier =
         if (expandClick != null || photoLongPress != null) {
             Modifier
                 .semantics(mergeDescendants = true) {
                     if (expandClick != null) {
-                        onClick(label = "Open photo") {
+                        onClick(label = tapLabel) {
                             expandClick()
                             true
                         }
@@ -196,9 +208,12 @@ internal fun ChatBubblePhotoContent(
         } else {
             Modifier
         }
+    val dropLabelState = clickDropControls?.state
+    val dropDeveloping = clickDropControls?.developing == true
     val countdownLabel =
-        remember(message.id, rollLocked) {
+        remember(message.id, rollLocked, dropLabelState, dropDeveloping) {
             if (!rollLocked) return@remember null
+            if (awaitingOriginal && dropLabelState != null) return@remember chatClickDropLabel(dropLabelState, dropDeveloping)
             val ttlIso = message.disposableRollRevealAtIso() ?: return@remember "Locked"
             val ttl = runCatching { Instant.parse(ttlIso) }.getOrNull() ?: return@remember "Locked"
             val remainMs = (ttl.toEpochMilliseconds() - Clock.System.now().toEpochMilliseconds()).coerceAtLeast(0L)
@@ -291,6 +306,14 @@ internal fun ChatBubblePhotoContent(
                 }
             }
             bitmap != null -> {
+                // Developed just now: the photo blooms out of its pixels once, then stays.
+                // Only once the original is decoded (the cache is emptied when it arrives).
+                val blooms =
+                    clickDropControls?.fresh == true &&
+                        !message.isGatedDropAwaitingOriginal(gatedOriginals) &&
+                        cachedBitmap != null &&
+                        cachedBitmap === bitmap
+                val reduceMotion = rememberReduceMotionEnabled()
                 PhotoBitmapContent(
                     bitmap = bitmap,
                     rollLocked = false,
@@ -298,6 +321,19 @@ internal fun ChatBubblePhotoContent(
                     borderIfReceived = borderIfReceived,
                     photoGestureModifier = photoGestureModifier,
                     uploadProgress = secureState?.uploadProgress,
+                    overlay =
+                        if (blooms) {
+                            {
+                                ClickDropDevelopEffect(
+                                    original = bitmap,
+                                    reduceMotion = reduceMotion,
+                                    modifier = Modifier.matchParentSize().clip(chatPhotoAttachmentShape),
+                                    onFinished = { clickDropControls?.onShown?.invoke() },
+                                )
+                            }
+                        } else {
+                            null
+                        },
                 )
             }
             isEncrypted && secureState?.loading == true -> {
@@ -405,6 +441,7 @@ private fun PhotoBitmapContent(
     borderIfReceived: Boolean,
     photoGestureModifier: Modifier,
     uploadProgress: Float?,
+    overlay: (@Composable BoxScope.() -> Unit)? = null,
 ) {
     Box(
         modifier =
@@ -437,6 +474,7 @@ private fun PhotoBitmapContent(
                         },
                     ),
         )
+        overlay?.invoke(this)
         if (rollLocked && countdownLabel != null) {
             Box(
                 modifier =
@@ -473,3 +511,16 @@ private fun PhotoBitmapContent(
         }
     }
 }
+
+/**
+ * A gated Click Drop bubble's develop state and actions (iOS `ClickDropControls`): the state the
+ * server gave this viewer, whether a develop is in flight, and whether it was developed on this
+ * screen just now (play the bloom once, then [onShown]).
+ */
+internal data class ClickDropBubbleControls(
+    val state: ClickDropDevelopState,
+    val developing: Boolean,
+    val fresh: Boolean,
+    val onDevelop: () -> Unit,
+    val onShown: () -> Unit,
+)
