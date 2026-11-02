@@ -141,7 +141,19 @@ class LocalReminderWorker(
                 .setAutoCancel(true)
                 .setContentIntent(pendingIntent)
                 .build()
-        runCatching { NotificationManagerCompat.from(context).notify(id, 0, notification) }
+        // Check right at the call site (lint cannot see through canPostNotifications) — the user can
+        // revoke POST_NOTIFICATIONS while the work is queued, so a late SecurityException is handled too.
+        if (
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ActivityCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return Result.success()
+        }
+        try {
+            NotificationManagerCompat.from(context).notify(id, 0, notification)
+        } catch (e: SecurityException) {
+            // Permission revoked between the check and the post; drop this reminder quietly.
+        }
         return Result.success()
     }
 }

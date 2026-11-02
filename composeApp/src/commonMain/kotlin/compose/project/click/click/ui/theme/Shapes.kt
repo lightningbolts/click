@@ -50,6 +50,20 @@ object ClickRadius {
 }
 
 /**
+ * Control metrics. Heights are minimums so larger font scales can grow content.
+ *
+ * Mirrors iOS `ClickMetrics` in `Click/DesignSystem/Spacing.swift`, used by
+ * `ClickPrimaryButtonStyle` / `ClickSecondaryButtonStyle` in `Components/ButtonStyles.swift`.
+ */
+object ClickMetrics {
+    /** Minimum height of the single strongly filled action in a region. */
+    val primaryActionHeight = 50.dp
+
+    /** Minimum height of a neutral secondary action. */
+    val secondaryActionHeight = 44.dp
+}
+
+/**
  * Ready-made shapes for each [ClickRadius] role plus a capsule. Read through [LocalClickShapes]
  * (provided by [PlatformThemeProvider]) the same way [LocalPlatformStyle] is read.
  */

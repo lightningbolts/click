@@ -6,8 +6,8 @@ import kotlin.test.assertEquals
 
 class ClickLaunchPrimitivesTest {
     @Test
-    fun screenSpacing_matchesNativeTitleGutterAndEightPtScale() {
-        assertEquals(20.dp, ClickScreenSpacing.Horizontal)
+    fun screenSpacing_matchesIosGutterAndEightPtScale() {
+        assertEquals(16.dp, ClickScreenSpacing.Horizontal)
         assertEquals(24.dp, ClickScreenSpacing.Section)
         assertEquals(8.dp, ClickScreenSpacing.RowGap)
         assertEquals(8.dp, ClickScreenSpacing.Compact)

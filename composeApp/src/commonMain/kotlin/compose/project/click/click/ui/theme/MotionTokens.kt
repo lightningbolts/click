@@ -30,12 +30,18 @@ import androidx.compose.ui.unit.dp
  * or an immediate state change.
  */
 object MotionTokens {
+    /**
+     * Tween durations (ms). iOS `ClickMotion` (`Click/DesignSystem/Motion.swift`) is spring-based
+     * and has no duration scale, so the shared cross-platform scale from web `DESIGN.md`
+     * (`--d-press` 120, `--d-fast` 160, `--d-base` 240, `--d-slow` 360) is used, with
+     * [Emphasized] taken from the response of iOS `ClickMotion.reveal` (0.5 s).
+     */
     object Duration {
-        const val Instant = 90
-        const val Fast = 140
-        const val Standard = 190
-        const val Deliberate = 240
-        const val Emphasized = 320
+        const val Instant = 120
+        const val Fast = 160
+        const val Standard = 240
+        const val Deliberate = 360
+        const val Emphasized = 500
     }
 
     /** Live-state pulse cycles only — never use for ordinary content transitions. */
@@ -45,13 +51,23 @@ object MotionTokens {
         const val Shimmer = 900
     }
 
+    /**
+     * One press scale for every control size (web `.press`, scale 0.97; the same 0.97 iOS uses for
+     * its press-in transitions). The three names are kept so call sites read by role.
+     *
+     * The spring is iOS `ClickMotion.press` (`spring(response: 0.2, dampingFraction: 0.7)`), with
+     * stiffness = (2π / response)² for unit mass.
+     */
     object PressScale {
-        const val IconPressedScale = 0.95f
-        const val ButtonPressedScale = 0.98f
-        const val CardPressedScale = 0.985f
+        const val Scale = 0.97f
+        const val IconPressedScale = Scale
+        const val ButtonPressedScale = Scale
+        const val CardPressedScale = Scale
 
-        const val DampingRatio = Spring.DampingRatioNoBouncy
-        const val Stiffness = Spring.StiffnessMedium
+        /** iOS `ClickMotion.press` response, in seconds. */
+        const val IosResponseSeconds = 0.2f
+        const val DampingRatio = 0.7f
+        const val Stiffness = 986.96f
     }
 
     object Content {

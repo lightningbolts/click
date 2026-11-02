@@ -45,7 +45,7 @@ data class PlatformStyle(
 val LocalPlatformStyle =
     staticCompositionLocalOf {
         PlatformStyle(
-            cardCornerRadius = 16.dp,
+            cardCornerRadius = ClickRadius.surface,
             compactCardCornerRadius = 8.dp,
             buttonCornerRadius = 8.dp,
             cardBorderWidth = 1.dp,
@@ -99,9 +99,9 @@ fun clickSheetOnSurface(): Color = MaterialTheme.colorScheme.onSurface
 @ReadOnlyComposable
 fun clickSheetOnSurfaceMuted(): Color = MaterialTheme.colorScheme.onSurfaceVariant
 
-private val androidPlatformStyle =
+internal val androidPlatformStyle =
     PlatformStyle(
-        cardCornerRadius = 16.dp,
+        cardCornerRadius = ClickRadius.surface,
         compactCardCornerRadius = 8.dp,
         buttonCornerRadius = 8.dp,
         cardBorderWidth = 1.dp,

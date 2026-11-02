@@ -53,15 +53,16 @@ import compose.project.click.click.ui.theme.clickBorderWidth // pragma: allowlis
 import compose.project.click.click.ui.theme.clickCardSurface // pragma: allowlist secret
 
 /**
- * Shared gutters for launch surfaces. Values wrap the existing 8pt scale and the native
- * large-title leading inset (20pt) so tab roots and [AppScreenScaffold] stay aligned.
+ * Shared gutters for launch surfaces. Values wrap the [ClickSpacing] 4 dp rhythm so tab roots
+ * and [AppScreenScaffold] stay aligned with iOS (`ClickSpacing.screenGutter` in
+ * `Click/DesignSystem/Spacing.swift`).
  *
  * Use [Horizontal] instead of a screen-local `20.dp` / `16.dp` constant.
  * Purple, typefaces, and radii stay in [compose.project.click.click.ui.theme].
  */
 object ClickScreenSpacing {
-    /** Tab-root / sheet gutter — matches native title leading, not chat bubble inset. */
-    val Horizontal = 20.dp
+    /** Tab-root / sheet gutter; iOS `ClickSpacing.screenGutter` (16). */
+    val Horizontal = ClickSpacing.screenGutter
 
     /** Space between major sections (greeting → hero, list → composer). */
     val Section = ClickSpacing.lg
@@ -340,7 +341,7 @@ fun ClickContentCard(
     onClick: (() -> Unit)? = null,
     showBorder: Boolean = false,
     containerColor: Color = clickCardSurface(),
-    contentPadding: Dp = ClickScreenSpacing.Horizontal,
+    contentPadding: Dp = ClickSpacing.surfacePadding,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val radius = LocalPlatformStyle.current.cardCornerRadius

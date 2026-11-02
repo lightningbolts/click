@@ -32,8 +32,8 @@ private fun platformCardShape(): RoundedCornerShape {
 @Composable
 private fun platformBorderWidth(): Dp = LocalPlatformStyle.current.cardBorderWidth
 
-/** Legacy name — Functional Clarity uses 16.dp card corners. */
-val GlassCornerRadius: Dp = 16.dp
+/** Legacy name for the shared card corner; iOS `ClickRadius.surface` (26). */
+val GlassCornerRadius: Dp = ClickRadius.surface
 val GlassCardShape = RoundedCornerShape(GlassCornerRadius)
 
 @Composable
