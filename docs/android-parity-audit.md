@@ -475,7 +475,7 @@ Each PR builds (`assembleDebug`), passes `spotlessCheck` and all unit tests loca
 | P2-12 Listening now | lightningbolts/click#150 | Stacked on #133. |
 | G6-1 Activity inbox | lightningbolts/click#151 | |
 | G6-9 Pinned messages | lightningbolts/click#152 | |
-| G7-1 / P2-9 Approve a new device from this phone | lightningbolts/click#153 | Biometric or screen-lock confirmation; fails closed below Android 9. |
+| G7-1 / P2-9 Approve a new device from this phone | lightningbolts/click#153 | Biometric or screen-lock confirmation; fails closed below Android 10. |
 | (found) Plan map link escaping | lightningbolts/click#144 | |
 
 **Merge order:** #132, then #134 → #135 → #148, then #133 → #145 / #150. The rest are independent.
