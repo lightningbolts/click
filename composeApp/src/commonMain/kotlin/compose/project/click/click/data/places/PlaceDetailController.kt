@@ -114,9 +114,24 @@ data class PlaceDetailUiState(
             ?.pulseEligibility
             ?.questions
             .orEmpty()
-            .filter { it.key != "energy" && it.key !in answeredFollowUps }
+            .filter { it.key in FOLLOW_UP_KEYS && it.key !in answeredFollowUps }
+    }
+
+    companion object {
+        /** The follow-ups `PATCH /pulse/{id}` accepts (`talkable`, `category_answer`). */
+        val FOLLOW_UP_KEYS = setOf("talkable", "category")
     }
 }
+
+/** A missing summary (null) keeps the Pulse already on screen. */
+private fun PlaceDetail.withPulse(pulse: PulseSummaryDto?): PlaceDetail =
+    if (pulse ==
+        null
+    ) {
+        this
+    } else {
+        copy(summary = summary.copy(pulse = pulse))
+    }
 
 private fun Throwable.placeError(): PlaceError = (this as? PlaceApiException)?.error ?: PlaceError.Network
 
@@ -136,6 +151,9 @@ class PlaceDetailController(
     private val source: String? = source ?: if (anchorToken == null) null else "qr"
     private var hasFetched = false
 
+    /** Bumped by every successful check-in or check-out; a detail fetched before one is stale. */
+    private var checkInMutations = 0
+
     private val _state =
         MutableStateFlow(
             PlaceDetailUiState(
@@ -149,10 +167,13 @@ class PlaceDetailController(
 
     suspend fun load() {
         if (_state.value.detail == null) _state.update { it.copy(load = PlaceLoadState.Loading) }
+        val mutationsAtStart = checkInMutations
         val result = repository.detail(idOrSlug, if (hasFetched) null else source)
         result.fold(
             onSuccess = { fresh ->
                 hasFetched = true
+                // Started before a check-in/out landed: it would undo it. The reload after it follows.
+                if (mutationsAtStart != checkInMutations) return@fold
                 _state.update { it.copy(detail = fresh, load = PlaceLoadState.Loaded) }
             },
             onFailure = { e ->
@@ -194,6 +215,7 @@ class PlaceDetailController(
             )
         repository.checkIn(placeId, body).fold(
             onSuccess = { checkIn ->
+                checkInMutations++
                 _state.update {
                     it.copy(
                         pendingAnchorToken = null,
@@ -210,6 +232,7 @@ class PlaceDetailController(
     suspend fun checkOut() {
         repository.checkOut(placeId).fold(
             onSuccess = { ask ->
+                checkInMutations++
                 _state.update {
                     it.copy(
                         detail = it.detail?.copy(checkIn = null),
@@ -231,7 +254,7 @@ class PlaceDetailController(
             onSuccess = { result ->
                 _state.update {
                     it.copy(
-                        detail = it.detail?.let { d -> d.copy(summary = d.summary.copy(pulse = result.summary)) },
+                        detail = it.detail?.withPulse(result.summary),
                         answeredFollowUps = emptySet(),
                         pulse = PlacePulsePhase.Submitted(result.pulseId, result.editableUntilMs),
                     )
@@ -256,16 +279,24 @@ class PlaceDetailController(
                 talkable = value.takeIf { question.key == "talkable" },
                 categoryAnswer = value.takeIf { question.key == "category" },
             )
-        // The window closed or the field was already set: just stop offering it.
-        repository.updatePulse(placeId, submitted.pulseId, body).onSuccess { summary ->
-            _state.update { it.copy(detail = it.detail?.let { d -> d.copy(summary = d.summary.copy(pulse = summary)) }) }
-        }
+        repository.updatePulse(placeId, submitted.pulseId, body).fold(
+            onSuccess = { update -> _state.update { it.copy(detail = it.detail?.withPulse(update.summary)) } },
+            onFailure = { e ->
+                // A network failure offers it again; a rejection (window closed, already set) stops offering it.
+                if (e.placeError() == PlaceError.Network) {
+                    _state.update { it.copy(answeredFollowUps = it.answeredFollowUps - question.key) }
+                }
+            },
+        )
     }
 
     /** null = dismissed without answering. */
     suspend fun answerWouldReturn(value: Int?) {
         _state.update { it.copy(showWouldReturn = false) }
         if (value == null) return
-        repository.submitPulse(placeId, PlacesRequests.pulseBody(wouldReturn = value))
+        // A failed send brings the prompt back so the answer isn't silently lost.
+        repository.submitPulse(placeId, PlacesRequests.pulseBody(wouldReturn = value)).onFailure {
+            _state.update { it.copy(showWouldReturn = it.wouldReturnQuestion != null) }
+        }
     }
 }

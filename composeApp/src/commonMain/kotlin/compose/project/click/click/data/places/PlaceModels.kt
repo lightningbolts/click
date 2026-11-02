@@ -222,7 +222,7 @@ data class PlaceCheckInDto(
     @SerialName("here_now_count") val hereNowCount: Int? = null,
     @SerialName("ask_would_return") val askWouldReturn: Boolean = false,
 ) {
-    val isActive: Boolean get() = (active ?: checkedIn ?: false) && !checkInId.isNullOrBlank()
+    val isActive: Boolean get() = (active == true || checkedIn == true) && !checkInId.isNullOrBlank()
     val expiresAtMs: Long? get() = parseInstantMs(expiresAt)
 }
 
@@ -316,7 +316,13 @@ data class MyPlaceVisit(
 data class PulseSubmitResult(
     val pulseId: String,
     val editableUntilMs: Long?,
-    val summary: PulseSummaryDto,
+    /** null when the response had no usable summary: keep the one on screen. */
+    val summary: PulseSummaryDto?,
+)
+
+/** `PATCH /api/places/{id}/pulse/{pulseId}` → `{ summary }`; null summary keeps the one on screen. */
+data class PulseUpdateResult(
+    val summary: PulseSummaryDto?,
 )
 
 private inline fun <reified T> decodeOrNull(element: JsonElement?): T? =
@@ -328,12 +334,26 @@ private fun JsonObject.obj(key: String): JsonObject? = this[key] as? JsonObject
 
 private fun lenientNullPattern(pattern: PlacePatternDto?): PlacePatternDto? = pattern?.takeIf { it.energy != null }
 
-/** One summary row; null when the row has no id or coordinates (iOS drops those). */
-fun decodePlaceSummary(element: JsonElement?): PlaceSummaryDto? = decodeOrNull<PlaceSummaryDto>(element)?.takeIf { it.id.isNotBlank() }
+/** Optional nested objects decoded on their own, so a malformed one never drops the row. */
+private val OPTIONAL_SUMMARY_OBJECTS = setOf("pulse", "next_event", "viewer")
 
-/** `{ places: [...] }` from `/api/places/nearby`. */
-fun decodeNearbyPlaces(root: JsonElement): List<PlaceSummaryDto> =
-    (root as? JsonObject)?.get("places").rows().mapNotNull(::decodePlaceSummary)
+/** One summary row; null when the row has no id or coordinates (iOS drops those). */
+fun decodePlaceSummary(element: JsonElement?): PlaceSummaryDto? {
+    val row = element as? JsonObject ?: return null
+    val core = JsonObject(row.filterKeys { it !in OPTIONAL_SUMMARY_OBJECTS })
+    val summary = decodeOrNull<PlaceSummaryDto>(core)?.takeIf { it.id.isNotBlank() } ?: return null
+    return summary.copy(
+        pulse = decodeOrNull<PulseSummaryDto>(row["pulse"]) ?: PulseSummaryDto(),
+        nextEvent = decodeOrNull<PlaceEventRefDto>(row["next_event"]),
+        viewer = decodeOrNull<PlaceViewerFlagsDto>(row["viewer"]),
+    )
+}
+
+/** The `places` array, or null when the body isn't `{ places: [...] }` (a load failure, not "none"). */
+private fun placesArray(root: JsonElement): JsonArray? = (root as? JsonObject)?.get("places") as? JsonArray
+
+/** `{ places: [...] }` from `/api/places/nearby`; null for a malformed body. */
+fun decodeNearbyPlaces(root: JsonElement): List<PlaceSummaryDto>? = placesArray(root)?.mapNotNull(::decodePlaceSummary)
 
 /** `{ place: {...} }` from `/api/places/{idOrSlug}`. */
 fun decodePlaceDetail(root: JsonElement): PlaceDetail? {
@@ -367,8 +387,8 @@ fun decodePlaceDetail(root: JsonElement): PlaceDetail? {
 }
 
 /** `{ places: [{ place, check_in_count, last_check_in_at, encounter_count }] }` from `/api/me/places`. */
-fun decodeMyPlaces(root: JsonElement): List<MyPlaceVisit> =
-    (root as? JsonObject)?.get("places").rows().mapNotNull { row ->
+fun decodeMyPlaces(root: JsonElement): List<MyPlaceVisit>? =
+    placesArray(root)?.mapNotNull { row ->
         val obj = row as? JsonObject ?: return@mapNotNull null
         val place = decodePlaceSummary(obj["place"]) ?: return@mapNotNull null
         MyPlaceVisit(
@@ -392,12 +412,12 @@ fun decodePulseSubmit(root: JsonElement): PulseSubmitResult? {
     return PulseSubmitResult(
         pulseId = id,
         editableUntilMs = parseInstantMs((pulse["editable_until"] as? JsonPrimitive)?.contentOrNull),
-        summary = decodeOrNull<PulseSummaryDto>(obj["summary"]) ?: PulseSummaryDto(),
+        summary = decodeOrNull<PulseSummaryDto>(obj["summary"]),
     )
 }
 
-fun decodePulseSummary(root: JsonElement): PulseSummaryDto =
-    decodeOrNull<PulseSummaryDto>((root as? JsonObject)?.get("summary")) ?: PulseSummaryDto()
+fun decodePulseUpdate(root: JsonElement): PulseUpdateResult =
+    PulseUpdateResult(decodeOrNull<PulseSummaryDto>((root as? JsonObject)?.get("summary")))
 
 /**
  * Errors from the Places API, keyed on the server's `code` (§5.4–§5.5; iOS `PlaceError`). Android
@@ -430,6 +450,9 @@ sealed class PlaceError {
 
     data object Network : PlaceError()
 
+    /** A 401 the bearer refresh couldn't fix: only signing in again helps. */
+    data object SessionExpired : PlaceError()
+
     /** §6.7 copy (iOS `PlaceError.message`). */
     fun message(metric: Boolean = false): String =
         when (this) {
@@ -441,6 +464,7 @@ sealed class PlaceError {
             NotPresent -> "Check in here to share the Pulse."
             is Cooldown -> "You can update your Pulse a little later."
             ManagerPulseNotAllowed -> "You manage this Place, so you can't Pulse it."
+            SessionExpired -> "Session expired. Sign in again."
             else -> "Something went wrong. Try again."
         }
 
@@ -466,6 +490,7 @@ sealed class PlaceError {
                 "pulse_not_editable" -> return NotEditable
             }
             return when (status) {
+                401 -> SessionExpired
                 404 -> NotFound
                 403 -> forbidden
                 409 -> NotEditable

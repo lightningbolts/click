@@ -50,7 +50,7 @@ interface PlacesRepository {
         placeId: String,
         pulseId: String,
         body: JsonObject,
-    ): Result<PulseSummaryDto>
+    ): Result<PulseUpdateResult>
 
     suspend fun myPlaces(): Result<List<MyPlaceVisit>>
 }
@@ -138,7 +138,14 @@ class ClickWebPlacesRepository(
     ): Result<T> =
         try {
             val response = request()
-            val text = runCatching { response.bodyAsText() }.getOrNull()
+            val text =
+                try {
+                    response.bodyAsText()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    null
+                }
             if (response.status.value in 200..299) {
                 val decoded = text?.let { runCatching { placesJson.parseToJsonElement(it) }.getOrNull() }?.let(decode)
                 decoded?.let { Result.success(it) } ?: Result.failure(PlaceApiException(PlaceError.Network))
@@ -204,7 +211,7 @@ class ClickWebPlacesRepository(
             contentType(ContentType.Application.Json)
             setBody(body.toString())
         }
-    }, decode = ::decodePulseSummary)
+    }, decode = ::decodePulseUpdate)
 
     override suspend fun myPlaces() =
         call(request = {

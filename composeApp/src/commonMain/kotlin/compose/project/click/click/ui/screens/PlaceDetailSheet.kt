@@ -453,7 +453,8 @@ private fun PlaceVisitSection(
         (state.checkIn as? PlaceCheckInPhase.Failed)?.let { failed ->
             SupportingText(failed.error.message(), MaterialTheme.colorScheme.error)
             Row {
-                TextButton(onClick = onCheckIn) { Text("Try again") }
+                // While checked in the failure came from Leave, and the Leave button above retries it.
+                if (checkIn?.isActive != true) TextButton(onClick = onCheckIn) { Text("Try again") }
                 if (failed.error == PlaceError.NoLocation) TextButton(onClick = onOpenSettings) { Text("Settings") }
             }
         }

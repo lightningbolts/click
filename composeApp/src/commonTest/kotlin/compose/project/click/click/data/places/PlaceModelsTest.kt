@@ -70,7 +70,34 @@ class PlaceModelsTest {
         assertNull(decodePlaceSummary(json("""{"id":"no-coordinates"}""")))
 
         val list = decodeNearbyPlaces(json("""{"places":[$fullSummary,{"id":"bad"},{"id":"p2","latitude":0,"longitude":0}]}"""))
-        assertEquals(listOf("6a1f0000-0000-4000-8000-000000000001", "p2"), list.map { it.id })
+        assertEquals(listOf("6a1f0000-0000-4000-8000-000000000001", "p2"), list?.map { it.id })
+        // A malformed body is a failure (null), not an empty list.
+        assertNull(decodeNearbyPlaces(json("""{"error":"x"}""")))
+        assertEquals(emptyList(), decodeNearbyPlaces(json("""{"places":[]}""")))
+    }
+
+    @Test
+    fun malformedOptionalObjectsKeepTheRow() {
+        val place =
+            assertNotNull(
+                decodePlaceSummary(
+                    json(
+                        """{"id":"p1","latitude":1,"longitude":2,"name":"Kept","pulse":{"report_count":"lots"},
+                        "next_event":{"title":"no id"},"viewer":"weird"}""",
+                    ),
+                ),
+            )
+        assertEquals("Kept", place.name)
+        assertEquals("none", place.pulse.state)
+        assertNull(place.nextEvent)
+        assertNull(place.viewer)
+    }
+
+    @Test
+    fun eitherCheckInFlagCounts() {
+        assertTrue(PlaceCheckInDto(active = false, checkedIn = true, checkInId = "ci").isActive)
+        assertTrue(PlaceCheckInDto(active = true, checkedIn = false, checkInId = "ci").isActive)
+        assertFalse(PlaceCheckInDto(active = false, checkedIn = false, checkInId = "ci").isActive)
     }
 
     @Test
@@ -183,9 +210,12 @@ class PlaceModelsTest {
             )
         assertEquals("pl1", result.pulseId)
         assertEquals(Instant.parse("2026-10-01T20:10:00Z").toEpochMilliseconds(), result.editableUntilMs)
-        assertEquals(EnergyLabel.PACKED, result.summary.energy)
+        assertEquals(EnergyLabel.PACKED, result.summary?.energy)
         assertNull(decodePulseSubmit(json("""{"summary":{}}""")))
-        assertEquals(5, decodePulseSummary(json("""{"summary":{"report_count":5}}""")).reportCount)
+        // No usable summary: null, so the page keeps the Pulse it shows.
+        assertNull(decodePulseSubmit(json("""{"pulse":{"id":"pl2"}}"""))?.summary)
+        assertEquals(5, decodePulseUpdate(json("""{"summary":{"report_count":5}}""")).summary?.reportCount)
+        assertNull(decodePulseUpdate(json("""{"ok":true}""")).summary)
     }
 
     @Test
@@ -197,6 +227,7 @@ class PlaceModelsTest {
                     {"place":{"id":"x"},"check_in_count":1}]}""",
                 ),
             )
+        assertNotNull(visits)
         assertEquals(1, visits.size)
         assertEquals(4, visits.single().checkInCount)
         assertEquals(1, visits.single().encounterCount)
@@ -204,7 +235,16 @@ class PlaceModelsTest {
     }
 
     @Test
+    fun malformedMyPlacesIsAFailure() {
+        assertNull(decodeMyPlaces(json("""{"places":"nope"}""")))
+        assertNull(decodeMyPlaces(json("""[]""")))
+        assertEquals(emptyList(), decodeMyPlaces(json("""{"places":[]}""")))
+    }
+
+    @Test
     fun mapsErrorsByCodeThenStatus() {
+        assertEquals(PlaceError.SessionExpired, PlaceError.from(401, """{"error":"Unauthorized"}"""))
+        assertEquals("Session expired. Sign in again.", PlaceError.SessionExpired.message())
         assertEquals(PlaceError.NoLocation, PlaceError.from(422, """{"error":"x","code":"no_location"}"""))
         assertEquals(PlaceError.LowAccuracy, PlaceError.from(422, """{"code":"low_accuracy"}"""))
         assertEquals(PlaceError.OutOfBounds(312.5), PlaceError.from(422, """{"code":"out_of_bounds","distance_meters":312.5}"""))

@@ -50,6 +50,7 @@ class PlaceCopyTest {
         assertNull(PlaceCopy.hereNow(0))
         assertEquals("Seats: Plenty 0 · Some 1 · None 0", PlaceCopy.categoryLine("seats", listOf(0, 1, 0)))
         assertEquals("Line: None 2 · Short 0 · Long 1", PlaceCopy.categoryLine("line", listOf(2, 0, 1)))
+        assertEquals("Seats: Plenty 2 · Some 0 · None 0", PlaceCopy.categoryLine("seats", listOf(2)))
         assertEquals("Easy to talk: 1 yes · 2 no", PlaceCopy.easyToTalk(PulseSummaryDto(talkable = PulseTalkableDto(1, 2))))
         assertNull(PlaceCopy.easyToTalk(PulseSummaryDto(talkable = PulseTalkableDto(0, 0))))
         assertEquals("https://joinclick.co/p/cafe-allegro", PlaceCopy.shareUrl("cafe-allegro"))

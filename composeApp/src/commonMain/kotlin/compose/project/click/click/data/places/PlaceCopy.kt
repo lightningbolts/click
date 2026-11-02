@@ -99,7 +99,9 @@ object PlaceCopy {
                 "wait" -> "Wait"
                 else -> "Equipment wait"
             }
-        return "$title: " + labels.zip(counts).joinToString(" · ") { (label, count) -> "$label $count" }
+        // Short arrays pad with zeros so every choice shows (like the energy bars).
+        val padded = labels.indices.map { counts.getOrElse(it) { 0 } }
+        return "$title: " + labels.zip(padded).joinToString(" · ") { (label, count) -> "$label $count" }
     }
 
     fun easyToTalk(pulse: PulseSummaryDto): String? {

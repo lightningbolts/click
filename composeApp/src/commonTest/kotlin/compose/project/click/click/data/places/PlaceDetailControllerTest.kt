@@ -43,6 +43,10 @@ class PlaceDetailControllerTest {
         val patchBodies = mutableListOf<JsonObject>()
         var checkInResult: Result<PlaceCheckInDto> = Result.success(PlaceCheckInDto(checkedIn = true, checkInId = "ci1"))
         var checkOutResult: Result<Boolean> = Result.success(true)
+        var updateResult: Result<PulseUpdateResult> = Result.success(PulseUpdateResult(PulseSummaryDto(reportCount = 9)))
+
+        /** Runs inside detail(), to model a check-out landing while a fetch is in flight. */
+        var duringDetail: (suspend () -> Unit)? = null
         var pulseResult: Result<PulseSubmitResult> =
             Result.success(PulseSubmitResult("pl1", null, PulseSummaryDto(state = "live", label = "packed", reportCount = 1)))
 
@@ -57,7 +61,12 @@ class PlaceDetailControllerTest {
             source: String?,
         ): Result<PlaceDetail> {
             detailSources += source
-            return detailResult
+            val result = detailResult
+            duringDetail?.let {
+                duringDetail = null
+                it()
+            }
+            return result
         }
 
         override suspend fun checkIn(
@@ -82,9 +91,9 @@ class PlaceDetailControllerTest {
             placeId: String,
             pulseId: String,
             body: JsonObject,
-        ): Result<PulseSummaryDto> {
+        ): Result<PulseUpdateResult> {
             patchBodies += body
-            return Result.success(PulseSummaryDto(reportCount = 9))
+            return updateResult
         }
 
         override suspend fun myPlaces() = Result.success(emptyList<MyPlaceVisit>())
@@ -197,6 +206,85 @@ class PlaceDetailControllerTest {
                     .single()["would_return"]!!
                     .jsonPrimitive.content
                     .toInt(),
+            )
+        }
+
+    @Test
+    fun detailStartedBeforeCheckOutIsIgnored() =
+        runTest {
+            val checkedIn = detail(checkIn = PlaceCheckInDto(active = true, checkInId = "ci1"))
+            val repo = FakeRepo(Result.success(checkedIn))
+            val c = PlaceDetailController("cafe", null, repo) { fix }
+            c.load()
+            // A refresh that still says "checked in" is in flight when Leave succeeds.
+            repo.duringDetail = {
+                repo.detailResult = Result.success(detail())
+                c.checkOut()
+            }
+            c.load()
+            assertFalse(c.state.value.isCheckedIn)
+        }
+
+    @Test
+    fun failedWouldReturnBringsThePromptBack() =
+        runTest {
+            val repo = FakeRepo(Result.success(detail(checkIn = PlaceCheckInDto(active = true, checkInId = "ci1"))))
+            val c = PlaceDetailController("cafe", null, repo) { fix }
+            c.load()
+            c.checkOut()
+            repo.pulseResult = Result.failure(PlaceApiException(PlaceError.Network))
+            c.answerWouldReturn(1)
+            assertTrue(c.state.value.showWouldReturn)
+        }
+
+    @Test
+    fun followUpNetworkFailureOffersItAgainButRejectionDoesNot() =
+        runTest {
+            val repo = FakeRepo(Result.success(detail()))
+            val c = PlaceDetailController("cafe", null, repo) { fix }
+            c.load()
+            c.submitEnergy(3)
+            repo.updateResult = Result.failure(PlaceApiException(PlaceError.Network))
+            c.answerFollowUp(talkableQ, 1)
+            assertEquals(
+                listOf("talkable"),
+                c.state.value
+                    .remainingFollowUps(0)
+                    .map { it.key },
+            )
+            repo.updateResult = Result.failure(PlaceApiException(PlaceError.NotEditable))
+            c.answerFollowUp(talkableQ, 1)
+            assertTrue(
+                c.state.value
+                    .remainingFollowUps(0)
+                    .isEmpty(),
+            )
+        }
+
+    @Test
+    fun onlySubmittableFollowUpsAreOffered() {
+        val odd = PulseQuestionDto(key = "noise", prompt = "Loud?")
+        val d = detail().let { it.copy(pulseEligibility = it.pulseEligibility!!.copy(questions = listOf(energyQ, talkableQ, odd))) }
+        val s = PlaceDetailUiState(detail = d, pulse = PlacePulsePhase.Submitted("pl1", null))
+        assertEquals(listOf("talkable"), s.remainingFollowUps(0).map { it.key })
+    }
+
+    @Test
+    fun missingPulseSummaryKeepsTheShownPulse() =
+        runTest {
+            val shown = PulseSummaryDto(state = "live", label = "chill", reportCount = 4)
+            val d = detail().let { it.copy(summary = it.summary.copy(pulse = shown)) }
+            val repo = FakeRepo(Result.success(d))
+            repo.pulseResult = Result.success(PulseSubmitResult("pl1", null, summary = null))
+            val c = PlaceDetailController("cafe", null, repo) { fix }
+            c.load()
+            c.submitEnergy(2)
+            assertTrue(c.state.value.pulseSubmitted)
+            assertEquals(
+                shown,
+                c.state.value.detail
+                    ?.summary
+                    ?.pulse,
             )
         }
 
