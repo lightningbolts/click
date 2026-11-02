@@ -18,6 +18,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.activity.ActivityStore
 import compose.project.click.click.data.api.CommunityHubNearbyDto // pragma: allowlist secret
+import compose.project.click.click.data.flags.FeatureFlag
+import compose.project.click.click.data.flags.FeatureFlags
 import compose.project.click.click.data.models.AvailabilityIntentRow // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
 import compose.project.click.click.data.models.NudgeAction
@@ -45,6 +47,7 @@ import compose.project.click.click.ui.components.UnifiedToastHost // pragma: all
 import compose.project.click.click.ui.components.homeGreetingTitle // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberBottomChromePadding // pragma: allowlist secret
 import compose.project.click.click.ui.components.rememberUnifiedToastState // pragma: allowlist secret
+import compose.project.click.click.ui.drops.SharedDropsHomeSection
 import compose.project.click.click.ui.theme.* // pragma: allowlist secret
 import compose.project.click.click.ui.utils.mergeMapBeaconLists // pragma: allowlist secret
 import compose.project.click.click.viewmodel.AvailabilityViewModel // pragma: allowlist secret
@@ -52,6 +55,7 @@ import compose.project.click.click.viewmodel.HomeState // pragma: allowlist secr
 import compose.project.click.click.viewmodel.HomeViewModel // pragma: allowlist secret
 import compose.project.click.click.viewmodel.MapLayerFilter // pragma: allowlist secret
 import compose.project.click.click.viewmodel.MapViewModel // pragma: allowlist secret
+import compose.project.click.click.viewmodel.SharedDropsViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.datetime.Clock
@@ -106,6 +110,9 @@ fun HomeScreen(
     val icebreakerSendCooldownSec by homeViewModel.icebreakerSendCooldownRemainingSec.collectAsState()
     val availabilityViewModel: AvailabilityViewModel =
         viewModel(key = "home-availability") { AvailabilityViewModel() }
+    // Shared Click Drops strip (flag `shared_drops`; iOS SharedDropsStrip on Home).
+    val featureFlags by FeatureFlags.state.collectAsState()
+    val sharedDropsViewModel: SharedDropsViewModel = viewModel(key = "home-shared-drops") { SharedDropsViewModel() }
     var showAvailabilityIntentSheet by remember { mutableStateOf(false) }
     var seedAvailabilityIntent by remember { mutableStateOf<AvailabilityIntentRow?>(null) }
     val homeAvailabilityIntents by availabilityViewModel.activeAvailabilityIntents.collectAsState()
@@ -307,6 +314,14 @@ fun HomeScreen(
                     if (onOpenSearch != null) {
                         item(key = "home_search_pill") {
                             HomeSearchPill(onClick = onOpenSearch)
+                        }
+                    }
+                    if (featureFlags.isEnabled(FeatureFlag.SHARED_DROPS)) {
+                        item(key = "shared_drops_strip") {
+                            SharedDropsHomeSection(
+                                viewModel = sharedDropsViewModel,
+                                onToast = { toastState.show(scope, it) },
+                            )
                         }
                     }
                     homeNudge?.let { nudge ->

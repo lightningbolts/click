@@ -132,6 +132,8 @@ data class NotificationPreferencesPatchBody(
     val hubMessagePushEnabled: Boolean = true,
     @SerialName("reconnect_nudge_push_enabled")
     val reconnectNudgePushEnabled: Boolean = true,
+    @SerialName("drop_release_push_enabled")
+    val dropReleasePushEnabled: Boolean = true,
 )
 
 @Serializable

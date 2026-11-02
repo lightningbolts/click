@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.PrivacyTip
 import androidx.compose.material.icons.filled.QrCode
 import androidx.compose.material.icons.filled.Shield
@@ -79,6 +80,8 @@ import compose.project.click.click.data.api.removeChatDeviceImpl
 import compose.project.click.click.data.devices.REMOVE_DEVICE_MESSAGE
 import compose.project.click.click.data.devices.deviceDisplayName
 import compose.project.click.click.data.devices.removeDeviceTitle
+import compose.project.click.click.data.flags.FeatureFlag
+import compose.project.click.click.data.flags.FeatureFlags
 import compose.project.click.click.data.models.AvailabilityIntentRow // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
 import compose.project.click.click.data.repository.AuthRepository // pragma: allowlist secret
@@ -186,6 +189,7 @@ fun SettingsScreen(
     val intentListFeedback by availabilityViewModel.intentListFeedback.collectAsState()
     val currentUser by AppDataManager.currentUser.collectAsState()
     val notificationPreferences by AppDataManager.notificationPreferences.collectAsState()
+    val featureFlags by FeatureFlags.state.collectAsState()
     val locationPreferences by AppDataManager.locationPreferences.collectAsState()
     val connections by AppDataManager.connections.collectAsState()
     val coreConnectionIds by AppDataManager.coreConnectionIds.collectAsState()
@@ -805,6 +809,21 @@ fun SettingsScreen(
                                             },
                                         )
                                         SettingsDivider()
+                                        // iOS lists "Click Drops" after messages; hidden while shared drops are off.
+                                        if (featureFlags.isEnabled(FeatureFlag.SHARED_DROPS)) {
+                                            SettingsToggleRow(
+                                                icon = Icons.Default.PhotoCamera,
+                                                title = "Click Drops",
+                                                subtitle = "When a connection's shared drop develops",
+                                                checked = notificationPreferences.dropReleasePushEnabled,
+                                                enabled = !notificationPreferencesSaving,
+                                                pending = pendingAlertKey == "drops",
+                                                onCheckedChange = { on ->
+                                                    setAlert("drops") { AppDataManager.setDropReleaseNotificationsEnabled(on) }
+                                                },
+                                            )
+                                            SettingsDivider()
+                                        }
                                         SettingsToggleRow(
                                             icon = Icons.Default.Notifications,
                                             title = "Event reminders",
