@@ -21,11 +21,6 @@ import compose.project.click.click.ui.utils.discoveryFeedSubtitle // pragma: all
 import compose.project.click.click.ui.utils.haversineDistance // pragma: allowlist secret
 import kotlinx.datetime.Clock
 
-internal enum class DiscoverySortMode {
-    Distance,
-    Recent,
-}
-
 internal sealed class DiscoveryFeedItem {
     abstract val sortDistanceM: Double
     abstract val sortRecentEpochMs: Long
@@ -171,12 +166,3 @@ internal fun groupDiscoveryFeedIntoSections(items: List<DiscoveryFeedItem>): Lis
     }
     return sections
 }
-
-internal fun sortDiscoveryFeedItems(
-    items: List<DiscoveryFeedItem>,
-    mode: DiscoverySortMode,
-): List<DiscoveryFeedItem> =
-    when (mode) {
-        DiscoverySortMode.Distance -> items.sortedBy { it.sortDistanceM }
-        DiscoverySortMode.Recent -> items.sortedByDescending { it.sortRecentEpochMs }
-    }

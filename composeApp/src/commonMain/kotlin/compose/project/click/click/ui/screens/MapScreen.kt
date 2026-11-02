@@ -96,6 +96,7 @@ fun MapScreen(
 ) {
     val mapState by viewModel.mapState.collectAsState()
     val mapBindingZoom by viewModel.mapBindingZoom.collectAsState()
+    val pinStackZoom by viewModel.zoomLevel.collectAsState()
     val renderData by viewModel.renderData.collectAsState()
     val selection by viewModel.selection.collectAsState()
     val mapFabAboveNav = rememberFabAboveNavPadding()
@@ -307,6 +308,12 @@ fun MapScreen(
                         pins = stack.pins,
                         onChoose = { viewModel.onOverlappingPinChosen(it) },
                         onDismiss = { viewModel.clearSelection() },
+                        onZoomIn =
+                            if (MapPinStack(id = "sheet", members = stack.pins).canSeparate()) {
+                                { viewModel.zoomIntoPinStack(stack.pins) }
+                            } else {
+                                null
+                            },
                         modifier =
                             Modifier
                                 .fillMaxWidth()
@@ -521,6 +528,7 @@ fun MapScreen(
                                 renderData = renderData,
                                 communityHubs = communityHubs,
                                 zoom = cameraTarget?.zoom ?: mapBindingZoom,
+                                stackZoom = pinStackZoom,
                                 mapGesturesEnabled = true,
                                 showCompass = true,
                                 cameraTarget = cameraTarget,

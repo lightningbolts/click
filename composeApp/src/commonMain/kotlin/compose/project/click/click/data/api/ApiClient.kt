@@ -462,7 +462,10 @@ class ApiClient {
         lon: Double,
         radiusMeters: Double,
         filters: String? = null,
-    ): Result<String> = getMapBeaconsImpl(lat = lat, lon = lon, radiusMeters = radiusMeters, filters = filters)
+        cursor: String? = null,
+        limit: Int? = null,
+    ): Result<String> =
+        getMapBeaconsImpl(lat = lat, lon = lon, radiusMeters = radiusMeters, filters = filters, cursor = cursor, limit = limit)
 
     suspend fun getMapBeacon(beaconId: String): Result<MapBeacon> = getMapBeaconImpl(beaconId = beaconId)
 

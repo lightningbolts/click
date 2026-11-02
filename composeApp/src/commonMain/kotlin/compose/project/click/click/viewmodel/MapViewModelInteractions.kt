@@ -13,10 +13,14 @@ import compose.project.click.click.ui.components.MapPinKind // pragma: allowlist
 import compose.project.click.click.ui.utils.CommunityHubPin // pragma: allowlist secret
 import compose.project.click.click.ui.utils.ConnectionMapPoint // pragma: allowlist secret
 import compose.project.click.click.ui.utils.MapCluster // pragma: allowlist secret
+import compose.project.click.click.ui.utils.MapPinStack // pragma: allowlist secret
+import compose.project.click.click.ui.utils.MapPinStacking // pragma: allowlist secret
 import compose.project.click.click.ui.utils.MapRenderData // pragma: allowlist secret
 import compose.project.click.click.ui.utils.calculateZoomForBounds // pragma: allowlist secret
+import compose.project.click.click.ui.utils.findMapPinStack // pragma: allowlist secret
 import compose.project.click.click.ui.utils.haversineDistance // pragma: allowlist secret
 import compose.project.click.click.ui.utils.overlappingMapPins // pragma: allowlist secret
+import compose.project.click.click.ui.utils.zoomInTarget // pragma: allowlist secret
 import compose.project.click.click.utils.HUB_GATEKEEPER_HIGH_ACCURACY_TIMEOUT_MS // pragma: allowlist secret
 import compose.project.click.click.utils.LocationResult // pragma: allowlist secret
 import compose.project.click.click.utils.resolveHubGatekeeperLocation // pragma: allowlist secret
@@ -133,6 +137,20 @@ internal suspend fun MapViewModel.resolveFastMapLocation(): LocationResult? =
     )
 
 internal fun MapViewModel.onMapPinTappedImpl(pin: MapPin) {
+    // A stack's lead (count badge): list every member, most important first (iOS stack sheet).
+    if (pin.stackCount > 1) {
+        val stack =
+            findMapPinStack(
+                leadId = pin.id,
+                pins = currentVisibleMapPins(),
+                zoom = MapPinStacking.zoomStep(_zoomLevel.value),
+                nowEpochMs = Clock.System.now().toEpochMilliseconds(),
+            )
+        if (stack != null) {
+            _selection.value = MapSelection.OverlappingPinsSelected(stack.members)
+            return
+        }
+    }
     val overlaps =
         overlappingMapPins(
             tapped = pin,
@@ -144,6 +162,20 @@ internal fun MapViewModel.onMapPinTappedImpl(pin: MapPin) {
         return
     }
     openResolvedMapPin(pin)
+}
+
+/**
+ * "Zoom In" from a stack's list: frames the members so they draw apart
+ * (iOS `ClickMapView.zoom(into:)`).
+ */
+internal fun MapViewModel.zoomIntoPinStackImpl(pins: List<MapPin>) {
+    if (pins.isEmpty()) return
+    val (lat, lon, zoom) = MapPinStack(id = "zoom", members = pins).zoomInTarget()
+    _selection.value = MapSelection.None
+    _cameraTarget.value = CameraTarget(latitude = lat, longitude = lon, zoom = zoom)
+    pendingProgrammaticZoomTarget = zoom
+    pendingProgrammaticZoomSetAtMs = Clock.System.now().toEpochMilliseconds()
+    _zoomLevel.value = zoom
 }
 
 /** User picked one pin from an overlapping stack chooser. */
