@@ -1,5 +1,6 @@
 package compose.project.click.click.ui.utils
 
+import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.MapBeaconKind
 import compose.project.click.click.ui.components.MapPin
 import compose.project.click.click.ui.components.MapPinKind
@@ -21,7 +22,8 @@ class MapPinStackingTest {
         id: String,
         lat: Double = 47.6,
         lon: Double = -122.3,
-    ) = MapPin(id = id, title = id, latitude = lat, longitude = lon, kind = MapPinKind.CONNECTION)
+        isCore: Boolean = false,
+    ) = MapPin(id = id, title = id, latitude = lat, longitude = lon, kind = MapPinKind.CONNECTION, isCore = isCore)
 
     private fun beacon(
         id: String,
@@ -59,6 +61,38 @@ class MapPinStackingTest {
         assertEquals("stack.beacon:h1", stack.id)
         assertEquals(4, stack.toRenderedPin().stackCount)
         assertEquals("beacon:h1", stack.toRenderedPin().id)
+    }
+
+    @Test
+    fun coreClicksRankAboveOtherConnectionsButBelowBeaconsAndHubs() {
+        // "Ann" would lead A–Z; the Core Click "Zed" leads instead (iOS `stackRank` 6 vs 7).
+        val ann = connection("Ann")
+        val zed = connection("Zed", isCore = true)
+        assertEquals(6, mapPinStackRank(zed, now))
+        assertEquals(7, mapPinStackRank(ann, now))
+        val stack = stackMapPins(listOf(ann, hub("hub"), zed, beacon("b1", MapBeaconKind.STUDY)), 16.0, now).single()
+        assertEquals(listOf("hub:hub", "beacon:b1", "Zed", "Ann"), stack.members.map { it.id })
+        assertEquals("Zed", stackMapPins(listOf(ann, zed), 16.0, now).single().lead.id)
+        // The flag only matters for connection pins.
+        assertEquals(3, mapPinStackRank(hub("h2").copy(isCore = true), now))
+    }
+
+    @Test
+    fun connectionPinsCarryTheCoreFlag() {
+        val point =
+            ConnectionMapPoint(
+                connection = Connection(id = "c1", created = 1L, expiry = 9_999_999_999L, user_ids = listOf("me", "peer")),
+                latitude = 47.6,
+                longitude = -122.3,
+                timeState = TimeState.RECENT,
+                opacity = 1f,
+                shouldPulse = false,
+                displayName = "Peer",
+                locationLabel = "Campus",
+                formattedDate = "Today",
+            )
+        assertTrue(MapPin.fromConnectionPoint(point, isCore = true).isCore)
+        assertFalse(MapPin.fromConnectionPoint(point).isCore)
     }
 
     @Test

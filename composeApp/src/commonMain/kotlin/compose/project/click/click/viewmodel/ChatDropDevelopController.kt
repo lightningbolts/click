@@ -4,8 +4,12 @@ import compose.project.click.click.collaboration.ClickDropDevelopBook
 import compose.project.click.click.collaboration.ClickDropRevealRef
 import compose.project.click.click.collaboration.parseInstantOrNull
 import compose.project.click.click.data.api.DropDevelopResultDto
+import compose.project.click.click.data.flags.FeatureFlag
+import compose.project.click.click.data.flags.FeatureFlags
+import compose.project.click.click.data.models.ChatMessageType
 import compose.project.click.click.data.models.Message
 import compose.project.click.click.data.models.disposableRollRevealAtIso
+import compose.project.click.click.data.models.isDisposableRoll
 import compose.project.click.click.data.models.isGatedDrop
 import compose.project.click.click.util.isPersistedApiUuid
 import kotlinx.coroutines.CancellationException
@@ -27,11 +31,34 @@ interface ChatDropDevelopService {
     suspend fun developedAt(ids: List<String>): Result<Map<String, String>>
 }
 
-/** A gated chat drop that went through the server (not an optimistic copy); null for anything else. */
-fun Message.clickDropRevealRefOrNull(): ClickDropRevealRef? {
-    if (!isGatedDrop() || !isPersistedApiUuid(id)) return null
+/**
+ * True when this Click Drop photo goes through tap to develop. Gated drops always do; legacy
+ * (non-gated) drops do when `drops_develop` is on, and otherwise keep their 24 h time lock and
+ * develop by themselves at reveal. Mirrors iOS `ConversationModel.usesDevelopFlow`.
+ */
+fun Message.usesClickDropDevelopFlow(developFlowEnabled: Boolean = FeatureFlags.isEnabled(FeatureFlag.DROPS_DEVELOP)): Boolean =
+    isDisposableRoll() && messageType.lowercase() == ChatMessageType.IMAGE && (isGatedDrop() || developFlowEnabled)
+
+/**
+ * A chat drop in the develop flow ([usesClickDropDevelopFlow]) that went through the server (not an
+ * optimistic copy); null for anything else.
+ */
+fun Message.clickDropRevealRefOrNull(
+    developFlowEnabled: Boolean = FeatureFlags.isEnabled(FeatureFlag.DROPS_DEVELOP),
+): ClickDropRevealRef? {
+    if (!usesClickDropDevelopFlow(developFlowEnabled) || !isPersistedApiUuid(id)) return null
     return ClickDropRevealRef(id, parseInstantOrNull(disposableRollRevealAtIso()))
 }
+
+/**
+ * A legacy (non-gated) drop in the develop flow that this viewer hasn't developed yet. Its media is
+ * the original, so it stays locked past its reveal time until the server says it's developed; then
+ * it shows its own media (no original to fetch). iOS `ClickDropBubble` / `developedDropURL`.
+ */
+fun Message.isLegacyDropAwaitingDevelop(
+    book: ClickDropDevelopBook,
+    developFlowEnabled: Boolean = FeatureFlags.isEnabled(FeatureFlag.DROPS_DEVELOP),
+): Boolean = !isGatedDrop() && clickDropRevealRefOrNull(developFlowEnabled) != null && !book.isDeveloped(id)
 
 internal const val CLICK_DROP_DEVELOP_FAILED = "Couldn't develop right now. Try again in a moment."
 

@@ -4,6 +4,7 @@ import androidx.lifecycle.viewModelScope
 import compose.project.click.click.data.flags.FeatureFlag
 import compose.project.click.click.data.flags.FeatureFlags
 import compose.project.click.click.data.models.Message
+import compose.project.click.click.data.models.isGatedDrop
 import compose.project.click.click.data.models.mediaUrlOrNull // pragma: allowlist secret
 import compose.project.click.click.data.models.originalMimeTypeOrNull // pragma: allowlist secret
 import compose.project.click.click.data.repository.GatedDropOriginalResult
@@ -116,7 +117,8 @@ internal class ChatViewModelClickDropHost(
             hasLocalOriginal = { id -> messagesById[id]?.let(::hasLocalGatedDropOriginal) == true },
             onDeveloped = { id, url ->
                 contexts.remove(id)?.let { (scopeId, viewer, message) ->
-                    viewModel.ensureGatedDropOriginalLoaded(scopeId, viewer, message, url)
+                    // A legacy drop's media is the original already: the bubble unlocks from the book.
+                    if (message.isGatedDrop()) viewModel.ensureGatedDropOriginalLoaded(scopeId, viewer, message, url)
                 }
             },
             onError = { viewModel._chatNotice.value = it },

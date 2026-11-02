@@ -96,7 +96,10 @@ internal fun canEditMessage(messageWithUser: MessageWithUser): Boolean {
 }
 
 /** A Click Drop stays unsaveable and unshareable until its collaboration window ends. */
-internal fun canExportMessageMedia(message: Message): Boolean = !message.isDisposableRollLocked() && !message.isGatedDropAwaitingOriginal()
+internal fun canExportMessageMedia(
+    message: Message,
+    awaitingDevelop: Boolean = false,
+): Boolean = !awaitingDevelop && !message.isDisposableRollLocked() && !message.isGatedDropAwaitingOriginal()
 
 /** Saves an image message to the gallery (decrypting first when needed); true on success. */
 internal suspend fun saveMessageImage(

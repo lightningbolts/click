@@ -69,12 +69,13 @@ internal fun MapContent(
     onMapGesture: () -> Unit = {},
 ) {
     val connectedUsers by AppDataManager.connectedUsers.collectAsState()
+    val coreConnectionIds by AppDataManager.coreConnectionIds.collectAsState()
     val hubPins =
         remember(communityHubs, places) {
             communityHubs.map { MapPin.fromCommunityHub(it) } + places.map { MapPin.fromPlace(it) }
         }
     val rawPins =
-        remember(renderData, connectedUsers, currentUserId, hubPins, places) {
+        remember(renderData, connectedUsers, coreConnectionIds, currentUserId, hubPins, places) {
             when (renderData) {
                 is MapRenderData.IndividualPins -> {
                     val conn =
@@ -87,6 +88,7 @@ internal fun MapContent(
                                     point,
                                     imageUrl = peer?.image,
                                     avatarSeed = peerId ?: point.connection.id,
+                                    isCore = point.connection.id in coreConnectionIds,
                                 )
                             }
                     // An event at a Place on the map rides in the Place's pin (iOS `mergingPlaceEvents`).

@@ -48,8 +48,8 @@ object MapPinStacking {
 
 /**
  * Which pin leads a stack and the order its list reads: alerts (so one is never hidden under
- * another pin), live events, then events (soonest first), Places, hubs, other beacons, then
- * connections. iOS `MapItem.stackRank` (plans = 5 have no Android pin yet).
+ * another pin), live events, then events (soonest first), Places, hubs, other beacons, Core Clicks,
+ * then everyone else. iOS `MapItem.stackRank` (plans = 5 have no Android pin yet).
  */
 fun mapPinStackRank(
     pin: MapPin,
@@ -62,7 +62,7 @@ fun mapPinStackRank(
         pin.kind == MapPinKind.PLACE -> 2
         pin.kind == MapPinKind.COMMUNITY_HUB -> 3
         kind != null -> 4
-        pin.kind == MapPinKind.CONNECTION -> 7
+        pin.kind == MapPinKind.CONNECTION -> if (pin.isCore) 6 else 7
         else -> 4
     }
 }
