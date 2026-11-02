@@ -4,6 +4,14 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import compose.project.click.click.data.ActiveHubEntry // pragma: allowlist secret
 import compose.project.click.click.data.AppDataManager
+import compose.project.click.click.data.api.GLOBAL_SEARCH_MIN_QUERY
+import compose.project.click.click.data.api.GlobalSearchApi
+import compose.project.click.click.data.api.GlobalSearchEvent
+import compose.project.click.click.data.api.GlobalSearchHub
+import compose.project.click.click.data.api.GlobalSearchOutcome
+import compose.project.click.click.data.api.GlobalSearchPayload
+import compose.project.click.click.data.api.GlobalSearchPerson
+import compose.project.click.click.data.api.GlobalSearchService
 import compose.project.click.click.data.chat.LocalMessageStore // pragma: allowlist secret
 import compose.project.click.click.data.chat.StoredChatMessage // pragma: allowlist secret
 import compose.project.click.click.data.models.AvailabilityIntentRow
@@ -24,6 +32,7 @@ import compose.project.click.click.util.connectionMatchesMemoryOrTimeQuery
 import compose.project.click.click.util.redactedRestMessage
 import compose.project.click.click.utils.LocationService
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -31,6 +40,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
@@ -146,6 +156,32 @@ sealed class SearchResult {
         override val sortKey: Long = -result.connectionCount.toLong()
     }
 
+    /** Server: someone you share a group or hub with but haven't Clicked with (`/api/search` `people`). */
+    data class SharedContextPerson(
+        val person: GlobalSearchPerson,
+    ) : SearchResult() {
+        override val categories = setOf(SearchResultCategory.Active)
+        override val sortKey: Long = 0L
+    }
+
+    /** Server: a public upcoming event or one of yours (`/api/search` `events`). */
+    data class RemoteEvent(
+        val event: GlobalSearchEvent,
+    ) : SearchResult() {
+        override val categories = setOf(SearchResultCategory.Beacons, SearchResultCategory.Nearby)
+        override val sortKey: Long = event.startEpochMs() ?: Long.MAX_VALUE
+    }
+
+    /** Server: a hub you joined (`/api/search` `hubs`), with the channel the hub screen needs. */
+    data class JoinedHub(
+        val hub: GlobalSearchHub,
+        val realtimeChannel: String,
+        val creatorId: String? = null,
+    ) : SearchResult() {
+        override val categories = setOf(SearchResultCategory.Nearby)
+        override val sortKey: Long = 0L
+    }
+
     companion object {
         private fun sortKeyForDetails(d: ChatWithDetails): Long =
             -(d.lastMessage?.timeCreated ?: d.connection.last_message_at ?: d.connection.created)
@@ -198,9 +234,20 @@ fun SearchResult.toChatOpenTarget(): SearchChatOpenTarget? =
         is SearchResult.IntentMatch -> SearchChatOpenTarget(details.connection.id)
         is SearchResult.InterestMatch -> SearchChatOpenTarget(details.connection.id)
         is SearchResult.MemoryContextMatch -> SearchChatOpenTarget(details.connection.id)
+        is SearchResult.JoinedHub ->
+            SearchChatOpenTarget(
+                connectionId = hub.hubId,
+                hubId = hub.hubId,
+                hubRealtimeChannel = realtimeChannel,
+                hubTitle = hub.name,
+                hubCreatorId = creatorId,
+                hubCategory = hub.category?.takeIf { it.isNotBlank() } ?: "general",
+            )
         is SearchResult.LocationBucket,
         is SearchResult.BeaconMatch,
         is SearchResult.OwnAvailabilityIntentMatch,
+        is SearchResult.SharedContextPerson,
+        is SearchResult.RemoteEvent,
         -> null
     }
 
@@ -239,13 +286,16 @@ private fun typeRank(r: SearchResult): Int =
         is SearchResult.OwnAvailabilityIntentMatch -> 0
         is SearchResult.IntentMatch -> 1
         is SearchResult.BeaconMatch -> 2
-        is SearchResult.InterestMatch -> 3
-        is SearchResult.MemoryContextMatch -> 4
-        is SearchResult.ActiveConnection -> 5
-        is SearchResult.ArchivedConnection -> 6
-        is SearchResult.MessageHit -> 7
-        is SearchResult.LocationBucket -> 8
-        is SearchResult.Clique -> 9
+        is SearchResult.RemoteEvent -> 3
+        is SearchResult.InterestMatch -> 4
+        is SearchResult.MemoryContextMatch -> 5
+        is SearchResult.ActiveConnection -> 6
+        is SearchResult.ArchivedConnection -> 7
+        is SearchResult.SharedContextPerson -> 8
+        is SearchResult.MessageHit -> 9
+        is SearchResult.LocationBucket -> 10
+        is SearchResult.Clique -> 11
+        is SearchResult.JoinedHub -> 12
     }
 
 // ── ViewModel ─────────────────────────────────────────────────────────────────
@@ -292,6 +342,10 @@ class GlobalSearchViewModel(
     private val searchLocalMessages: suspend (userId: String, query: String) -> List<StoredChatMessage> = { userId, query ->
         LocalMessageStore.search(userId, query, limit = 120)
     },
+    /** `GET /api/search` (people, events, hubs and message hits the device doesn't hold). */
+    private val serverSearch: GlobalSearchService = GlobalSearchApi(),
+    /** Server debounce (iOS waits 250 ms); the next keystroke cancels a pending or in-flight request. */
+    private val serverDebounceMs: Long = 250L,
 ) : ViewModel() {
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
@@ -306,6 +360,82 @@ class GlobalSearchViewModel(
     val visibleCategories: StateFlow<Set<SearchResultCategory>> = _visibleCategories.asStateFlow()
 
     private var searchJob: Job? = null
+
+    private val _serverState = MutableStateFlow<ServerSearchState>(ServerSearchState.Idle)
+
+    /** The `/api/search` request for the current query, kept apart from "no results" (iOS). */
+    val serverState: StateFlow<ServerSearchState> = _serverState.asStateFlow()
+
+    /** On-device rows for the current query; the server's rows are merged on top in [publish]. */
+    private var localItems: List<SearchResult> = emptyList()
+    private var serverPayload: GlobalSearchPayload? = null
+    private var serverRequest: Deferred<GlobalSearchOutcome?>? = null
+
+    /** The query the latest server request was made for; a response for any other query is stale. */
+    private var serverQuery: String? = null
+
+    private fun publishLocal(items: List<SearchResult>) {
+        localItems = items
+        publish()
+    }
+
+    private fun publish() {
+        _results.value = GlobalSearchResults(mergeServerResults(localItems, serverPayload, activeHubs()))
+    }
+
+    /**
+     * Starts the debounced server search for [query], cancelling whatever was pending. Returns the
+     * request so the message scan can reuse its hits instead of calling `/api/chat/search` again.
+     */
+    private fun startServerSearch(
+        query: String,
+        debounceMs: Long,
+    ): Deferred<GlobalSearchOutcome?>? {
+        serverRequest?.cancel()
+        serverPayload = null
+        val q = query.trim()
+        if (q.length < GLOBAL_SEARCH_MIN_QUERY) {
+            serverQuery = null
+            serverRequest = null
+            _serverState.value = ServerSearchState.Idle
+            return null
+        }
+        serverQuery = q
+        _serverState.value = ServerSearchState.Loading
+        val request =
+            viewModelScope.async {
+                if (debounceMs > 0L) delay(debounceMs)
+                val outcome =
+                    try {
+                        serverSearch.search(q)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        GlobalSearchOutcome.Failed(e.redactedRestMessage().ifBlank { "Something went wrong." })
+                    }
+                // A response that outlived its keystroke must not overwrite the newer query's state.
+                if (!isActive || serverQuery != q) return@async null
+                when (outcome) {
+                    is GlobalSearchOutcome.Success -> {
+                        serverPayload = outcome.payload
+                        _serverState.value = ServerSearchState.Loaded
+                        publish()
+                    }
+                    GlobalSearchOutcome.Offline -> _serverState.value = ServerSearchState.Offline
+                    is GlobalSearchOutcome.Failed -> _serverState.value = ServerSearchState.Failed(outcome.message)
+                }
+                outcome
+            }
+        serverRequest = request
+        return request
+    }
+
+    /** "Tap to retry": re-sends the current query right away (no debounce). */
+    fun retryServerSearch() {
+        val q = _searchQuery.value
+        if (q.trim().length < GLOBAL_SEARCH_MIN_QUERY) return
+        startServerSearch(q, debounceMs = 0L)
+    }
 
     fun toggleCategory(category: SearchResultCategory) {
         val cur = _visibleCategories.value
@@ -408,6 +538,9 @@ class GlobalSearchViewModel(
                         is SearchResult.IntentMatch -> "intent:${result.details.connection.id}:${result.intentLabel}"
                         is SearchResult.OwnAvailabilityIntentMatch -> "own-intent:${result.intent.hashCode()}"
                         is SearchResult.InterestMatch -> "interest:${result.details.connection.id}"
+                        is SearchResult.SharedContextPerson -> "user:${result.person.userId}"
+                        is SearchResult.RemoteEvent -> "beacon:${result.event.beaconId}"
+                        is SearchResult.JoinedHub -> "hub:${result.hub.hubId}"
                     }
                 },
         )
@@ -423,13 +556,15 @@ class GlobalSearchViewModel(
         val lowerQuery = query.lowercase().trim()
         val userId = viewerUserId.trim()
         if (lowerQuery.isBlank() || userId.isBlank()) {
-            _results.value = GlobalSearchResults()
+            startServerSearch("", 0L)
+            publishLocal(emptyList())
             _isSearching.value = false
             return
         }
 
+        val serverHits = startServerSearch(query, serverDebounceMs)
         // First paint is local and synchronous. This is the primary latency contract for search.
-        _results.value = immediateLocalResults(lowerQuery, userId)
+        publishLocal(immediateLocalResults(lowerQuery, userId).items)
         _isSearching.value = true
         searchJob =
             viewModelScope.launch {
@@ -521,7 +656,7 @@ class GlobalSearchViewModel(
                     emitLocationBuckets(lowerQuery, activeRows, archivedRows, out)
 
                     if (out.isNotEmpty()) {
-                        _results.value = GlobalSearchResults(items = out.toList())
+                        publishLocal(out.toList())
                     }
 
                     val messageHits =
@@ -534,12 +669,13 @@ class GlobalSearchViewModel(
                                 cliqueRows,
                                 archivedIds,
                                 activeHubs(),
+                                serverHits,
                             )
                         } else {
                             emptyList()
                         }
                     out.addAll(messageHits)
-                    _results.value = GlobalSearchResults(items = out)
+                    publishLocal(out.toList())
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -555,6 +691,8 @@ class GlobalSearchViewModel(
 
     fun clear() {
         searchJob?.cancel()
+        startServerSearch("", 0L)
+        localItems = emptyList()
         _searchQuery.value = ""
         _results.value = GlobalSearchResults()
         _isSearching.value = false
@@ -569,9 +707,26 @@ class GlobalSearchViewModel(
         cliqueRows: List<ChatWithDetails>,
         archivedIds: Set<String>,
         hubs: List<ActiveHubEntry>,
+        serverRequest: Deferred<GlobalSearchOutcome?>?,
     ): List<SearchResult.MessageHit> =
         coroutineScope {
-            val apiHitsD = async { searchConversationHits(lowerQuery) }
+            // `/api/search` already carries the plaintext message hits; only call `/api/chat/search`
+            // when that request didn't succeed.
+            val apiHitsD =
+                async {
+                    val outcome =
+                        try {
+                            serverRequest?.await()
+                        } catch (e: CancellationException) {
+                            // A retry replaced the request; this scan still falls back below.
+                            if (!isActive) throw e
+                            null
+                        }
+                    when (outcome) {
+                        is GlobalSearchOutcome.Success -> outcome.payload.hits
+                        else -> searchConversationHits(lowerQuery)
+                    }
+                }
             // On-device history (05 §D6): matches from messages already opened, even offline.
             val storedByThread =
                 runCatching { searchLocalMessages(userId, lowerQuery) }
