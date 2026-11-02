@@ -48,8 +48,8 @@ object MapPinStacking {
 
 /**
  * Which pin leads a stack and the order its list reads: alerts (so one is never hidden under
- * another pin), live events, then events (soonest first), hubs, other beacons, then connections.
- * iOS `MapItem.stackRank` (Places = 2 and plans = 5 have no Android pin yet).
+ * another pin), live events, then events (soonest first), Places, hubs, other beacons, then
+ * connections. iOS `MapItem.stackRank` (plans = 5 have no Android pin yet).
  */
 fun mapPinStackRank(
     pin: MapPin,
@@ -59,6 +59,7 @@ fun mapPinStackRank(
     return when {
         kind == MapBeaconKind.HAZARD || kind == MapBeaconKind.SOS -> -1
         kind == MapBeaconKind.EVENT -> if (pin.isLiveEventAt(nowEpochMs)) 0 else 1
+        pin.kind == MapPinKind.PLACE -> 2
         pin.kind == MapPinKind.COMMUNITY_HUB -> 3
         kind != null -> 4
         pin.kind == MapPinKind.CONNECTION -> 7
@@ -177,6 +178,7 @@ fun mapPinStackTitle(pins: List<MapPin>): String {
                 when {
                     pin.kind == MapPinKind.CONNECTION -> "Clicks"
                     pin.kind == MapPinKind.COMMUNITY_HUB -> "Hubs"
+                    pin.kind == MapPinKind.PLACE -> "Places"
                     pin.beaconKind == MapBeaconKind.EVENT -> "Events"
                     else -> "Beacons"
                 }

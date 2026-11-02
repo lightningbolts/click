@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.data.models.ChatWithDetails
 import compose.project.click.click.data.models.MapBeacon
+import compose.project.click.click.data.places.placeSearchSubtitle // pragma: allowlist secret
 import compose.project.click.click.ui.components.AppEmptyState
 import compose.project.click.click.ui.components.ClickListRow
 import compose.project.click.click.ui.components.ConnectionListUserAvatarFace
@@ -146,6 +147,7 @@ internal fun searchResultStableKey(r: SearchResult): String =
         is SearchResult.SharedContextPerson -> "user:${r.person.userId}"
         is SearchResult.RemoteEvent -> "event:${r.event.beaconId}"
         is SearchResult.JoinedHub -> "hub:${r.hub.hubId}"
+        is SearchResult.PlaceMatch -> "place:${r.place.id}"
     }
 
 @Composable
@@ -175,6 +177,7 @@ internal fun SearchResultRow(
     onNavigateToBeacon: (String) -> Unit = {},
     onNavigateToSettings: () -> Unit = {},
     onNavigateToProfile: (userId: String) -> Unit = {},
+    onNavigateToPlace: (placeId: String) -> Unit = {},
 ) {
     val archivedLook =
         when (result) {
@@ -194,6 +197,7 @@ internal fun SearchResultRow(
                 is SearchResult.OwnAvailabilityIntentMatch -> onNavigateToSettings()
                 is SearchResult.SharedContextPerson -> onNavigateToProfile(result.person.userId)
                 is SearchResult.RemoteEvent -> onNavigateToBeacon(result.event.beaconId)
+                is SearchResult.PlaceMatch -> onNavigateToPlace(result.place.id)
                 else -> result.toChatOpenTarget()?.let(onNavigateToChat)
             }
         },
@@ -219,6 +223,14 @@ internal fun SearchResultRow(
                     )
                 is SearchResult.RemoteEvent -> SimpleLeadingIcon(Icons.Filled.Event)
                 is SearchResult.JoinedHub -> SimpleLeadingIcon(Icons.Filled.Sensors)
+                is SearchResult.PlaceMatch ->
+                    ConnectionListUserAvatarFace(
+                        displayName = result.place.name,
+                        email = null,
+                        avatarUrl = result.place.photoUrl,
+                        userId = result.place.id,
+                        modifier = Modifier.size(42.dp),
+                    )
             }
         },
         trailing = {
@@ -253,6 +265,7 @@ internal fun BadgeRow(result: SearchResult) {
             is SearchResult.SharedContextPerson -> TinyBadge("Person")
             is SearchResult.RemoteEvent -> TinyBadge("Event")
             is SearchResult.JoinedHub -> TinyBadge("Hub")
+            is SearchResult.PlaceMatch -> TinyBadge("Place")
             is SearchResult.ActiveConnection -> {}
         }
     }
@@ -377,6 +390,10 @@ internal fun TitleAndSubtitle(result: SearchResult) {
         is SearchResult.JoinedHub -> {
             Text(result.hub.name, style = titleStyle)
             Text(joinedHubSubtitle(result.hub.category), style = subtitleStyle)
+        }
+        is SearchResult.PlaceMatch -> {
+            Text(result.place.name, style = titleStyle)
+            Text(placeSearchSubtitle(result.place), style = subtitleStyle)
         }
     }
 }

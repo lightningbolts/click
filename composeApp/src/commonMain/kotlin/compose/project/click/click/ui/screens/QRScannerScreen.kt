@@ -28,6 +28,9 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import compose.project.click.click.data.flags.FeatureFlag // pragma: allowlist secret
+import compose.project.click.click.data.flags.FeatureFlags // pragma: allowlist secret
+import compose.project.click.click.deeplink.AppDeepLinkRouter // pragma: allowlist secret
 import compose.project.click.click.platform.rememberReduceMotionEnabled // pragma: allowlist secret
 import compose.project.click.click.qr.QrParseResult // pragma: allowlist secret
 import compose.project.click.click.qr.parseQrCode // pragma: allowlist secret
@@ -152,6 +155,10 @@ fun QRScannerScreen(
         if (isProcessingResult) return
         if (qrData == lastScannedRaw && showError) return
 
+        AppDeepLinkRouter.placeLinkFromScan(qrData, FeatureFlags.isEnabled(FeatureFlag.CLICK_PLACES))?.let { place ->
+            lockAndContinue { AppDeepLinkRouter.open(place) }
+            return
+        }
         scope.launch(Dispatchers.Default) {
             val result = parseQrCode(qrData)
             withContext(Dispatchers.Main) {

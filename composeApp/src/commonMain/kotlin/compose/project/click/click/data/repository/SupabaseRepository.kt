@@ -785,7 +785,10 @@ class SupabaseRepository {
      * Fetch location privacy preferences for a user.
      * Returns default (all true) if columns are missing or on error.
      */
-    suspend fun fetchLocationPreferences(userId: String): LocationPreferences =
+    suspend fun fetchLocationPreferences(
+        userId: String,
+        includePlaceVisits: Boolean = false,
+    ): LocationPreferences =
         try {
             val result =
                 supabase
@@ -793,9 +796,7 @@ class SupabaseRepository {
                     .select(
                         columns =
                             io.github.jan.supabase.postgrest.query.Columns.list(
-                                "location_connection_snap_enabled",
-                                "location_show_on_map_enabled",
-                                "location_include_in_insights_enabled",
+                                *LocationPreferences.columns(includePlaceVisits).toTypedArray(),
                             ),
                     ) {
                         filter { eq("id", userId) }
@@ -812,6 +813,7 @@ class SupabaseRepository {
     suspend fun updateLocationPreferences(
         userId: String,
         prefs: LocationPreferences,
+        includePlaceVisits: Boolean = false,
     ): Boolean =
         try {
             // RLS can turn an update into a silent no-op; only a returned row counts as saved.
@@ -819,9 +821,7 @@ class SupabaseRepository {
                 supabase
                     .from("users")
                     .update({
-                        set("location_connection_snap_enabled", prefs.connectionSnapEnabled)
-                        set("location_show_on_map_enabled", prefs.showOnMapEnabled)
-                        set("location_include_in_insights_enabled", prefs.includeInInsightsEnabled)
+                        prefs.writeRow(includePlaceVisits).forEach { (column, value) -> set(column, value) }
                     }) {
                         select(Columns.list("id"))
                         filter { eq("id", userId) }

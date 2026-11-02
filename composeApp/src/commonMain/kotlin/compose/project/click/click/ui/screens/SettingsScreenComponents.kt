@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Map
+import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.PrivacyTip
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -18,6 +19,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -27,6 +30,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.mohamedrejeb.calf.ui.toggle.AdaptiveSwitch
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
+import compose.project.click.click.data.flags.FeatureFlag // pragma: allowlist secret
+import compose.project.click.click.data.flags.FeatureFlags // pragma: allowlist secret
 import compose.project.click.click.data.models.LocationPreferences // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickInsetDivider // pragma: allowlist secret
@@ -117,6 +122,20 @@ internal fun YourDataLocationRows(
             checked = locationPreferences.includeInInsightsEnabled,
             onCheckedChange = { AppDataManager.setIncludeInInsightsEnabled(it) },
         )
+
+        // Click Places (iOS `PrivacySettingsView`): who sees that you've been to a Place.
+        val flags by FeatureFlags.state.collectAsState()
+        if (flags.isEnabled(FeatureFlag.CLICK_PLACES)) {
+            LaunchedEffect(Unit) { AppDataManager.refreshLocationPreferencesWithPlaces() }
+            SettingsDivider()
+            SettingsToggleRow(
+                icon = Icons.Default.Place,
+                title = "Show my Place visits to my Clicks",
+                subtitle = "Your Clicks see that you've been to a Place, never when.",
+                checked = locationPreferences.placeVisitsVisible,
+                onCheckedChange = { AppDataManager.setPlaceVisitsVisible(it) },
+            )
+        }
     }
 }
 

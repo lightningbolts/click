@@ -107,6 +107,7 @@ fun MapScreen(
     val beaconSubmitInFlight by viewModel.beaconSubmitInFlight.collectAsState()
     val currentUser by AppDataManager.currentUser.collectAsState()
     val communityHubs by viewModel.discoveryFeedHubs.collectAsState()
+    val mapPlaces by viewModel.visibleMapPlaces.collectAsState()
     val mapBeacons by viewModel.discoveryFeedBeacons.collectAsState()
     val discoveryFeedPending by viewModel.discoveryFeedPending.collectAsState()
     val discoveryFeedLoading by viewModel.discoveryFeedLoading.collectAsState()
@@ -527,6 +528,7 @@ fun MapScreen(
                                 modifier = Modifier.fillMaxSize(),
                                 renderData = renderData,
                                 communityHubs = communityHubs,
+                                places = mapPlaces,
                                 zoom = cameraTarget?.zoom ?: mapBindingZoom,
                                 stackZoom = pinStackZoom,
                                 mapGesturesEnabled = true,

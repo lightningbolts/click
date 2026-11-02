@@ -168,6 +168,7 @@ internal fun MapViewModel.prefetchDiscoveryProximityDataImpl(
                 if (centers.isEmpty()) return@launch
                 if (seq != discoveryFetchSeq) return@launch
 
+                centers.firstOrNull()?.let { (lat, lon) -> refreshMapPlacesAround(lat, lon) }
                 val layers = _selectedLayerFilters.value
                 val wantHubs = layersWantHubFetch(layers)
                 val wantBeacons = layersWantBeaconFetch(layers)
@@ -392,6 +393,7 @@ internal fun MapViewModel.fetchProximityLayersForBounds(
                 MapViewModel.DiscoveryFetchSlot.MapViewport -> if (seq != beaconFetchSeq) return@launch
                 MapViewModel.DiscoveryFetchSlot.Discovery -> if (seq != discoveryFetchSeq) return@launch
             }
+            refreshMapPlacesAround(bounds.centerLat, bounds.centerLon)
             val layers = _selectedLayerFilters.value
             val wantHubs = layersWantHubFetch(layers)
             val wantBeacons = layersWantBeaconFetch(layers)

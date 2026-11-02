@@ -29,6 +29,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import compose.project.click.click.data.flags.FeatureFlag // pragma: allowlist secret
+import compose.project.click.click.data.flags.FeatureFlags // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
 import compose.project.click.click.data.models.heroImageUrl // pragma: allowlist secret
 import compose.project.click.click.ui.components.CardVisualHero // pragma: allowlist secret
@@ -37,6 +39,7 @@ import compose.project.click.click.ui.components.LiquidGlassPill // pragma: allo
 import compose.project.click.click.ui.theme.* // pragma: allowlist secret
 import compose.project.click.click.ui.utils.* // pragma: allowlist secret
 import compose.project.click.click.viewmodel.MapLayerFilter // pragma: allowlist secret
+import compose.project.click.click.viewmodel.visibleMapLayerFilters // pragma: allowlist secret
 
 @Composable
 internal fun MapAlwaysOnChrome(
@@ -141,6 +144,7 @@ internal fun mapLayerFilterShortLabel(selected: Set<MapLayerFilter>): String {
             MapLayerFilter.ALERTS_UTILITIES -> "Alerts"
             MapLayerFilter.SOCIAL_VIBES -> "Social"
             MapLayerFilter.COMMUNITY_HUBS -> "Hubs"
+            MapLayerFilter.PLACES -> "Places"
             else -> f.label.take(6)
         }
     }
@@ -163,7 +167,9 @@ internal fun MapLayerFilterDropdown(
     val menuSurface = MaterialTheme.colorScheme.surface
     val onMenuSurface = MaterialTheme.colorScheme.onSurface
     val menuOutline = clickBorderColor()
-    val itemCount = MapLayerFilter.entries.size
+    val flags by FeatureFlags.state.collectAsState()
+    val layerEntries = visibleMapLayerFilters(flags.isEnabled(FeatureFlag.CLICK_PLACES))
+    val itemCount = layerEntries.size
     val menuUpOffset =
         if (opensDownward) {
             8.dp
@@ -229,7 +235,7 @@ internal fun MapLayerFilterDropdown(
             shadowElevation = 0.dp,
             border = BorderStroke(clickBorderWidth(), menuOutline),
         ) {
-            MapLayerFilter.entries.forEach { filter ->
+            layerEntries.forEach { filter ->
                 val isSelected =
                     when (filter) {
                         MapLayerFilter.ALL -> MapLayerFilter.ALL in selected

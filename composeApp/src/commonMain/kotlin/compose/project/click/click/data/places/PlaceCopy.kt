@@ -65,6 +65,50 @@ object PlaceCopy {
     /** null hides the row. */
     fun hereNow(count: Int): String? = if (count > 0) "$count here now" else null
 
+    /**
+     * One line under a Place on the map, the stack list and search (iOS `PlaceCopy.mapSubtitle`):
+     * "Lively · 3 reports", "Live: Trivia", "Tonight 8:00 PM · Trivia", else the category.
+     */
+    fun mapSubtitle(
+        place: PlaceSummaryDto,
+        nowMs: Long,
+        timeZone: TimeZone = TimeZone.currentSystemDefault(),
+    ): String {
+        val energy = place.pulse.energy
+        if (place.pulse.isLive && energy != null) return "${energy.title} · ${reports(place.pulse.reportCount)}"
+        val event = place.nextEvent
+        if (event != null) {
+            if (event.isLive) return "Live: ${event.title}"
+            val start = event.startsAtMs
+            if (start != null) {
+                val startDate = Instant.fromEpochMilliseconds(start).toLocalDateTime(timeZone).date
+                val today = Instant.fromEpochMilliseconds(nowMs).toLocalDateTime(timeZone).date
+                val day =
+                    if (startDate == today) {
+                        "Tonight"
+                    } else {
+                        startDate.dayOfWeek.name
+                            .lowercase()
+                            .replaceFirstChar { it.uppercase() }
+                            .take(3)
+                    }
+                return "$day ${formatClockTime(start, timeZone)} · ${event.title}"
+            }
+        }
+        return place.placeCategory.label
+    }
+
+    /** Pin badge: "LIVE" for a live event, else its start time when there's an event today (iOS `pinBadge`). */
+    fun pinBadge(
+        place: PlaceSummaryDto,
+        timeZone: TimeZone = TimeZone.currentSystemDefault(),
+    ): String? {
+        val event = place.nextEvent ?: return null
+        if (event.isLive) return "LIVE"
+        val start = event.startsAtMs ?: return null
+        return if (place.eventsTodayCount > 0) formatClockTime(start, timeZone) else null
+    }
+
     /** "Maya, Jordan and 1 other" (names arrive sorted by name). */
     fun names(
         names: List<String>,

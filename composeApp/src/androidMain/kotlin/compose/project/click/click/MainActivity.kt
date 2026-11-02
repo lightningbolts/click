@@ -102,7 +102,7 @@ class MainActivity : ComponentActivity() {
         handleAppDeepLinkIntent(intent)
     }
 
-    /** click://chat, profile, myqr, scan, tap, search and joinclick.co/search; push taps to the Clicks list. */
+    /** click://chat, profile, myqr, scan, tap, search, p and joinclick.co/search and /p; push taps to the Clicks list. */
     private fun handleAppDeepLinkIntent(intent: Intent?) {
         if (intent?.action == ACTION_VIEW_CONNECTIONS) {
             AppDeepLinkRouter.open(AppDeepLink.Clicks)

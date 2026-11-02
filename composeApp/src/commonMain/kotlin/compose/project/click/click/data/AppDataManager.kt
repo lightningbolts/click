@@ -3,6 +3,8 @@
 package compose.project.click.click.data // pragma: allowlist secret
 
 import compose.project.click.click.data.api.CommunityHubNearbyDto // pragma: allowlist secret
+import compose.project.click.click.data.flags.FeatureFlag // pragma: allowlist secret
+import compose.project.click.click.data.flags.FeatureFlags // pragma: allowlist secret
 import compose.project.click.click.data.models.CachedAppSnapshot // pragma: allowlist secret
 import compose.project.click.click.data.models.CachedChatThread // pragma: allowlist secret
 import compose.project.click.click.data.models.CachedHubThread // pragma: allowlist secret
@@ -948,7 +950,9 @@ object AppDataManager {
         val previous = _locationPreferences.value
         _locationPreferences.value = prefs
         scope.launch {
-            val saved = runCatching { supabaseRepository.updateLocationPreferences(userId, prefs) }.getOrDefault(false)
+            val includePlaceVisits = FeatureFlags.isEnabled(FeatureFlag.CLICK_PLACES)
+            val saved =
+                runCatching { supabaseRepository.updateLocationPreferences(userId, prefs, includePlaceVisits) }.getOrDefault(false)
             if (!saved && _locationPreferences.value == prefs) {
                 // Zero rows updated (or a network failure): show server truth, not the optimistic flip.
                 _locationPreferences.value = previous
@@ -968,6 +972,24 @@ object AppDataManager {
 
     fun setIncludeInInsightsEnabled(enabled: Boolean) {
         updateLocationPreferences(_locationPreferences.value.copy(includeInInsightsEnabled = enabled))
+    }
+
+    /**
+     * Re-reads location privacy with the Places column, for when the profile loaded before
+     * `click_places` was known (iOS loads these each time the Privacy page opens).
+     */
+    fun refreshLocationPreferencesWithPlaces() {
+        val userId = _currentUser.value?.id ?: return
+        if (!FeatureFlags.isEnabled(FeatureFlag.CLICK_PLACES)) return
+        scope.launch {
+            runCatching { supabaseRepository.fetchLocationPreferences(userId, includePlaceVisits = true) }
+                .onSuccess { _locationPreferences.value = it }
+        }
+    }
+
+    /** "Show my Place visits to my Clicks" (Click Places; the row shows only with the flag on). */
+    fun setPlaceVisitsVisible(enabled: Boolean) {
+        updateLocationPreferences(_locationPreferences.value.copy(placeVisitsVisible = enabled))
     }
 
     /**

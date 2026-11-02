@@ -88,6 +88,7 @@ import compose.project.click.click.data.models.AvailabilityIntentRow // pragma: 
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
 import compose.project.click.click.data.places.ClickWebPlacesRepository
 import compose.project.click.click.data.places.PlaceApiException
+import compose.project.click.click.data.places.PlaceOpenRequests // pragma: allowlist secret
 import compose.project.click.click.data.repository.AuthRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.HangoutPresence
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
@@ -329,7 +330,6 @@ fun SettingsScreen(
     val placesRepository = remember { ClickWebPlacesRepository() }
     var myPlacesLoad by remember { mutableStateOf<MyPlacesLoad>(MyPlacesLoad.Loading) }
     var myPlacesEpoch by remember { mutableStateOf(0) }
-    var openPlaceId by remember { mutableStateOf<String?>(null) }
     var deletingAccount by remember { mutableStateOf(false) }
     var accountDeletionError by remember { mutableStateOf<String?>(null) }
     var pendingAlertKey by remember { mutableStateOf<String?>(null) }
@@ -939,7 +939,7 @@ fun SettingsScreen(
                             if (placesEnabled) {
                                 MyPlacesPageContent(
                                     load = myPlacesLoad,
-                                    onOpenPlace = { openPlaceId = it.place.id },
+                                    onOpenPlace = { PlaceOpenRequests.open(it.place.id, source = "history") },
                                     onRetry = { myPlacesEpoch++ },
                                 )
                             } else {
@@ -1393,10 +1393,6 @@ fun SettingsScreen(
                     TextButton(onClick = { confirmRemovePhoto = false }) { Text("Cancel", color = GlassSheetTokens.OnOledMuted()) }
                 },
             )
-        }
-
-        openPlaceId?.let { placeId ->
-            PlaceDetailSheet(idOrSlug = placeId, source = "history", onDismiss = { openPlaceId = null })
         }
 
         if (confirmSignOut) {

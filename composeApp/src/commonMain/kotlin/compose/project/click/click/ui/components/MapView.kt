@@ -9,8 +9,11 @@ import androidx.compose.ui.Modifier
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
 import compose.project.click.click.data.models.heroImageUrl // pragma: allowlist secret
+import compose.project.click.click.data.places.PlaceCopy // pragma: allowlist secret
+import compose.project.click.click.data.places.PlaceSummaryDto // pragma: allowlist secret
 import compose.project.click.click.events.eventSchedule // pragma: allowlist secret
 import compose.project.click.click.ui.components.stableAvatarPlaceholderColor // pragma: allowlist secret
+import compose.project.click.click.ui.screens.color // pragma: allowlist secret
 import compose.project.click.click.ui.theme.BeaconPinShape // pragma: allowlist secret
 import compose.project.click.click.ui.theme.composeColorToArgb // pragma: allowlist secret
 import compose.project.click.click.ui.theme.generateCardVisual // pragma: allowlist secret
@@ -18,6 +21,7 @@ import compose.project.click.click.ui.utils.BeaconPinMetrics // pragma: allowlis
 import compose.project.click.click.ui.utils.CommunityHubPin // pragma: allowlist secret
 import compose.project.click.click.ui.utils.ConnectionMapPoint // pragma: allowlist secret
 import compose.project.click.click.ui.utils.MapCluster // pragma: allowlist secret
+import compose.project.click.click.ui.utils.MapPlacesLayer // pragma: allowlist secret
 import compose.project.click.click.ui.utils.TimeState // pragma: allowlist secret
 import compose.project.click.click.ui.utils.beaconZIndex // pragma: allowlist secret
 import kotlinx.serialization.json.contentOrNull
@@ -59,6 +63,9 @@ enum class MapPinKind {
     BEACON_SOCIAL,
     BEACON_OTHER,
     COMMUNITY_HUB,
+
+    /** A Click Place (G5-2): a rounded square with its photo, tinted by a live Pulse. */
+    PLACE,
 }
 
 data class MapPin(
@@ -241,6 +248,31 @@ data class MapPin(
             )
         }
 
+        /**
+         * A Click Place pin (iOS `PlacePinView`, click-ios `Click/Features/Places/PlacePinView.swift`):
+         * a rounded square showing the photo or initials, filled with the energy color while the
+         * Pulse is live, captioned "LIVE" / today's event time, else the name.
+         */
+        fun fromPlace(place: PlaceSummaryDto): MapPin {
+            val energy = place.pulse.energy?.takeIf { place.pulse.isLive }
+            val caption = PlaceCopy.pinBadge(place) ?: truncateMapPinCaption(place.name, 14).takeIf { it.isNotEmpty() }
+            return MapPin(
+                id = MapPlacesLayer.pinId(place.id),
+                title = place.name,
+                latitude = place.latitude,
+                longitude = place.longitude,
+                timeState = TimeState.LIVE,
+                imageUrl = place.photoUrl?.trim()?.takeIf { it.isNotEmpty() },
+                kind = MapPinKind.PLACE,
+                zIndex = 14_000f,
+                caption = caption,
+                avatarInitials = mapPinAvatarInitials(place.name),
+                avatarFillArgb = composeColorToArgb(energy?.color() ?: stableAvatarPlaceholderColor(place.id)),
+                avatarUserId = place.id,
+                pinShape = BeaconPinShape.ROUNDED_SQUARE,
+            )
+        }
+
         fun fromCommunityHub(hub: CommunityHubPin): MapPin {
             val cap = truncateMapPinCaption(hub.name, 14).takeIf { it.isNotEmpty() }
             return MapPin(
@@ -356,6 +388,7 @@ fun MapPin.markerHueDegrees(): Float =
                 MapPinKind.BEACON_SOCIAL -> 310f
                 MapPinKind.BEACON_OTHER -> 55f
                 MapPinKind.COMMUNITY_HUB -> 260f
+                MapPinKind.PLACE -> 200f
                 MapPinKind.CONNECTION -> 300f
             }
     }
