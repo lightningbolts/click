@@ -603,6 +603,13 @@ internal fun SoundtrackBeaconDetail(
             }
         }
 
+        // "Listening now" (flag `soundtrack_presence`, iOS F5).
+        val flags by FeatureFlags.state.collectAsState()
+        val soundtrackLive = displayBeacon.expiresAtEpochMs?.let { it > Clock.System.now().toEpochMilliseconds() } != false
+        if (soundtrackLive && flags.isEnabled(FeatureFlag.SOUNDTRACK_PRESENCE)) {
+            ListeningNowSection(beaconId = displayBeacon.id)
+        }
+
         if (displayBeacon.showCreatorName && !hostDisplayName.isNullOrBlank()) {
             EventHostCard(
                 displayName = hostDisplayName,
