@@ -115,8 +115,10 @@ class ClickFirebaseMessagingService : FirebaseMessagingService() {
         }
 
         // Defense in depth: the push function enforces mutes, but drop a muted chat here too.
-        val pushChatId = message.data["chat_id"] ?: message.data["hub_id"]
-        if (pushChatId != null && isChatMutedLocally(pushChatId)) {
+        // A direct chat's mute may be stored under its connection id (iOS MuteMenu aliases).
+        val pushMuteIds =
+            listOf("chat_id", "hub_id", "connection_id").mapNotNull { key -> message.data[key]?.takeIf { it.isNotBlank() } }
+        if (pushMuteIds.any { isChatMutedLocally(it) }) {
             return
         }
 

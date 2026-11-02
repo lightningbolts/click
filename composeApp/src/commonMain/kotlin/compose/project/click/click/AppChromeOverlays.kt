@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusManager
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import compose.project.click.click.deeplink.AppDeepLink // pragma: allowlist secret
 import compose.project.click.click.deeplink.AppDeepLinkRouter // pragma: allowlist secret
 import compose.project.click.click.events.isEventLinkedHubCategory // pragma: allowlist secret
 import compose.project.click.click.navigation.NavigationItem // pragma: allowlist secret
@@ -195,6 +196,11 @@ internal fun BoxScope.AppBottomChrome(
                 onNavigateToSettings = {
                     showUnifiedSearchSheet = false
                     navigateTo(NavigationItem.Settings.route)
+                },
+                onNavigateToProfile = { userId ->
+                    showUnifiedSearchSheet = false
+                    // Same path as `click://profile/{id}`: the Clicks tab owns the profile sheet.
+                    AppDeepLinkRouter.open(AppDeepLink.Profile(userId))
                 },
             )
         }

@@ -40,7 +40,7 @@ CI: Android job runs on Linux (`testDebugUnitTest` + `assembleDebug`).
 
 ### Non-obvious caveats
 
-- The `google-secrets` Gradle plugin reads `MAPS_API_KEY` from `local.properties`, with `local.defaults.properties` as a checked-in fallback for CI when the gitignored file is absent. A placeholder value is sufficient for compilation but Google Maps features won't work at runtime without a real key.
+- The `google-secrets` Gradle plugin reads `MAPS_API_KEY` from `local.properties`, with `local.defaults.properties` as a checked-in fallback for CI when the gitignored file is absent. A placeholder value is sufficient for compilation but Google Maps features won't work at runtime without a real key. `KLIPY_APP_KEY` (KLIPY GIF search in chat) works the same way; left empty, the GIF picker is hidden.
 - The `click-web` Next.js companion app (QR flows, chat gatekeeper) is a **separate repository**. Prefer checking it out as a sibling `../click-web`.
 - **`click-web/supabase` is the source of truth** for shared migrations and `bind-proximity-connection`. Sync mirrors with `bash scripts/sync-supabase-from-click-web.sh`. Mobile-only functions (`send-push-notification`, `expire-*`, `verify-hub-proximity`) stay in this repo.
 - Supabase Edge Functions require the Supabase CLI to deploy/serve locally; they are not needed for basic mobile build testing.

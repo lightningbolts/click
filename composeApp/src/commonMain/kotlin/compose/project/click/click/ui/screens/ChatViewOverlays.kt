@@ -38,6 +38,7 @@ import compose.project.click.click.ui.chat.MuteDurationDialog
 import compose.project.click.click.ui.chat.PlanHangoutSheet
 import compose.project.click.click.ui.chat.canEditMessage // pragma: allowlist secret
 import compose.project.click.click.ui.chat.canExportMessageMedia // pragma: allowlist secret
+import compose.project.click.click.ui.chat.muteIds
 import compose.project.click.click.ui.chat.muteResultMessage
 import compose.project.click.click.ui.components.ClickOutlinedTextField // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassSheetTokens // pragma: allowlist secret
@@ -305,12 +306,14 @@ internal fun BoxScope.ChatViewOverlays(
             isCore = sheetConn != null && sheetConn.id in coreConnectionIds,
             showPlanAction = true,
             isMuted =
-                successState?.chatDetails?.chat?.id?.let {
-                    ChatMuteStore.isMuted(
-                        chatMutes,
-                        it,
-                        Clock.System.now().toEpochMilliseconds(),
-                    )
+                successState?.chatDetails?.let { details ->
+                    details.chat.id?.let {
+                        ChatMuteStore.isMuted(
+                            chatMutes,
+                            details.muteIds(),
+                            Clock.System.now().toEpochMilliseconds(),
+                        )
+                    }
                 },
             onDismiss = { showConnectionSheet = false },
             onMenuAction = { action ->
@@ -359,9 +362,15 @@ internal fun BoxScope.ChatViewOverlays(
                     }
                     ConnectionMenuAction.ToggleMute -> {
                         val chat = successState?.chatDetails?.chat?.id
+                        val muteIds = successState?.chatDetails?.muteIds().orEmpty()
                         if (chat != null) {
-                            if (ChatMuteStore.isMuted(chat)) {
-                                muteScope.launch { toastState.show(muteScope, muteResultMessage(null, ChatMuteStore.setMuted(chat, null))) }
+                            if (ChatMuteStore.isMuted(chatMutes, muteIds, Clock.System.now().toEpochMilliseconds())) {
+                                muteScope.launch {
+                                    toastState.show(
+                                        muteScope,
+                                        muteResultMessage(null, ChatMuteStore.setMuted(chat, null, aliases = muteIds)),
+                                    )
+                                }
                             } else {
                                 muteDialogChatId = chat
                             }

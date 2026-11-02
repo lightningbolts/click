@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.outlined.AttachFile
+import androidx.compose.material.icons.outlined.Gif
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.PhotoCamera
@@ -50,6 +51,8 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.PlatformHapticsPolicy
+import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
+import compose.project.click.click.data.api.KlipyClient // pragma: allowlist secret
 import compose.project.click.click.data.models.ChatWithDetails
 import compose.project.click.click.data.models.MessageWithUser
 import compose.project.click.click.ui.components.ClickButton // pragma: allowlist secret
@@ -114,6 +117,9 @@ internal fun ConnectionChatMessageComposer(
             stagedBeacon == null &&
             messageInput.isNotBlank()
     var showBeaconPicker by remember { mutableStateOf(false) }
+    // KLIPY GIF search: offered when a key is configured (iOS `ConversationModel.supportsGifs`).
+    val gifsEnabled = remember { KlipyClient().isConfigured }
+    var showGifPicker by remember { mutableStateOf(false) }
 
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -374,6 +380,19 @@ internal fun ConnectionChatMessageComposer(
                                 },
                             )
                         }
+                        if (gifsEnabled && editingMessageId == null) {
+                            ChatAttachmentMenuRow(
+                                label = "GIF",
+                                icon = Icons.Outlined.Gif,
+                                onClick = {
+                                    PlatformHapticsPolicy.lightImpact()
+                                    attachmentMenuExpanded = false
+                                    keyboardController?.hide()
+                                    focusManager.clearFocus()
+                                    showGifPicker = true
+                                },
+                            )
+                        }
                         ChatAttachmentMenuRow(
                             label = "Photo library",
                             icon = Icons.Outlined.Image,
@@ -424,6 +443,19 @@ internal fun ConnectionChatMessageComposer(
                     showBeaconPicker = false
                     viewModel.stageBeaconForShare(beacon)
                 },
+            )
+        }
+        if (showGifPicker) {
+            GifPickerSheet(
+                userId =
+                    AppDataManager.currentUser.value
+                        ?.id
+                        .orEmpty(),
+                onPick = { gif ->
+                    showGifPicker = false
+                    viewModel.sendGif(gif)
+                },
+                onDismiss = { showGifPicker = false },
             )
         }
         scheduleSendText?.let { text ->

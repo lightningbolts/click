@@ -1,18 +1,15 @@
 package compose.project.click.click.data.repository // pragma: allowlist secret
 
 import compose.project.click.click.data.api.ApiClient // pragma: allowlist secret
-import compose.project.click.click.data.api.BeaconAttendeeDto
 import compose.project.click.click.data.api.BeaconAttendeeDirectoryResponseDto
+import compose.project.click.click.data.api.BeaconAttendeeDto
 import compose.project.click.click.data.api.BeaconRsvpGetResponseDto
+import compose.project.click.click.data.api.CommunityHubNearbyDto // pragma: allowlist secret
 import compose.project.click.click.data.api.ConnectionEventRecommendationResponseDto
 import compose.project.click.click.data.api.MapBeaconPatchBody
-import compose.project.click.click.data.api.CommunityHubNearbyDto // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconInsert // pragma: allowlist secret
-import compose.project.click.click.data.models.parseMapBeaconRows // pragma: allowlist secret
 import kotlinx.coroutines.delay
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonObject
 import kotlin.math.PI
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -25,9 +22,6 @@ import kotlin.math.sqrt
 class MapBeaconRepository(
     private val apiClient: ApiClient = ApiClient(),
 ) {
-
-    private val json = Json { ignoreUnknownKeys = true; isLenient = true }
-
     private fun isRateLimited(error: Throwable): Boolean {
         val msg = error.message?.lowercase().orEmpty()
         return msg.contains("too many requests") || msg.contains("429")
@@ -42,40 +36,46 @@ class MapBeaconRepository(
         return block()
     }
 
+    /**
+     * Every beacon in the area, paged through `next_cursor` (see [pageBeacons]); [onPage] gets the
+     * running total after each page so callers can show the first page at once.
+     */
     suspend fun fetchLocalBeacons(
         minLat: Double,
         maxLat: Double,
         minLon: Double,
         maxLon: Double,
         beaconTypeFilters: String? = null,
+        maxPages: Int = BeaconPaging.MAX_PAGES,
+        onPage: (suspend (List<MapBeacon>) -> Unit)? = null,
     ): Result<List<MapBeacon>> {
         val (lat, lon, radius) = bboxToCenterRadiusMeters(minLat, maxLat, minLon, maxLon)
-        return apiClient.getMapBeacons(
-            lat = lat,
-            lon = lon,
-            radiusMeters = radius,
-            filters = beaconTypeFilters,
-        ).fold(
-            onSuccess = { text -> Result.success(parseBeaconResponsePayload(text)) },
-            onFailure = { Result.failure(it) },
-        )
+        return pageBeacons(maxPages = maxPages, onPage = onPage) { cursor ->
+            apiClient
+                .getMapBeacons(
+                    lat = lat,
+                    lon = lon,
+                    radiusMeters = radius,
+                    filters = beaconTypeFilters,
+                    cursor = cursor,
+                    limit = BeaconPaging.PAGE_SIZE,
+                ).map { text -> parseBeaconPage(text) }
+        }
     }
 
     /** Full beacon by id — used to hydrate event schedule when proximity list omitted it. */
-    suspend fun fetchBeacon(beaconId: String): Result<MapBeacon> =
-        apiClient.getMapBeacon(beaconId)
+    suspend fun fetchBeacon(beaconId: String): Result<MapBeacon> = apiClient.getMapBeacon(beaconId)
 
-    suspend fun insertBeacon(insert: MapBeaconInsert): Result<MapBeacon> =
-        apiClient.postMapBeacon(insert)
+    suspend fun insertBeacon(insert: MapBeaconInsert): Result<MapBeacon> = apiClient.postMapBeacon(insert)
 
-    suspend fun updateBeacon(beaconId: String, patch: MapBeaconPatchBody): Result<MapBeacon> =
-        apiClient.patchMapBeacon(beaconId, patch)
+    suspend fun updateBeacon(
+        beaconId: String,
+        patch: MapBeaconPatchBody,
+    ): Result<MapBeacon> = apiClient.patchMapBeacon(beaconId, patch)
 
-    suspend fun deleteBeacon(beaconId: String): Result<Unit> =
-        apiClient.deleteMapBeacon(beaconId)
+    suspend fun deleteBeacon(beaconId: String): Result<Unit> = apiClient.deleteMapBeacon(beaconId)
 
-    suspend fun fetchBeaconRsvp(beaconId: String): Result<BeaconRsvpGetResponseDto> =
-        apiClient.getBeaconRsvp(beaconId)
+    suspend fun fetchBeaconRsvp(beaconId: String): Result<BeaconRsvpGetResponseDto> = apiClient.getBeaconRsvp(beaconId)
 
     suspend fun fetchBeaconAttendeeDirectory(beaconId: String): Result<BeaconAttendeeDirectoryResponseDto> =
         apiClient.getBeaconAttendeeDirectory(beaconId)
@@ -84,8 +84,7 @@ class MapBeaconRepository(
         connectionId: String,
         latitude: Double? = null,
         longitude: Double? = null,
-    ): Result<ConnectionEventRecommendationResponseDto> =
-        apiClient.getConnectionEventRecommendation(connectionId, latitude, longitude)
+    ): Result<ConnectionEventRecommendationResponseDto> = apiClient.getConnectionEventRecommendation(connectionId, latitude, longitude)
 
     suspend fun rsvpBeacon(
         beaconId: String,
@@ -103,8 +102,7 @@ class MapBeaconRepository(
             apiClient.deleteBeaconRsvp(beaconId)
         }
 
-    suspend fun fetchBeaconEngagement(beaconId: String) =
-        apiClient.getBeaconEngagement(beaconId)
+    suspend fun fetchBeaconEngagement(beaconId: String) = apiClient.getBeaconEngagement(beaconId)
 
     suspend fun setBeaconBookmark(
         beaconId: String,
@@ -130,8 +128,10 @@ class MapBeaconRepository(
         shareUrl: String? = null,
     ) = apiClient.postBeaconShare(beaconId, telemetry, shareUrl)
 
-    suspend fun fetchMyEventBookmarks(limit: Int = 50, cursor: String? = null) =
-        apiClient.getMyEventBookmarks(limit = limit, cursor = cursor)
+    suspend fun fetchMyEventBookmarks(
+        limit: Int = 50,
+        cursor: String? = null,
+    ) = apiClient.getMyEventBookmarks(limit = limit, cursor = cursor)
 
     suspend fun fetchNearbyCommunityHubs(
         minLat: Double,
@@ -143,32 +143,6 @@ class MapBeaconRepository(
         val diag = haversineMeters(minLat, minLon, maxLat, maxLon)
         val radius = (diag / 2.0 * 1.35).coerceIn(500.0, 50_000.0)
         return apiClient.getNearbyCommunityHubs(lat, lon, radius)
-    }
-
-    private fun parseBeaconResponsePayload(text: String): List<MapBeacon> {
-        val trimmed = text.trim()
-        if (trimmed.isEmpty() || trimmed == "null") return emptyList()
-        return runCatching {
-            val root = json.parseToJsonElement(trimmed)
-            when (root) {
-                is JsonObject -> {
-                    val rows = root["beacons"] ?: root["data"] ?: root["rows"] ?: root["items"]
-                    when (rows) {
-                        null -> {
-                            if (root.keys.any { it.equals("id", true) || it == "kind" || it == "beacon_type" }) {
-                                parseMapBeaconRows(root)
-                            } else {
-                                emptyList()
-                            }
-                        }
-                        else -> parseMapBeaconRows(rows)
-                    }
-                }
-                else -> parseMapBeaconRows(root)
-            }
-        }.getOrElse {
-            runCatching { parseMapBeaconRows(json.parseToJsonElement(trimmed)) }.getOrDefault(emptyList())
-        }
     }
 
     private fun bboxToCenterRadiusMeters(
@@ -184,14 +158,20 @@ class MapBeaconRepository(
         return Triple(cLat, cLon, radius)
     }
 
-    private fun haversineMeters(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
+    private fun haversineMeters(
+        lat1: Double,
+        lon1: Double,
+        lat2: Double,
+        lon2: Double,
+    ): Double {
         val earthRadius = 6371000.0
         val dLat = (lat2 - lat1) * PI / 180.0
         val dLon = (lon2 - lon1) * PI / 180.0
         val lat1Rad = lat1 * PI / 180.0
         val lat2Rad = lat2 * PI / 180.0
-        val a = sin(dLat / 2) * sin(dLat / 2) +
-            cos(lat1Rad) * cos(lat2Rad) * (sin(dLon / 2) * sin(dLon / 2))
+        val a =
+            sin(dLat / 2) * sin(dLat / 2) +
+                cos(lat1Rad) * cos(lat2Rad) * (sin(dLon / 2) * sin(dLon / 2))
         val c = 2 * atan2(sqrt(a), sqrt(1 - a))
         return earthRadius * c
     }

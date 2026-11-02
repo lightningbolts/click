@@ -25,6 +25,7 @@ import compose.project.click.click.events.EventSchedule // pragma: allowlist sec
 import compose.project.click.click.events.EventVenueScale // pragma: allowlist secret
 import compose.project.click.click.events.eventSchedule // pragma: allowlist secret
 import compose.project.click.click.ui.components.MapPin // pragma: allowlist secret
+import compose.project.click.click.ui.screens.NearbySort // pragma: allowlist secret
 import compose.project.click.click.ui.utils.BoundingBox // pragma: allowlist secret
 import compose.project.click.click.ui.utils.CommunityHubPin // pragma: allowlist secret
 import compose.project.click.click.ui.utils.ConnectionMapPoint // pragma: allowlist secret
@@ -74,6 +75,16 @@ class MapViewModel : ViewModel() {
     // Current zoom level (logical; updated from native map readbacks and programmatic moves)
     internal val _zoomLevel = MutableStateFlow(10.0)
     val zoomLevel: StateFlow<Double> = _zoomLevel.asStateFlow()
+
+    /** Nearby row order; kept here so it survives the sheet closing (iOS `MapFeatureModel.sort`). */
+    internal val _nearbySort =
+        MutableStateFlow(NearbySort.Relevance)
+    internal val nearbySort: StateFlow<NearbySort> =
+        _nearbySort.asStateFlow()
+
+    internal fun setNearbySort(sort: NearbySort) {
+        _nearbySort.value = sort
+    }
 
     // What to render on the map (clusters or individual pins)
     internal val _renderData = MutableStateFlow<MapRenderData>(MapRenderData.Clusters(emptyList()))
@@ -535,6 +546,8 @@ class MapViewModel : ViewModel() {
     fun onMapPinTapped(pin: MapPin) = onMapPinTappedImpl(pin = pin)
 
     fun onOverlappingPinChosen(pin: MapPin) = onOverlappingPinChosenImpl(pin = pin)
+
+    fun zoomIntoPinStack(pins: List<MapPin>) = zoomIntoPinStackImpl(pins = pins)
 
     /**
      * Clear current selection

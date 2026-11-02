@@ -264,7 +264,8 @@ fun Message.previewLabel(): String =
                 ChatMessageType.FILE -> "File"
                 // Mask raw attachment envelopes (`ccx:v1:{...}`) so chat-list previews never
                 // leak the encrypted JSON before the client has a chance to decrypt it.
-                else -> maskAttachmentEnvelope(content)
+                // A KLIPY GIF's body is only its media URL (iOS `ChatGif.previewLabel`).
+                else -> ChatGif.previewLabel(content) ?: maskAttachmentEnvelope(content)
             }
     }
 

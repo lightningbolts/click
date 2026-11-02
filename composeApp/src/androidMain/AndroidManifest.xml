@@ -197,6 +197,11 @@
             android:name="com.google.android.geo.API_KEY"
             android:value="${MAPS_API_KEY}" />
 
+        <!-- KLIPY GIF search key (public by design; empty hides GIF search). -->
+        <meta-data
+            android:name="compose.project.click.click.KLIPY_APP_KEY"
+            android:value="${KLIPY_APP_KEY}" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

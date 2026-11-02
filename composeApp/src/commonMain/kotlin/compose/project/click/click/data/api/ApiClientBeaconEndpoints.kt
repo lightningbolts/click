@@ -21,12 +21,15 @@ import kotlinx.serialization.json.put
 
 /**
  * `GET /api/beacons` — proximity map beacons (PostGIS); bearer is the Supabase session JWT.
+ * One keyset page: pass the previous body's `next_cursor` as [cursor] (see `BeaconPaging`).
  */
 internal suspend fun ApiClient.getMapBeaconsImpl(
     lat: Double,
     lon: Double,
     radiusMeters: Double,
     filters: String? = null,
+    cursor: String? = null,
+    limit: Int? = null,
 ): Result<String> {
     if (!lat.isFinite() || !lon.isFinite() || !radiusMeters.isFinite()) {
         return Result.failure(IllegalArgumentException("lat, lon, and radiusMeters must be finite"))
@@ -41,6 +44,8 @@ internal suspend fun ApiClient.getMapBeaconsImpl(
                 if (f.isNotEmpty()) {
                     parameter("filters", f)
                 }
+                limit?.takeIf { it > 0 }?.let { parameter("limit", it) }
+                cursor?.trim()?.takeIf { it.isNotEmpty() }?.let { parameter("cursor", it) }
             }
         if (response.status.value in 200..299) {
             Result.success(response.bodyAsText())

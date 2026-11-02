@@ -224,6 +224,12 @@ internal fun MapViewModel.prefetchDiscoveryProximityDataImpl(
                                                 minLon = bounds.minLon,
                                                 maxLon = bounds.maxLon,
                                                 beaconTypeFilters = beaconTypesQueryForLayers(layers),
+                                                // Later pages fill in behind the first (G3-7).
+                                                onPage = { soFar ->
+                                                    if (seq == discoveryFetchSeq && soFar.isNotEmpty()) {
+                                                        _mapBeacons.update { current -> mergeMapBeaconLists(current, soFar) }
+                                                    }
+                                                },
                                             ).getOrNull()
                                             .orEmpty()
                                     }
@@ -414,6 +420,12 @@ internal fun MapViewModel.fetchProximityLayersForBounds(
                                 minLon = bounds.minLon,
                                 maxLon = bounds.maxLon,
                                 beaconTypeFilters = beaconTypesQueryForLayers(layers),
+                                // Busy areas page through `next_cursor`; pins fill in per page (G3-7).
+                                onPage = { soFar ->
+                                    if (soFar.isNotEmpty()) {
+                                        _mapBeacons.update { current -> mergeMapBeaconLists(current, soFar) }
+                                    }
+                                },
                             )
                         }
                     } else {
