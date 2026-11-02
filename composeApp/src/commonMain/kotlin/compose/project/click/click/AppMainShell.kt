@@ -945,5 +945,8 @@ internal fun AppMainShell(
             pendingTargetMessageIdState = pendingTargetMessageIdState,
             pendingBeaconIdState = pendingBeaconIdState,
         )
+        // "Approve new sign-in?" when another of this account's devices asks for history.
+        compose.project.click.click.ui.screens
+            .DeviceApprovalHost()
     }
 }
