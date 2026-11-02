@@ -81,9 +81,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
+import compose.project.click.click.data.flags.FeatureFlag // pragma: allowlist secret
+import compose.project.click.click.data.flags.FeatureFlags // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
 import compose.project.click.click.data.models.heroImageUrl // pragma: allowlist secret
+import compose.project.click.click.data.places.PlaceOpenRequests // pragma: allowlist secret
 import compose.project.click.click.events.eventSchedule // pragma: allowlist secret
 import compose.project.click.click.events.formatEventScheduleRange // pragma: allowlist secret
 import compose.project.click.click.ui.components.AppEmptyState // pragma: allowlist secret
@@ -108,9 +111,11 @@ import compose.project.click.click.ui.components.sheetPageBackground // pragma: 
 import compose.project.click.click.ui.theme.clickBorderColor // pragma: allowlist secret
 import compose.project.click.click.ui.theme.clickBorderWidth // pragma: allowlist secret
 import compose.project.click.click.ui.theme.clickCardSurface // pragma: allowlist secret
+import compose.project.click.click.ui.utils.MapPlacesLayer // pragma: allowlist secret
 import compose.project.click.click.ui.utils.displayDynamicTitle // pragma: allowlist secret
 import compose.project.click.click.viewmodel.MapLayerFilter // pragma: allowlist secret
 import compose.project.click.click.viewmodel.MapViewModel // pragma: allowlist secret
+import compose.project.click.click.viewmodel.setPlaceFilters // pragma: allowlist secret
 
 /** Approximate bottom inset so FABs sit clearly above the Nearby lip. */
 internal val EventsReopenChipClearance: Dp = 104.dp
@@ -287,6 +292,9 @@ internal fun EventsDiscoveryFullScreen(
     interactiveBackSwipeOffsetPx: androidx.compose.runtime.MutableFloatState? = null,
 ) {
     val nearbySort by viewModel.nearbySort.collectAsState()
+    val placeFilters by viewModel.placeFilters.collectAsState()
+    val featureFlags by FeatureFlags.state.collectAsState()
+    val placesEnabled = featureFlags.isEnabled(FeatureFlag.CLICK_PLACES)
     var eventsQuery by remember { mutableStateOf("") }
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -413,7 +421,14 @@ internal fun EventsDiscoveryFullScreen(
                 EventsSheetLayerChips(
                     layerFilters = layerFilters,
                     onToggleLayerFilter = onToggleLayerFilter,
+                    placesEnabled = placesEnabled,
                 )
+                if (MapPlacesLayer.isVisible(layerFilters, placesEnabled)) {
+                    PlaceFilterChipsRow(
+                        filters = placeFilters,
+                        onFiltersChange = { viewModel.setPlaceFilters(it) },
+                    )
+                }
 
                 PullToRefreshBox(
                     isRefreshing = discoveryFeedRefreshing,
@@ -495,6 +510,7 @@ internal fun EventsDiscoveryFullScreen(
                                             when (item) {
                                                 is DiscoveryFeedItem.Beacon -> "beacon-${item.beacon.kind}"
                                                 is DiscoveryFeedItem.Hub -> "hub"
+                                                is DiscoveryFeedItem.Place -> "place"
                                                 is DiscoveryFeedItem.Connection -> "conn"
                                             }
                                         },
@@ -523,6 +539,20 @@ internal fun EventsDiscoveryFullScreen(
                                                         keyboardController?.hide()
                                                         focusManager.clearFocus(force = true)
                                                         onHubClick(item)
+                                                    },
+                                                )
+                                            }
+                                            is DiscoveryFeedItem.Place -> {
+                                                DiscoveryPlaceCard(
+                                                    item = item,
+                                                    distanceText =
+                                                        item.sortDistanceM
+                                                            .takeIf { it < Double.MAX_VALUE / 2 }
+                                                            ?.let { formatDiscoveryDistance(it) },
+                                                    onOpen = {
+                                                        keyboardController?.hide()
+                                                        focusManager.clearFocus(force = true)
+                                                        PlaceOpenRequests.open(item.place.id, source = "nearby")
                                                     },
                                                 )
                                             }
@@ -618,17 +648,10 @@ private fun EventsSheetSearchField(
 private fun EventsSheetLayerChips(
     layerFilters: Set<MapLayerFilter>,
     onToggleLayerFilter: (MapLayerFilter) -> Unit,
+    placesEnabled: Boolean = false,
 ) {
     val scroll = rememberScrollState()
-    val chips =
-        listOf(
-            MapLayerFilter.EVENTS,
-            MapLayerFilter.COMMUNITY_HUBS,
-            MapLayerFilter.SOCIAL_VIBES,
-            MapLayerFilter.SOUNDTRACKS,
-            MapLayerFilter.ALERTS_UTILITIES,
-            MapLayerFilter.MY_CONNECTIONS,
-        )
+    val chips = nearbyLayerChips(placesEnabled)
     Row(
         modifier =
             Modifier

@@ -79,16 +79,23 @@ class MapPlacesLayerTest {
     }
 
     @Test
-    fun placePin_captionIsLiveBadge() {
-        val live = place(nextEvent = PlaceEventRefDto(beaconId = "e1", title = "Trivia", isLive = true))
-        assertEquals("LIVE", MapPin.fromPlace(live).caption)
+    fun placePin_liveBadgeIsACornerBadgeAndCaptionStaysTheName() {
+        val live = MapPin.fromPlace(place(nextEvent = PlaceEventRefDto(beaconId = "e1", title = "Trivia", isLive = true)))
+        assertEquals("LIVE", live.cornerBadge)
+        assertEquals("Café Allegro", live.caption)
+        assertNull(MapPin.fromPlace(place()).cornerBadge)
     }
 
     @Test
-    fun placePin_fillFollowsLivePulseOnly() {
+    fun placePin_ringFollowsLivePulseOnly() {
         val livePulse = MapPin.fromPlace(place(pulse = PulseSummaryDto(state = "live", label = "packed")))
         val stalePulse = MapPin.fromPlace(place(pulse = PulseSummaryDto(state = "stale", label = "packed")))
-        assertTrue(livePulse.avatarFillArgb != stalePulse.avatarFillArgb)
+        val liveChill = MapPin.fromPlace(place(pulse = PulseSummaryDto(state = "live", label = "chill")))
+        assertTrue(livePulse.ringArgb != null)
+        assertNull(stalePulse.ringArgb)
+        assertTrue(livePulse.ringArgb != liveChill.ringArgb)
+        // The fill no longer carries the energy: it is the Place's stable placeholder.
+        assertEquals(livePulse.avatarFillArgb, stalePulse.avatarFillArgb)
     }
 
     @Test

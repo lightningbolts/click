@@ -16,6 +16,7 @@ import compose.project.click.click.data.models.BeaconVisibilityAudience // pragm
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
 import compose.project.click.click.data.places.ClickWebPlacesRepository // pragma: allowlist secret
+import compose.project.click.click.data.places.PlaceFilters // pragma: allowlist secret
 import compose.project.click.click.data.places.PlaceSummaryDto // pragma: allowlist secret
 import compose.project.click.click.data.places.PlacesRepository // pragma: allowlist secret
 import compose.project.click.click.data.realtime.LiveUpdates // pragma: allowlist secret
@@ -133,10 +134,17 @@ class MapViewModel : ViewModel() {
     /** Click Places loaded around the map (G5-2); shown only with the flag and layer on. */
     internal val _mapPlaces = MutableStateFlow<List<PlaceSummaryDto>>(emptyList())
 
-    /** Places to draw: `click_places` on and the Places layer (or All) selected. */
+    /** Place filters (§6.6), kept per device like iOS `MapFeatureModel.placeFilters`. */
+    internal val _placeFilters = MutableStateFlow(PlaceFilters.NONE)
+    val placeFilters: StateFlow<PlaceFilters> = _placeFilters.asStateFlow()
+
+    /**
+     * Places to draw and list: `click_places` on, the Places layer (or All) selected, and the
+     * Place filters applied (iOS `MapFeatureModel.items`).
+     */
     val visibleMapPlaces: StateFlow<List<PlaceSummaryDto>> =
-        combine(_mapPlaces, _selectedLayerFilters, FeatureFlags.state) { places, layers, flags ->
-            MapPlacesLayer.visiblePlaces(places, layers, flags.isEnabled(FeatureFlag.CLICK_PLACES))
+        combine(_mapPlaces, _selectedLayerFilters, FeatureFlags.state, _placeFilters) { places, layers, flags, filters ->
+            filters.apply(MapPlacesLayer.visiblePlaces(places, layers, flags.isEnabled(FeatureFlag.CLICK_PLACES)))
         }.stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5_000),
@@ -365,6 +373,7 @@ class MapViewModel : ViewModel() {
             hydrateBeaconRsvpFromDisk()
             hydrateBeaconEngagementFromDisk()
         }
+        viewModelScope.launch { hydratePlaceFilters() }
         viewModelScope.launch {
             AppDataManager.currentUser.collect { user ->
                 if (user != null) {

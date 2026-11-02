@@ -64,7 +64,7 @@ enum class MapPinKind {
     BEACON_OTHER,
     COMMUNITY_HUB,
 
-    /** A Click Place (G5-2): a rounded square with its photo, tinted by a live Pulse. */
+    /** A Click Place (G5-2): a rounded square with its photo, ringed by a live Pulse. */
     PLACE,
 }
 
@@ -109,6 +109,10 @@ data class MapPin(
     val stackCount: Int = 1,
     /** A Core Click's connection pin: ranks above other connections in a stack (iOS `MapItem.isCoreConnection`). */
     val isCore: Boolean = false,
+    /** Small corner pill on the marker (Place pins: "LIVE" or today's event time). */
+    val cornerBadge: String? = null,
+    /** Colored ring drawn outside the marker (Place pins: energy color while the Pulse is live). */
+    val ringArgb: Int? = null,
 ) {
     companion object {
         /**
@@ -254,12 +258,12 @@ data class MapPin(
 
         /**
          * A Click Place pin (iOS `PlacePinView`, click-ios `Click/Features/Places/PlacePinView.swift`):
-         * a rounded square showing the photo or initials, filled with the energy color while the
-         * Pulse is live, captioned "LIVE" / today's event time, else the name.
+         * a rounded square showing the photo or initials, an energy ring only while the Pulse is
+         * live, a "LIVE" / start-time corner badge for official events today, captioned with the name.
          */
         fun fromPlace(place: PlaceSummaryDto): MapPin {
             val energy = place.pulse.energy?.takeIf { place.pulse.isLive }
-            val caption = PlaceCopy.pinBadge(place) ?: truncateMapPinCaption(place.name, 14).takeIf { it.isNotEmpty() }
+            val caption = truncateMapPinCaption(place.name, 14).takeIf { it.isNotEmpty() }
             return MapPin(
                 id = MapPlacesLayer.pinId(place.id),
                 title = place.name,
@@ -271,9 +275,11 @@ data class MapPin(
                 zIndex = 14_000f,
                 caption = caption,
                 avatarInitials = mapPinAvatarInitials(place.name),
-                avatarFillArgb = composeColorToArgb(energy?.color() ?: stableAvatarPlaceholderColor(place.id)),
+                avatarFillArgb = composeColorToArgb(stableAvatarPlaceholderColor(place.id)),
                 avatarUserId = place.id,
                 pinShape = BeaconPinShape.ROUNDED_SQUARE,
+                cornerBadge = PlaceCopy.pinBadge(place),
+                ringArgb = energy?.let { composeColorToArgb(it.color()) },
             )
         }
 
