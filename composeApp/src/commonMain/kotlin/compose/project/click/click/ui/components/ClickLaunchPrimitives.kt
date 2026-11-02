@@ -43,6 +43,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import compose.project.click.click.ui.theme.ClickSpacing // pragma: allowlist secret
+import compose.project.click.click.ui.theme.LocalClickShapes // pragma: allowlist secret
 import compose.project.click.click.ui.theme.LocalPlatformStyle // pragma: allowlist secret
 import compose.project.click.click.ui.theme.MotionTokens // pragma: allowlist secret
 import compose.project.click.click.ui.theme.PrimaryBlue // pragma: allowlist secret
@@ -62,13 +64,13 @@ object ClickScreenSpacing {
     val Horizontal = 20.dp
 
     /** Space between major sections (greeting → hero, list → composer). */
-    val Section = 24.dp
+    val Section = ClickSpacing.lg
 
     /** Gap between stacked rows inside a section. */
-    val RowGap = 8.dp
+    val RowGap = ClickSpacing.sm
 
     /** Compact inner padding (chips, icon wells, section-header trailing). */
-    val Compact = 8.dp
+    val Compact = ClickSpacing.sm
 }
 
 /** Default two-line social row; one-line rows can be shorter via [ClickListRow] padding. */
@@ -268,7 +270,7 @@ fun ClickChip(
     compact: Boolean = false,
     leadingIcon: ImageVector? = null,
 ) {
-    val shape = RoundedCornerShape(999.dp)
+    val shape = LocalClickShapes.current.capsule
     val background =
         when {
             !enabled -> MaterialTheme.colorScheme.surface

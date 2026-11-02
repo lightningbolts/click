@@ -15,10 +15,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import compose.project.click.click.ui.theme.ClickRadius // pragma: allowlist secret
 import compose.project.click.click.ui.theme.clickBorderColor // pragma: allowlist secret
 import compose.project.click.click.ui.theme.clickBorderWidth // pragma: allowlist secret
 
-private val SheetActionShape = RoundedCornerShape(12.dp)
+private val SheetActionShape = RoundedCornerShape(ClickRadius.compact)
 
 /** Full-width filled sheet action (same chrome as the share-beacon and availability sheets). */
 @Composable
