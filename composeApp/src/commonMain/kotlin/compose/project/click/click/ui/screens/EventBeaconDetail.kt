@@ -20,9 +20,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -1014,6 +1014,7 @@ private fun weatherIcon(reading: PlaceWeatherReading?) =
         "snow" -> Icons.Filled.AcUnit
         else -> if (reading?.isDay == false) Icons.Filled.NightsStay else Icons.Filled.WbSunny
     }
+
 /**
  * Directions and Add to Calendar (iOS `DirectionsDialog`, `EventCalendar`): each opens a short menu.
  * Directions: Google Maps, another maps app, or copy the address. Calendar: this phone's calendar
