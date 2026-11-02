@@ -622,6 +622,7 @@ class ConnectionRepository(
         bindExactNoiseLevelDb: Double? = null,
         bindHeightCategory: HeightCategory? = null,
         simulatorMock: Boolean = false,
+        observationKeys: JsonObject? = null,
     ): Result<BindProximityHandshakeResult> =
         bindProximityHandshakeImpl(
             httpClient = httpClient,
@@ -640,6 +641,7 @@ class ConnectionRepository(
             bindExactNoiseLevelDb = bindExactNoiseLevelDb,
             bindHeightCategory = bindHeightCategory,
             simulatorMock = simulatorMock,
+            observationKeys = observationKeys,
         )
 
     suspend fun recoverPendingProximityHandshake(

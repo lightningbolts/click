@@ -60,6 +60,7 @@ import compose.project.click.click.calendar.CalendarSyncSession // pragma: allow
 import compose.project.click.click.calendar.calculateAvailabilityOverlaps // pragma: allowlist secret
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.ContextTagTaxonomy // pragma: allowlist secret
+import compose.project.click.click.data.TagSignals // pragma: allowlist secret
 import compose.project.click.click.data.api.ApiClient // pragma: allowlist secret
 import compose.project.click.click.data.api.ConnectionEventRecommendationDto // pragma: allowlist secret
 import compose.project.click.click.data.models.ContextTag // pragma: allowlist secret
@@ -78,6 +79,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
+import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 
@@ -324,16 +326,23 @@ fun ConnectionContextSheet(
     /** Label for the confirm button ("Save this Click" when everyone already shares a group). */
     confirmLabel: String = "Connect",
 ) {
-    val hourOfDay =
+    val localNow =
         remember {
             Clock.System
                 .now()
                 .toLocalDateTime(TimeZone.currentSystemDefault())
-                .hour
         }
+    // Tag suggestions v2 (G4-11; iOS `ContextTagTaxonomy.suggest`): weighted by the time of day,
+    // weekday vs weekend and the place name; up to four tags.
     val suggestions =
-        remember(locationName, hourOfDay) {
-            ContextTagTaxonomy.suggest(locationName = locationName, hourOfDay = hourOfDay)
+        remember(locationName, localNow) {
+            ContextTagTaxonomy.suggest(
+                TagSignals(
+                    hourOfDay = localNow.hour,
+                    isWeekend = localNow.dayOfWeek == DayOfWeek.SATURDAY || localNow.dayOfWeek == DayOfWeek.SUNDAY,
+                    placeName = locationName,
+                ),
+            )
         }
     val allTags = remember { ContextTagTaxonomy.all }
 
