@@ -390,7 +390,8 @@ internal fun AppDataManager.startBeaconPrefetch() {
                     coroutineScope {
                         val beaconsDeferred =
                             async {
-                                mapBeaconRepository.fetchLocalBeacons(minLat, maxLat, minLon, maxLon)
+                                // First page only at launch; the map's discovery fetch pages the rest.
+                                mapBeaconRepository.fetchLocalBeacons(minLat, maxLat, minLon, maxLon, maxPages = 1)
                             }
                         val hubsDeferred =
                             async {

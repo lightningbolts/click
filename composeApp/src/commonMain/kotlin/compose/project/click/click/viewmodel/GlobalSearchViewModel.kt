@@ -275,6 +275,8 @@ class GlobalSearchViewModel(
                 maxLat = bbox.maxLat,
                 minLon = bbox.minLon,
                 maxLon = bbox.maxLon,
+                // One page keeps search snappy; the map pages the whole area.
+                maxPages = 1,
             ).getOrElse { emptyList() }
     },
     private val resolveSearchLocation: suspend () -> Pair<Double, Double>? = {

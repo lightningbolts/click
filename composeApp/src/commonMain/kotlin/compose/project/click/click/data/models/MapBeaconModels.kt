@@ -223,6 +223,8 @@ data class MapBeacon(
     val visibilityAudience: BeaconVisibilityAudience = BeaconVisibilityAudience.EVERYONE,
     /** Event hub id from `map_beacons.hub_id`, API JSON, or legacy metadata `hub_id`. */
     val hubId: String? = null,
+    /** `rsvp_count` that `GET /api/beacons` adds to event rows ("12 going"); null when absent. */
+    val rsvpCount: Int? = null,
 )
 
 fun parseMapBeaconRows(element: JsonElement): List<MapBeacon> =
@@ -319,6 +321,7 @@ private fun parseMapBeaconRow(element: JsonElement): MapBeacon? {
         creatorDisplayName = creatorDisplayName,
         visibilityAudience = visibilityAudience,
         hubId = hubId,
+        rsvpCount = dbl("rsvp_count", "rsvpCount")?.toInt()?.takeIf { it >= 0 },
     )
 }
 

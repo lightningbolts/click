@@ -50,6 +50,8 @@ internal fun MapContent(
     renderData: MapRenderData,
     communityHubs: List<CommunityHubPin>,
     zoom: Double,
+    /** Live camera zoom that overlapping pins are stacked at (see [stackMapPins]). */
+    stackZoom: Double = zoom,
     mapGesturesEnabled: Boolean = true,
     showCompass: Boolean = true,
     cameraTarget: compose.project.click.click.viewmodel.CameraTarget?, // pragma: allowlist secret
@@ -68,7 +70,7 @@ internal fun MapContent(
         remember(communityHubs) {
             communityHubs.map { MapPin.fromCommunityHub(it) }
         }
-    val pins =
+    val rawPins =
         remember(renderData, connectedUsers, currentUserId, hubPins) {
             when (renderData) {
                 is MapRenderData.IndividualPins -> {
@@ -92,6 +94,20 @@ internal fun MapContent(
                     (standalone + hubPins).sortedByDescending { it.zIndex }
                 }
             }
+        }
+
+    // Overlapping pins draw as one stack led by the most important pin, with a count badge
+    // (iOS `MapFeatureModel.clusters`). Rebuilt only when the pins or the quarter zoom step change.
+    val stackZoomStep = MapPinStacking.zoomStep(stackZoom)
+    val pins =
+        remember(rawPins, stackZoomStep) {
+            val now =
+                kotlinx.datetime.Clock.System
+                    .now()
+                    .toEpochMilliseconds()
+            stackMapPins(rawPins, stackZoomStep, now)
+                .map { it.toRenderedPin() }
+                .sortedByDescending { it.zIndex }
         }
 
     val clusters =
@@ -191,22 +207,33 @@ internal fun OverlappingMapPinsChooser(
     onChoose: (MapPin) -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
+    /** "Zoom In" when the members can be drawn apart (iOS `MapStackSheet`); null hides it. */
+    onZoomIn: (() -> Unit)? = null,
 ) {
     Column(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Text(
-            text = "Which pin?",
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
-        Text(
-            text = "A few pins are stacked here — pick the one you meant.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // "5 Events", "3 Clicks", or "4 Here" (iOS `MapStackSheet.title`).
+            Text(
+                text = mapPinStackTitle(pins),
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f),
+            )
+            if (onZoomIn != null) {
+                TextButton(onClick = onZoomIn) {
+                    Icon(Icons.Filled.ZoomIn, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Zoom In")
+                }
+            }
+        }
         pins.forEach { pin ->
             val kindLabel =
                 when (pin.kind) {

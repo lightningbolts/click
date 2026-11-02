@@ -9,6 +9,7 @@ import androidx.compose.ui.Modifier
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
 import compose.project.click.click.data.models.heroImageUrl // pragma: allowlist secret
+import compose.project.click.click.events.eventSchedule // pragma: allowlist secret
 import compose.project.click.click.ui.components.stableAvatarPlaceholderColor // pragma: allowlist secret
 import compose.project.click.click.ui.theme.BeaconPinShape // pragma: allowlist secret
 import compose.project.click.click.ui.theme.composeColorToArgb // pragma: allowlist secret
@@ -94,6 +95,11 @@ data class MapPin(
     val avatarUserId: String? = null,
     val pinShape: BeaconPinShape = BeaconPinShape.CIRCLE,
     val visualFillArgb2: Int? = null,
+    /** Event schedule (beacon pins): ranks live and soonest events first in a stack. */
+    val eventStartEpochMs: Long? = null,
+    val eventEndEpochMs: Long? = null,
+    /** > 1 when this pin leads a stack of overlapping pins; the map draws the count as a badge. */
+    val stackCount: Int = 1,
 ) {
     companion object {
         /**
@@ -200,6 +206,7 @@ data class MapPin(
             // Prefer cover/image from metadata when present; otherwise platform generates initials.
             // Soundtrack pins must use album art (same source as discovery/event cover cards).
             val coverUrl = beacon.metadata.heroImageUrl()
+            val schedule = if (beacon.kind == MapBeaconKind.EVENT) beacon.eventSchedule() else null
             val visual =
                 generateCardVisual(
                     beacon.id,
@@ -229,6 +236,8 @@ data class MapPin(
                 avatarFillArgb = visual.fillArgb,
                 pinShape = visual.pinShape,
                 visualFillArgb2 = visual.fillArgbSecondary,
+                eventStartEpochMs = schedule?.startEpochMs,
+                eventEndEpochMs = schedule?.endEpochMs,
             )
         }
 
