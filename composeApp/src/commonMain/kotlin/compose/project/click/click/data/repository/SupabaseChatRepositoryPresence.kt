@@ -263,7 +263,7 @@ internal suspend fun SupabaseChatRepository.joinChatEphemeralChannelImpl(
     /** Presence keys are configured as each client's user id; diff joins/leaves are authoritative. */
     val presenceSessions = PresenceSessionTracker()
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    val broadcastFlow = channel.broadcastFlow<SupabaseChatRepository.TypingBroadcastPayload>(event = "typing")
+    val broadcastFlow = channel.broadcastFlow<JsonObject>(event = TypingBroadcast.EVENT)
     val presenceFlow = channel.presenceChangeFlow()
 
     val presenceJob =
@@ -314,8 +314,9 @@ internal suspend fun SupabaseChatRepository.joinChatEphemeralChannelImpl(
         scope.launch {
             try {
                 broadcastFlow.collect { payload ->
-                    if (payload.userId != currentUserId) {
-                        typingFlow.emit(TypingStatus(userId = payload.userId, isTyping = true))
+                    val status = TypingBroadcast.decode(payload) ?: return@collect
+                    if (status.userId != currentUserId) {
+                        typingFlow.emit(status)
                     }
                 }
             } catch (e: CancellationException) {

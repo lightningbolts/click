@@ -16,12 +16,15 @@ data class EventReminderSubject(
 )
 
 /**
- * Local reminders 60 and 15 minutes before events the viewer is going to or saved
- * (iOS `EventReminderScheduler`, spec §59). They honour Alerts → Event reminders, never prompt
- * for permission, and open the event when tapped.
+ * A local reminder an hour before events the viewer is going to or saved (iOS
+ * `EventReminderScheduler`, spec §59; iOS retired the 15-minute one in #32). They honour
+ * Alerts → Event reminders, never prompt for permission, and open the event when tapped.
  */
 object EventReminders {
-    val OFFSETS_MINUTES: List<Int> = listOf(60, 15)
+    val OFFSETS_MINUTES: List<Int> = listOf(60)
+
+    /** Offsets older builds scheduled. [sync] clears the whole group; [cancel] clears these too. */
+    val RETIRED_OFFSETS_MINUTES: List<Int> = listOf(15)
 
     /** Group prefix shared by every event reminder id, for cancel-all. */
     const val GROUP: String = "event"
@@ -117,7 +120,7 @@ object EventReminders {
     }
 
     fun cancel(beaconId: String) {
-        OFFSETS_MINUTES.forEach { LocalReminderScheduler.cancel(reminderId(beaconId, it)) }
+        (OFFSETS_MINUTES + RETIRED_OFFSETS_MINUTES).forEach { LocalReminderScheduler.cancel(reminderId(beaconId, it)) }
     }
 
     /** Alerts → Event reminders off, or sign-out. */

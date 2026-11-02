@@ -170,6 +170,51 @@ internal suspend fun ApiClient.postProximityConfirmSelectionImpl(
     }
 }
 
+/**
+ * POST `/api/connections/proximity/selection` — save who this person removed while reviewing a
+ * group tap, so the confirm step leaves them out no matter which phone confirms first.
+ */
+internal suspend fun ApiClient.postProximitySelectionExclusionsImpl(
+    bearerJwt: String,
+    pendingHandshakeId: String,
+    excludedMemberIds: List<String>,
+): Result<Unit> {
+    val pendingId = pendingHandshakeId.trim()
+    if (pendingId.isEmpty()) {
+        return Result.failure(IllegalArgumentException("pendingHandshakeId required"))
+    }
+    val excluded =
+        excludedMemberIds
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .distinct()
+            .sorted()
+            // Server schema caps the list at 32 and keeps at most PROXIMITY_HOST_SELECTION_MAX_MEMBERS.
+            .take(32)
+    return try {
+        val response: HttpResponse =
+            clickWebClient.post(
+                "${ApiClient.clickWebAuthOrigin}/api/connections/proximity/selection",
+            ) {
+                contentType(ContentType.Application.Json)
+                bearerJwt.trim().takeIf { it.isNotEmpty() }?.let { token ->
+                    header("Authorization", "Bearer $token")
+                }
+                setBody(
+                    ProximitySelectionExclusionsPostBody(
+                        pendingHandshakeId = pendingId,
+                        excludedMemberIds = excluded,
+                    ),
+                )
+            }
+        if (response.status.value in 200..299) Result.success(Unit) else clickWebFailure(response)
+    } catch (e: ClientRequestException) {
+        clickWebFailure(e.response)
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
+}
+
 /** GET `/api/connections/proximity` — recover a previously accepted pending handshake. */
 internal suspend fun ApiClient.getPendingProximityHandshakeImpl(
     pendingHandshakeId: String,

@@ -583,6 +583,17 @@ class ApiClient {
             contextTags = contextTags,
         )
 
+    suspend fun postProximitySelectionExclusions(
+        bearerJwt: String,
+        pendingHandshakeId: String,
+        excludedMemberIds: List<String>,
+    ): Result<Unit> =
+        postProximitySelectionExclusionsImpl(
+            bearerJwt = bearerJwt,
+            pendingHandshakeId = pendingHandshakeId,
+            excludedMemberIds = excludedMemberIds,
+        )
+
     suspend fun getPendingProximityHandshake(
         pendingHandshakeId: String,
         bearerJwt: String? = null,

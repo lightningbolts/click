@@ -20,9 +20,7 @@ import kotlinx.coroutines.CancellationException
 /** Registers this device's E2EE v2 identity now (a repeat registration answers 409 and is fine). */
 internal suspend fun SupabaseChatRepository.registerThisDeviceImpl(): Boolean {
     val token = ensureFreshJwtForChat() ?: return false
-    val identity = runCatching { MessageCryptoV2.loadOrCreateDeviceIdentity() }.getOrNull() ?: return false
-    val result = apiClient.registerE2eeV2Device(identity.info.deviceId, identity.info.publicKeySpkiBase64, token)
-    return result.isSuccess || result.exceptionOrNull()?.message?.contains("already registered", ignoreCase = true) == true
+    return runCatching { registerThisE2eeDevice(token).registered }.getOrDefault(false)
 }
 
 /**

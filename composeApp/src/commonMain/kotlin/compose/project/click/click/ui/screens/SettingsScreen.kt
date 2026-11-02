@@ -68,6 +68,8 @@ import compose.project.click.click.data.api.ApiClient
 import compose.project.click.click.data.api.BlockedUserDto // pragma: allowlist secret
 import compose.project.click.click.data.api.EventBookmarkItemDto // pragma: allowlist secret
 import compose.project.click.click.data.api.PROFILE_BIO_MAX_LENGTH
+import compose.project.click.click.data.api.accountDeletionFailureMessage
+import compose.project.click.click.data.api.deleteAccountImpl
 import compose.project.click.click.data.models.AvailabilityIntentRow // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
 import compose.project.click.click.data.repository.AuthRepository // pragma: allowlist secret
@@ -286,6 +288,8 @@ fun SettingsScreen(
     var confirmSignOut by remember { mutableStateOf(false) }
     var signingOut by remember { mutableStateOf(false) }
     var confirmDeleteAccount by remember { mutableStateOf(false) }
+    var deletingAccount by remember { mutableStateOf(false) }
+    var accountDeletionError by remember { mutableStateOf<String?>(null) }
     var pendingAlertKey by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(notificationPreferencesSaving) {
         if (!notificationPreferencesSaving) pendingAlertKey = null
@@ -766,7 +770,7 @@ fun SettingsScreen(
                                         SettingsToggleRow(
                                             icon = Icons.Default.Notifications,
                                             title = "Event reminders",
-                                            subtitle = "An hour and 15 minutes before events you're going to or saved",
+                                            subtitle = "An hour before events you're going to or saved",
                                             checked = notificationPreferences.eventReminderPushEnabled,
                                             enabled = !notificationPreferencesSaving,
                                             pending = pendingAlertKey == "events",
@@ -1269,27 +1273,57 @@ fun SettingsScreen(
 
         if (confirmDeleteAccount) {
             GlassAlertDialog(
-                onDismissRequest = { confirmDeleteAccount = false },
+                onDismissRequest = { if (!deletingAccount) confirmDeleteAccount = false },
                 title = { Text("Delete your Click account?") },
                 text = {
-                    Text(
-                        "Deleting your account permanently removes your profile, connections, and messages. For your " +
-                            "security, you'll confirm deletion on joinclick.co while signed in there.",
-                    )
+                    Text("This permanently removes your profile, connections, and messages. It can't be undone.")
                 },
                 confirmButton = {
                     TextButton(
+                        enabled = !deletingAccount,
                         onClick = {
-                            confirmDeleteAccount = false
+                            deletingAccount = true
+                            settingsScope.launch {
+                                val result = ApiClient().deleteAccountImpl()
+                                deletingAccount = false
+                                confirmDeleteAccount = false
+                                if (result.isSuccess) {
+                                    // The account is gone: sign out locally and wipe every on-device store.
+                                    onSignOut()
+                                } else {
+                                    accountDeletionError = accountDeletionFailureMessage(result.exceptionOrNull())
+                                }
+                            }
+                        },
+                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                    ) { Text(if (deletingAccount) "Deleting…" else "Delete Account") }
+                },
+                dismissButton = {
+                    TextButton(enabled = !deletingAccount, onClick = { confirmDeleteAccount = false }) {
+                        Text("Keep Account", color = GlassSheetTokens.OnOledMuted())
+                    }
+                },
+            )
+        }
+
+        accountDeletionError?.let { message ->
+            GlassAlertDialog(
+                onDismissRequest = { accountDeletionError = null },
+                title = { Text("Something went wrong") },
+                text = { Text(message) },
+                confirmButton = {
+                    TextButton(onClick = { accountDeletionError = null }) { Text("OK") }
+                },
+                dismissButton = {
+                    // Fallback: the same deletion from the web dashboard while signed in there.
+                    TextButton(
+                        onClick = {
+                            accountDeletionError = null
                             if (!openInAppBrowser(ACCOUNT_DELETION_URL)) {
                                 toastState.show(settingsScope, "Open joinclick.co in your browser to delete your account.")
                             }
                         },
-                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                    ) { Text("Continue on joinclick.co") }
-                },
-                dismissButton = {
-                    TextButton(onClick = { confirmDeleteAccount = false }) { Text("Cancel", color = GlassSheetTokens.OnOledMuted()) }
+                    ) { Text("Use joinclick.co", color = GlassSheetTokens.OnOledMuted()) }
                 },
             )
         }

@@ -558,6 +558,9 @@ internal fun ChatViewModel.updateMessageInputImpl(text: String) {
  * so the UI does not flash a full-screen loading state over the list.
  */
 internal fun ChatViewModel.leaveChatRoomImpl(clearMessageSurface: Boolean = true) {
+    pinsChatId = null
+    _pinnedMessages.value = emptyList()
+    _jumpToMessageRequest.value = null
     val departingState = _chatMessagesState.value as? ChatMessagesState.Success
     val departingConnectionId = currentConnectionId ?: departingState?.chatDetails?.connection?.id
     val chatId = departingState?.chatDetails?.chat?.id

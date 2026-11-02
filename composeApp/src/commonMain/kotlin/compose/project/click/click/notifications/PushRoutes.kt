@@ -31,11 +31,34 @@ sealed interface PushRoute {
     data object OpenApp : PushRoute
 }
 
-/** One table for every push `type` the app receives. */
+/** One table for every push `type` the app receives (mirrors iOS `ClickNotificationCoordinator.tapRoute`). */
 object PushRoutes {
-    /** Types shown with server-written title/body rather than the chat-message path. */
+    /**
+     * Types shown with server-written title/body (`data.title`/`data.body`, set by
+     * `send-push-notification` for every non-chat category) rather than the chat-message path.
+     * Anything not here is treated as a chat message, so every non-chat type must be listed.
+     */
     val serverTextTypes: Set<String> =
-        setOf("event_reminder", "shared_upcoming_event", "reconnect_nudge", "archive_warning", "availability_match")
+        setOf(
+            "event_reminder",
+            "shared_upcoming_event",
+            "reconnect_nudge",
+            "archive_warning",
+            "availability_match",
+            "event_rsvp",
+            "event_rsvp_request",
+            "friends_going",
+            "event_trending",
+            "event_drop_recap",
+            "event_recap",
+            "new_connection",
+            "prior_connection_accepted",
+            "prior_connection_request",
+            "device_approval",
+            "shared_drop_released",
+            "reaction",
+            "reconnect_nearby",
+        )
 
     fun route(data: Map<String, String>): PushRoute {
         fun value(vararg keys: String): String? = keys.firstNotNullOfOrNull { key -> data[key]?.trim()?.takeIf { it.isNotEmpty() } }
@@ -49,18 +72,34 @@ object PushRoutes {
             } else {
                 fallback
             }
+
+        fun event(): PushRoute = value("beacon_id", "event_id")?.let { PushRoute.Event(it) } ?: PushRoute.OpenApp
         return when (value("type", "category").orEmpty()) {
             "chat_message", "new_message", "message", "disposable_reveal", "" ->
                 if (value("group_id") != null && chatId != null) PushRoute.GroupChat(chatId) else directChatOr(PushRoute.OpenApp)
-            "event_reminder", "event_teaser", "shared_upcoming_event" ->
-                value("beacon_id", "event_id")?.let { PushRoute.Event(it) } ?: PushRoute.OpenApp
+            "event_reminder", "event_teaser", "shared_upcoming_event", "event_rsvp", "event_rsvp_request",
+            "friends_going", "event_trending",
+            -> event()
+            // iOS opens the recap; Android has no recap screen yet (audit G3-2), so the event page.
+            "event_drop_recap", "event_recap" -> event()
             "hub_message" -> value("hub_id", "venue_id")?.let { PushRoute.Hub(it) } ?: PushRoute.OpenApp
             // The profile carries the moment: friendship, story, and a hangout to confirm.
-            "archive_warning", "reconnect_nudge", "anniversary", "memory_prompt", "hangout_confirm" ->
+            "archive_warning", "reconnect_nudge", "anniversary", "memory_prompt", "hangout_confirm", "prior_connection_accepted" ->
                 peerUserId?.let { PushRoute.Profile(it) } ?: PushRoute.Connections
-            "wave" -> connectionId?.let { PushRoute.DirectChat("", it) } ?: directChatOr(PushRoute.Connections)
+            "wave", "new_connection", "reconnect_nearby" ->
+                connectionId?.let { PushRoute.DirectChat("", it) } ?: directChatOr(PushRoute.Connections)
             "group_revival" -> chatId?.let { PushRoute.GroupChat(it) } ?: PushRoute.Connections
             "availability_match" -> PushRoute.Connections
+            // iOS answers it in Activity; Android shows pending prior requests in the Clicks list.
+            "prior_connection_request" -> PushRoute.Connections
+            // A reaction to a beacon opens it; shared drops have no Android screen yet (audit G2-4).
+            "reaction" ->
+                value("target_id")
+                    ?.takeIf { data["target_kind"] != "shared_drop" }
+                    ?.let { PushRoute.Event(it) }
+                    ?: PushRoute.OpenApp
+            // No Android screen yet (audit G7-1, G2-4): open the app rather than guess.
+            "device_approval", "shared_drop_released" -> PushRoute.OpenApp
             else -> PushRoute.OpenApp
         }
     }
