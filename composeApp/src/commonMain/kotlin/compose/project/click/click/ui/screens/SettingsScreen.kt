@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.PrivacyTip
 import androidx.compose.material.icons.filled.QrCode
 import androidx.compose.material.icons.filled.Shield
@@ -79,8 +80,12 @@ import compose.project.click.click.data.api.removeChatDeviceImpl
 import compose.project.click.click.data.devices.REMOVE_DEVICE_MESSAGE
 import compose.project.click.click.data.devices.deviceDisplayName
 import compose.project.click.click.data.devices.removeDeviceTitle
+import compose.project.click.click.data.flags.FeatureFlag
+import compose.project.click.click.data.flags.FeatureFlags
 import compose.project.click.click.data.models.AvailabilityIntentRow // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
+import compose.project.click.click.data.places.ClickWebPlacesRepository
+import compose.project.click.click.data.places.PlaceApiException
 import compose.project.click.click.data.repository.AuthRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.HangoutPresence
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
@@ -135,6 +140,7 @@ internal enum class SettingsPage {
     Permissions,
     Blocked,
     Devices,
+    Places,
     Calendar,
     Interests,
     Personality,
@@ -150,6 +156,7 @@ internal fun SettingsPage.title(): String =
         SettingsPage.Permissions -> "Permissions"
         SettingsPage.Blocked -> "Blocked people"
         SettingsPage.Devices -> "Devices"
+        SettingsPage.Places -> "Places"
         SettingsPage.Calendar -> "Calendar"
         SettingsPage.Interests -> "Interests"
         SettingsPage.Personality -> "Personality"
@@ -310,6 +317,13 @@ fun SettingsScreen(
     var removingDevices by remember { mutableStateOf(emptySet<String>()) }
     var devicesError by remember { mutableStateOf<String?>(null) }
     var confirmRemoveDevice by remember { mutableStateOf<MyChatDeviceDto?>(null) }
+    // Me → Places (iOS MyPlacesView; flag click_places)
+    val featureFlags by FeatureFlags.state.collectAsState()
+    val placesEnabled = featureFlags.isEnabled(FeatureFlag.CLICK_PLACES)
+    val placesRepository = remember { ClickWebPlacesRepository() }
+    var myPlacesLoad by remember { mutableStateOf<MyPlacesLoad>(MyPlacesLoad.Loading) }
+    var myPlacesEpoch by remember { mutableStateOf(0) }
+    var openPlaceId by remember { mutableStateOf<String?>(null) }
     var deletingAccount by remember { mutableStateOf(false) }
     var accountDeletionError by remember { mutableStateOf<String?>(null) }
     var pendingAlertKey by remember { mutableStateOf<String?>(null) }
@@ -382,6 +396,18 @@ fun SettingsScreen(
         chatDevicesApi.getMyChatDevicesImpl().fold(
             onSuccess = { devicesLoad = PageLoad.Loaded(it) },
             onFailure = { if (devicesLoad !is PageLoad.Loaded) devicesLoad = PageLoad.Failed },
+        )
+    }
+    LaunchedEffect(settingsPage, myPlacesEpoch, placesEnabled) {
+        if (settingsPage != SettingsPage.Places || !placesEnabled) return@LaunchedEffect
+        if (myPlacesLoad !is MyPlacesLoad.Loaded) myPlacesLoad = MyPlacesLoad.Loading
+        placesRepository.myPlaces().fold(
+            onSuccess = { myPlacesLoad = MyPlacesLoad.Loaded(it) },
+            onFailure = { e ->
+                if (myPlacesLoad !is MyPlacesLoad.Loaded) {
+                    myPlacesLoad = MyPlacesLoad.Failed((e as? PlaceApiException)?.error?.message() ?: "Something went wrong. Try again.")
+                }
+            },
         )
     }
     LaunchedEffect(settingsPage, blockedEpoch) {
@@ -553,6 +579,10 @@ fun SettingsScreen(
                             MeNavRow(Icons.Default.Shield, "Permissions", onClick = { settingsPage = SettingsPage.Permissions })
                             SettingsDivider()
                             MeNavRow(Icons.Default.Devices, "Devices", onClick = { settingsPage = SettingsPage.Devices })
+                            if (placesEnabled) {
+                                SettingsDivider()
+                                MeNavRow(Icons.Default.Place, "Places", onClick = { settingsPage = SettingsPage.Places })
+                            }
                             SettingsDivider()
                             MeNavRow(
                                 icon = Icons.Default.Star,
@@ -869,6 +899,20 @@ fun SettingsScreen(
                                 onAllow = ::requestPermission,
                                 onOpenSettings = { permissionController.openSettings(it) },
                             )
+                        }
+                    }
+
+                    SettingsPage.Places -> {
+                        item {
+                            if (placesEnabled) {
+                                MyPlacesPageContent(
+                                    load = myPlacesLoad,
+                                    onOpenPlace = { openPlaceId = it.place.id },
+                                    onRetry = { myPlacesEpoch++ },
+                                )
+                            } else {
+                                Text("Not available", style = MaterialTheme.typography.bodyLarge)
+                            }
                         }
                     }
 
@@ -1301,6 +1345,10 @@ fun SettingsScreen(
                     TextButton(onClick = { confirmRemovePhoto = false }) { Text("Cancel", color = GlassSheetTokens.OnOledMuted()) }
                 },
             )
+        }
+
+        openPlaceId?.let { placeId ->
+            PlaceDetailSheet(idOrSlug = placeId, source = "history", onDismiss = { openPlaceId = null })
         }
 
         if (confirmSignOut) {
