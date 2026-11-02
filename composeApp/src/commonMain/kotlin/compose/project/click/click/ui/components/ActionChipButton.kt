@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -22,6 +21,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import compose.project.click.click.ui.theme.LocalClickShapes // pragma: allowlist secret
 import compose.project.click.click.ui.theme.clickBorderColor // pragma: allowlist secret
 import compose.project.click.click.ui.theme.clickBorderWidth // pragma: allowlist secret
 
@@ -41,7 +41,7 @@ fun ActionChipButton(
     contentDescription: String? = null,
     filled: Boolean = false,
 ) {
-    val shape = RoundedCornerShape(12.dp)
+    val shape = LocalClickShapes.current.compact
     val background =
         if (filled) {
             MaterialTheme.colorScheme.primaryContainer

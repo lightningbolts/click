@@ -167,6 +167,8 @@ fun clickColorScheme(isDarkMode: Boolean) =
         )
     }
 
+private val clickShapes = ClickShapes()
+
 @Composable
 fun PlatformThemeProvider(
     isDarkMode: Boolean,
@@ -176,7 +178,10 @@ fun PlatformThemeProvider(
         colorScheme = clickColorScheme(isDarkMode),
         typography = clickTypography(),
     ) {
-        CompositionLocalProvider(LocalIsDarkMode provides isDarkMode) {
+        CompositionLocalProvider(
+            LocalIsDarkMode provides isDarkMode,
+            LocalClickShapes provides clickShapes,
+        ) {
             PlatformStyleProvider {
                 Box(
                     modifier =

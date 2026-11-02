@@ -53,6 +53,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import compose.project.click.click.ui.theme.ClickRadius // pragma: allowlist secret
 import compose.project.click.click.ui.theme.clickBorderColor // pragma: allowlist secret
 import compose.project.click.click.ui.theme.clickBorderWidth // pragma: allowlist secret
 import compose.project.click.click.ui.theme.clickCardSurface // pragma: allowlist secret
@@ -60,8 +61,9 @@ import compose.project.click.click.ui.theme.clickTextFieldTextStyle // pragma: a
 
 /** Shared radii / heights so search, form, and drop fields match. */
 object ClickFieldTokens {
-    val CornerRadius = 16.dp
-    val CompactCornerRadius = 14.dp
+    /** iOS `ClickRadius.field` (was 16 dp). */
+    val CornerRadius = ClickRadius.field
+    val CompactCornerRadius = ClickRadius.field
     val SearchHeight = 56.dp
     val SingleLineMinHeight = 56.dp
     val MultilineMinHeight = 112.dp
