@@ -383,7 +383,7 @@ Each task is one PR, cut from `origin/main`, with `./gradlew :composeApp:assembl
 | **P1-1** | **Feature flags client (G1-1)**, including `ticket_wallet`. `StateFlow<FeatureFlags>`, per-user encrypted persistence, refresh on sign-in and foreground, cleared at sign-out, unknown or failed means off. | new `KMP/core/FeatureFlags.kt`, `FeatureFlagsRepository.kt`; `KMP/data/api/ApiClient*.kt`; hook in `KMP/data/AppDataManager.kt` and sign-out | Off by default, malformed JSON gives all off, persistence round-trip, reset on sign-out. |
 | **P1-2** | **Theme tokens to Quiet Presence (colour).** Map M3 roles to the iOS/web table in §3, light and dark. Drop the hard borders and press offset from `PlatformStyle`. Keep `#630ED4` as `BrandMark`. | `KMP/ui/theme/Color.kt`, `PlatformTheme.kt` | Contrast tests in `Contrast.kt` (existing helpers) for action-on-white and text roles; Compose screenshot tests of a token gallery (light and dark). |
 | **P1-3** | **Typography: Manrope for headings only.** Display/headline/title use Manrope ExtraBold/Bold; body/label use `FontFamily.Default`. Remap sizes to the shared scale (floor 12 sp). | `KMP/ui/theme/Typography.kt` | Unit test that every style is at least 12 sp; screenshot test of the type ramp. |
-| **P1-4** | **Shape, spacing and motion tokens.** Add `ClickShapes` (6/10/14/20/26, capsule, bubble 18) and spacing (2/4/8/16/24/32/48, gutter 16). Align `MotionTokens` durations to 120/160/240/360 and press scale to 0.97. Do not sweep screens in this PR. | `KMP/ui/theme/` (new `Shapes.kt`), `KMP/ui/components/ClickLaunchPrimitives.kt`, `MotionTokens.kt` | Token unit tests. |
+| **P1-4** | **Shape, spacing and motion tokens.** Add `ClickShapes` (12/14/26/30, capsule, bubble 18, per iOS `Spacing.swift`) and spacing (2/4/8/16/24/32/48, gutter 16). Align `MotionTokens` durations to 120/160/240/360 and press scale to 0.97. Do not sweep screens in this PR. | `KMP/ui/theme/` (new `Shapes.kt`), `KMP/ui/components/ClickLaunchPrimitives.kt`, `MotionTokens.kt` | Token unit tests. |
 | **P1-5** | **Screenshot test harness.** Add Roborazzi (Robolectric-based, runs in `testDebugUnitTest`) with a baseline for the token gallery and two core components. | `composeApp/build.gradle.kts`, `gradle/libs.versions.toml`, `androidUnitTest/.../screenshots/*` | Record and verify tasks in CI. |
 | **P1-6** | **Re-key after `409 DEVICE_REVOKED`, and re-check devices before the first send of a session.** | `KMP/data/repository/SupabaseChatRepositoryCrypto.kt`, `KMP/crypto/DeviceIdentityStorage.kt` (behind the existing expect) | A fake API returns 409 once: a new identity is generated once, and a second 409 surfaces an error. |
 | **P1-7** | **Push routes (G1-3).** Add the 13 missing types; unknown types open the app; missing IDs never navigate. | `KMP/notifications/PushRoutes.kt` | One test per type. |
@@ -490,11 +490,12 @@ Each PR builds (`assembleDebug`), passes `spotlessCheck` and all unit tests loca
 | G2-2 Develop, live develop, bloom; archive memory cap | lightningbolts/click#164 | |
 | G5-2, G5-4 Places map layer, `/p/` links, privacy toggle, search | lightningbolts/click#165 | |
 | P2-19 Multi-Tap `prepareGroup` | lightningbolts/click#166 | |
+| P1-4 Shape and spacing tokens | lightningbolts/click#167 | Tokens plus a few shared components; field corner 16 → 14 dp. |
 
 All PRs above are merged into `main`.
 
 **Still open:**
-- P1-4 shape and spacing tokens (PR in progress); a full screen sweep is not planned.
+- P1-4 follow-ups: `ClickButton` capsule (now 8 dp), cards 26 dp (now 16), screen gutter 16 dp (now 20), and the motion tokens. Each moves pixels on busy screens, so they belong in a screen sweep with re-recorded screenshots.
 - Places: filters, a Nearby-list section, venue writes through the Places APIs and manager invites (G5-5).
 - G4: altitude follow-up (no Android equivalent of CoreMotion's absolute altimeter) and an encounter details card after a QR connect.
 - G2: legacy (non-gated) drops still use the 24 h lock when `drops_develop` is on.
