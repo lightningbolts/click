@@ -118,6 +118,17 @@ jobs:
       - name: Unit tests
         run: ./gradlew :composeApp:testDebugUnitTest --no-daemon --stacktrace
 
+      - name: Screenshot tests (Roborazzi verify against committed baselines)
+        run: ./gradlew :composeApp:verifyRoborazziDebug --no-daemon --stacktrace
+
+      - name: Upload screenshot diffs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: roborazzi-diffs
+          path: composeApp/build/outputs/roborazzi
+          if-no-files-found: ignore
+
       - name: Supabase drift check (vs sibling click-web)
         run: bash scripts/check-supabase-drift.sh
 
