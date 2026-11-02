@@ -14,10 +14,7 @@ import compose.project.click.click.data.models.isOneToOnePairEdge // pragma: all
 import compose.project.click.click.data.models.isPendingSync // pragma: allowlist secret
 import compose.project.click.click.data.models.toUserProfile // pragma: allowlist secret
 import compose.project.click.click.data.repository.PROXIMITY_HOST_SELECTION_MAX_PEERS // pragma: allowlist secret
-import compose.project.click.click.data.repository.SupabaseChatRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.hostSelectionExclusions // pragma: allowlist secret
-import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
-import compose.project.click.click.domain.VerifiedCliqueCreation // pragma: allowlist secret
 import compose.project.click.click.sensors.AmbientNoiseMonitor // pragma: allowlist secret
 import compose.project.click.click.sensors.BarometricHeightMonitor // pragma: allowlist secret
 import compose.project.click.click.sensors.ConnectionSensorContext // pragma: allowlist secret
@@ -436,23 +433,9 @@ internal fun ConnectionViewModel.confirmHostProximitySelectionImpl(
                     _connectionState.value = ConnectionState.Error("Connection was not created")
                     return@launch
                 }
-                // Host + ≥2 selected peers (member set ≥3) on a new spark → clique autofill
-                // with the confirmed selection only (never the raw unmatched BLE candidate list).
+                // Host + ≥2 selected peers (member set ≥3) on a new spark: find or create the group
+                // chat right away, alongside the post-connect screen (P2-19, iOS `prepareGroup`).
                 if (selected.size >= 2 && outcome.isAggregateNewConnection) {
-                    val selectedUsers =
-                        matchedPeers.filter { it.id in selected }.ifEmpty {
-                            tagging.selectableUsers
-                                .ifEmpty { tagging.targetUsers }
-                                .filter { it.id in selected }
-                                .map { profile ->
-                                    User(
-                                        id = profile.id,
-                                        name = profile.displayName,
-                                        image = profile.avatarUrl,
-                                        createdAt = 0L,
-                                    )
-                                }
-                        }
                     ConnectionFlowTelemetry.recordVerifiedCliqueCreated(
                         peerCount = selected.size,
                         selectedCount = selected.size,
@@ -460,14 +443,11 @@ internal fun ConnectionViewModel.confirmHostProximitySelectionImpl(
                             tagging.selectableUsers.size.takeIf { it > 0 }
                                 ?: tagging.targetUsers.size,
                     )
-                    _verifiedCliqueFromProximity.emit(
-                        VerifiedCliqueProximityIntent(
-                            preselectFriendIds = selected,
-                            matchedUsers = selectedUsers,
-                        ),
+                    startMultiTapGroupPreparation(
+                        currentUserId = currentUserId,
+                        groupMemberIds = created.first().user_ids,
+                        peers = profiles.filter { it.id in selected }.ifEmpty { profiles },
                     )
-                    _connectionState.value = ConnectionState.Idle
-                    return@launch
                 }
                 // Tags already sent with confirm when present; skip second tagging sheet.
                 if (!contextTagIds.isNullOrEmpty()) {
@@ -515,21 +495,19 @@ internal fun ConnectionViewModel.confirmHostProximitySelectionImpl(
                 )
             }
     if (selected.size >= 2 && tagging.isNewConnection) {
-        viewModelScope.launch {
-            ConnectionFlowTelemetry.recordVerifiedCliqueCreated(
-                peerCount = selected.size,
-                selectedCount = selected.size,
-                candidateCount =
-                    tagging.selectableUsers.size.takeIf { it > 0 }
-                        ?: tagging.targetUsers.size,
-            )
-            _verifiedCliqueFromProximity.emit(
-                VerifiedCliqueProximityIntent(
-                    preselectFriendIds = selected,
-                    matchedUsers = peerUsers,
-                ),
-            )
-        }
+        ConnectionFlowTelemetry.recordVerifiedCliqueCreated(
+            peerCount = selected.size,
+            selectedCount = selected.size,
+            candidateCount =
+                tagging.selectableUsers.size.takeIf { it > 0 }
+                    ?: tagging.targetUsers.size,
+        )
+        // P2-19: find or create the group chat (prefilled sheet only if that fails).
+        startMultiTapGroupPreparation(
+            currentUserId = currentUserId,
+            groupMemberIds = emptyList(),
+            peers = peerUsers.map { it.toUserProfile() },
+        )
     }
     confirmProximityConnection(
         peerUsers = peerUsers,
@@ -644,49 +622,14 @@ internal fun ConnectionViewModel.saveContextTagsImpl(
             if (!connections.any { it.isPendingSync() }) {
                 AppDataManager.refresh(force = true)
             }
-            if (selfId != null && targetProfiles.size >= 1) {
-                val memberUserIds =
-                    (
-                        tagging.memberUserIds.takeIf { it.isNotEmpty() }
-                            ?: (listOf(selfId) + targetProfiles.map { it.id })
-                    ).distinct().sorted()
-                // Only auto-create verified clique for true multi-person groups (not 1:1 DMs).
-                if (tagging.isGroup && memberUserIds.size >= 3) {
-                    _connectionState.value = ConnectionState.SecuringConnection
-                    val selfProfile = AppDataManager.currentUser.value?.toUserProfile()
-                    val nameParts =
-                        if (selfProfile != null) {
-                            (listOf(selfProfile) + targetProfiles).distinctBy { it.id }.sortedBy { it.id }
-                        } else {
-                            targetProfiles.distinctBy { it.id }.sortedBy { it.id }
-                        }
-                    val initialGroupName =
-                        nameParts.joinToString(", ") { p ->
-                            p.displayName
-                                .trim()
-                                .split(Regex("\\s+"))
-                                .firstOrNull()
-                                ?.takeIf { it.isNotEmpty() }
-                                ?: p.displayName.trim().ifBlank { "Friend" }
-                        }
-                    val chatRepo = SupabaseChatRepository(tokenStorage = createTokenStorage())
-                    val auto =
-                        VerifiedCliqueCreation.createVerifiedCliqueWithWrappedKeys(
-                            chatRepository = chatRepo,
-                            connections = AppDataManager.connections.value,
-                            currentUserId = selfId,
-                            memberUserIds = memberUserIds,
-                            initialGroupName = initialGroupName,
-                        )
-                    val created = auto.getOrNull()
-                    if (created != null) {
-                        val chatId = chatRepo.resolveChatIdForGroupId(created.groupId)
-                        if (chatId != null) {
-                            chatRepo.cacheGroupMasterKey(chatId, created.masterKey32)
-                        }
-                        AppDataManager.bumpChatListRefresh()
-                    }
-                }
+            // P2-19: a group Click's chat is found or created in the background (once per member
+            // set; a no-op when it already started at confirm time).
+            if (selfId != null && tagging.isGroup) {
+                startMultiTapGroupPreparation(
+                    currentUserId = selfId,
+                    groupMemberIds = tagging.memberUserIds,
+                    peers = targetProfiles,
+                )
             }
             val primary = connections.first()
             val summaryUser = syntheticUserForProximitySuccess(targetProfiles)
