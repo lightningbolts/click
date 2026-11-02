@@ -11,6 +11,13 @@ class FakeTokenStorage(
 ) : TokenStorage {
     private var activeHubsJson: String? = null
     private var pendingEncounterQueueJson: String? = null
+    private var nearbySort: String? = null
+
+    override suspend fun saveNearbySort(value: String?) {
+        nearbySort = value
+    }
+
+    override suspend fun getNearbySort(): String? = nearbySort
 
     override suspend fun saveTokens(
         jwt: String,

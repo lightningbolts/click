@@ -1,5 +1,6 @@
 package compose.project.click.click.ui.chat
 
+import compose.project.click.click.collaboration.ClickDropDevelopState
 import compose.project.click.click.data.models.Message
 import compose.project.click.click.data.models.MessageReplyRef
 import compose.project.click.click.data.models.MessageWithUser
@@ -71,6 +72,20 @@ class MessagePrivacyAndActionsTest {
             )
         assertTrue(canExportMessageMedia(revealed))
         assertTrue(canExportMessageMedia(message(type = "image")))
+        // With drops_develop on, a revealed legacy drop stays private until this viewer develops it.
+        assertFalse(canExportMessageMedia(revealed, awaitingDevelop = true))
+    }
+
+    @Test
+    fun legacyDropsInTheDevelopFlowStayPixelatedUntilDeveloped() {
+        // Outside the develop flow (no controls): a legacy drop follows its time lock only.
+        assertFalse(clickDropAwaitingDevelop(gatedAwaitingOriginal = false, isGated = false, developState = null))
+        val ready = ClickDropDevelopState.Ready
+        assertTrue(clickDropAwaitingDevelop(gatedAwaitingOriginal = false, isGated = false, developState = ready))
+        assertFalse(clickDropAwaitingDevelop(false, isGated = false, developState = ClickDropDevelopState.Developed))
+        // Gated drops wait for their original on screen, whatever the develop state says.
+        assertTrue(clickDropAwaitingDevelop(gatedAwaitingOriginal = true, isGated = true, developState = ClickDropDevelopState.Developed))
+        assertFalse(clickDropAwaitingDevelop(gatedAwaitingOriginal = false, isGated = true, developState = ready))
     }
 
     // endregion

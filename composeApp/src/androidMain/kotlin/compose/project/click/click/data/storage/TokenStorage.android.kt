@@ -77,6 +77,7 @@ class AndroidTokenStorage(
         private const val KEY_FEATURE_FLAGS_CACHE = "feature_flags_cache"
         private const val KEY_PUSH_PREVIEW_KEYS = "push_preview_epoch_keys"
         private const val KEY_RECENT_EMOJI = "recent_emoji"
+        private const val KEY_NEARBY_SORT = "nearby_sort"
         private const val KEY_PLACE_FILTERS = "places.filters.v1"
         private const val KEY_LOCATION_EXPLAINER_SEEN = "location_explainer_seen"
         private const val KEY_ONBOARDING_STATE = "onboarding_state"
@@ -265,12 +266,21 @@ class AndroidTokenStorage(
 
     override suspend fun getRecentEmoji(): String? = sharedPreferences.getString(KEY_RECENT_EMOJI, null)
 
+    override suspend fun saveNearbySort(value: String?) {
+        sharedPreferences.edit().apply {
+            if (value == null) remove(KEY_NEARBY_SORT) else putString(KEY_NEARBY_SORT, value)
+            apply()
+        }
+    }
+
     override suspend fun savePlaceFilters(json: String?) {
         sharedPreferences.edit().apply {
             if (json == null) remove(KEY_PLACE_FILTERS) else putString(KEY_PLACE_FILTERS, json)
             apply()
         }
     }
+
+    override suspend fun getNearbySort(): String? = sharedPreferences.getString(KEY_NEARBY_SORT, null)
 
     override suspend fun getPlaceFilters(): String? = sharedPreferences.getString(KEY_PLACE_FILTERS, null)
 

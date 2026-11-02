@@ -81,6 +81,7 @@ import compose.project.click.click.ui.theme.PrimaryBlue
 import compose.project.click.click.viewmodel.SecureChatMediaHost
 import compose.project.click.click.viewmodel.SecureChatMediaLoadState
 import compose.project.click.click.viewmodel.clickDropRevealRefOrNull
+import compose.project.click.click.viewmodel.usesClickDropDevelopFlow
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -289,17 +290,22 @@ fun ChatMessageBubble(
 
     // A gated Click Drop: pending until reveal, then ready until this viewer develops it (tap,
     // "Develop all", or live develop when it reaches zero on screen). iOS `ClickDropImageView`.
+    // Legacy (non-gated) drops join the same flow when `drops_develop` is on (iOS `usesDevelopFlow`).
     val gatedDrop = isImageMessage && message.isGatedDrop()
+    val dropHost = secureMediaHost?.clickDropDevelop
+    val developFlowDrop = isImageMessage && dropHost != null && message.usesClickDropDevelopFlow()
     val gatedOriginals = GatedDropOriginals.loaded.collectAsState().value
     val gatedOriginalOnScreen = gatedDrop && message.id in gatedOriginals
-    val dropHost = secureMediaHost?.clickDropDevelop
     val dropBook = dropHost?.clickDropBook?.collectAsState()?.value
-    val dropRef = remember(message.id, message.metadata, gatedDrop) { if (gatedDrop) message.clickDropRevealRefOrNull() else null }
+    val dropRef =
+        remember(message.id, message.metadata, gatedDrop, developFlowDrop) {
+            if (gatedDrop || developFlowDrop) message.clickDropRevealRefOrNull() else null
+        }
     val dropDeveloped = dropRef != null && dropBook?.isDeveloped(dropRef.id) == true
     // Bumped at reveal time so a pending drop turns ready on screen.
     var dropRevealTick by remember(message.id) { mutableStateOf(0) }
-    LaunchedEffect(message.id, gatedDrop, gatedOriginalOnScreen, activeChatId, currentUserId, dropDeveloped) {
-        if (!gatedDrop || gatedOriginalOnScreen) return@LaunchedEffect
+    LaunchedEffect(message.id, gatedDrop, developFlowDrop, gatedOriginalOnScreen, activeChatId, currentUserId, dropDeveloped) {
+        if (!(gatedDrop || developFlowDrop) || gatedOriginalOnScreen) return@LaunchedEffect
         val scopeId = activeChatId ?: return@LaunchedEffect
         val viewerId = currentUserId ?: return@LaunchedEffect
         val revealAtMs =

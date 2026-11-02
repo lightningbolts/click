@@ -1,6 +1,7 @@
 package compose.project.click.click.ui.screens // pragma: allowlist secret
 
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
+import compose.project.click.click.data.storage.TokenStorage // pragma: allowlist secret
 import compose.project.click.click.events.eventSchedule // pragma: allowlist secret
 import compose.project.click.click.ui.utils.displayDynamicTitle // pragma: allowlist secret
 import compose.project.click.click.ui.utils.displayTypeTitle // pragma: allowlist secret
@@ -15,12 +16,35 @@ import kotlin.math.pow
  */
 internal enum class NearbySort(
     val label: String,
+    /** Stored value; the same raw values as iOS `NearbySort`. */
+    val storageValue: String,
 ) {
-    Relevance("Relevance"),
-    Distance("Distance"),
-    Rising("Rising"),
-    New("New"),
-    Alphabetical("Alphabetical"),
+    Relevance("Relevance", "relevance"),
+    Distance("Distance", "distance"),
+    Rising("Rising", "rising"),
+    New("New", "new"),
+    Alphabetical("Alphabetical", "alphabetical"),
+    ;
+
+    companion object {
+        /** A stored choice, or Relevance when there is none or it is unknown (iOS default). */
+        fun fromStorage(raw: String?): NearbySort = entries.firstOrNull { it.storageValue == raw?.trim() } ?: Relevance
+    }
+}
+
+/**
+ * Keeps the Nearby sort across restarts in the app's existing settings store ([TokenStorage]), as
+ * iOS keeps it in `UserDefaults` (`MapFeatureModel.sort`). A failed read or write is ignored.
+ */
+internal object NearbySortPreference {
+    suspend fun load(storage: TokenStorage): NearbySort = NearbySort.fromStorage(runCatching { storage.getNearbySort() }.getOrNull())
+
+    suspend fun save(
+        storage: TokenStorage,
+        sort: NearbySort,
+    ) {
+        runCatching { storage.saveNearbySort(sort.storageValue) }
+    }
 }
 
 /** Row title used for search, A–Z order and stack ordering. */

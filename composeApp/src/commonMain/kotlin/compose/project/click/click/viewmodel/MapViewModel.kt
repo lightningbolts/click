@@ -32,6 +32,7 @@ import compose.project.click.click.events.EventVenueScale // pragma: allowlist s
 import compose.project.click.click.events.eventSchedule // pragma: allowlist secret
 import compose.project.click.click.ui.components.MapPin // pragma: allowlist secret
 import compose.project.click.click.ui.screens.NearbySort // pragma: allowlist secret
+import compose.project.click.click.ui.screens.NearbySortPreference // pragma: allowlist secret
 import compose.project.click.click.ui.utils.BoundingBox // pragma: allowlist secret
 import compose.project.click.click.ui.utils.CommunityHubPin // pragma: allowlist secret
 import compose.project.click.click.ui.utils.ConnectionMapPoint // pragma: allowlist secret
@@ -90,8 +91,13 @@ class MapViewModel : ViewModel() {
     internal val nearbySort: StateFlow<NearbySort> =
         _nearbySort.asStateFlow()
 
+    /** True once the user picked a sort here, so a late stored read never overrides it. */
+    private var nearbySortChosen = false
+
     internal fun setNearbySort(sort: NearbySort) {
+        nearbySortChosen = true
         _nearbySort.value = sort
+        viewModelScope.launch { NearbySortPreference.save(tokenStorage, sort) }
     }
 
     // What to render on the map (clusters or individual pins)
@@ -173,6 +179,15 @@ class MapViewModel : ViewModel() {
 
     internal val mapBeaconRepository = MapBeaconRepository()
     internal val tokenStorage: TokenStorage = createTokenStorage()
+
+    init {
+        // The last Nearby sort survives restarts (iOS `UserDefaults` `nearby.sort.v1`).
+        viewModelScope.launch {
+            val stored = NearbySortPreference.load(tokenStorage)
+            if (!nearbySortChosen) _nearbySort.value = stored
+        }
+    }
+
     internal val authRepository: AuthRepository by lazy { AuthRepository(tokenStorage) }
     internal val apiClient: ApiClient by lazy { ApiClient() }
 

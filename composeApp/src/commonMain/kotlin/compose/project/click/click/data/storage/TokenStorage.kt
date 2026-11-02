@@ -98,6 +98,11 @@ interface TokenStorage {
 
     suspend fun getRecentEmoji(): String? = null
 
+    /** Nearby sort choice, a device preference like iOS `UserDefaults` `nearby.sort.v1` (kept across sign-out). */
+    suspend fun saveNearbySort(value: String?) {}
+
+    suspend fun getNearbySort(): String? = null
+
     /** Click Places filters as JSON (`places.filters.v1`, like iOS). Device-local. */
     suspend fun savePlaceFilters(json: String?) {}
 
