@@ -211,7 +211,9 @@ internal fun ConnectionViewModel.handleAwaitingHostSelection(
             pendingHandshakeId = awaiting.pendingHandshakeId,
             requiresSelection = true,
             selectedPeerIds = selected,
+            existingConnectionId = awaiting.existingConnectionId,
         )
+    hostSelectionSync.reset()
 }
 
 internal fun ConnectionViewModel.startPendingProximityRecovery(
