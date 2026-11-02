@@ -5,6 +5,7 @@ import compose.project.click.click.connect.ConnectionCaptureSession // pragma: a
 import compose.project.click.click.connect.ConnectionCaptureSnapshot // pragma: allowlist secret
 import compose.project.click.click.connect.ConnectionLocationQuality // pragma: allowlist secret
 import compose.project.click.click.connect.ConnectionSensorObservation // pragma: allowlist secret
+import compose.project.click.click.connect.EncounterFollowUp // pragma: allowlist secret
 import compose.project.click.click.connect.connectionQualityKeys // pragma: allowlist secret
 import compose.project.click.click.connect.currentConnectionDeviceContext // pragma: allowlist secret
 import compose.project.click.click.connect.hasPreciseLocationPermission // pragma: allowlist secret
@@ -101,4 +102,42 @@ internal suspend fun ConnectionViewModel.captureConnectContext(
             observation?.let { put("sensor_observation", it) }
         }
     return CapturedConnectContext(snapshot = snapshot, includeLocation = includeLocation, observationKeys = keys)
+}
+
+/** Starts the location follow-up (G4-7) for this capture; confirmed when the flow knows its connection IDs. */
+internal fun ConnectionViewModel.beginEncounterFollowUp(captured: CapturedConnectContext) {
+    activeFollowUp?.cancel()
+    followUpAccuracyJob?.cancel()
+    val followUp =
+        EncounterFollowUp.begin(
+            snapshot = captured.snapshot,
+            includeLocation = captured.fix != null,
+            scope = viewModelScope,
+        )
+    activeFollowUp = followUp
+    _followUpAccuracyMeters.value = null
+    followUpAccuracyJob =
+        followUp?.let { f ->
+            viewModelScope.launch { f.refinedAccuracyMeters.collect { _followUpAccuracyMeters.value = it } }
+        }
+}
+
+/** The connection did not happen: nothing is sent. Ignored once confirmed. */
+internal fun ConnectionViewModel.cancelEncounterFollowUp() {
+    activeFollowUp?.cancel()
+}
+
+/**
+ * Confirms or cancels the follow-up as the flow settles (one place for every path, like iOS
+ * `finish(with:)` / `dropFollowUp()`): a shown result confirms its connection IDs, an error cancels.
+ */
+internal fun ConnectionViewModel.syncFollowUpWith(state: ConnectionState) {
+    val followUp = activeFollowUp ?: return
+    when (state) {
+        is ConnectionState.Success -> followUp.confirm(listOf(state.connection.id))
+        is ConnectionState.TaggingContext ->
+            if (state.newConnections.isNotEmpty()) followUp.confirm(state.newConnections.map { it.id })
+        is ConnectionState.Error -> followUp.cancel()
+        else -> Unit
+    }
 }

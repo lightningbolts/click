@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import compose.project.click.click.collaboration.CollaborationSession // pragma: allowlist secret
 import compose.project.click.click.collaboration.CollaborationSessionManager // pragma: allowlist secret
+import compose.project.click.click.connect.ConnectionVerification // pragma: allowlist secret
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.WeatherService // pragma: allowlist secret
 import compose.project.click.click.data.models.Connection // pragma: allowlist secret
@@ -197,6 +198,27 @@ class ConnectionViewModel : ViewModel() {
 
     /** When the QR / link was recognized: the connection moment for that flow. */
     internal var qrScanMomentMs: Long? = null
+
+    /** The location follow-up of the latest connect (G4-7). */
+    internal var activeFollowUp: compose.project.click.click.connect.EncounterFollowUp? = null
+    internal var followUpAccuracyJob: Job? = null
+    internal val _followUpAccuracyMeters = MutableStateFlow<Double?>(null)
+
+    /** Live "Location ±N m" once the follow-up tightened the moment's fix. */
+    val followUpAccuracyMeters: StateFlow<Double?> = _followUpAccuracyMeters.asStateFlow()
+
+    /** What confirmed the latest connection on this phone ("Bluetooth · Sound · Location ±8 m"; G4-6). */
+    internal val _lastVerification = MutableStateFlow<ConnectionVerification?>(null)
+    val lastVerification: StateFlow<ConnectionVerification?> = _lastVerification.asStateFlow()
+
+    /** G4-4 review poll and G4-5 late-joiner watch. */
+    internal var reviewWatchJob: Job? = null
+    internal var groupWatchJob: Job? = null
+
+    init {
+        // G4-7: the follow-up is confirmed or cancelled as each flow settles.
+        viewModelScope.launch { _connectionState.collect { syncFollowUpWith(it) } }
+    }
 
     override fun onCleared() {
         // Sensors never outlive the flow's view model.
@@ -425,9 +447,17 @@ class ConnectionViewModel : ViewModel() {
                         ?: tagging.targetUsers.size,
                 reason = "dismissed",
             )
+            // Leaving the review means not joining: nobody else's confirm adds this person (iOS `cancel()`).
+            leaveReview(tagging)
         }
         activeTapProximityJob?.cancel()
         activeTapProximityJob = null
+        reviewWatchJob?.cancel()
+        reviewWatchJob = null
+        groupWatchJob?.cancel()
+        groupWatchJob = null
+        // Ignored once the flow confirmed its connections, so closing the result never drops a reading.
+        cancelEncounterFollowUp()
         lastTapProximityStartedAtMs = 0L
         lastProximityEncounterLoggedAggregate = true
         lastProximityHardwareVibe = null

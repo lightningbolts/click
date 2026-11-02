@@ -2,6 +2,7 @@ package compose.project.click.click.viewmodel
 
 import androidx.lifecycle.viewModelScope
 import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
+import compose.project.click.click.connect.ConnectionVerification // pragma: allowlist secret
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.models.Connection // pragma: allowlist secret
 import compose.project.click.click.data.models.ConnectionRequest // pragma: allowlist secret
@@ -383,6 +384,16 @@ internal fun ConnectionViewModel.confirmHostProximitySelectionImpl(
                     }
                 activateCollaborationSessionIfPresent(outcome)
                 lastProximityEncounterLoggedAggregate = outcome.encounterLogged
+                // G4-5: when another phone confirmed first (409, recovered by the repository), its
+                // group may still include someone this person removed; say so (iOS `finishAfterOtherConfirmed`).
+                val removedHere =
+                    tagging.selectableUsers
+                        .ifEmpty { tagging.targetUsers }
+                        .map { it.id }
+                        .filterNot { it in selected }
+                        .toSet()
+                otherPhoneConfirmedNotice(outcome.matches.filter { it.id in removedHere })
+                    ?.let { _transientNotice.tryEmit(it) }
                 val matchedPeers =
                     outcome.matches
                         .filter { it.id.isNotBlank() && it.id != currentUserId }
@@ -605,6 +616,31 @@ internal fun ConnectionViewModel.saveContextTagsImpl(
                     return@launch
                 }
             }
+            // G4-6: a group Click's tag also goes on this person's connection with each member.
+            if (contextTag != null && selfId != null && tagging.isGroup) {
+                val clickIds = connections.map { it.id }
+                val pairIds =
+                    groupTagTargetIds(
+                        clickConnectionIds = clickIds,
+                        memberUserIds = tagging.memberUserIds.ifEmpty { targetProfiles.map { it.id } },
+                        currentUserId = selfId,
+                        knownConnections = AppDataManager.connections.value,
+                    ) - clickIds.toSet()
+                for (pairId in pairIds) {
+                    // Best effort: a member's own row can predate this tap (merged into an earlier hangout).
+                    withContext(Dispatchers.Default) {
+                        repository.updateConnectionTags(
+                            connectionId = pairId,
+                            reportingUserId = selfId,
+                            contextTag = contextTag,
+                            noiseLevelCategory = null,
+                            exactNoiseLevelDb = null,
+                            heightCategory = null,
+                            exactBarometricElevationMeters = null,
+                        )
+                    }
+                }
+            }
             if (!connections.any { it.isPendingSync() }) {
                 AppDataManager.refresh(force = true)
             }
@@ -790,6 +826,13 @@ internal fun ConnectionViewModel.connectWithUserImpl(
                 val outcome = result.getOrNull()!!
                 val connection = outcome.connection
                 val encounterLogged = outcome.encounterLogged
+                if (connectionMethod == "qr") {
+                    // G4-6: what confirmed this scan ("QR code · Location ±8 m").
+                    _lastVerification.value = ConnectionVerification.forQr(capturedFix?.horizontalAccuracyMeters)
+                    // G4-7: tighten the scan's fix while still (never for a rate-limited reconnect);
+                    // confirmed once the result state lands.
+                    if (encounterLogged) captured?.let { beginEncounterFollowUp(it) }
+                }
                 if (connectionMethod == "qr") {
                     if (encounterLogged) {
                         ConnectionFlowTelemetry.recordQrSucceeded(isReconnect = null, captureQuality = lastCaptureQuality)

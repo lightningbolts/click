@@ -146,6 +146,8 @@ data class BindProximityHandshakeOutcome(
     val groupCliqueCandidateMemberIds: List<String>? = null,
     val connectionId: String? = null,
     val isGroup: Boolean = false,
+    /** This phone's stored tap; polled for a late joiner turning a 1:1 into a group (G4-5). */
+    val pendingHandshakeId: String? = null,
 )
 
 /** Result of `POST /api/connections/proximity` — instant match vs async pending. */
@@ -199,6 +201,7 @@ internal fun ProximityBindOkResponseDto.toBindOutcome(): BindProximityHandshakeO
         isGroup = isGroup == true,
         encounterId = encounterId?.trim()?.takeIf { it.isNotEmpty() },
         collaborationTtl = collaborationTtl?.trim()?.takeIf { it.isNotEmpty() },
+        pendingHandshakeId = pendingHandshakeId?.trim()?.takeIf { it.isNotEmpty() },
     )
 }
 
