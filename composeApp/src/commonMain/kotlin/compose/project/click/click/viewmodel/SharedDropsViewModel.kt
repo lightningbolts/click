@@ -11,15 +11,24 @@ import compose.project.click.click.collaboration.SharedDropGroup
 import compose.project.click.click.collaboration.clickDropPreviewJpeg
 import compose.project.click.click.collaboration.encodedImageSize
 import compose.project.click.click.data.AppDataManager
+import compose.project.click.click.data.api.ReactionTarget
+import compose.project.click.click.data.api.ReactionsApi
+import compose.project.click.click.data.api.ReactionsService
 import compose.project.click.click.data.api.SharedDropPostException
 import compose.project.click.click.data.api.SharedDropsApi
 import compose.project.click.click.data.api.SharedDropsService
 import compose.project.click.click.data.api.sharedDropCreateBody
+import compose.project.click.click.data.api.withMine
 import compose.project.click.click.data.flags.FeatureFlag
 import compose.project.click.click.data.flags.FeatureFlags
+import compose.project.click.click.data.models.ChatDropReply
+import compose.project.click.click.data.models.ChatMessageType
+import compose.project.click.click.data.realtime.LiveBatch
+import compose.project.click.click.data.realtime.LiveUpdates
 import compose.project.click.click.util.readChatMediaVaultBytes
 import compose.project.click.click.util.writeChatMediaVaultFile
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -29,6 +38,7 @@ import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import kotlin.random.Random
 
 /** A drop being shared, kept so a failed post retries with the same `client_drop_id`. */
@@ -52,7 +62,53 @@ data class SharedDropsUiState(
     val pendingPost: PendingSharedDrop? = null,
     val developing: Set<String> = emptySet(),
     val notice: String? = null,
-)
+    /** "View all": every drop you can see, newest first, a page at a time. */
+    val archive: List<SharedDrop> = emptyList(),
+    /** Where the next archive page starts; null at the end. */
+    val archiveNextBefore: String? = null,
+    val archiveLoaded: Boolean = false,
+    val archiveLoading: Boolean = false,
+    /** The first page failed and nothing is on screen. */
+    val archiveError: String? = null,
+    /** A later page failed: the grid shows "Couldn't load more. Retry". */
+    val archiveMoreFailed: Boolean = false,
+) {
+    /** The strip's copy first (it's the fresher one), else the archive's (iOS `SharedDropsStore.drop`). */
+    fun drop(id: String): SharedDrop? = drops.firstOrNull { it.id == id } ?: archive.firstOrNull { it.id == id }
+}
+
+/** Sends a story reply (or a reaction) into the 1-1 chat with the poster; false when it didn't go. */
+fun interface SharedDropReplySender {
+    suspend fun send(
+        connectionId: String,
+        userId: String,
+        text: String,
+        metadata: JsonObject,
+    ): Boolean
+}
+
+/** The app's chat pipeline: E2EE like any message, with `metadata.drop_reply` beside the crypto keys. */
+object ChatSharedDropReplySender : SharedDropReplySender {
+    override suspend fun send(
+        connectionId: String,
+        userId: String,
+        text: String,
+        metadata: JsonObject,
+    ): Boolean =
+        try {
+            AppDataManager.chatRepository.sendMessageForConnection(
+                connectionId = connectionId,
+                userId = userId,
+                content = text,
+                messageType = ChatMessageType.TEXT,
+                metadata = metadata,
+            ) != null
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            false
+        }
+}
 
 /** Where developed photos, teasers and the last strip live on device (fakeable in tests). */
 interface SharedDropsDisk {
@@ -86,6 +142,45 @@ object VaultSharedDropsDisk : SharedDropsDisk {
 
 internal const val SHARED_DROP_DEVELOP_FAILED = "Couldn't develop right now. Try again in a moment."
 internal const val SHARED_DROP_SHARE_FAILED = "Couldn't share your drop. Tap Retry — it won't be shared twice."
+internal const val SHARED_DROP_ARCHIVE_FAILED = "Couldn't load your drops."
+
+/** The toast after a story reply or reaction lands in the chat (iOS `SharedDropStorySource.send`). */
+internal fun sharedDropReplyNotice(
+    firstName: String,
+    isReaction: Boolean,
+    sent: Boolean,
+): String =
+    when {
+        !sent -> "Couldn't send. Try again."
+        isReaction -> "Reaction sent to $firstName"
+        else -> "Sent to $firstName"
+    }
+
+/** The reply field shows on others' developed drops that have a chat to reply in (iOS `SharedDropFooter`). */
+internal fun SharedDrop.canReply(now: Instant): Boolean = !isMine && !connectionId.isNullOrBlank() && !state(now).isPending
+
+/** Replaces drop [id] wherever it appears. */
+internal fun List<SharedDrop>.replacing(
+    id: String,
+    transform: (SharedDrop) -> SharedDrop,
+): List<SharedDrop> = map { if (it.id == id) transform(it) else it }
+
+/** Appends an archive page, never showing a drop twice. */
+internal fun List<SharedDrop>.appendingPage(page: List<SharedDrop>): List<SharedDrop> {
+    val seen = mapTo(HashSet()) { it.id }
+    return this + page.filter { seen.add(it.id) }
+}
+
+/** Disk keys for a shared drop's photos (per account), shared with the chat's drop-reply header. */
+internal fun sharedDropOriginalKey(
+    uid: String,
+    id: String,
+) = "shared-drop-$uid-$id-original"
+
+internal fun sharedDropPreviewKey(
+    uid: String,
+    id: String,
+) = "shared-drop-$uid-$id-preview"
 
 /** Marks [id] developed (keeping any newer signed URL) everywhere it appears. */
 internal fun List<SharedDrop>.withDeveloped(
@@ -121,7 +216,9 @@ internal fun sharedDropsNextTickMs(
 /**
  * The Home shared-drops strip and story viewer (flag `shared_drops`). Mirrors iOS
  * `Click/Features/Home/SharedDropsStore.swift`: the strip and developed originals paint from disk
- * first, then refresh; a failed share keeps its `client_drop_id` so Retry never shares twice.
+ * first, then refresh; a failed share keeps its `client_drop_id` so Retry never shares twice. Also
+ * the "View all" archive, reactions (iOS `ReactionBar.swift`) and story replies
+ * (iOS `SharedDropStorySource.send`), and a refresh on the Live updates `drops` hint.
  */
 class SharedDropsViewModel(
     private val service: SharedDropsService = SharedDropsApi(),
@@ -131,6 +228,9 @@ class SharedDropsViewModel(
     private val makePreview: suspend (ByteArray) -> ByteArray? = ::clickDropPreviewJpeg,
     private val imageSize: (ByteArray) -> Pair<Int, Int>? = ::encodedImageSize,
     private val now: () -> Instant = { Clock.System.now() },
+    private val reactions: ReactionsService = ReactionsApi(),
+    private val replySender: SharedDropReplySender = ChatSharedDropReplySender,
+    liveHints: Flow<LiveBatch> = LiveUpdates.batches,
 ) : ViewModel() {
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -149,6 +249,18 @@ class SharedDropsViewModel(
 
     private val loadingImages = mutableSetOf<String>()
     private var loadedForUser: String? = null
+    private var archiveGeneration = 0
+
+    init {
+        // A drop shared, deleted or developed elsewhere (or a new connection's drops) refreshes the strip.
+        viewModelScope.launch {
+            liveHints.collect { batch ->
+                if (!batch.refetchesSharedDrops || loadedForUser == null) return@collect
+                refresh()
+                if (_state.value.archiveLoaded) loadArchive()
+            }
+        }
+    }
 
     fun groups(at: Instant = now()): List<SharedDropGroup> = SharedDropGroup.group(_state.value.drops, at)
 
@@ -157,12 +269,12 @@ class SharedDropsViewModel(
     private fun originalKey(
         uid: String,
         id: String,
-    ) = "shared-drop-$uid-$id-original"
+    ) = sharedDropOriginalKey(uid, id)
 
     private fun previewKey(
         uid: String,
         id: String,
-    ) = "shared-drop-$uid-$id-preview"
+    ) = sharedDropPreviewKey(uid, id)
 
     /** Paints the last strip from disk, then fetches the live one. */
     fun refresh() {
@@ -273,7 +385,10 @@ class SharedDropsViewModel(
                     .onSuccess { result ->
                         if (result?.status != "developed") return@onSuccess
                         val developedIso = result.developedAt ?: now().toString()
+                        _state.update { it.copy(archive = it.archive.withDeveloped(drop.id, developedIso, result.url)) }
                         commit(uid, _state.value.drops.withDeveloped(drop.id, developedIso, result.url))
+                        // Reactions open with the photo (the strip inlines them for drops already developed).
+                        loadReactions(drop.id)
                         result.url?.let { downloadOriginal(uid, drop.id, it) }
                     }.onFailure { error ->
                         if (error !is CancellationException) _state.update { it.copy(notice = SHARED_DROP_DEVELOP_FAILED) }
@@ -353,6 +468,7 @@ class SharedDropsViewModel(
             service
                 .delete(drop.id)
                 .onSuccess {
+                    _state.update { s -> s.copy(archive = s.archive.filterNot { it.id == drop.id }) }
                     commit(uid, _state.value.drops.filterNot { it.id == drop.id })
                     _originals.update { it - drop.id }
                     _previews.update { it - drop.id }
@@ -367,6 +483,122 @@ class SharedDropsViewModel(
                 .report(drop.id, "Reported from the story viewer")
                 .onSuccess { _state.update { it.copy(notice = "Thanks. We'll take a look.") } }
                 .onFailure { _state.update { it.copy(notice = "Couldn't send the report. Try again.") } }
+        }
+    }
+
+    /** Fetches reactions for a developed drop the strip didn't inline them for. */
+    fun loadReactions(id: String) {
+        viewModelScope.launch {
+            reactions.reactions(ReactionTarget.SHARED_DROP, id).onSuccess { r -> replaceDrop(id) { it.copy(reactions = r) } }
+        }
+    }
+
+    /**
+     * Reacts (null takes it back). The pick shows at once and a failure puts the old one back. A new
+     * reaction also answers in the 1-1 chat, carrying the drop (iOS `ReactionBar.onReacted`).
+     */
+    fun react(
+        drop: SharedDrop,
+        emoji: String?,
+    ) {
+        if (drop.isMine) return
+        val previous = _state.value.drop(drop.id)?.reactions ?: drop.reactions
+        replaceDrop(drop.id) { it.copy(reactions = previous.withMine(emoji)) }
+        viewModelScope.launch {
+            reactions
+                .react(ReactionTarget.SHARED_DROP, drop.id, emoji)
+                .onSuccess { saved ->
+                    replaceDrop(drop.id) { it.copy(reactions = saved) }
+                    if (emoji != null) sendReply(drop, emoji, isReaction = true)
+                }.onFailure { error ->
+                    if (error is CancellationException) throw error
+                    replaceDrop(drop.id) { it.copy(reactions = previous) }
+                }
+        }
+    }
+
+    /** "Reply to {name}…": into the 1-1 chat with the poster, through the usual E2EE send. */
+    fun sendReply(
+        drop: SharedDrop,
+        text: String,
+        isReaction: Boolean = false,
+    ) {
+        val body = text.trim()
+        val connectionId = drop.connectionId?.takeIf { it.isNotBlank() } ?: return
+        val uid = currentUserId() ?: return
+        if (body.isEmpty() || drop.isMine) return
+        viewModelScope.launch {
+            val sent = replySender.send(connectionId, uid, body, ChatDropReply.metadataFor(drop.id, isReaction))
+            _state.update { it.copy(notice = sharedDropReplyNotice(drop.user.firstName, isReaction, sent)) }
+        }
+    }
+
+    private fun replaceDrop(
+        id: String,
+        transform: (SharedDrop) -> SharedDrop,
+    ) {
+        val uid = currentUserId()
+        _state.update { it.copy(archive = it.archive.replacing(id, transform)) }
+        if (_state.value.drops.any { it.id == id }) {
+            val next = _state.value.drops.replacing(id, transform)
+            if (uid != null) commit(uid, next) else _state.update { it.copy(drops = next) }
+        }
+    }
+
+    /** The first page of "View all" (iOS `SharedDropsStore.loadArchive`); a newer load wins over an older one. */
+    fun loadArchive() {
+        if (!isEnabled()) return
+        val uid = currentUserId()?.takeIf { it.isNotBlank() } ?: return
+        val generation = ++archiveGeneration
+        _state.update { it.copy(archiveLoading = true, archiveError = null) }
+        viewModelScope.launch {
+            service
+                .archive(null)
+                .onSuccess { page ->
+                    if (generation != archiveGeneration || currentUserId() != uid) return@onSuccess
+                    _state.update {
+                        it.copy(
+                            archive = page.drops,
+                            archiveNextBefore = page.nextBefore,
+                            archiveLoaded = true,
+                            archiveLoading = false,
+                            archiveMoreFailed = false,
+                        )
+                    }
+                }.onFailure { error ->
+                    if (error is CancellationException) throw error
+                    if (generation != archiveGeneration) return@onFailure
+                    _state.update {
+                        it.copy(archiveLoading = false, archiveError = if (it.archiveLoaded) null else SHARED_DROP_ARCHIVE_FAILED)
+                    }
+                }
+        }
+    }
+
+    /** The next archive page, when there is one and none is loading. */
+    fun loadMoreArchive() {
+        val s = _state.value
+        val cursor = s.archiveNextBefore ?: return
+        if (s.archiveLoading || !s.archiveLoaded) return
+        val generation = archiveGeneration
+        _state.update { it.copy(archiveLoading = true) }
+        viewModelScope.launch {
+            service
+                .archive(cursor)
+                .onSuccess { page ->
+                    if (generation != archiveGeneration) return@onSuccess
+                    _state.update {
+                        it.copy(
+                            archive = it.archive.appendingPage(page.drops),
+                            archiveNextBefore = page.nextBefore,
+                            archiveLoading = false,
+                            archiveMoreFailed = false,
+                        )
+                    }
+                }.onFailure { error ->
+                    if (error is CancellationException) throw error
+                    if (generation == archiveGeneration) _state.update { it.copy(archiveLoading = false, archiveMoreFailed = true) }
+                }
         }
     }
 

@@ -31,6 +31,11 @@ sealed interface AppDeepLink {
 
     /** The Add Click tab (public profile "Open Add Click"); not parsed from a URL. */
     data object AddClick : AppDeepLink
+
+    /** A shared Click Drop's story on Home; only reached from push taps and Activity rows. */
+    data class SharedDrop(
+        val dropId: String,
+    ) : AppDeepLink
 }
 
 /** Minimal URL split; enough for `click://` and joinclick.co links without platform URI types. */
@@ -168,5 +173,27 @@ object AppDeepLinkRouter {
         val value = searchQuery
         searchQuery = null
         return value
+    }
+}
+
+/**
+ * The shared drop a push asked to open (iOS `AppEnvironment.pendingSharedDropID`). Home's strip
+ * opens its story once the drop is in the strip and has developed, then clears it.
+ */
+object SharedDropOpenRequests {
+    private val _pending = MutableStateFlow<String?>(null)
+    val pending: StateFlow<String?> = _pending.asStateFlow()
+
+    fun request(dropId: String) {
+        _pending.value = dropId.trim().takeIf { it.isNotEmpty() }
+    }
+
+    /** Clears [dropId] if it's still the pending one (a newer request is kept). */
+    fun consume(dropId: String) {
+        if (_pending.value == dropId) _pending.value = null
+    }
+
+    fun clear() {
+        _pending.value = null
     }
 }

@@ -70,6 +70,12 @@ data class LiveBatch(
     /** Home's "nudges" module (or every module, on a catch-up). */
     val refetchesNudges: Boolean get() = LiveKind.HOME in kinds || LiveKind.NUDGES in kinds
 
+    /**
+     * The shared-drops strip: a drop changed, or a new connection may reveal theirs (iOS
+     * `LiveUpdates.flush`). A catch-up carries `drops` too.
+     */
+    val refetchesSharedDrops: Boolean get() = LiveKind.DROPS in kinds || LiveKind.CONNECTIONS in kinds
+
     /** Home's availability intents (or every module, on a catch-up). */
     val refetchesAvailability: Boolean get() = LiveKind.HOME in kinds || LiveKind.AVAILABILITY in kinds
 }

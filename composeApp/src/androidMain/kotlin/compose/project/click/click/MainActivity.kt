@@ -107,6 +107,12 @@ class MainActivity : ComponentActivity() {
             AppDeepLinkRouter.open(AppDeepLink.Clicks)
             return
         }
+        if (intent?.action == ACTION_VIEW_SHARED_DROP) {
+            intent.getStringExtra(EXTRA_SHARED_DROP_ID)?.trim()?.takeIf { it.isNotEmpty() }?.let {
+                AppDeepLinkRouter.open(AppDeepLink.SharedDrop(it))
+            }
+            return
+        }
         if (intent?.action != Intent.ACTION_VIEW) return
         val uriString = intent.dataString ?: return
         AppDeepLinkRouter.handleIncomingUrl(uriString)
@@ -190,11 +196,13 @@ class MainActivity : ComponentActivity() {
         const val ACTION_VIEW_EVENT = "compose.project.click.click.action.VIEW_EVENT" // pragma: allowlist secret
         const val ACTION_VIEW_PROFILE = "compose.project.click.click.action.VIEW_PROFILE" // pragma: allowlist secret
         const val ACTION_VIEW_CONNECTIONS = "compose.project.click.click.action.VIEW_CONNECTIONS" // pragma: allowlist secret
+        const val ACTION_VIEW_SHARED_DROP = "compose.project.click.click.action.VIEW_SHARED_DROP" // pragma: allowlist secret
 
         private const val EXTRA_CHAT_ID = "extra_chat_id"
         private const val EXTRA_CHAT_CONNECTION_ID = "extra_chat_connection_id"
         private const val EXTRA_EVENT_BEACON_ID = "extra_event_beacon_id"
         private const val EXTRA_PROFILE_USER_ID = "extra_profile_user_id"
+        private const val EXTRA_SHARED_DROP_ID = "extra_shared_drop_id"
 
         fun createChatDeepLinkIntent(
             context: Context,
@@ -232,6 +240,17 @@ class MainActivity : ComponentActivity() {
             Intent(context, MainActivity::class.java).apply {
                 action = ACTION_VIEW_CONNECTIONS
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            }
+
+        /** Opens a shared Click Drop's story on Home (`shared_drop_released`, shared-drop reactions). */
+        fun createSharedDropIntent(
+            context: Context,
+            dropId: String,
+        ): Intent =
+            Intent(context, MainActivity::class.java).apply {
+                action = ACTION_VIEW_SHARED_DROP
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                putExtra(EXTRA_SHARED_DROP_ID, dropId)
             }
 
         fun createEventDeepLinkIntent(

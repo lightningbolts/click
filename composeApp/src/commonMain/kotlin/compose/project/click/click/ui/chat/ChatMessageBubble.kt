@@ -61,6 +61,7 @@ import compose.project.click.click.data.models.MessageWithUser
 import compose.project.click.click.data.models.PlanResponses
 import compose.project.click.click.data.models.PlanRsvp
 import compose.project.click.click.data.models.disposableRollRevealAtIso
+import compose.project.click.click.data.models.dropReplyOrNull
 import compose.project.click.click.data.models.hasLocalMediaUri
 import compose.project.click.click.data.models.hubMediaPathOrNull
 import compose.project.click.click.data.models.isBeaconChatMessage
@@ -268,6 +269,9 @@ fun ChatMessageBubble(
         val viewerId = currentUserId ?: return@LaunchedEffect
         secureMediaHost?.ensureSecureChatImageLoaded(scopeId, viewerId, message)
     }
+
+    // A story reply or reaction to a shared drop ("Replied to your drop"; iOS DropReplyHeader).
+    val dropReply = remember(message.id, message.messageType, message.metadata) { message.dropReplyOrNull() }
 
     // A gated Click Drop develops once it is due, including while this chat stays open.
     val gatedDrop = isImageMessage && message.isGatedDrop()
@@ -628,6 +632,7 @@ fun ChatMessageBubble(
                                                 )
                                             }
                                         }
+                                        dropReply?.let { ChatDropReplyQuote(it, mine = true, maxWidth = bubbleContentMaxWidth) }
                                         when {
                                             mt == ChatMessageType.AUDIO && audioPlaybackSource != null -> {
                                                 ChatAudioBubble(
@@ -819,6 +824,7 @@ fun ChatMessageBubble(
                                         }
                                         val onBody = MaterialTheme.colorScheme.onSurface
                                         val linkC = MaterialTheme.colorScheme.primary
+                                        dropReply?.let { ChatDropReplyQuote(it, mine = false, maxWidth = bubbleContentMaxWidth) }
                                         when {
                                             mt == ChatMessageType.AUDIO && audioPlaybackSource != null -> {
                                                 ChatAudioBubble(

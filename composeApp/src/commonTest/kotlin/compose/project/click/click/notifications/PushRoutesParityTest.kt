@@ -35,17 +35,22 @@ class PushRoutesParityTest {
     }
 
     @Test
-    fun reactionsOpenTheBeaconButNotSharedDropsYet() {
+    fun reactionsOpenTheBeaconOrTheSharedDrop() {
         assertEquals(PushRoute.Event("b1"), r("reaction", "target_kind" to "soundtrack", "target_id" to "b1"))
-        assertEquals(PushRoute.OpenApp, r("reaction", "target_kind" to "shared_drop", "target_id" to "d1"))
+        assertEquals(PushRoute.SharedDrop("d1"), r("reaction", "target_kind" to "shared_drop", "target_id" to "d1"))
         assertEquals(PushRoute.OpenApp, r("reaction"))
     }
 
     @Test
     fun screensAndroidLacksJustOpenTheApp() {
         assertEquals(PushRoute.OpenApp, r("device_approval", "request_id" to "q1"))
-        assertEquals(PushRoute.OpenApp, r("shared_drop_released", "drop_id" to "d1"))
         assertEquals(PushRoute.OpenApp, r("something_new", "beacon_id" to "b1"))
+    }
+
+    @Test
+    fun aReleasedDropOpensItsStory() {
+        assertEquals(PushRoute.SharedDrop("d1"), r("shared_drop_released", "drop_id" to "d1", "drop_count" to "2"))
+        assertEquals(PushRoute.OpenApp, r("shared_drop_released"))
     }
 
     @Test

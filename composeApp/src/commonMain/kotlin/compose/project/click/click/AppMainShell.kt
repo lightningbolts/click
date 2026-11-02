@@ -45,6 +45,7 @@ import compose.project.click.click.deeplink.AppDeepLink // pragma: allowlist sec
 import compose.project.click.click.deeplink.AppDeepLinkRouter // pragma: allowlist secret
 import compose.project.click.click.deeplink.ConnectionDeepLinkRouter // pragma: allowlist secret
 import compose.project.click.click.deeplink.EventDeepLinkRouter // pragma: allowlist secret
+import compose.project.click.click.deeplink.SharedDropOpenRequests // pragma: allowlist secret
 import compose.project.click.click.encounter.EncounterTetherManager // pragma: allowlist secret
 import compose.project.click.click.navigation.NavigationItem // pragma: allowlist secret
 import compose.project.click.click.navigation.RouteHistory // pragma: allowlist secret
@@ -347,6 +348,10 @@ internal fun AppMainShell(
             }
             AppDeepLink.Clicks -> navigateTo(NavigationItem.Connections.route)
             AppDeepLink.AddClick -> navigateTo(NavigationItem.AddClick.route)
+            is AppDeepLink.SharedDrop -> {
+                navigateTo(NavigationItem.Home.route)
+                SharedDropOpenRequests.request(link.dropId)
+            }
             is AppDeepLink.Chat, is AppDeepLink.Profile -> Unit
         }
     }

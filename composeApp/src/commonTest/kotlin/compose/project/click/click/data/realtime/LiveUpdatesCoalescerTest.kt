@@ -184,6 +184,10 @@ class LiveUpdatesCoalescerTest {
 
     @Test
     fun homeRefetchesOnlyTheModulesAHintNames() {
+        assertTrue(LiveBatch(setOf(LiveKind.DROPS)).refetchesSharedDrops)
+        assertTrue(LiveBatch(setOf(LiveKind.CONNECTIONS)).refetchesSharedDrops)
+        assertTrue(LiveBatch(LiveKind.catchUp).refetchesSharedDrops)
+        assertFalse(LiveBatch(setOf(LiveKind.BEACONS, LiveKind.NUDGES)).refetchesSharedDrops)
         assertTrue(LiveBatch(setOf(LiveKind.NUDGES)).refetchesNudges)
         assertFalse(LiveBatch(setOf(LiveKind.NUDGES)).refetchesAvailability)
         assertTrue(LiveBatch(setOf(LiveKind.AVAILABILITY)).refetchesAvailability)

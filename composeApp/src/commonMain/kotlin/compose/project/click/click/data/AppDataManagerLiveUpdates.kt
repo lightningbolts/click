@@ -21,7 +21,7 @@ internal data class LiveRefetchPlan(
  * Mirrors the flush in click-ios `Click/App/LiveUpdates.swift`: `connections` refreshes the inbox,
  * `activity` the bell, and a beacon change near [here] (or anywhere/unknown) the nearby read.
  * `home` is the local catch-up after the user topic was down, so it refetches the inbox too.
- * Shared drops (`drops`) have no Android screen yet.
+ * Shared drops (`drops`, and `connections`) are refetched by `SharedDropsViewModel` itself.
  */
 internal fun liveRefetchPlan(
     batch: LiveBatch,

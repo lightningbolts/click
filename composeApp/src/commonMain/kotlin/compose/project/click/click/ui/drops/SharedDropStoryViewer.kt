@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -26,7 +27,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
@@ -37,6 +41,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -49,11 +55,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -63,14 +72,17 @@ import compose.project.click.click.collaboration.SharedDropGroup
 import compose.project.click.click.platform.rememberReduceMotionEnabled
 import compose.project.click.click.ui.components.ConnectionListUserAvatarFace
 import compose.project.click.click.viewmodel.SharedDropsViewModel
+import compose.project.click.click.viewmodel.canReply
 import kotlinx.coroutines.launch
+import kotlinx.datetime.Clock
 import kotlin.math.roundToInt
 
 /*
  * The shared-drops story viewer (iOS `Click/Features/Drops/DropStoryViewer.swift`): progress
  * segments, tap left/right, hold to pause, swipe down to close, a horizontal pager between people.
- * A ready drop develops when it comes up and blooms in once. No likes, views or counts. The reaction
- * tray and the reply field are not here yet.
+ * A ready drop develops when it comes up and blooms in once. No likes, views or counts. Every page
+ * reserves the same footer, the reaction tray over a one-line reply (iOS `SharedDropFooter` in
+ * `SharedDropStorySource.swift`), so the photo never shifts; the story holds still while you type.
  */
 
 private const val STORY_DROP_MS = 5_000
@@ -120,12 +132,16 @@ private fun StoryPage(
     var index by remember(group.userId) {
         mutableIntStateOf(ids.indexOf(startDropId ?: group.start()?.id).coerceAtLeast(0))
     }
-    val drop = state.drops.firstOrNull { it.id == ids[index] } ?: group.drops.first { it.id == ids[index] }
+    val drop = state.drop(ids[index]) ?: group.drops.first { it.id == ids[index] }
     val dropState = drop.state()
     val original = originals[drop.id]
     val reduceMotion = rememberReduceMotionEnabled()
+    val focus = LocalFocusManager.current
 
     var holding by remember { mutableStateOf(false) }
+    var presenting by remember { mutableStateOf(false) }
+    var replyFocused by remember { mutableStateOf(false) }
+    var reply by remember(drop.id) { mutableStateOf("") }
     var menuOpen by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
     var dragY by remember { mutableStateOf(0f) }
@@ -146,9 +162,10 @@ private fun StoryPage(
         if (!isCurrent) return@LaunchedEffect
         viewModel.warmImages(drop)
         if (dropState == ClickDropDevelopState.Ready) viewModel.develop(drop)
+        if (drop.reactions == null && dropState == ClickDropDevelopState.Developed) viewModel.loadReactions(drop.id)
     }
     // The story timer runs only while the photo is up and nothing is holding it.
-    val paused = holding || menuOpen || confirmDelete || !isCurrent || original == null
+    val paused = holding || presenting || replyFocused || menuOpen || confirmDelete || !isCurrent || original == null
     LaunchedEffect(drop.id, paused) {
         if (paused) return@LaunchedEffect
         val remaining = ((1f - progress.value) * STORY_DROP_MS).roundToInt()
@@ -220,7 +237,7 @@ private fun StoryPage(
             Modifier
                 .weight(1f)
                 .fillMaxWidth()
-                .padding(start = 8.dp, end = 8.dp, top = 8.dp, bottom = 16.dp)
+                .padding(start = 8.dp, end = 8.dp, top = 8.dp, bottom = 8.dp)
                 .clip(RoundedCornerShape(20.dp))
                 .background(Color.DarkGray)
                 .pointerInput(drop.id) {
@@ -231,7 +248,9 @@ private fun StoryPage(
                             holding = false
                         },
                         onTap = { offset ->
-                            if (offset.x < size.width / 3f) {
+                            if (replyFocused) {
+                                focus.clearFocus()
+                            } else if (offset.x < size.width / 3f) {
                                 previous()
                             } else {
                                 next()
@@ -249,7 +268,7 @@ private fun StoryPage(
                             holding = false
                             dragY = 0f
                         },
-                    ) { _, amount -> dragY = (dragY + amount).coerceAtLeast(0f) }
+                    ) { _, amount -> if (!replyFocused) dragY = (dragY + amount).coerceAtLeast(0f) }
                 },
             contentAlignment = Alignment.Center,
         ) {
@@ -277,6 +296,50 @@ private fun StoryPage(
                             .padding(16.dp)
                             .background(Color.Black.copy(alpha = 0.45f), RoundedCornerShape(50))
                             .padding(horizontal = 14.dp, vertical = 8.dp),
+                )
+            }
+        }
+        // The same footer on every page: the tray over a one-line reply (or, on yours, who reacted).
+        ReactionBar(
+            state = drop.reactions,
+            isOwner = drop.isMine,
+            onReact = { viewModel.react(drop, it) },
+            reactable = dropState == ClickDropDevelopState.Developed,
+            composing = replyFocused,
+            onPresentingChange = { presenting = it },
+            modifier = Modifier.fillMaxWidth().padding(start = 14.dp, end = 14.dp, bottom = 10.dp),
+        ) {
+            // A reply carries the drop into the chat, which shows its photo: only once it's developed.
+            if (drop.canReply(Clock.System.now())) {
+                val send = {
+                    viewModel.sendReply(drop, reply)
+                    reply = ""
+                    focus.clearFocus()
+                }
+                TextField(
+                    value = reply,
+                    onValueChange = { reply = it.replace("\n", "") },
+                    singleLine = true,
+                    placeholder = { Text("Reply to ${drop.user.firstName}…", color = Color.White.copy(alpha = 0.6f)) },
+                    trailingIcon = {
+                        if (reply.isNotBlank()) {
+                            IconButton(onClick = send) { Icon(Icons.AutoMirrored.Filled.Send, "Send reply", tint = Color.White) }
+                        }
+                    },
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                    keyboardActions = KeyboardActions(onSend = { send() }),
+                    shape = RoundedCornerShape(50),
+                    colors =
+                        TextFieldDefaults.colors(
+                            focusedContainerColor = Color.White.copy(alpha = 0.14f),
+                            unfocusedContainerColor = Color.White.copy(alpha = 0.14f),
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            cursorColor = Color.White,
+                            focusedIndicatorColor = Color.Transparent,
+                            unfocusedIndicatorColor = Color.Transparent,
+                        ),
+                    modifier = Modifier.fillMaxWidth().imePadding().onFocusChanged { replyFocused = it.isFocused },
                 )
             }
         }
