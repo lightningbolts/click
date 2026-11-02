@@ -491,15 +491,19 @@ Each PR builds (`assembleDebug`), passes `spotlessCheck` and all unit tests loca
 | G5-2, G5-4 Places map layer, `/p/` links, privacy toggle, search | lightningbolts/click#165 | |
 | P2-19 Multi-Tap `prepareGroup` | lightningbolts/click#166 | |
 | P1-4 Shape and spacing tokens | lightningbolts/click#167 | Tokens plus a few shared components; field corner 16 → 14 dp. |
+| Follow-ups: legacy drops in the develop flow, saved Nearby sort, Core Clicks lead pin stacks | lightningbolts/click#168 | |
+| G5 Place filters, Places in Nearby, pin badge and energy ring | lightningbolts/click#169 | |
+| P1-4 sweep: capsule buttons, 26 dp cards, 16 dp gutter, motion tokens, lint errors | lightningbolts/click#170 | Durations follow web `DESIGN.md`; iOS has no duration scale. |
+| Server: Android ticket checkout, platform on product events, `connect_postgrest_fallback` key | lightningbolts/click-web#168 | click-web; merge by the owner. |
 
 All PRs above are merged into `main`.
 
 **Still open:**
-- P1-4 follow-ups: `ClickButton` capsule (now 8 dp), cards 26 dp (now 16), screen gutter 16 dp (now 20), and the motion tokens. Each moves pixels on busy screens, so they belong in a screen sweep with re-recorded screenshots.
-- Places: filters, a Nearby-list section, venue writes through the Places APIs and manager invites (G5-5).
-- G4: altitude follow-up (no Android equivalent of CoreMotion's absolute altimeter) and an encounter details card after a QR connect.
-- G2: legacy (non-gated) drops still use the 24 h lock when `drops_develop` is on.
-- Server-side: `connect_postgrest_fallback` in `FEATURE_KEYS`; ticket checkout accepting `client: "android"`; reading `X-Click-Platform`.
+- G5-5 venue writes: nothing to move to. click-web's connections endpoint takes no venue (the server works it out), and iOS sends none.
+- Place manager invites: iOS has no invite UI, and the server has no decline or pending-invites endpoint.
+- G4 altitude follow-up (no Android equivalent of CoreMotion's absolute altimeter), and an encounter details card after a QR connect (Android picks tags before the QR redeem).
+- Release builds need `KLIPY_APP_KEY` set; without it GIF search is hidden.
+- click-web CI on main: the production dependency audit (`next`, `zod`, `body-parser` advisories) and the Maestro web smoke (runner Chrome 154 vs ChromeDriver 156) both fail independently of any PR.
 
 ## 9. Environment note for Phase 3
 
