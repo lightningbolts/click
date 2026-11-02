@@ -115,6 +115,10 @@ enum class ClickButtonVariant {
 /**
  * Canonical action button. Screens must use this instead of one-off [Button] styling.
  * [AdaptiveButton] remains as the primary-variant alias.
+ *
+ * Capsule-shaped with iOS minimum heights (`ClickPrimaryButtonStyle` 50 pt for filled actions,
+ * `ClickSecondaryButtonStyle` 44 pt for the neutral variant; `Click/DesignSystem/Components/ButtonStyles.swift`).
+ * An explicit height from the caller's [modifier] still wins.
  */
 @Composable
 fun ClickButton(
@@ -125,7 +129,6 @@ fun ClickButton(
     content: @Composable RowScope.() -> Unit,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
-    val style = LocalPlatformStyle.current
     val colors =
         when (variant) {
             ClickButtonVariant.Primary ->
@@ -166,7 +169,10 @@ fun ClickButton(
         }
     Button(
         onClick = onClick,
-        modifier = modifier.platformPressScale(interactionSource, MotionTokens.PressScale.ButtonPressedScale),
+        modifier =
+            modifier
+                .heightIn(min = clickButtonMinHeight(variant))
+                .platformPressScale(interactionSource, MotionTokens.PressScale.ButtonPressedScale),
         enabled = enabled,
         interactionSource = interactionSource,
         colors = colors,
@@ -177,10 +183,20 @@ fun ClickButton(
                 focusedElevation = 0.dp,
             ),
         border = border,
-        shape = RoundedCornerShape(style.buttonCornerRadius),
+        shape = LocalClickShapes.current.capsule,
         content = content,
     )
 }
+
+/** Minimum height per [ClickButtonVariant]: the neutral variant matches iOS secondary (44), filled ones iOS primary (50). */
+internal fun clickButtonMinHeight(variant: ClickButtonVariant): Dp =
+    when (variant) {
+        ClickButtonVariant.Secondary -> ClickMetrics.secondaryActionHeight
+        ClickButtonVariant.Primary,
+        ClickButtonVariant.Accent,
+        ClickButtonVariant.Destructive,
+        -> ClickMetrics.primaryActionHeight
+    }
 
 @Composable
 fun AdaptiveButton(

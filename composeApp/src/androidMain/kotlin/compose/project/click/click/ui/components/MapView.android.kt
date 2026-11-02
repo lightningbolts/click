@@ -11,6 +11,7 @@ import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.Rect
 import android.graphics.RectF
+import android.os.Build
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.*
@@ -181,7 +182,7 @@ actual fun PlatformMap(
                     } ?: return@forEach
                 // Software copy — Google Maps markers reject hardware bitmaps.
                 val bmp =
-                    if (src.config == Bitmap.Config.HARDWARE) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && src.config == Bitmap.Config.HARDWARE) {
                         src.copy(Bitmap.Config.ARGB_8888, false) ?: return@forEach
                     } else {
                         src.copy(Bitmap.Config.ARGB_8888, false) ?: src

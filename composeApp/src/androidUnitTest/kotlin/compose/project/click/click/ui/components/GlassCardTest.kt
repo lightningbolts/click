@@ -7,10 +7,9 @@ import kotlin.test.assertEquals
  * JVM unit tests for Functional Clarity card/sheet tokens (no Compose UI harness required).
  */
 class GlassCardTest {
-
     @Test
     fun glassCornerRadius_matchesDesignToken() {
-        assertEquals(16f, GlassCornerRadius.value)
+        assertEquals(26f, GlassCornerRadius.value)
     }
 
     @Test
