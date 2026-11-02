@@ -1,5 +1,6 @@
 package compose.project.click.click.viewmodel
 
+import compose.project.click.click.collaboration.ClickDropDevelopBook
 import compose.project.click.click.collaboration.ClickDropDevelopState
 import compose.project.click.click.collaboration.ClickDropRevealRef
 import compose.project.click.click.data.api.DropDevelopResultDto
@@ -13,6 +14,8 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
@@ -214,4 +217,68 @@ class ChatDropDevelopControllerTest {
         assertNull(gated.copy(id = "temp-img-1").clickDropRevealRefOrNull())
         assertNull(gated.copy(metadata = null).clickDropRevealRefOrNull())
     }
+
+    private fun legacyDrop(
+        id: String = "22222222-2222-4222-8222-222222222222",
+        revealAt: String = "2026-10-01T11:00:00Z",
+    ): Message =
+        Message(
+            id = id,
+            user_id = "u",
+            content = "",
+            timeCreated = 0L,
+            messageType = "image",
+            metadata =
+                buildJsonObject {
+                    put("disposable_roll", JsonPrimitive(true))
+                    put("collaboration_ttl", JsonPrimitive(revealAt))
+                },
+        )
+
+    @Test
+    fun legacyDropsJoinTheDevelopFlowOnlyWhenDropsDevelopIsOn() {
+        val legacy = legacyDrop()
+        assertNull(legacy.clickDropRevealRefOrNull(developFlowEnabled = false))
+        assertFalse(legacy.usesClickDropDevelopFlow(developFlowEnabled = false))
+        assertEquals(ClickDropRevealRef(legacy.id, now - 3600.seconds), legacy.clickDropRevealRefOrNull(developFlowEnabled = true))
+        // Only photos, and never an optimistic copy.
+        assertNull(legacy.copy(messageType = "video").clickDropRevealRefOrNull(developFlowEnabled = true))
+        assertNull(legacy.copy(id = "temp-img-2").clickDropRevealRefOrNull(developFlowEnabled = true))
+        assertNull(legacy.copy(metadata = null).clickDropRevealRefOrNull(developFlowEnabled = true))
+    }
+
+    @Test
+    fun gatedDropsStayInTheDevelopFlowWithTheFlagOff() {
+        val gated =
+            legacyDrop().copy(
+                metadata =
+                    buildJsonObject {
+                        put("disposable_roll", JsonPrimitive(true))
+                        put("drop_gated", JsonPrimitive(true))
+                        put("reveal_at", JsonPrimitive("2026-10-01T11:00:00Z"))
+                    },
+            )
+        assertTrue(gated.usesClickDropDevelopFlow(developFlowEnabled = false))
+        // Gated drops wait for their original instead, so they are never "legacy awaiting develop".
+        assertFalse(gated.isLegacyDropAwaitingDevelop(ClickDropDevelopBook(), developFlowEnabled = true))
+    }
+
+    @Test
+    fun aLegacyDropStaysLockedUntilTheServerSaysItIsDeveloped() =
+        runTest {
+            val legacy = legacyDrop()
+            assertFalse(legacy.isLegacyDropAwaitingDevelop(ClickDropDevelopBook(), developFlowEnabled = false))
+            assertTrue(legacy.isLegacyDropAwaitingDevelop(ClickDropDevelopBook(), developFlowEnabled = true))
+            // Develops through the same server call as gated drops; there is no signed original.
+            val service = FakeDevelopService()
+            service.developResult = { ids -> Result.success(ids.map { DropDevelopResultDto("chat", it, "developed", url = null) }) }
+            val h = harness(service)
+            val ref = assertNotNull(legacy.clickDropRevealRefOrNull(developFlowEnabled = true))
+            h.controller.develop(listOf(ref))
+            advanceUntilIdle()
+            assertEquals(listOf(listOf(legacy.id)), service.developCalls)
+            assertEquals(listOf<Pair<String, String?>>(legacy.id to null), h.developed)
+            assertEquals(setOf(legacy.id), h.controller.book.value.fresh)
+            assertFalse(legacy.isLegacyDropAwaitingDevelop(h.controller.book.value, developFlowEnabled = true))
+        }
 }

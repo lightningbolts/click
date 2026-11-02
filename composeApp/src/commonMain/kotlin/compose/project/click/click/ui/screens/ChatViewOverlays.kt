@@ -52,6 +52,7 @@ import compose.project.click.click.viewmodel.ChatMessagesState // pragma: allowl
 import compose.project.click.click.viewmodel.ChatViewModel // pragma: allowlist secret
 import compose.project.click.click.viewmodel.canDiscardFailed
 import compose.project.click.click.viewmodel.canRetrySend
+import compose.project.click.click.viewmodel.isLegacyDropAwaitingDevelop
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 
@@ -178,11 +179,15 @@ internal fun BoxScope.ChatViewOverlays(
         val selectedMessage = contextMenuMessage!!
         var fullSheetForEmoji by remember(selectedMessage.message.id) { mutableStateOf(false) }
         val pinnedMessages by viewModel.pinnedMessages.collectAsState()
+        val dropBook by viewModel.clickDropHost.clickDropBook
+            .collectAsState()
+        // An undeveloped legacy drop stays private, like a gated one awaiting its original.
+        val dropAwaitingDevelop = selectedMessage.message.isLegacyDropAwaitingDevelop(dropBook)
         val capabilities =
             MessageActionCapabilities(
                 canReply = selectedMessage.message.messageType.lowercase() != "call_log",
-                canSaveMedia = canExportMessageMedia(selectedMessage.message),
-                canShareMedia = canExportMessageMedia(selectedMessage.message),
+                canSaveMedia = canExportMessageMedia(selectedMessage.message, dropAwaitingDevelop),
+                canShareMedia = canExportMessageMedia(selectedMessage.message, dropAwaitingDevelop),
                 canEdit = canEditMessage(selectedMessage),
                 canForward = selectedMessage.message.canForward(),
                 canRetry = selectedMessage.message.canRetrySend(),

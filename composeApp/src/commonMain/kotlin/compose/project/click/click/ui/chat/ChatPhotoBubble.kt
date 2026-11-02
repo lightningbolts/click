@@ -51,6 +51,7 @@ import compose.project.click.click.collaboration.ClickDropDevelopState
 import compose.project.click.click.data.models.Message
 import compose.project.click.click.data.models.disposableRollRevealAtIso
 import compose.project.click.click.data.models.isDisposableRollLocked
+import compose.project.click.click.data.models.isGatedDrop
 import compose.project.click.click.data.repository.GatedDropOriginals
 import compose.project.click.click.data.repository.isGatedDropAwaitingOriginal
 import compose.project.click.click.platform.rememberReduceMotionEnabled
@@ -158,7 +159,13 @@ internal fun ChatBubblePhotoContent(
 ) {
     val gatedOriginals by GatedDropOriginals.loaded.collectAsState()
     // A gated drop stays pixelated until its original is on screen, even after its reveal time.
-    val awaitingOriginal = message.isGatedDropAwaitingOriginal(gatedOriginals)
+    // A legacy drop in the develop flow stays locked until this viewer develops it.
+    val awaitingOriginal =
+        clickDropAwaitingDevelop(
+            gatedAwaitingOriginal = message.isGatedDropAwaitingOriginal(gatedOriginals),
+            isGated = message.isGatedDrop(),
+            developState = clickDropControls?.state,
+        )
     val rollLocked = message.isDisposableRollLocked() || awaitingOriginal
     val canExpand = onPhotoClick != null && !rollLocked
     // A ready drop develops on tap (iOS `ClickDropImageView.lockedImage`).
@@ -513,7 +520,17 @@ private fun PhotoBitmapContent(
 }
 
 /**
- * A gated Click Drop bubble's develop state and actions (iOS `ClickDropControls`): the state the
+ * True while a Click Drop bubble must stay pixelated: a gated drop until its original is on screen,
+ * or a legacy drop in the develop flow ([developState] non-null) until this viewer developed it.
+ */
+internal fun clickDropAwaitingDevelop(
+    gatedAwaitingOriginal: Boolean,
+    isGated: Boolean,
+    developState: ClickDropDevelopState?,
+): Boolean = gatedAwaitingOriginal || (!isGated && developState != null && developState != ClickDropDevelopState.Developed)
+
+/**
+ * A Click Drop bubble's develop state and actions (iOS `ClickDropControls`): the state the
  * server gave this viewer, whether a develop is in flight, and whether it was developed on this
  * screen just now (play the bloom once, then [onShown]).
  */

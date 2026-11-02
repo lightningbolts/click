@@ -196,6 +196,7 @@ internal fun MapViewModel.currentVisibleMapPins(): List<MapPin> {
     val hubs = _communityHubs.value.map { MapPin.fromCommunityHub(it) } + places.map { MapPin.fromPlace(it) }
     val currentUserId = AppDataManager.currentUser.value?.id
     val connectedUsers = AppDataManager.connectedUsers.value
+    val coreConnectionIds = AppDataManager.coreConnectionIds.value
     return when (val state = _renderData.value) {
         is MapRenderData.IndividualPins -> {
             val connections =
@@ -206,6 +207,7 @@ internal fun MapViewModel.currentVisibleMapPins(): List<MapPin> {
                         point,
                         imageUrl = peer?.image,
                         avatarSeed = peerId ?: point.connection.id,
+                        isCore = point.connection.id in coreConnectionIds,
                     )
                 }
             val beacons = MapPlacesLayer.beaconsOutsidePlaces(state.beacons, places).map { MapPin.fromBeacon(it) }

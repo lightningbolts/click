@@ -107,6 +107,8 @@ data class MapPin(
     val eventEndEpochMs: Long? = null,
     /** > 1 when this pin leads a stack of overlapping pins; the map draws the count as a badge. */
     val stackCount: Int = 1,
+    /** A Core Click's connection pin: ranks above other connections in a stack (iOS `MapItem.isCoreConnection`). */
+    val isCore: Boolean = false,
 ) {
     companion object {
         /**
@@ -116,6 +118,7 @@ data class MapPin(
             point: ConnectionMapPoint,
             imageUrl: String? = null,
             avatarSeed: String? = null,
+            isCore: Boolean = false,
         ): MapPin {
             val seed = avatarSeed?.takeIf { it.isNotBlank() } ?: point.connection.id
             val cap = truncateMapPinCaption(point.displayName, 12).takeIf { it.isNotEmpty() }
@@ -137,6 +140,7 @@ data class MapPin(
                 avatarInitials = mapPinAvatarInitials(point.displayName),
                 avatarFillArgb = composeColorToArgb(stableAvatarPlaceholderColor(seed)),
                 avatarUserId = seed,
+                isCore = isCore,
             )
         }
 
