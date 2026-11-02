@@ -9,6 +9,7 @@ import compose.project.click.click.data.models.* // pragma: allowlist secret
 import compose.project.click.click.data.repository.AuthRepository // pragma: allowlist secret
 import compose.project.click.click.data.storage.TokenStorage // pragma: allowlist secret
 import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
+import compose.project.click.click.platform.deviceKindLabel
 import compose.project.click.click.qr.CLICK_WEB_BASE_URL // pragma: allowlist secret
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
 import io.ktor.client.*
@@ -360,7 +361,7 @@ class ChatApiClient(
                 client.post("$clickWebBaseUrl/api/chat/devices") {
                     header(HttpHeaders.Authorization, bearerAuthHeader(authToken))
                     contentType(ContentType.Application.Json)
-                    setBody(ClickWebRegisterChatDeviceBody(deviceId, identityPublicKey))
+                    setBody(ClickWebRegisterChatDeviceBody(deviceId, identityPublicKey, deviceKindLabel()))
                 }
             if (response.status.value in 200..299) {
                 Result.success(response.body<ClickWebChatDeviceEnvelope>().device)
