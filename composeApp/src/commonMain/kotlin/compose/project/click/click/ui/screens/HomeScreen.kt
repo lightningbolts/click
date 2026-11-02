@@ -22,6 +22,7 @@ import compose.project.click.click.data.models.MapBeacon // pragma: allowlist se
 import compose.project.click.click.data.models.NudgeAction
 import compose.project.click.click.data.models.isActiveForUser // pragma: allowlist secret
 import compose.project.click.click.data.models.mostUrgentArchiveNotice // pragma: allowlist secret
+import compose.project.click.click.events.upcomingEvents
 import compose.project.click.click.notifications.ChatDeepLinkManager
 import compose.project.click.click.ui.components.ActivityRecapSection // pragma: allowlist secret
 import compose.project.click.click.ui.components.AppScreenScaffold // pragma: allowlist secret
@@ -86,6 +87,7 @@ fun HomeScreen(
     val reconnectReminders by homeViewModel.reconnectReminders.collectAsState()
     val homeEventReminders by homeViewModel.homeEventReminders.collectAsState()
     val savedEventBookmarks by homeViewModel.savedEventBookmarks.collectAsState()
+    val myEvents by homeViewModel.myEvents.collectAsState()
     val recapState by homeViewModel.recapState.collectAsState()
     val homeNudge by homeViewModel.homeNudge.collectAsState()
     val recapWindow by homeViewModel.recapWindow.collectAsState()
@@ -165,6 +167,11 @@ fun HomeScreen(
     val displayedSavedBookmarks =
         remember(savedEventBookmarks, cachedEventBookmarks) {
             if (savedEventBookmarks.isNotEmpty()) savedEventBookmarks else cachedEventBookmarks
+        }
+    // Upcoming (iOS #69): hosting, going and saved events still ahead, soonest first.
+    val upcoming =
+        remember(myEvents, displayedSavedBookmarks) {
+            upcomingEvents(myEvents, displayedSavedBookmarks, Clock.System.now().toEpochMilliseconds())
         }
 
     val exploreTiles =
@@ -370,7 +377,11 @@ fun HomeScreen(
 
                     item(key = "saved_events") {
                         SavedEventsSection(
-                            bookmarks = displayedSavedBookmarks,
+                            bookmarks = upcoming.map { it.event },
+                            title = "Upcoming",
+                            tags = upcoming.associate { it.event.beaconId to it.tag.label },
+                            emptyTitle = "Nothing coming up",
+                            emptyBody = "Find events on the map, RSVP or save one, and it shows up here.",
                             onBookmarkClick = { bookmark ->
                                 selectedSavedEventBeacon =
                                     resolveSavedEventBeacon(
