@@ -3,6 +3,8 @@ package compose.project.click.click.viewmodel
 import androidx.arch.core.executor.testing.InstantTaskExecutorRule
 import androidx.test.core.app.ApplicationProvider
 import compose.project.click.click.data.ActiveHubEntry // pragma: allowlist secret
+import compose.project.click.click.data.api.GlobalSearchOutcome
+import compose.project.click.click.data.api.GlobalSearchService
 import compose.project.click.click.data.models.AvailabilityIntentRow
 import compose.project.click.click.data.models.Chat
 import compose.project.click.click.data.models.ChatWithDetails
@@ -504,6 +506,7 @@ class GlobalSearchViewModelTest {
                         fetchBeaconsForSearch = { _, _ -> emptyList() },
                         resolveSearchLocation = { null },
                         searchLocalMessages = { _, _ -> emptyList() },
+                        serverSearch = { GlobalSearchOutcome.Offline },
                     )
                 vm.search("al", VIEWER)
                 assertTrue(vm.isSearching.value)
@@ -579,6 +582,8 @@ class GlobalSearchViewModelTest {
             resolveSearchLocation: suspend () -> Pair<Double, Double>? = { null },
             activeHubs: () -> List<ActiveHubEntry> = { emptyList() },
             searchHubMessages: suspend (String, String) -> List<Message> = { _, _ -> emptyList() },
+            serverSearch: GlobalSearchService = GlobalSearchService { GlobalSearchOutcome.Offline },
+            serverDebounceMs: Long = 0L,
         ): GlobalSearchViewModel =
             GlobalSearchViewModel(
                 tokenStorage = FakeTokenStorage(),
@@ -592,6 +597,8 @@ class GlobalSearchViewModelTest {
                 activeHubs = activeHubs,
                 searchHubMessages = searchHubMessages,
                 searchLocalMessages = { _, _ -> emptyList() },
+                serverSearch = serverSearch,
+                serverDebounceMs = serverDebounceMs,
             )
 
         fun directChat(

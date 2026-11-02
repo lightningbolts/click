@@ -23,9 +23,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.EventAvailable
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -56,6 +58,8 @@ import compose.project.click.click.viewmodel.SearchResult
 import compose.project.click.click.viewmodel.SearchResultCategory
 import compose.project.click.click.viewmodel.beaconDisplaySubtitle
 import compose.project.click.click.viewmodel.beaconDisplayTitle
+import compose.project.click.click.viewmodel.joinedHubSubtitle
+import compose.project.click.click.viewmodel.remoteEventSubtitle
 import compose.project.click.click.viewmodel.toChatOpenTarget // pragma: allowlist secret
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
@@ -139,6 +143,9 @@ internal fun searchResultStableKey(r: SearchResult): String =
         is SearchResult.LocationBucket -> "loc:${r.result.location}"
         is SearchResult.BeaconMatch -> "beacon:${r.beacon.id}"
         is SearchResult.OwnAvailabilityIntentMatch -> "own-intent:${r.intent.intentTag}:${r.intent.timeframe}"
+        is SearchResult.SharedContextPerson -> "user:${r.person.userId}"
+        is SearchResult.RemoteEvent -> "event:${r.event.beaconId}"
+        is SearchResult.JoinedHub -> "hub:${r.hub.hubId}"
     }
 
 @Composable
@@ -167,6 +174,7 @@ internal fun SearchResultRow(
     onNavigateToMap: () -> Unit,
     onNavigateToBeacon: (String) -> Unit = {},
     onNavigateToSettings: () -> Unit = {},
+    onNavigateToProfile: (userId: String) -> Unit = {},
 ) {
     val archivedLook =
         when (result) {
@@ -184,6 +192,8 @@ internal fun SearchResultRow(
                 is SearchResult.LocationBucket -> onNavigateToMap()
                 is SearchResult.BeaconMatch -> onNavigateToBeacon(result.beacon.id)
                 is SearchResult.OwnAvailabilityIntentMatch -> onNavigateToSettings()
+                is SearchResult.SharedContextPerson -> onNavigateToProfile(result.person.userId)
+                is SearchResult.RemoteEvent -> onNavigateToBeacon(result.event.beaconId)
                 else -> result.toChatOpenTarget()?.let(onNavigateToChat)
             }
         },
@@ -199,6 +209,16 @@ internal fun SearchResultRow(
                 is SearchResult.IntentMatch -> PersonLeadingAvatar(result.details)
                 is SearchResult.InterestMatch -> PersonLeadingAvatar(result.details)
                 is SearchResult.MemoryContextMatch -> PersonLeadingAvatar(result.details)
+                is SearchResult.SharedContextPerson ->
+                    ConnectionListUserAvatarFace(
+                        displayName = result.person.name,
+                        email = null,
+                        avatarUrl = result.person.avatarUrl,
+                        userId = result.person.userId,
+                        modifier = Modifier.size(42.dp),
+                    )
+                is SearchResult.RemoteEvent -> SimpleLeadingIcon(Icons.Filled.Event)
+                is SearchResult.JoinedHub -> SimpleLeadingIcon(Icons.Filled.Sensors)
             }
         },
         trailing = {
@@ -230,6 +250,9 @@ internal fun BadgeRow(result: SearchResult) {
             is SearchResult.LocationBucket -> TinyBadge("Place")
             is SearchResult.BeaconMatch -> TinyBadge("Beacon")
             is SearchResult.OwnAvailabilityIntentMatch -> TinyBadge("Your intent")
+            is SearchResult.SharedContextPerson -> TinyBadge("Person")
+            is SearchResult.RemoteEvent -> TinyBadge("Event")
+            is SearchResult.JoinedHub -> TinyBadge("Hub")
             is SearchResult.ActiveConnection -> {}
         }
     }
@@ -343,6 +366,18 @@ internal fun TitleAndSubtitle(result: SearchResult) {
                 style = subtitleStyle,
             )
         }
+        is SearchResult.SharedContextPerson -> {
+            Text(result.person.name, style = titleStyle)
+            result.person.context?.let { Text(it, style = subtitleStyle) }
+        }
+        is SearchResult.RemoteEvent -> {
+            Text(result.event.title, style = titleStyle)
+            Text(remoteEventSubtitle(result.event), style = subtitleStyle)
+        }
+        is SearchResult.JoinedHub -> {
+            Text(result.hub.name, style = titleStyle)
+            Text(joinedHubSubtitle(result.hub.category), style = subtitleStyle)
+        }
     }
 }
 
@@ -393,6 +428,18 @@ internal fun BeaconLeadingIcon(beacon: MapBeacon) {
             imageVector = Icons.Filled.Place,
             contentDescription = null,
             tint = visual.onContent,
+            modifier = Modifier.size(22.dp),
+        )
+    }
+}
+
+@Composable
+private fun SimpleLeadingIcon(icon: androidx.compose.ui.graphics.vector.ImageVector) {
+    SearchLeadingIconBox {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = PrimaryBlue,
             modifier = Modifier.size(22.dp),
         )
     }
