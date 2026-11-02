@@ -3,6 +3,7 @@ package compose.project.click.click.data.devices // pragma: allowlist secret
 import compose.project.click.click.crypto.MessageCryptoV2 // pragma: allowlist secret
 import compose.project.click.click.data.api.DeviceApprovalChallengeDto // pragma: allowlist secret
 import compose.project.click.click.data.api.DeviceApprovalDecisionBody // pragma: allowlist secret
+import compose.project.click.click.data.api.DeviceApprovalHttpException // pragma: allowlist secret
 import compose.project.click.click.data.api.DeviceApprovalsEnvelope // pragma: allowlist secret
 import compose.project.click.click.data.repository.DeviceApprovalGateway // pragma: allowlist secret
 import compose.project.click.click.data.repository.deviceApprovalProof // pragma: allowlist secret
@@ -10,6 +11,7 @@ import compose.project.click.click.data.repository.runDeviceApprovalDecision // 
 import compose.project.click.click.platform.DeviceOwnerAuthCancelled // pragma: allowlist secret
 import compose.project.click.click.platform.DeviceOwnerAuthUnavailable // pragma: allowlist secret
 import compose.project.click.click.ui.screens.approvalFailureMessage // pragma: allowlist secret
+import compose.project.click.click.ui.screens.isApprovalClosed // pragma: allowlist secret
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
@@ -136,7 +138,7 @@ class DeviceApprovalsTest {
             val gateway = FakeGateway(Result.success(challenge))
             var authorized = false
             runDeviceApprovalDecision("req", approve = true, myDeviceId = "android-1", gateway = gateway, unwrap = { _, _ ->
-                ByteArray(32)
+                ByteArray(32) { 7 }
             }, authorize = { authorized = true })
             assertTrue(authorized)
             val (id, body) = gateway.decisions.single()
@@ -144,6 +146,7 @@ class DeviceApprovalsTest {
             assertEquals("approve", body.decision)
             assertEquals("android-1", body.approvingDeviceId)
             assertEquals(challenge.challengeId, body.challengeId)
+            assertEquals("BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=", body.proof)
         }
 
     @Test
@@ -191,5 +194,58 @@ class DeviceApprovalsTest {
         assertNull(approvalFailureMessage(DeviceOwnerAuthCancelled()))
         assertTrue(approvalFailureMessage(DeviceOwnerAuthUnavailable())!!.startsWith("Device authentication is required"))
         assertTrue(approvalFailureMessage(IllegalStateException())!!.startsWith("Couldn't reach Click"))
+    }
+
+    @Test
+    fun alreadyDecidedAndExpiredGetTheirOwnMessageAndCloseTheRequest() {
+        val decided = DeviceApprovalHttpException(409, "decided")
+        val expired = DeviceApprovalHttpException(410, "expired")
+        assertTrue(approvalFailureMessage(decided)!!.contains("already decided"))
+        assertTrue(approvalFailureMessage(expired)!!.contains("expired"))
+        assertTrue(isApprovalClosed(decided))
+        assertTrue(isApprovalClosed(expired))
+        assertTrue(!isApprovalClosed(DeviceApprovalHttpException(500, "boom")))
+        assertTrue(approvalFailureMessage(DeviceApprovalHttpException(500, "boom"))!!.startsWith("Couldn't reach Click"))
+    }
+
+    @Test
+    fun staleRefreshCannotOverwriteNewerState() {
+        DeviceApprovalStore.reset()
+        val pending = DeviceApproval("a", DeviceApproval.Status.PENDING, "iPhone", null, expired = false, emailSent = false)
+        val withA = DeviceApprovals(incoming = listOf(pending))
+
+        // A refresh started before a decision must not bring the decided request back.
+        val token = DeviceApprovalStore.beginRefresh()
+        DeviceApprovalStore.decided("a")
+        assertTrue(!DeviceApprovalStore.publish(token, withA))
+        assertTrue(
+            DeviceApprovalStore.state.value.incoming
+                .isEmpty(),
+        )
+
+        // Nor survive a sign-out reset.
+        val token2 = DeviceApprovalStore.beginRefresh()
+        DeviceApprovalStore.reset()
+        assertTrue(!DeviceApprovalStore.publish(token2, withA))
+        assertTrue(
+            DeviceApprovalStore.state.value.incoming
+                .isEmpty(),
+        )
+
+        // An account that no longer matches is dropped too.
+        val token3 = DeviceApprovalStore.beginRefresh()
+        assertTrue(!DeviceApprovalStore.publish(token3, withA) { false })
+
+        // The newest refresh wins.
+        val older = DeviceApprovalStore.beginRefresh()
+        val newer = DeviceApprovalStore.beginRefresh()
+        assertTrue(!DeviceApprovalStore.publish(older, withA))
+        assertTrue(DeviceApprovalStore.publish(newer, withA))
+        assertEquals(
+            listOf("a"),
+            DeviceApprovalStore.state.value.incoming
+                .map { it.id },
+        )
+        DeviceApprovalStore.reset()
     }
 }

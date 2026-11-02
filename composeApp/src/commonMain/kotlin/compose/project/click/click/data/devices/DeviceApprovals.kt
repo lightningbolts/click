@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.updateAndGet
 import kotlinx.datetime.Instant
 
 /** A device of this account waiting for (or decided on) permission to read chat history. */
@@ -47,6 +48,11 @@ data class DeviceApprovals(
     val incoming: List<DeviceApproval> = emptyList(),
     /** This device's own request, if it has asked. */
     val own: DeviceApproval? = null,
+    /**
+     * Bumped by every write to [DeviceApprovalStore], so a refresh that started before a reset, a
+     * decision or a newer refresh can tell its result is stale and drop it.
+     */
+    internal val generation: Long = 0,
 ) {
     companion object {
         internal fun from(envelope: DeviceApprovalsEnvelope): DeviceApprovals =
@@ -122,17 +128,42 @@ object DeviceApprovalStore {
     private val _deferred = MutableStateFlow<Set<String>>(emptySet())
     val deferred: StateFlow<Set<String>> = _deferred.asStateFlow()
 
-    fun set(approvals: DeviceApprovals) {
-        _state.value = approvals
+    /** Starts a refresh: returns the token its result must carry to be published. */
+    fun beginRefresh(): Long = _state.updateAndGet { it.copy(generation = it.generation + 1) }.generation
+
+    /**
+     * Publishes a refresh result only if nothing has written since [token] was taken and
+     * [stillCurrent] holds, checked and written in one atomic update. Returns whether it was applied.
+     */
+    fun publish(
+        token: Long,
+        approvals: DeviceApprovals,
+        stillCurrent: () -> Boolean = { true },
+    ): Boolean {
+        var applied = false
+        _state.update { current ->
+            if (current.generation == token && stillCurrent()) {
+                applied = true
+                approvals.copy(generation = current.generation + 1)
+            } else {
+                applied = false
+                current
+            }
+        }
+        return applied
     }
+
+    /** A direct server answer (e.g. after "Ask again"); supersedes any refresh in flight. */
+    fun set(approvals: DeviceApprovals) = _state.update { approvals.copy(generation = it.generation + 1) }
 
     fun defer(id: String) = _deferred.update { it + id }
 
-    /** Drops a decided request at once rather than waiting for the next refresh. */
-    fun decided(id: String) = _state.update { it.copy(incoming = it.incoming.filterNot { a -> a.id == id }) }
+    /** Drops a decided request at once; a refresh already in flight can't bring it back. */
+    fun decided(id: String) =
+        _state.update { it.copy(incoming = it.incoming.filterNot { a -> a.id == id }, generation = it.generation + 1) }
 
     fun reset() {
-        _state.value = DeviceApprovals()
+        _state.update { DeviceApprovals(generation = it.generation + 1) }
         _deferred.value = emptySet()
     }
 }

@@ -23,13 +23,14 @@ actual fun deviceKindLabel(): String {
 }
 
 /**
- * Uses the framework [BiometricPrompt] (API 28+) so it works from the app's ComponentActivity,
- * allowing the screen-lock PIN, pattern or password as well as biometrics. Before API 28 there is
- * no prompt we can show inline, so approval fails closed and the emailed link remains the way in.
+ * Uses the framework [BiometricPrompt] so it works from the app's ComponentActivity, allowing the
+ * screen-lock PIN, pattern or password as well as biometrics. Accepting the screen lock needs API 29
+ * (`setDeviceCredentialAllowed`) or 30 (`setAllowedAuthenticators`), so on Android 9 and earlier
+ * approval fails closed and the emailed link remains the way in.
  */
 actual suspend fun authenticateDeviceOwner(reason: String) {
     val activity = AndroidActivityRuntime.currentActivity() ?: throw DeviceOwnerAuthUnavailable("No foreground activity")
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) throw DeviceOwnerAuthUnavailable("Android 9 or later is required")
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) throw DeviceOwnerAuthUnavailable("Android 10 or later is required")
     val keyguard = activity.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
     if (keyguard?.isDeviceSecure != true) throw DeviceOwnerAuthUnavailable("Set a screen lock to approve devices")
     withContext(Dispatchers.Main) {
