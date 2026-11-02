@@ -717,8 +717,31 @@ internal fun ConnectionViewModel.connectWithUserImpl(
                     else -> null
                 }
 
-            val locLat = latitude ?: lastProximityLat
-            val locLng = longitude ?: lastProximityLng
+            // G4-1..3: QR / link — this phone's fix at the recognition moment, with its quality
+            // keys and sensor_observation (venue codes never send this phone's location).
+            val captureMethod = captureSession?.method ?: "link"
+            if (connectionMethod == "qr") ConnectionFlowTelemetry.recordQrStarted(captureMethod)
+            val captured =
+                if (connectionMethod == "qr") {
+                    runCatching {
+                        captureConnectContext(
+                            method = captureMethod,
+                            momentMs =
+                                qrScanMomentMs ?: kotlinx.datetime.Clock.System
+                                    .now()
+                                    .toEpochMilliseconds(),
+                            includeLocation = venueId.isNullOrBlank() && AppDataManager.shouldCaptureLocationAtTap(),
+                            cold = captureSession?.isRunning != true,
+                        )
+                    }.getOrNull()
+                } else {
+                    null
+                }
+            qrScanMomentMs = null
+            if (connectionMethod == "qr") stopConnectionCapture()
+            val capturedFix = captured?.fix
+            val locLat = capturedFix?.latitude ?: latitude ?: lastProximityLat
+            val locLng = capturedFix?.longitude ?: longitude ?: lastProximityLng
             val locAlt = altitudeMeters ?: lastProximityAltitudeMeters
             val qrHardwareVibe =
                 when (connectionMethod) {
@@ -755,6 +778,7 @@ internal fun ConnectionViewModel.connectWithUserImpl(
                     compassAzimuth = requestHardwareVibe?.compassAzimuth?.takeIf { it.isFinite() }?.toDouble(),
                     batteryLevel = requestHardwareVibe?.batteryLevel?.takeIf { it in 0..100 },
                     weatherSnapshotLabel = weatherSnapshotLabel?.trim()?.takeIf { it.isNotEmpty() },
+                    observationKeys = captured?.observationKeys,
                 )
 
             val result =
@@ -766,6 +790,13 @@ internal fun ConnectionViewModel.connectWithUserImpl(
                 val outcome = result.getOrNull()!!
                 val connection = outcome.connection
                 val encounterLogged = outcome.encounterLogged
+                if (connectionMethod == "qr") {
+                    if (encounterLogged) {
+                        ConnectionFlowTelemetry.recordQrSucceeded(isReconnect = null, captureQuality = lastCaptureQuality)
+                    } else {
+                        ConnectionFlowTelemetry.recordQrRateLimited(captureQuality = lastCaptureQuality)
+                    }
+                }
                 activateCollaborationSessionIfPresent(outcome)
                 val connectedUserId = connection.user_ids.firstOrNull { it != currentUserId } ?: scannedUserId
                 val connectedUser =
@@ -820,6 +851,9 @@ internal fun ConnectionViewModel.connectWithUserImpl(
                 }
             } else {
                 val error = result.exceptionOrNull()?.message ?: "Failed to create connection"
+                if (connectionMethod == "qr") {
+                    ConnectionFlowTelemetry.recordQrFailed(ConnectionFlowTelemetry.qrFailureReason(error), lastCaptureQuality)
+                }
                 _connectionState.value = ConnectionState.Error(error)
             }
         } catch (e: Exception) {

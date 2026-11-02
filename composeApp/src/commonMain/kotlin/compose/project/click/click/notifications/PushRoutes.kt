@@ -24,6 +24,11 @@ sealed interface PushRoute {
         val userId: String,
     ) : PushRoute
 
+    /** A shared Click Drop's story, opened on Home once it's in the strip (iOS `TapRoute.sharedDrop`). */
+    data class SharedDrop(
+        val dropId: String,
+    ) : PushRoute
+
     /** The Clicks list (unknown identity, availability matches). */
     data object Connections : PushRoute
 
@@ -92,14 +97,15 @@ object PushRoutes {
             "availability_match" -> PushRoute.Connections
             // iOS answers it in Activity; Android shows pending prior requests in the Clicks list.
             "prior_connection_request" -> PushRoute.Connections
-            // A reaction to a beacon opens it; shared drops have no Android screen yet (audit G2-4).
+            // A reaction opens what was reacted to: the beacon, or the shared drop's story.
             "reaction" ->
                 value("target_id")
-                    ?.takeIf { data["target_kind"] != "shared_drop" }
-                    ?.let { PushRoute.Event(it) }
+                    ?.let { id -> if (data["target_kind"] == "shared_drop") PushRoute.SharedDrop(id) else PushRoute.Event(id) }
                     ?: PushRoute.OpenApp
-            // No Android screen yet (audit G7-1, G2-4): open the app rather than guess.
-            "device_approval", "shared_drop_released" -> PushRoute.OpenApp
+            // "Just developed": the newest released drop's story.
+            "shared_drop_released" -> value("drop_id")?.let { PushRoute.SharedDrop(it) } ?: PushRoute.OpenApp
+            // No Android screen yet (audit G7-1): open the app rather than guess.
+            "device_approval" -> PushRoute.OpenApp
             else -> PushRoute.OpenApp
         }
     }

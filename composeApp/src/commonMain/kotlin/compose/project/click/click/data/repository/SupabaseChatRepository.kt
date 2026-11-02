@@ -970,6 +970,14 @@ class SupabaseChatRepository(
     ): GatedDropOriginalResult =
         loadGatedDropOriginalImpl(chatId = chatId, viewerUserId = viewerUserId, message = message, extension = extension)
 
+    override suspend fun uploadClickDropOriginal(
+        plainBytes: ByteArray,
+        chatId: String,
+        senderUserId: String,
+        mimeType: String,
+        previewMediaReference: String,
+    ): ClickDropOriginalUpload? = uploadClickDropOriginalImpl(plainBytes, chatId, senderUserId, mimeType, previewMediaReference)
+
     override suspend fun downloadAndDecryptChatMedia(
         chatId: String,
         viewerUserId: String,

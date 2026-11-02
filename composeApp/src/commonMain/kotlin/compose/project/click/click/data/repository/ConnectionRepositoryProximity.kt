@@ -5,6 +5,7 @@ package compose.project.click.click.data.repository
 import compose.project.click.click.data.api.ClickWebRequestException
 import compose.project.click.click.data.api.ProximityHandshakePostBody
 import compose.project.click.click.data.api.ProximityHandshakePostResult
+import compose.project.click.click.data.api.postProximityHandshakeImpl
 import compose.project.click.click.data.auth.EnsureFreshAccessToken // pragma: allowlist secret
 import compose.project.click.click.data.models.HeightCategory
 import compose.project.click.click.data.models.NoiseLevelCategory
@@ -20,6 +21,7 @@ import kotlinx.datetime.Clock
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.offsetIn
 import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.JsonObject
 import kotlin.math.*
 
 /**
@@ -59,6 +61,7 @@ internal suspend fun ConnectionRepository.bindProximityHandshakeImpl(
     bindExactNoiseLevelDb: Double? = null,
     bindHeightCategory: HeightCategory? = null,
     simulatorMock: Boolean = false,
+    observationKeys: JsonObject? = null,
 ): Result<BindProximityHandshakeResult> {
     return try {
         @Suppress("UNUSED_PARAMETER")
@@ -112,12 +115,12 @@ internal suspend fun ConnectionRepository.bindProximityHandshakeImpl(
             )
         val outgoingJson = json.encodeToString(ProximityHandshakePostBody.serializer(), request)
         println("OUTGOING_HANDSHAKE_PAYLOAD: $outgoingJson")
-        val firstResult = apiClient.postProximityHandshake(request, bearerJwt = bearerJwt)
+        val firstResult = apiClient.postProximityHandshakeImpl(request, bearerJwt = bearerJwt, extraKeys = observationKeys)
         val apiResult =
             firstResult.getOrElse { firstError ->
                 val refreshed = if (firstError.isClickWebAuthFailure()) refreshedJwtAfterAuthFailure() else null
                 refreshed?.let { freshJwt ->
-                    apiClient.postProximityHandshake(request, bearerJwt = freshJwt).getOrNull()
+                    apiClient.postProximityHandshakeImpl(request, bearerJwt = freshJwt, extraKeys = observationKeys).getOrNull()
                 } ?: return Result.failure(firstError)
             }
         when (apiResult) {

@@ -189,6 +189,22 @@ class ConnectionViewModel : ViewModel() {
     internal var lastTapProximityStartedAtMs: Long = 0L
     internal var activeTapProximityJob: Job? = null
 
+    /** This phone's warm capture for the visible Tap / QR flow (G4-1). */
+    internal var captureSession: compose.project.click.click.connect.ConnectionCaptureSession? = null
+
+    /** `capture_quality` aggregates of the latest capture, for connect telemetry (G4-8). */
+    internal var lastCaptureQuality: Map<String, kotlinx.serialization.json.JsonPrimitive>? = null
+
+    /** When the QR / link was recognized: the connection moment for that flow. */
+    internal var qrScanMomentMs: Long? = null
+
+    override fun onCleared() {
+        // Sensors never outlive the flow's view model.
+        captureSession?.stop()
+        captureSession = null
+        super.onCleared()
+    }
+
     fun lastProximityCoordinates(): Pair<Double?, Double?> = lastProximityLat to lastProximityLng
 
     internal fun isProximityHandshakeInFlight(): Boolean =
@@ -258,6 +274,12 @@ class ConnectionViewModel : ViewModel() {
         venueId: String?,
     ) {
         if (scannedUserId.isBlank()) return
+        qrScanMomentMs =
+            kotlinx.datetime.Clock.System
+                .now()
+                .toEpochMilliseconds()
+        // A Click link opened outside the scanner captures cold from here (never prompts).
+        if (captureSession?.isRunning != true) warmUpConnectionCapture(if (qrToken == null) "link" else "qr")
         viewModelScope.launch {
             val profile =
                 repository.getUserById(scannedUserId).getOrNull()?.toUserProfile()

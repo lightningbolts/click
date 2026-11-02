@@ -424,6 +424,18 @@ interface ChatRepository {
         extension: String,
     ): GatedDropOriginalResult = GatedDropOriginalResult.Unavailable
 
+    /**
+     * Encrypts and uploads a gated Click Drop's original (`drop_original: true`) for the message whose
+     * preview went up as [previewMediaReference]; null on failure.
+     */
+    suspend fun uploadClickDropOriginal(
+        plainBytes: ByteArray,
+        chatId: String,
+        senderUserId: String,
+        mimeType: String,
+        previewMediaReference: String,
+    ): ClickDropOriginalUpload? = null
+
     /** Downloads ciphertext from [mediaUrl] and decrypts for [chatId] as [viewerUserId]. */
     suspend fun downloadAndDecryptChatMedia(
         chatId: String,

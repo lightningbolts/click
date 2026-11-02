@@ -2,8 +2,6 @@
 
 package compose.project.click.click.ui.screens
 
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,8 +9,8 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Error
@@ -33,7 +31,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.LiveRegionMode
-import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
@@ -47,14 +44,16 @@ import compose.project.click.click.events.ClickPassUnavailableException
 import compose.project.click.click.events.PassScan
 import compose.project.click.click.events.getClickPass
 import compose.project.click.click.events.scanClickPass
+import compose.project.click.click.events.tickets.ApiTicketingClient
+import compose.project.click.click.events.tickets.OwnedTicket
+import compose.project.click.click.events.tickets.TicketingClient
+import compose.project.click.click.events.tickets.TicketingException
 import compose.project.click.click.events.verdict
 import compose.project.click.click.platform.setCodeDisplayBrightness
 import compose.project.click.click.ui.components.ClickFormBottomSheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.QRScanner // pragma: allowlist secret
 import compose.project.click.click.util.formatClockTime // pragma: allowlist secret
-import compose.project.click.click.utils.toImageBitmap // pragma: allowlist secret
 import kotlinx.coroutines.launch
-import qrcode.QRCode
 
 private sealed interface PassLoad {
     data object Loading : PassLoad
@@ -78,7 +77,14 @@ internal fun ClickPassSheet(
     eventTitle: String,
     onDismiss: () -> Unit,
     api: ApiClient = remember { ApiClient() },
+    /** A ticketed event: the pass is each ticket's QR (`GET /api/beacons/{id}/tickets`) instead of the RSVP pass. */
+    ticketed: Boolean = false,
+    eventCancelled: Boolean = false,
 ) {
+    if (ticketed) {
+        TicketedPassSheet(beaconId, eventTitle, eventCancelled, onDismiss, remember(api) { ApiTicketingClient(api) })
+        return
+    }
     var load by remember(beaconId) { mutableStateOf<PassLoad>(PassLoad.Loading) }
     var reload by remember { mutableStateOf(0) }
     DisposableEffect(Unit) {
@@ -116,30 +122,7 @@ internal fun ClickPassSheet(
                 }
                 is PassLoad.Ready -> {
                     val pass = current.pass
-                    val qr =
-                        remember(pass.credentialUrl) {
-                            runCatching {
-                                QRCode
-                                    .ofSquares()
-                                    .build(pass.credentialUrl)
-                                    .renderToBytes()
-                                    .toImageBitmap()
-                            }.getOrNull()
-                        }
-                    // Black on white in every theme, with a quiet zone, so door scanners can read it.
-                    Box(
-                        modifier =
-                            Modifier
-                                .widthIn(max = 260.dp)
-                                .fillMaxWidth()
-                                .aspectRatio(1f)
-                                .background(Color.White, RoundedCornerShape(16.dp))
-                                .padding(16.dp)
-                                .semantics { contentDescription = "Click Pass QR code, ${pass.code}" },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        if (qr != null) Image(bitmap = qr, contentDescription = null, modifier = Modifier.fillMaxWidth().aspectRatio(1f))
-                    }
+                    PassQrTile(pass.credentialUrl, "Click Pass QR code, ${pass.code}")
                     if (pass.code.isNotBlank()) {
                         Text(pass.code, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.titleMedium)
                     }
@@ -158,6 +141,59 @@ internal fun ClickPassSheet(
                         textAlign = TextAlign.Center,
                     )
                 }
+            }
+        }
+    }
+}
+
+/** The Click Pass sheet for a ticketed event: the holder's tickets, each with its own QR (iOS `ClickPassView` + `TicketPassContent`). */
+@Composable
+private fun TicketedPassSheet(
+    beaconId: String,
+    eventTitle: String,
+    eventCancelled: Boolean,
+    onDismiss: () -> Unit,
+    client: TicketingClient,
+) {
+    var tickets by remember(beaconId) { mutableStateOf<List<OwnedTicket>?>(null) }
+    var failure by remember(beaconId) { mutableStateOf<String?>(null) }
+    var reload by remember { mutableStateOf(0) }
+    DisposableEffect(Unit) {
+        setCodeDisplayBrightness(true)
+        onDispose { setCodeDisplayBrightness(false) }
+    }
+    LaunchedEffect(beaconId, reload) {
+        failure = null
+        runCatching { client.eventTickets(beaconId) }
+            .onSuccess { tickets = it }
+            .onFailure { err -> if (tickets == null) failure = (err as? TicketingException)?.userMessage ?: "Couldn't load your tickets." }
+    }
+    ClickFormBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text("Your tickets", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text(eventTitle, style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center)
+            val current = tickets
+            when {
+                current != null && current.isEmpty() ->
+                    Text(
+                        "Your tickets for this event show up here.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                current != null -> TicketPassList(current, eventCancelled)
+                failure != null -> {
+                    Text(failure.orEmpty(), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    TextButton(onClick = { reload++ }) { Text("Try Again") }
+                }
+                else -> CircularProgressIndicator(modifier = Modifier.size(28.dp))
             }
         }
     }

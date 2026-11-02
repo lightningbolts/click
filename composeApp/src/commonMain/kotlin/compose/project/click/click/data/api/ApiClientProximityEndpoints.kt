@@ -13,6 +13,8 @@ import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
 
 /**
  * POST `/api/connections/proximity` — tri-factor proximity bind (JWT bearer).
@@ -23,6 +25,8 @@ import kotlinx.serialization.json.Json
 internal suspend fun ApiClient.postProximityHandshakeImpl(
     body: ProximityHandshakePostBody,
     bearerJwt: String? = null,
+    /** G4-2/G4-3: this phone's `gps_*` / `barometric_*` keys and `sensor_observation`, at the top level. */
+    extraKeys: JsonObject? = null,
 ): Result<ProximityHandshakePostResult> {
     return try {
         val response: HttpResponse =
@@ -33,7 +37,12 @@ internal suspend fun ApiClient.postProximityHandshakeImpl(
                 bearerJwt?.trim()?.takeIf { it.isNotEmpty() }?.let { token ->
                     header("Authorization", "Bearer $token")
                 }
-                setBody(body)
+                if (extraKeys.isNullOrEmpty()) {
+                    setBody(body)
+                } else {
+                    val encoded = json.encodeToJsonElement(ProximityHandshakePostBody.serializer(), body).jsonObject
+                    setBody(withTopLevelKeys(encoded, extraKeys))
+                }
             }
         when (response.status.value) {
             200 -> {
@@ -271,3 +280,12 @@ internal suspend fun ApiClient.prewarmProximityHandshakeImpl() {
         }
     }
 }
+
+/**
+ * [base] with [extra] merged at the top level (G4-2/G4-3 quality keys and `sensor_observation`).
+ * Keys already in [base] win, so the extras never override the request's own fields.
+ */
+internal fun withTopLevelKeys(
+    base: JsonObject,
+    extra: JsonObject?,
+): JsonObject = if (extra.isNullOrEmpty()) base else JsonObject(extra + base)

@@ -21,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.ConfirmationNumber
 import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.EventAvailable
@@ -30,6 +31,7 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.PrivacyTip
 import androidx.compose.material.icons.filled.QrCode
@@ -92,6 +94,8 @@ import compose.project.click.click.data.repository.SupabaseRepository // pragma:
 import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
 import compose.project.click.click.deeplink.AppDeepLink // pragma: allowlist secret
 import compose.project.click.click.deeplink.AppDeepLinkRouter // pragma: allowlist secret
+import compose.project.click.click.events.tickets.ApiTicketingClient
+import compose.project.click.click.events.tickets.MyTicketsGroup
 import compose.project.click.click.notifications.ChatDeepLinkManager // pragma: allowlist secret
 import compose.project.click.click.openInAppBrowser // pragma: allowlist secret
 import compose.project.click.click.platformForegroundTickFlow // pragma: allowlist secret
@@ -145,6 +149,7 @@ internal enum class SettingsPage {
     Interests,
     Personality,
     Saved,
+    Tickets,
 }
 
 internal fun SettingsPage.title(): String =
@@ -161,6 +166,7 @@ internal fun SettingsPage.title(): String =
         SettingsPage.Interests -> "Interests"
         SettingsPage.Personality -> "Personality"
         SettingsPage.Saved -> "Saved events"
+        SettingsPage.Tickets -> "Tickets"
     }
 
 /** Pages pushed from Privacy go back to Privacy; everything else goes back to Me. */
@@ -193,6 +199,7 @@ fun SettingsScreen(
     val intentListFeedback by availabilityViewModel.intentListFeedback.collectAsState()
     val currentUser by AppDataManager.currentUser.collectAsState()
     val notificationPreferences by AppDataManager.notificationPreferences.collectAsState()
+    val featureFlags by FeatureFlags.state.collectAsState()
     val locationPreferences by AppDataManager.locationPreferences.collectAsState()
     val connections by AppDataManager.connections.collectAsState()
     val coreConnectionIds by AppDataManager.coreConnectionIds.collectAsState()
@@ -443,6 +450,8 @@ fun SettingsScreen(
     val mapBeacons by mapViewModel.mapBeacons.collectAsState()
     val prefetchedBeacons by AppDataManager.prefetchedMapBeacons.collectAsState()
     var selectedSavedEventBeacon by remember { mutableStateOf<MapBeacon?>(null) }
+    val ticketingClient = remember { ApiTicketingClient() }
+    var ticketPassGroup by remember { mutableStateOf<MyTicketsGroup?>(null) }
     // One host state means tap-back and swipe-back share a single animation and the hub behind gets
     // the same parallax either way, instead of tap-back using a separate slide-out with no underlay.
     val backHost = rememberInteractiveBackHostState()
@@ -563,6 +572,15 @@ fun SettingsScreen(
                                 onClick = { settingsPage = SettingsPage.Saved },
                             )
                             SettingsDivider()
+                            // Me → Tickets (iOS `MeView`): your own tickets, on while you hold any or sales are on.
+                            if (featureFlags.isEnabled(FeatureFlag.TICKET_WALLET)) {
+                                MeNavRow(
+                                    icon = Icons.Default.ConfirmationNumber,
+                                    title = "Tickets",
+                                    onClick = { settingsPage = SettingsPage.Tickets },
+                                )
+                                SettingsDivider()
+                            }
                             MeNavRow(
                                 icon = Icons.Default.CalendarMonth,
                                 title = "Calendar",
@@ -835,6 +853,21 @@ fun SettingsScreen(
                                             },
                                         )
                                         SettingsDivider()
+                                        // iOS lists "Click Drops" after messages; hidden while shared drops are off.
+                                        if (featureFlags.isEnabled(FeatureFlag.SHARED_DROPS)) {
+                                            SettingsToggleRow(
+                                                icon = Icons.Default.PhotoCamera,
+                                                title = "Click Drops",
+                                                subtitle = "When a connection's shared drop develops",
+                                                checked = notificationPreferences.dropReleasePushEnabled,
+                                                enabled = !notificationPreferencesSaving,
+                                                pending = pendingAlertKey == "drops",
+                                                onCheckedChange = { on ->
+                                                    setAlert("drops") { AppDataManager.setDropReleaseNotificationsEnabled(on) }
+                                                },
+                                            )
+                                            SettingsDivider()
+                                        }
                                         SettingsToggleRow(
                                             icon = Icons.Default.Notifications,
                                             title = "Event reminders",
@@ -1108,6 +1141,12 @@ fun SettingsScreen(
                         }
                     }
 
+                    SettingsPage.Tickets -> {
+                        item {
+                            MyTicketsPage(client = ticketingClient, onOpenPass = { ticketPassGroup = it })
+                        }
+                    }
+
                     SettingsPage.Saved -> {
                         val sections = savedEventSections(savedEventBookmarks, nowEpochMs())
                         val openBookmark: (EventBookmarkItemDto) -> Unit = { bookmark ->
@@ -1182,6 +1221,16 @@ fun SettingsScreen(
                     seedAvailabilityIntent = null
                     availabilityViewModel.resetAvailabilityIntentSheet()
                 },
+            )
+        }
+
+        ticketPassGroup?.let { group ->
+            ClickPassSheet(
+                beaconId = group.event.beaconId,
+                eventTitle = group.event.title,
+                onDismiss = { ticketPassGroup = null },
+                ticketed = true,
+                eventCancelled = group.event.cancelled,
             )
         }
 

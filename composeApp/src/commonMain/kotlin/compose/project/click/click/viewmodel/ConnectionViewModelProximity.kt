@@ -420,8 +420,27 @@ internal fun ConnectionViewModel.startTapProximityHandshakeImpl(
                     val heardTokensAudio = listenResult.heardTokens
                     val detectedDevicesBle = listenResult.detectedDevices
 
+                    // G4-1..3: the connection moment is the end of this phone's BLE/ultrasonic
+                    // exchange (iOS `TapConnectModel`): its best fix around now, quality keys and
+                    // sensor_observation. Falls back to the legacy one-shot fix when none is useful.
+                    val captured =
+                        runCatching {
+                            captureConnectContext(
+                                method = "tap",
+                                momentMs = Clock.System.now().toEpochMilliseconds(),
+                                includeLocation = shouldFetchLocation,
+                            )
+                        }.getOrNull()
+                    val capturedFix = captured?.fix
                     val location =
-                        locationDeferred?.await()
+                        capturedFix?.let {
+                            LocationResult(
+                                latitude = it.latitude,
+                                longitude = it.longitude,
+                                altitudeMeters = it.ellipsoidalAltitudeMeters,
+                                accuracyMeters = it.horizontalAccuracyMeters,
+                            )
+                        } ?: locationDeferred?.await()
                             ?: if (shouldFetchLocation) {
                                 runCatching { locationService.getCurrentLocation() }.getOrNull()
                                     ?: AppDataManager.lastKnownDeviceLocation.value?.let { (la, lo) ->
@@ -465,6 +484,7 @@ internal fun ConnectionViewModel.startTapProximityHandshakeImpl(
                                                 bindExactNoiseLevelDb = proximitySensorContext?.exactNoiseLevelDb,
                                                 bindHeightCategory = proximitySensorContext?.heightCategory,
                                                 simulatorMock = simulatorMock,
+                                                observationKeys = captured?.observationKeys,
                                             ).getOrThrow()
                                     },
                                 )

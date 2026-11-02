@@ -262,6 +262,7 @@ class ClickFirebaseMessagingService : FirebaseMessagingService() {
             is PushRoute.Hub -> MainActivity.createHubDeepLinkIntent(this, route.hubId)
             is PushRoute.Profile -> MainActivity.createProfileDeepLinkIntent(this, route.userId)
             PushRoute.Connections -> MainActivity.createConnectionsIntent(this)
+            is PushRoute.SharedDrop -> MainActivity.createSharedDropIntent(this, route.dropId)
             PushRoute.OpenApp ->
                 packageManager.getLaunchIntentForPackage(packageName)?.apply {
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
