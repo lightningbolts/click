@@ -134,12 +134,15 @@ fun clickColorScheme(isDarkMode: Boolean) =
             onBackground = OnSurfaceDark,
             surface = SurfaceDark,
             onSurface = OnSurfaceDark,
-            primaryContainer = LightBlue,
-            onPrimaryContainer = SoftBlue,
+            primaryContainer = SelectionDark,
+            onPrimaryContainer = AccentTextDark,
             surfaceVariant = SurfaceVariantDark,
-            onSurfaceVariant = Color(0xFFD6D9D9),
-            outline = OutlineMuted,
-            error = Color(0xFFBA1A1A),
+            onSurfaceVariant = OnSurfaceVariantDark,
+            outline = OutlineMutedDark,
+            outlineVariant = BorderQuietDark,
+            error = DestructiveDark,
+            // Dark text on the bright dark-mode red; white on #FF453A fails contrast.
+            onError = Color.Black,
         )
     } else {
         lightColorScheme(
@@ -155,10 +158,12 @@ fun clickColorScheme(isDarkMode: Boolean) =
             onSurface = OnSurfaceLight,
             primaryContainer = SoftBlue,
             onPrimaryContainer = DeepBlue,
-            surfaceVariant = SurfaceContainerHighest,
+            surfaceVariant = SurfaceContainerLow,
             onSurfaceVariant = OnSurfaceVariant,
             outline = OutlineMuted,
-            error = Color(0xFFBA1A1A),
+            outlineVariant = OutlineVariant,
+            error = DestructiveLight,
+            onError = Color.White,
         )
     }
 

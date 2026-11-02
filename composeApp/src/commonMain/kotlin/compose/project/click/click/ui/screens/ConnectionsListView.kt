@@ -555,6 +555,10 @@ fun ConnectionsListView(
                             alpha = tabContentAlpha.value
                         },
                 ) {
+                    // This device waits for another of the account's devices to share history.
+                    item(key = "clicks_device_history", contentType = "device_history") {
+                        DeviceHistoryBanner(modifier = Modifier.padding(bottom = 8.dp))
+                    }
                     if (effectiveChats.isNotEmpty() || activeHubs.isNotEmpty()) {
                         item(key = "clicks_segment_bar", contentType = "segment_bar") {
                             Box(modifier = Modifier.padding(bottom = 8.dp)) {

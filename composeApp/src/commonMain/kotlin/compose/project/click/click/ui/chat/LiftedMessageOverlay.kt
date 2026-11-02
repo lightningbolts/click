@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material.icons.outlined.Share
@@ -233,6 +234,11 @@ internal fun LiftedMessageOverlay(
                                 "Reply",
                                 Icons.AutoMirrored.Filled.Reply,
                             ) { done { handlers.onReply(messageWithUser) } }
+                        }
+                        if (capabilities.canPin) {
+                            LiftedAction(if (capabilities.isPinned) "Unpin" else "Pin", Icons.Default.PushPin) {
+                                done { handlers.onTogglePin(messageWithUser) }
+                            }
                         }
                         if (capabilities.canForward) {
                             LiftedAction(

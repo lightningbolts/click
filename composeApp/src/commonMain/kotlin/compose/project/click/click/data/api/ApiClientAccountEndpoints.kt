@@ -72,6 +72,27 @@ internal suspend fun ApiClient.clearLegacyGhostModeImpl(): Result<Unit> =
         if (response.status.value in 200..299) Result.success(Unit) else clickWebFailure(response)
     }
 
+/**
+ * DELETE `/api/user/delete` — permanently deletes the signed-in account (bearer auth, same route iOS
+ * uses in-app). No body: the Apple revocation code is iOS-only. Callers sign out locally on success.
+ */
+internal suspend fun ApiClient.deleteAccountImpl(): Result<Unit> =
+    clickWebCall {
+        val response = clickWebClient.delete("${ApiClient.clickWebAuthOrigin}/api/user/delete")
+        if (response.status.value in 200..299) Result.success(Unit) else clickWebFailure(response)
+    }
+
+/** The message shown when deletion fails; the account is untouched. */
+internal fun accountDeletionFailureMessage(error: Throwable?): String {
+    val detail =
+        error
+            ?.message
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() && !it.contains("<html", ignoreCase = true) }
+            ?.take(160)
+    return if (detail == null) "Your account wasn't deleted. Try again." else "Your account wasn't deleted. $detail"
+}
+
 /** GET `/api/safety/block` — people the viewer blocked, newest first. */
 internal suspend fun ApiClient.getBlockedUsersImpl(): Result<List<BlockedUserDto>> =
     clickWebCall {

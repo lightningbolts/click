@@ -12,10 +12,12 @@ import io.ktor.client.request.post
 import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
+import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -164,6 +166,19 @@ internal suspend fun ApiClient.deleteProfileTimelineJournalEntryImpl(id: String)
         Result.failure(e)
     }
 }
+
+/** GET `/api/me/features` — this user's resolved feature flags (`{features:{key:{enabled,config}}}`). */
+internal suspend fun ApiClient.getMeFeaturesImpl(): Result<JsonElement> =
+    try {
+        val response: HttpResponse = clickWebClient.get("${ApiClient.clickWebAuthOrigin}/api/me/features")
+        if (response.status.value in 200..299) {
+            Result.success(Json.parseToJsonElement(response.bodyAsText()))
+        } else {
+            Result.failure(ClickWebRequestException(response.status.value, readClickWebErrorMessage(response)))
+        }
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
 
 /**
  * GET `/api/me/recap?window=day|week` — Home activity rollup.

@@ -20,6 +20,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -46,8 +47,10 @@ import coil3.compose.LocalPlatformContext
 import coil3.request.ImageRequest
 import coil3.size.Size
 import compose.project.click.click.data.models.Message
-import compose.project.click.click.data.models.disposableRollCollaborationTtlIso
+import compose.project.click.click.data.models.disposableRollRevealAtIso
 import compose.project.click.click.data.models.isDisposableRollLocked
+import compose.project.click.click.data.repository.GatedDropOriginals
+import compose.project.click.click.data.repository.isGatedDropAwaitingOriginal
 import compose.project.click.click.ui.theme.PrimaryBlue
 import compose.project.click.click.util.LruMemoryCache
 import compose.project.click.click.util.redactedRestMessage
@@ -147,7 +150,10 @@ internal fun ChatBubblePhotoContent(
     onPhotoClick: (() -> Unit)? = null,
     onPhotoLongPress: (() -> Unit)? = null,
 ) {
-    val rollLocked = message.isDisposableRollLocked()
+    val gatedOriginals by GatedDropOriginals.loaded.collectAsState()
+    // A gated drop stays pixelated until its original is on screen, even after its reveal time.
+    val awaitingOriginal = message.isGatedDropAwaitingOriginal(gatedOriginals)
+    val rollLocked = message.isDisposableRollLocked() || awaitingOriginal
     val canExpand = onPhotoClick != null && !rollLocked
     val expandClick = onPhotoClick.takeIf { canExpand }
     val photoLongPress = onPhotoLongPress
@@ -193,9 +199,10 @@ internal fun ChatBubblePhotoContent(
     val countdownLabel =
         remember(message.id, rollLocked) {
             if (!rollLocked) return@remember null
-            val ttlIso = message.disposableRollCollaborationTtlIso() ?: return@remember "Locked"
+            val ttlIso = message.disposableRollRevealAtIso() ?: return@remember "Locked"
             val ttl = runCatching { Instant.parse(ttlIso) }.getOrNull() ?: return@remember "Locked"
             val remainMs = (ttl.toEpochMilliseconds() - Clock.System.now().toEpochMilliseconds()).coerceAtLeast(0L)
+            if (remainMs == 0L && awaitingOriginal) return@remember "Developing…"
             val totalMin = remainMs / 60_000L
             val hours = totalMin / 60L
             val mins = totalMin % 60L
