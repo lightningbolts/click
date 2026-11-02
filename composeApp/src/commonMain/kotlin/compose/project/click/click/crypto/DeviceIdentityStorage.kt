@@ -24,4 +24,10 @@ expect object DeviceIdentityStorage {
     ): ByteArray
 
     fun destroyEphemeral(identity: DeviceIdentity)
+
+    /**
+     * Forgets the stored identity when it is still [deviceId] (the server removed it from the
+     * account). The next [loadOrCreate] makes a new key. A newer identity is left alone.
+     */
+    fun discard(deviceId: String)
 }

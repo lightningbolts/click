@@ -2,6 +2,8 @@
 
 package compose.project.click.click.data.repository
 
+import compose.project.click.click.crypto.DeviceIdentity
+import compose.project.click.click.crypto.DeviceIdentityStorage
 import compose.project.click.click.crypto.MessageCrypto
 import compose.project.click.click.crypto.MessageCryptoV2
 import compose.project.click.click.crypto.PlatformCrypto
@@ -34,6 +36,20 @@ internal data class E2eeV2ChatSession(
     val epochKey: ByteArray
         get() = epochKeys[epoch] ?: error("Current E2EE v2 key is unavailable")
 }
+
+/**
+ * Registers this device's v2 identity, starting over with a new key if another device removed this
+ * one from the account (`409 DEVICE_REVOKED`). Cached epoch sessions belong to the old key, so a
+ * replacement clears them.
+ */
+internal suspend fun SupabaseChatRepository.registerThisE2eeDevice(token: String): E2eeDeviceRegistration<DeviceIdentity> =
+    registerE2eeDeviceRekeyingIfRevoked(
+        loadIdentity = MessageCryptoV2::loadOrCreateDeviceIdentity,
+        infoOf = { it.info },
+        discardIdentity = DeviceIdentityStorage::discard,
+        onIdentityReplaced = { E2eeV2SessionCache.clear() },
+        register = { info -> apiClient.registerE2eeV2Device(info.deviceId, info.publicKeySpkiBase64, token) },
+    )
 
 private object E2eeV2SessionCache {
     private val sessions = mutableMapOf<String, E2eeV2ChatSession>()
@@ -326,13 +342,14 @@ internal suspend fun SupabaseChatRepository.resolveE2eeV2ChatCrypto(
 ): E2eeV2ChatSession? {
     if (!forceRefresh && !allowLifecycle) E2eeV2SessionCache.get(chatId)?.let { return it }
     val token = ensureFreshJwtForChat() ?: return null
-    val identity =
+    val registration =
         try {
-            MessageCryptoV2.loadOrCreateDeviceIdentity()
+            registerThisE2eeDevice(token)
         } catch (_: Exception) {
             throw E2eeV2RequiredException()
         }
-    apiClient.registerE2eeV2Device(identity.info.deviceId, identity.info.publicKeySpkiBase64, token)
+    if (registration.revoked) throw E2eeV2RequiredException()
+    val identity = registration.identity
     val devices =
         apiClient.discoverE2eeV2Devices(chatId, token).getOrElse { throw E2eeV2RequiredException() }
     val registered =
