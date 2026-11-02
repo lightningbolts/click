@@ -319,6 +319,28 @@ internal fun ColumnScope.ChatViewTimelinePane(
                                             .filterValues { it.isNotEmpty() }
                                     }
                                 }
+                            // Pin banner taps: scroll to the pinned message and highlight it.
+                            val jumpRequest by viewModel.jumpToMessageRequest.collectAsState()
+                            LaunchedEffect(jumpRequest, timelineEntries) {
+                                val id = jumpRequest ?: return@LaunchedEffect
+                                val index = timelineEntries.indexOfMessageId(id)
+                                if (index < 0) {
+                                    if (!viewModel.ensureTargetMessageLoaded(id)) viewModel.consumeJumpToMessage()
+                                    return@LaunchedEffect
+                                }
+                                viewModel.consumeJumpToMessage()
+                                scrollChatTimelineToMessage(
+                                    listState = listState,
+                                    suppressKeyboardDismiss =
+                                    suppressKeyboardDismissWhileProgrammaticTimelineScroll,
+                                    index = index,
+                                )
+                                focusedSearchMessageId = id
+                                delay(CHAT_SEARCH_FOCUS_HOLD_MS)
+                                if (focusedSearchMessageId == id) {
+                                    focusedSearchMessageId = null
+                                }
+                            }
                             LaunchedEffect(chatId, targetMessageId, timelineEntries) {
                                 val id =
                                     targetMessageId

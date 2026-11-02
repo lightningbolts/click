@@ -14,6 +14,7 @@ import compose.project.click.click.data.models.isPendingSync // pragma: allowlis
 import compose.project.click.click.data.models.toUserProfile // pragma: allowlist secret
 import compose.project.click.click.data.repository.PROXIMITY_HOST_SELECTION_MAX_PEERS // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseChatRepository // pragma: allowlist secret
+import compose.project.click.click.data.repository.hostSelectionExclusions // pragma: allowlist secret
 import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
 import compose.project.click.click.domain.VerifiedCliqueCreation // pragma: allowlist secret
 import compose.project.click.click.sensors.AmbientNoiseMonitor // pragma: allowlist secret
@@ -262,6 +263,34 @@ internal fun ConnectionViewModel.toggleHostSelectionPeerImpl(peerId: String) {
             tagging.selectedPeerIds + id
         }
     _connectionState.value = tagging.copy(selectedPeerIds = next)
+    submitHostSelectionExclusions(tagging, next)
+}
+
+internal fun ConnectionViewModel.updateHostSelectionImpl(
+    selectedPeerIds: Set<String>,
+    currentUserId: String,
+) {
+    val tagging = _connectionState.value as? ConnectionState.TaggingContext ?: return
+    if (!tagging.requiresSelection) return
+    val next = selectedPeerIds.filter { it.isNotBlank() && it != currentUserId }.toSet()
+    if (next != tagging.selectedPeerIds) {
+        _connectionState.value = tagging.copy(selectedPeerIds = next)
+    }
+    submitHostSelectionExclusions(tagging, next, currentUserId)
+}
+
+private fun ConnectionViewModel.submitHostSelectionExclusions(
+    tagging: ConnectionState.TaggingContext,
+    selected: Set<String>,
+    currentUserId: String = "",
+) {
+    val pendingId = tagging.pendingHandshakeId?.trim().orEmpty()
+    if (pendingId.isEmpty()) return
+    val candidates = tagging.selectableUsers.ifEmpty { tagging.targetUsers }.map { it.id }
+    hostSelectionSync.submit(
+        pendingHandshakeId = pendingId,
+        excludedMemberIds = hostSelectionExclusions(candidates, selected, currentUserId),
+    )
 }
 
 /**
@@ -333,6 +362,8 @@ internal fun ConnectionViewModel.confirmHostProximitySelectionImpl(
         isReconnect = !tagging.isNewConnection,
     )
     if (pendingId.isNotEmpty()) {
+        // This phone's own choice goes with confirm; a queued removal save is no longer needed.
+        hostSelectionSync.reset()
         viewModelScope.launch {
             _connectionState.value = ConnectionState.Loading
             try {

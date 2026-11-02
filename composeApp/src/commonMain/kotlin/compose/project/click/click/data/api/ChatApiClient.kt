@@ -9,6 +9,7 @@ import compose.project.click.click.data.models.* // pragma: allowlist secret
 import compose.project.click.click.data.repository.AuthRepository // pragma: allowlist secret
 import compose.project.click.click.data.storage.TokenStorage // pragma: allowlist secret
 import compose.project.click.click.data.storage.createTokenStorage // pragma: allowlist secret
+import compose.project.click.click.platform.deviceKindLabel
 import compose.project.click.click.qr.CLICK_WEB_BASE_URL // pragma: allowlist secret
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
 import io.ktor.client.*
@@ -360,12 +361,13 @@ class ChatApiClient(
                 client.post("$clickWebBaseUrl/api/chat/devices") {
                     header(HttpHeaders.Authorization, bearerAuthHeader(authToken))
                     contentType(ContentType.Application.Json)
-                    setBody(ClickWebRegisterChatDeviceBody(deviceId, identityPublicKey))
+                    setBody(ClickWebRegisterChatDeviceBody(deviceId, identityPublicKey, deviceKindLabel()))
                 }
             if (response.status.value in 200..299) {
                 Result.success(response.body<ClickWebChatDeviceEnvelope>().device)
             } else {
-                Result.failure(Exception(readClickWebErrorMessage(response)))
+                val body = runCatching { response.bodyAsText() }.getOrNull().orEmpty()
+                Result.failure(chatDeviceRegistrationFailure(response.status.value, body))
             }
         } catch (e: Exception) {
             Result.failure(e)
@@ -861,6 +863,12 @@ class ChatApiClient(
         path: String,
         authToken: String,
     ): Result<String> = signAttachmentUrlImpl(path = path, authToken = authToken)
+
+    /** POST `/api/drops/develop` — develops ready Click Drops for this viewer (see [developDropsImpl]). */
+    suspend fun developDrops(
+        refs: List<DropDevelopRef>,
+        authToken: String,
+    ): Result<List<DropDevelopResultDto>> = developDropsImpl(refs = refs, authToken = authToken)
 
     suspend fun downloadAttachmentBytes(signedUrl: String): Result<ByteArray> = downloadAttachmentBytesImpl(signedUrl = signedUrl)
 

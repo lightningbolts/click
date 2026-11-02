@@ -319,6 +319,10 @@ fun ConnectionContextSheet(
     onSendClickDrop: (() -> Unit)? = null,
     /** The tap bind already saved this crossing server-side (it may have been folded into an Extended Hangout). */
     encounterAlreadySaved: Boolean = false,
+    /** Called with the new choice each time someone is removed or added back in the people list. */
+    onSelectionChanged: ((Set<String>) -> Unit)? = null,
+    /** Label for the confirm button ("Save this Click" when everyone already shares a group). */
+    confirmLabel: String = "Connect",
 ) {
     val hourOfDay =
         remember {
@@ -516,8 +520,13 @@ fun ConnectionContextSheet(
         ConnectionContextPresentation.NewSpark ->
             when {
                 showPeerMultiSelect -> {
-                    titleText = "Who was in this tap?"
-                    subtitleText = "Select people to connect with, then pick optional context. You can skip and keep going."
+                    titleText = "Who's in this Click?"
+                    subtitleText =
+                        if (confirmLabel == "Connect") {
+                            "Remove anyone who wasn't part of this, then pick optional context."
+                        } else {
+                            "You're already a group. Remove anyone who wasn't here, then save this Click."
+                        }
                 }
                 connectedUsers.isEmpty() -> {
                     titleText = "Sparking a new connection…"
@@ -556,6 +565,7 @@ fun ConnectionContextSheet(
             } else {
                 selectedUserIds + userId
             }
+        onSelectionChanged?.invoke(selectedUserIds)
     }
 
     ClickFormBottomSheet(
@@ -877,7 +887,7 @@ fun ConnectionContextSheet(
                                     .scale(springBtn),
                             enabled = !isCustomSelectionInvalid && !selectionRequiredAndEmpty,
                         ) {
-                            Text("Connect")
+                            Text(confirmLabel)
                         }
                     }
                 }

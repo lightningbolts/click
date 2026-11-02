@@ -478,6 +478,13 @@ fun NfcScreen(
                         encounterSaveInProgress = tagging.encounterSubmitting,
                         selectableUsers = sheetSelectableUsers,
                         initialSelectedUserIds = sheetInitialSelectedIds,
+                        onSelectionChanged =
+                            if (tagging.requiresSelection) {
+                                { ids -> connectionViewModel.updateHostSelection(ids, userId) }
+                            } else {
+                                null
+                            },
+                        confirmLabel = if (tagging.existingConnectionId != null) "Save this Click" else "Connect",
                         onSaveEncounter = { selectedIds ->
                             scope.launch {
                                 connectionViewModel.saveReconnectEncounter(

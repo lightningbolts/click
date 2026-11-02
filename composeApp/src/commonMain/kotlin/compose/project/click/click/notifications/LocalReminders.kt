@@ -1,7 +1,7 @@
 package compose.project.click.click.notifications
 
 /**
- * Device-local reminders (plan reminders, event T-60/T-15). They never touch the server: each
+ * Device-local reminders (plan reminders, event T-60). They never touch the server: each
  * device schedules its own from state it already has. Mirrors iOS `PlanReminders` /
  * `EventReminderScheduler`, which use `UNUserNotificationCenter`.
  */

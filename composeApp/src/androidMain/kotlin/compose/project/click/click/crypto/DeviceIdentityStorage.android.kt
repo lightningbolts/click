@@ -61,6 +61,23 @@ actual object DeviceIdentityStorage {
         if (!identity.persistent) identity.privateKey.fill(0)
     }
 
+    actual fun discard(deviceId: String) {
+        synchronized(lock) {
+            val prefs = prefs()
+            val stored = prefs.getString(PRIVATE_KEY, null)?.decodeKey()?.takeIf { it.size == 32 } ?: return
+            if (identityFromPrivate(stored, persistent = true).info.deviceId != deviceId) return
+            check(
+                prefs
+                    .edit()
+                    .remove(PRIVATE_KEY)
+                    .remove(PUBLIC_KEY)
+                    .commit(),
+            ) {
+                "Unable to discard Android E2EE v2 identity"
+            }
+        }
+    }
+
     private fun identityFromPrivate(
         privateKey: ByteArray,
         persistent: Boolean,

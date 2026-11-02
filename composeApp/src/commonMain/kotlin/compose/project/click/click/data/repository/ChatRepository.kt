@@ -413,6 +413,17 @@ interface ChatRepository {
         contentType: String,
     ): String?
 
+    /**
+     * Develops a gated Click Drop for this viewer and returns its decrypted original
+     * (`POST /api/drops/develop`). Cached on device after the first download.
+     */
+    suspend fun loadGatedDropOriginal(
+        chatId: String,
+        viewerUserId: String,
+        message: Message,
+        extension: String,
+    ): GatedDropOriginalResult = GatedDropOriginalResult.Unavailable
+
     /** Downloads ciphertext from [mediaUrl] and decrypts for [chatId] as [viewerUserId]. */
     suspend fun downloadAndDecryptChatMedia(
         chatId: String,
