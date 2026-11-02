@@ -26,6 +26,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage // pragma: allowlist secret
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
+import compose.project.click.click.data.flags.FeatureFlag
+import compose.project.click.click.data.flags.FeatureFlags
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
 import compose.project.click.click.events.buildEventShareText // pragma: allowlist secret
@@ -43,6 +45,7 @@ import compose.project.click.click.util.SoundtrackMatch // pragma: allowlist sec
 import compose.project.click.click.util.SoundtrackResolver // pragma: allowlist secret
 import compose.project.click.click.viewmodel.MapViewModel // pragma: allowlist secret
 import kotlinx.coroutines.delay
+import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
@@ -218,6 +221,21 @@ internal fun CommunityBeaconDetail(
             )
         }
 
+        // "Is it still there?" on live hazard alerts (flag `alert_confirmations`, iOS F4).
+        val flags by FeatureFlags.state.collectAsState()
+        var alertEnded by remember(beacon.id) { mutableStateOf(false) }
+        val alertExpired = beacon.expiresAtEpochMs?.let { it <= Clock.System.now().toEpochMilliseconds() } == true
+        if (beacon.kind == MapBeaconKind.HAZARD && !alertExpired && !alertEnded && flags.isEnabled(FeatureFlag.ALERT_CONFIRMATIONS)) {
+            AlertConfirmationSection(beaconId = beacon.id, onEnded = { alertEnded = true })
+        }
+        if (alertEnded) {
+            Text(
+                text = "This alert has ended.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
         if (beacon.showCreatorName && !hostDisplayName.isNullOrBlank()) {
             EventHostCard(
                 displayName = hostDisplayName,
@@ -251,6 +269,12 @@ internal fun CommunityBeaconDetail(
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurface,
             )
+        }
+
+        val viewerIsCreator =
+            isCreator || (!currentUser?.id.isNullOrBlank() && beacon.createdByUserId == currentUser?.id)
+        if (!viewerIsCreator) {
+            BeaconReportButton(beaconId = beacon.id)
         }
     }
 }
