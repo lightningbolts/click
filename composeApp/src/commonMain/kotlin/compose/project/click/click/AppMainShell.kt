@@ -29,7 +29,9 @@ import compose.project.click.click.data.AppDataManager // pragma: allowlist secr
 import compose.project.click.click.data.ChatMuteStore
 import compose.project.click.click.data.OpenMeteoWeatherService // pragma: allowlist secret
 import compose.project.click.click.data.api.ApiClient
+import compose.project.click.click.data.api.getMeFeaturesImpl
 import compose.project.click.click.data.auth.EnsureFreshAccessToken // pragma: allowlist secret
+import compose.project.click.click.data.flags.FeatureFlags
 import compose.project.click.click.data.hub.HubConnectionManager // pragma: allowlist secret
 import compose.project.click.click.data.hub.HubVerifyResult // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
@@ -370,6 +372,8 @@ internal fun AppMainShell(
     val presenceDeps = remember { Triple(createTokenStorage(), LocationService(), ApiClient()) }
     LaunchedEffect(foregroundTick, currentUser.id) {
         if (currentUser.id.isBlank()) return@LaunchedEffect
+        // Feature flags: last known first (instant paint), then the server (sign-in and each foreground).
+        FeatureFlags.refresh(currentUser.id, presenceDeps.first) { presenceDeps.third.getMeFeaturesImpl() }
         ConnectionFlowTelemetry.flush()
         val (storage, location, api) = presenceDeps
         HangoutPresence.reportIfEnabled(storage, location, api)
