@@ -30,6 +30,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -59,21 +60,25 @@ import compose.project.click.click.data.models.MessageReaction
 import compose.project.click.click.data.models.MessageWithUser
 import compose.project.click.click.data.models.PlanResponses
 import compose.project.click.click.data.models.PlanRsvp
+import compose.project.click.click.data.models.disposableRollRevealAtIso
 import compose.project.click.click.data.models.hasLocalMediaUri
 import compose.project.click.click.data.models.hubMediaPathOrNull
 import compose.project.click.click.data.models.isBeaconChatMessage
 import compose.project.click.click.data.models.isDeletedPlaceholder
 import compose.project.click.click.data.models.isEncryptedMedia
+import compose.project.click.click.data.models.isGatedDrop
 import compose.project.click.click.data.models.mediaUrlOrNull
 import compose.project.click.click.data.models.parsedMediaMetadata
 import compose.project.click.click.data.models.planOrNull
 import compose.project.click.click.data.models.replyQuoteText
 import compose.project.click.click.data.models.replyRef
+import compose.project.click.click.data.repository.GatedDropOriginals
 import compose.project.click.click.ui.components.ConnectionListUserAvatarFace
 import compose.project.click.click.ui.theme.PrimaryBlue
 import compose.project.click.click.viewmodel.SecureChatMediaHost
 import compose.project.click.click.viewmodel.SecureChatMediaLoadState
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /** The reaction a double-tap toggles. */
@@ -261,6 +266,34 @@ fun ChatMessageBubble(
         if (mediaReference.isNullOrBlank()) return@LaunchedEffect
         val scopeId = activeChatId ?: return@LaunchedEffect
         val viewerId = currentUserId ?: return@LaunchedEffect
+        secureMediaHost?.ensureSecureChatImageLoaded(scopeId, viewerId, message)
+    }
+
+    // A gated Click Drop develops once it is due, including while this chat stays open.
+    val gatedDrop = isImageMessage && message.isGatedDrop()
+    val gatedOriginals = GatedDropOriginals.loaded.collectAsState().value
+    val gatedOriginalOnScreen = gatedDrop && message.id in gatedOriginals
+    LaunchedEffect(message.id, gatedDrop, gatedOriginalOnScreen, activeChatId, currentUserId) {
+        if (!gatedDrop || gatedOriginalOnScreen) return@LaunchedEffect
+        val scopeId = activeChatId ?: return@LaunchedEffect
+        val viewerId = currentUserId ?: return@LaunchedEffect
+        val revealAtMs =
+            message
+                .disposableRollRevealAtIso()
+                ?.let {
+                    runCatching {
+                        kotlinx.datetime.Instant
+                            .parse(it)
+                            .toEpochMilliseconds()
+                    }.getOrNull()
+                }
+                ?: return@LaunchedEffect
+        val waitMs =
+            revealAtMs -
+                kotlinx.datetime.Clock.System
+                    .now()
+                    .toEpochMilliseconds()
+        if (waitMs > 0) delay(waitMs + GATED_DROP_REVEAL_GRACE_MS)
         secureMediaHost?.ensureSecureChatImageLoaded(scopeId, viewerId, message)
     }
 
@@ -1273,3 +1306,6 @@ private fun ChatBubbleSelectableText(
         Box(modifier = modifier) { content() }
     }
 }
+
+/** Small wait after reveal so the server clock has passed it too (it never signs early). */
+private const val GATED_DROP_REVEAL_GRACE_MS = 1_500L

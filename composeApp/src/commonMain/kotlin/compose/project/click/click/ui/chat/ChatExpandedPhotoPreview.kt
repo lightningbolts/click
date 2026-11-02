@@ -26,6 +26,7 @@ import compose.project.click.click.data.models.isDisposableRollLocked // pragma:
 import compose.project.click.click.data.models.isEncryptedMedia // pragma: allowlist secret
 import compose.project.click.click.data.models.mediaUrlOrNull // pragma: allowlist secret
 import compose.project.click.click.data.models.originalMimeTypeOrNull // pragma: allowlist secret
+import compose.project.click.click.data.repository.isGatedDropAwaitingOriginal // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickZoomableMedia // pragma: allowlist secret
 import compose.project.click.click.ui.components.GlassFullscreenMediaOverlay // pragma: allowlist secret
 import compose.project.click.click.ui.components.MediaLightboxSaveShareTrailing // pragma: allowlist secret
@@ -72,7 +73,7 @@ fun ChatExpandedPhotoPreview(
 
     val messageWithUser = model ?: return
     val message = messageWithUser.message
-    if (message.isDisposableRollLocked()) return
+    if (message.isDisposableRollLocked() || message.isGatedDropAwaitingOriginal()) return
 
     val mediaUrl = message.mediaUrlOrNull().orEmpty()
     val isEncrypted = message.isEncryptedMedia()

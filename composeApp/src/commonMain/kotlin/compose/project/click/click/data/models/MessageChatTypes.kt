@@ -5,6 +5,7 @@ import kotlinx.datetime.Instant
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
@@ -121,9 +122,33 @@ fun Message.disposableRollCollaborationTtlIso(): String? {
         ?.takeIf { it.isNotEmpty() }
 }
 
+/**
+ * When the Click Drop develops. Gated drops carry a server-stamped `reveal_at`; older drops only
+ * `collaboration_ttl`. Same precedence as click-web `chatDropRevealAtMs` and iOS `MessageMedia`.
+ */
+fun Message.disposableRollRevealAtIso(): String? {
+    val root = metadata as? JsonObject ?: return null
+    return (root["reveal_at"] as? JsonPrimitive)
+        ?.contentOrNull
+        ?.trim()
+        ?.takeIf { it.isNotEmpty() }
+        ?: disposableRollCollaborationTtlIso()
+}
+
+/**
+ * A gated Click Drop (`metadata.drop_gated`, set by the server): this message's media is only a
+ * pixelated preview. The original comes from `POST /api/drops/develop` once the drop develops.
+ */
+fun Message.isGatedDrop(): Boolean {
+    if (!isDisposableRoll()) return false
+    if (messageType.lowercase() != ChatMessageType.IMAGE) return false
+    val root = metadata as? JsonObject ?: return false
+    return (root["drop_gated"] as? JsonPrimitive)?.booleanOrNull == true
+}
+
 fun Message.isDisposableRollLocked(now: Instant = Clock.System.now()): Boolean {
     if (!isDisposableRoll()) return false
-    val ttlIso = disposableRollCollaborationTtlIso() ?: return true
+    val ttlIso = disposableRollRevealAtIso() ?: return true
     val ttl = runCatching { Instant.parse(ttlIso) }.getOrNull() ?: return true
     return now < ttl
 }
