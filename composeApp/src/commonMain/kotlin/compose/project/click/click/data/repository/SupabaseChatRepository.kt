@@ -118,11 +118,6 @@ class SupabaseChatRepository(
         val jobs: List<Job>,
     )
 
-    @Serializable
-    internal data class TypingBroadcastPayload(
-        val userId: String,
-    )
-
     internal data class ChatEphemeralSession(
         val channel: RealtimeChannel,
         val peerUserId: String,
@@ -590,8 +585,8 @@ class SupabaseChatRepository(
         val session = ephemeralMutex.withLock { ephemeralSessions[chatId] } ?: return
         try {
             session.channel.broadcast(
-                event = "typing",
-                message = buildJsonObject { put("userId", userId) },
+                event = TypingBroadcast.EVENT,
+                message = TypingBroadcast.encode(userId),
             )
         } catch (e: Exception) {
             println("ChatRepository: typing broadcast failed: ${e.redactedRestMessage()}")
