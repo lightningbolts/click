@@ -4,6 +4,7 @@ package compose.project.click.click.data // pragma: allowlist secret
 
 import compose.project.click.click.data.models.Message // pragma: allowlist secret
 import compose.project.click.click.data.realtime.RealtimeCoordinator // pragma: allowlist secret
+import compose.project.click.click.telemetry.ProductTelemetry // pragma: allowlist secret
 import compose.project.click.click.util.chatMediaDispatcher // pragma: allowlist secret
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
 import io.github.jan.supabase.auth.auth
@@ -257,6 +258,8 @@ internal fun AppDataManager.startRealtimeCoordinatorSync(userId: String) {
             refreshInboxFromCoordinator(force = false)
         }
     }
+    startLiveUpdatesRefetch(userId)
+    ProductTelemetry.onSignedIn()
 }
 
 /** Lightweight inbox refresh after Realtime junction change (avoids full loadAllData). */

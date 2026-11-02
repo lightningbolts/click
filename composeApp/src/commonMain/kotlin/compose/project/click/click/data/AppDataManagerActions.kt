@@ -14,6 +14,7 @@ import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.models.UserAvailability // pragma: allowlist secret
 import compose.project.click.click.data.models.isOneToOnePairEdge // pragma: allowlist secret
 import compose.project.click.click.data.models.isResolvedDisplayName // pragma: allowlist secret
+import compose.project.click.click.data.realtime.LiveUpdates // pragma: allowlist secret
 import compose.project.click.click.data.realtime.RealtimeCoordinator // pragma: allowlist secret
 import compose.project.click.click.data.repository.NotificationPreferences // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
@@ -93,6 +94,7 @@ internal suspend fun AppDataManager.clearDataImpl() {
     realtimeCoordinatorJob?.cancel()
     realtimeCoordinatorJob = null
     RealtimeCoordinator.stop()
+    runCatching { LiveUpdates.stop() }
     beaconPrefetchedThisSession = false
     discoveryPrefetchEmptyRetryUsed = false
     silentChatPrefetchCompleted = false

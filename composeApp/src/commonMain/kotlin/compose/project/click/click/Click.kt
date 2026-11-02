@@ -1,8 +1,10 @@
 package compose.project.click.click
 
 import compose.project.click.click.data.AppDataManager
+import compose.project.click.click.data.realtime.LiveUpdates
 import compose.project.click.click.deeplink.ConnectionDeepLinkRouter
 import compose.project.click.click.deeplink.EventDeepLinkRouter
+import compose.project.click.click.telemetry.ProductTelemetry
 import compose.project.click.click.telemetry.TelemetryBatcher
 
 /**
@@ -12,11 +14,15 @@ import compose.project.click.click.telemetry.TelemetryBatcher
 fun onApplicationDidBecomeActive() {
     notifyPlatformApplicationForeground()
     AppDataManager.handleApplicationForegrounded()
+    LiveUpdates.setActive(true)
+    if (AppDataManager.currentUser.value != null) ProductTelemetry.onForegroundSignedIn()
 }
 
 /** Called from platform lifecycle when the app moves to background. */
 fun onApplicationDidEnterBackground() {
     TelemetryBatcher.onAppBackgrounded()
+    LiveUpdates.setActive(false)
+    ProductTelemetry.onBackground()
 }
 
 /** Parse and queue a connection URL. Returns true when recognized. */
