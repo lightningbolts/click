@@ -20,6 +20,7 @@ import compose.project.click.click.data.ChatMuteStore
 import compose.project.click.click.data.models.FriendshipStats
 import compose.project.click.click.data.models.MessageWithUser // pragma: allowlist secret
 import compose.project.click.click.data.models.canForward
+import compose.project.click.click.data.models.isDeletedPlaceholder // pragma: allowlist secret
 import compose.project.click.click.data.models.replyRef // pragma: allowlist secret
 import compose.project.click.click.data.models.toFriendshipEncounter
 import compose.project.click.click.ui.chat.ChatBeaconDetailSheet // pragma: allowlist secret
@@ -175,6 +176,7 @@ internal fun BoxScope.ChatViewOverlays(
     if (contextMenuMessage != null) {
         val selectedMessage = contextMenuMessage!!
         var fullSheetForEmoji by remember(selectedMessage.message.id) { mutableStateOf(false) }
+        val pinnedMessages by viewModel.pinnedMessages.collectAsState()
         val capabilities =
             MessageActionCapabilities(
                 canReply = selectedMessage.message.messageType.lowercase() != "call_log",
@@ -185,6 +187,8 @@ internal fun BoxScope.ChatViewOverlays(
                 canRetry = selectedMessage.message.canRetrySend(),
                 canDiscard = selectedMessage.message.canDiscardFailed(),
                 canDelete = selectedMessage.isSent && !selectedMessage.message.id.startsWith("temp-"),
+                canPin = !selectedMessage.message.id.startsWith("temp-") && !selectedMessage.message.isDeletedPlaceholder(),
+                isPinned = pinnedMessages.any { it.messageId == selectedMessage.message.id },
             )
         val handlers =
             MessageActionHandlers(
@@ -198,6 +202,7 @@ internal fun BoxScope.ChatViewOverlays(
                 onForward = { selected -> forwardingMessage = selected.message },
                 onRetry = { selected -> viewModel.retryFailedMessage(selected.message.id) },
                 onDiscard = { selected -> viewModel.discardFailedMessage(selected.message.id) },
+                onTogglePin = { selected -> viewModel.togglePin(selected.message.id) },
             )
         if (fullSheetForEmoji) {
             MessageActionSheet(

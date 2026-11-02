@@ -542,6 +542,8 @@ fun ChatView(
                                 renameGroupDraftState = renameGroupDraftState,
                             )
 
+                            PinnedMessageBanner(viewModel = viewModel, messages = messages)
+
                             ChatViewTimelinePane(
                                 viewModel = viewModel,
                                 chatId = chatId,
