@@ -14,11 +14,13 @@ The `telemetry/` package implements:
 3. **Grass nudge UI state** — gentle prompt when users pan without acting (anti-doomscroll nudge).
 4. **Background flush** — POST aggregated anomaly to click-web when session thresholds met.
 5. **Connection-flow telemetry** — proximity handshake funnel events (separate from map friction).
+6. **Pilot product events** — `install`, `app_open` (once per local day) and `recap_opened` via `ProductTelemetry` / `EventsTelemetrySink`, queued on device and flushed when signed in. No IDs, content or coordinates.
 
 Server persistence targets:
 
 - **`system_friction_logs`** via `/api/telemetry/friction` (`map_friction_anomaly` only).
 - **`connection_flow_events`** via `/api/telemetry/connection-flow` (proximity handshake allowlist).
+- **`product_events`** via `/api/telemetry/events` (client events `install`, `app_open`, `recap_opened`; server drops users outside `pilot_analytics`).
 ---
 
 ## Architecture

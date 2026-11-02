@@ -11,6 +11,7 @@ import compose.project.click.click.data.WeatherService
 import compose.project.click.click.data.api.ClickWebRequestException
 import compose.project.click.click.data.api.CollaborationSessionPostResponse
 import compose.project.click.click.data.api.ProximityBindOkResponseDto
+import compose.project.click.click.data.api.installClickWebPlatformHeader // pragma: allowlist secret
 import compose.project.click.click.data.auth.EnsureFreshAccessToken // pragma: allowlist secret
 import compose.project.click.click.data.models.Connection
 import compose.project.click.click.data.models.ConnectionActivityStatus
@@ -551,6 +552,7 @@ class ConnectionRepository(
             install(ContentNegotiation) {
                 json(this@ConnectionRepository.json)
             }
+            installClickWebPlatformHeader()
         }
     }
     internal val connectionsSelectWithEncounters = Columns.raw("*, connection_encounters(*)")
