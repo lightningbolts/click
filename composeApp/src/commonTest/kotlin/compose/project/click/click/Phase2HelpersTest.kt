@@ -117,6 +117,11 @@ class Phase2HelpersTest {
             planMapsUri(HangoutPlan("Dinner", 0, placeName = "Café", latitude = 47.6, longitude = -122.3)),
         )
         assertTrue(planMapsUri(HangoutPlan("Dinner", 0, placeName = "Gas Works"))!!.startsWith("https://www.google.com/maps/search/"))
+        // "&" and "#" must be escaped or the search is cut at them.
+        assertEquals(
+            "https://www.google.com/maps/search/?api=1&query=Tacos%20%26%20Beer%20%231",
+            planMapsUri(HangoutPlan("Dinner", 0, placeName = "Tacos & Beer #1")),
+        )
         assertNull(planMapsUri(HangoutPlan("Dinner", 0)))
         val reactions = listOf(HangoutPlan.GOING, "❤️", HangoutPlan.DECLINED).mapIndexed { i, e -> MessageReaction("$i", "m", "u$i", e, 0) }
         assertEquals(listOf("❤️"), nonRsvpReactions(reactions).map { it.reactionType })

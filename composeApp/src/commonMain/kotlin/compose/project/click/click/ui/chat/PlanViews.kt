@@ -55,7 +55,7 @@ import compose.project.click.click.ui.theme.clickBorderWidth // pragma: allowlis
 import compose.project.click.click.ui.theme.clickCardSurface // pragma: allowlist secret
 import compose.project.click.click.util.formatClockTime // pragma: allowlist secret
 import compose.project.click.click.util.formatRelativeDay // pragma: allowlist secret
-import io.ktor.http.encodeURLQueryComponent
+import io.ktor.http.encodeURLParameter
 
 /*
  * Plan card, responses sheet and group revival banner (iOS `PlanViews.swift`).
@@ -78,8 +78,8 @@ internal fun planMapsUri(plan: HangoutPlan): String? {
     val lat = plan.latitude
     val lon = plan.longitude
     return when {
-        lat != null && lon != null -> "geo:$lat,$lon?q=$lat,$lon(${(place ?: plan.title).encodeURLQueryComponent()})"
-        place != null -> "https://www.google.com/maps/search/?api=1&query=${place.encodeURLQueryComponent()}"
+        lat != null && lon != null -> "geo:$lat,$lon?q=$lat,$lon(${(place ?: plan.title).encodeURLParameter()})"
+        place != null -> "https://www.google.com/maps/search/?api=1&query=${place.encodeURLParameter()}"
         else -> null
     }
 }
