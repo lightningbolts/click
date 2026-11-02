@@ -170,6 +170,7 @@ class SharedDropsViewModelTest {
         reactions: FakeReactions = FakeReactions(),
         replies: FakeReplies = FakeReplies(),
         live: Flow<LiveBatch> = emptyFlow(),
+        originalsBudget: Long = SHARED_DROP_ORIGINALS_BUDGET_BYTES,
     ): SharedDropsViewModel {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
         return SharedDropsViewModel(
@@ -183,8 +184,32 @@ class SharedDropsViewModelTest {
             reactions = reactions,
             replySender = replies,
             liveHints = live,
+            originalsBudgetBytes = originalsBudget,
         )
     }
+
+    @Test
+    fun developedOriginalsInMemoryStayWithinTheBudgetAndReloadFromDisk() =
+        runTest {
+            try {
+                val disk = FakeDisk()
+                listOf("a", "b", "c").forEach { disk.files["shared-drop-me-$it-original.jpg"] = ByteArray(4) { 1 } }
+                val vm = viewModel(FakeSharedDropsService(), disk, originalsBudget = 10)
+                val drops = listOf("a", "b", "c").associateWith { drop(it, developed = past) }
+                vm.warmImages(drops.getValue("a"))
+                vm.warmImages(drops.getValue("b"))
+                // Shown again: "a" is now the most recent, so "b" goes first.
+                vm.warmImages(drops.getValue("a"))
+                vm.warmImages(drops.getValue("c"))
+                assertEquals(setOf("a", "c"), vm.originals.value.keys)
+                // Evicted from memory only: it comes back from disk when shown again.
+                vm.warmImages(drops.getValue("b"))
+                assertEquals(setOf("c", "b"), vm.originals.value.keys)
+                assertEquals(3, disk.files.count { it.key.endsWith("-original.jpg") })
+            } finally {
+                Dispatchers.resetMain()
+            }
+        }
 
     @Test
     fun refreshShowsTheLiveStripLoadsTeasersAndCachesItWithoutSignedUrls() =

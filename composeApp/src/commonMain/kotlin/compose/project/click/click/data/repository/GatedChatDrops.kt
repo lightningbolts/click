@@ -1,7 +1,9 @@
 package compose.project.click.click.data.repository
 
 import compose.project.click.click.crypto.MessageCryptoV2
+import compose.project.click.click.data.api.DROP_DEVELOP_MAX_PER_REQUEST
 import compose.project.click.click.data.api.DropDevelopRef
+import compose.project.click.click.data.api.DropDevelopResultDto
 import compose.project.click.click.data.models.Message
 import compose.project.click.click.data.models.isDisposableRollLocked
 import compose.project.click.click.data.models.isGatedDrop
@@ -91,43 +93,74 @@ internal suspend fun SupabaseChatRepository.loadGatedDropOriginalImpl(
     viewerUserId: String,
     message: Message,
     extension: String,
+    signedUrl: String? = null,
 ): GatedDropOriginalResult {
     if (!message.isGatedDrop() || message.isDisposableRollLocked()) return GatedDropOriginalResult.Unavailable
     val vaultKey = gatedDropOriginalVaultKey(message.id)
     readChatMediaVaultBytes(vaultKey, extension)?.takeIf { it.isNotEmpty() }?.let {
         return GatedDropOriginalResult.Developed(it)
     }
-    val jwt = ensureFreshJwtForChat() ?: return GatedDropOriginalResult.Unavailable
-    val refs = listOf(DropDevelopRef(kind = "chat", id = message.id))
-    val result =
-        apiClient
-            .developDrops(refs, jwt)
-            .getOrElse { first ->
-                val retry = refreshedJwtAfterAuthFailure()
-                if (retry == null) {
-                    println("ChatRepository: drop develop failed: ${first.redactedRestMessage()}")
-                    return GatedDropOriginalResult.Unavailable
-                }
-                apiClient.developDrops(refs, retry).getOrElse { err ->
-                    println("ChatRepository: drop develop retry failed: ${err.redactedRestMessage()}")
-                    return GatedDropOriginalResult.Unavailable
-                }
-            }.firstOrNull { it.id == message.id }
-            ?: return GatedDropOriginalResult.Unavailable
-    when (result.status) {
-        "pending" -> return GatedDropOriginalResult.Pending
-        "developed" -> Unit
-        else -> return GatedDropOriginalResult.Unavailable
-    }
-    val signedUrl = result.url?.trim()?.takeIf { it.isNotEmpty() } ?: return GatedDropOriginalResult.Unavailable
+    val fresh = signedUrl?.trim()?.takeIf { it.isNotEmpty() }
+    val originalUrl =
+        if (fresh != null) {
+            // Just developed ("Tap to develop", "Develop all", live develop): the URL came with it.
+            fresh
+        } else {
+            // No URL in hand: developing again is idempotent and signs a fresh one.
+            val result =
+                developChatDropsImpl(listOf(message.id)).getOrNull()?.firstOrNull { it.id == message.id }
+                    ?: return GatedDropOriginalResult.Unavailable
+            when (result.status) {
+                "pending" -> return GatedDropOriginalResult.Pending
+                "developed" -> Unit
+                else -> return GatedDropOriginalResult.Unavailable
+            }
+            result.url?.trim()?.takeIf { it.isNotEmpty() } ?: return GatedDropOriginalResult.Unavailable
+        }
     val v2 = message.dropOriginalV2MetadataOrNull(chatId)
     val bytes =
         downloadAndDecryptChatMediaImpl(
             chatId = chatId,
             viewerUserId = viewerUserId,
-            mediaUrl = signedUrl,
+            mediaUrl = originalUrl,
             v2Metadata = v2,
         )?.takeIf { it.isNotEmpty() } ?: return GatedDropOriginalResult.Unavailable
     writeChatMediaVaultFile(vaultKey, bytes, extension)
     return GatedDropOriginalResult.Developed(bytes)
+}
+
+/** Runs [call] with a fresh JWT, once more with a refreshed one after an auth failure. */
+private suspend fun <T> SupabaseChatRepository.withChatJwt(
+    label: String,
+    call: suspend (String) -> Result<T>,
+): Result<T> {
+    val jwt = ensureFreshJwtForChat() ?: return Result.failure(Exception("Session expired. Sign in again."))
+    return call(jwt).recoverCatching { first ->
+        val retry = refreshedJwtAfterAuthFailure()
+        if (retry == null) {
+            println("ChatRepository: $label failed: ${first.redactedRestMessage()}")
+            throw first
+        }
+        call(retry)
+            .onFailure { println("ChatRepository: $label retry failed: ${it.redactedRestMessage()}") }
+            .getOrThrow()
+    }
+}
+
+/** `POST /api/drops/develop` for chat drops, [DROP_DEVELOP_MAX_PER_REQUEST] at a time ("Develop all"). */
+internal suspend fun SupabaseChatRepository.developChatDropsImpl(messageIds: List<String>): Result<List<DropDevelopResultDto>> {
+    val ids = messageIds.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+    if (ids.isEmpty()) return Result.success(emptyList())
+    val out = mutableListOf<DropDevelopResultDto>()
+    for (batch in ids.chunked(DROP_DEVELOP_MAX_PER_REQUEST)) {
+        val refs = batch.map { DropDevelopRef(kind = "chat", id = it) }
+        out += withChatJwt("drop develop") { apiClient.developDrops(refs, it) }.getOrElse { return Result.failure(it) }
+    }
+    return Result.success(out)
+}
+
+/** `GET /api/drops/views?kind=chat` for [messageIds]. */
+internal suspend fun SupabaseChatRepository.loadChatDropDevelopedAtImpl(messageIds: List<String>): Result<Map<String, String>> {
+    if (messageIds.isEmpty()) return Result.success(emptyMap())
+    return withChatJwt("drop views") { apiClient.dropViews("chat", messageIds, it) }
 }

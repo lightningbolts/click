@@ -1,7 +1,9 @@
 package compose.project.click.click.data.api // pragma: allowlist secret
 
 import io.ktor.client.call.body
+import io.ktor.client.request.get
 import io.ktor.client.request.header
+import io.ktor.client.request.parameter
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
@@ -71,6 +73,59 @@ internal suspend fun ChatApiClient.developDropsImpl(
         } else {
             Result.failure(ClickWebRequestException(response.status.value, readClickWebErrorMessage(response)))
         }
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
+}
+
+/** `GET /api/drops/views` takes 1-100 ids per call (click-web `dropViewsQuerySchema`). */
+internal const val DROP_VIEWS_MAX_PER_REQUEST = 100
+
+/** `{developed: {id: developed_at}}`: only this viewer's rows, so foreign ids are simply absent. */
+@Serializable
+internal data class DropViewsEnvelope(
+    val developed: Map<String, String> = emptyMap(),
+)
+
+/** Distinct, non-blank ids, sorted and cut into server-sized batches (iOS `ClickDropService.developedAt`). */
+internal fun dropViewsBatches(ids: Collection<String>): List<List<String>> =
+    ids
+        .map { it.trim() }
+        .filter { it.isNotEmpty() }
+        .distinct()
+        .sorted()
+        .chunked(DROP_VIEWS_MAX_PER_REQUEST)
+
+/**
+ * GET `/api/drops/views?kind=…&ids=a,b` — this viewer's developed-at per drop id, across every
+ * batch. Mirrors iOS `ClickDropService.developedAt`.
+ */
+internal suspend fun ChatApiClient.dropViewsImpl(
+    kind: String,
+    ids: Collection<String>,
+    authToken: String,
+): Result<Map<String, String>> {
+    val batches = dropViewsBatches(ids)
+    if (batches.isEmpty()) return Result.success(emptyMap())
+    val token =
+        resolveClickWebAccessToken(tokenStorage)
+            ?: authToken.trim().takeIf { it.isNotEmpty() }
+            ?: return Result.failure(Exception("Session expired. Sign in again."))
+    return try {
+        val out = mutableMapOf<String, String>()
+        for (batch in batches) {
+            val response =
+                client.get("$clickWebBaseUrl/api/drops/views") {
+                    header(HttpHeaders.Authorization, clickWebBearerHeader(token))
+                    parameter("kind", kind)
+                    parameter("ids", batch.joinToString(","))
+                }
+            if (response.status.value !in 200..299) {
+                return Result.failure(ClickWebRequestException(response.status.value, readClickWebErrorMessage(response)))
+            }
+            out += response.body<DropViewsEnvelope>().developed
+        }
+        Result.success(out)
     } catch (e: Exception) {
         Result.failure(e)
     }

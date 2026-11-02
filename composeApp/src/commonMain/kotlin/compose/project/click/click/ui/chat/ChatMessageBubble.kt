@@ -80,6 +80,7 @@ import compose.project.click.click.ui.components.ConnectionListUserAvatarFace
 import compose.project.click.click.ui.theme.PrimaryBlue
 import compose.project.click.click.viewmodel.SecureChatMediaHost
 import compose.project.click.click.viewmodel.SecureChatMediaLoadState
+import compose.project.click.click.viewmodel.clickDropRevealRefOrNull
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -286,11 +287,18 @@ fun ChatMessageBubble(
     // A story reply or reaction to a shared drop ("Replied to your drop"; iOS DropReplyHeader).
     val dropReply = remember(message.id, message.messageType, message.metadata) { message.dropReplyOrNull() }
 
-    // A gated Click Drop develops once it is due, including while this chat stays open.
+    // A gated Click Drop: pending until reveal, then ready until this viewer develops it (tap,
+    // "Develop all", or live develop when it reaches zero on screen). iOS `ClickDropImageView`.
     val gatedDrop = isImageMessage && message.isGatedDrop()
     val gatedOriginals = GatedDropOriginals.loaded.collectAsState().value
     val gatedOriginalOnScreen = gatedDrop && message.id in gatedOriginals
-    LaunchedEffect(message.id, gatedDrop, gatedOriginalOnScreen, activeChatId, currentUserId) {
+    val dropHost = secureMediaHost?.clickDropDevelop
+    val dropBook = dropHost?.clickDropBook?.collectAsState()?.value
+    val dropRef = remember(message.id, message.metadata, gatedDrop) { if (gatedDrop) message.clickDropRevealRefOrNull() else null }
+    val dropDeveloped = dropRef != null && dropBook?.isDeveloped(dropRef.id) == true
+    // Bumped at reveal time so a pending drop turns ready on screen.
+    var dropRevealTick by remember(message.id) { mutableStateOf(0) }
+    LaunchedEffect(message.id, gatedDrop, gatedOriginalOnScreen, activeChatId, currentUserId, dropDeveloped) {
         if (!gatedDrop || gatedOriginalOnScreen) return@LaunchedEffect
         val scopeId = activeChatId ?: return@LaunchedEffect
         val viewerId = currentUserId ?: return@LaunchedEffect
@@ -310,9 +318,46 @@ fun ChatMessageBubble(
                 kotlinx.datetime.Clock.System
                     .now()
                     .toEpochMilliseconds()
-        if (waitMs > 0) delay(waitMs + GATED_DROP_REVEAL_GRACE_MS)
-        secureMediaHost?.ensureSecureChatImageLoaded(scopeId, viewerId, message)
+        if (dropHost == null || dropRef == null) {
+            // No server develop here (hub chats): the original loads at reveal.
+            if (waitMs > 0) delay(waitMs + GATED_DROP_REVEAL_GRACE_MS)
+            secureMediaHost?.ensureSecureChatImageLoaded(scopeId, viewerId, message)
+            return@LaunchedEffect
+        }
+        if (dropDeveloped) {
+            secureMediaHost?.ensureSecureChatImageLoaded(scopeId, viewerId, message)
+        } else if (waitMs > 0) {
+            delay(waitMs + GATED_DROP_REVEAL_GRACE_MS)
+            dropRevealTick++
+            dropHost.developClickDropIfJustRevealed(scopeId, viewerId, message)
+        } else {
+            dropHost.checkClickDrops(listOf(message))
+        }
     }
+    val clickDropControls =
+        if (dropHost != null && dropRef != null && dropBook != null) {
+            val dropState =
+                remember(dropBook, dropRef, dropRevealTick) {
+                    dropBook.state(
+                        dropRef,
+                        kotlinx.datetime.Clock.System
+                            .now(),
+                    )
+                }
+            ClickDropBubbleControls(
+                state = dropState,
+                developing = dropRef.id in dropBook.developing,
+                fresh = dropRef.id in dropBook.fresh,
+                onDevelop = {
+                    val scopeId = activeChatId
+                    val viewerId = currentUserId
+                    if (scopeId != null && viewerId != null) dropHost.developClickDrops(scopeId, viewerId, listOf(message))
+                },
+                onShown = { dropHost.didShowClickDropDevelop(dropRef.id) },
+            )
+        } else {
+            null
+        }
 
     LaunchedEffect(
         message.id,
@@ -575,6 +620,7 @@ fun ChatMessageBubble(
                                         borderIfReceived = false,
                                         onPhotoClick = { onExpandPhoto(messageWithUser) },
                                         onPhotoLongPress = if (enableMessageContextMenu) openPhotoContextMenu else null,
+                                        clickDropControls = clickDropControls,
                                     )
                                     val capImg = message.content.trim()
                                     if (capImg.isNotEmpty()) {
@@ -764,6 +810,7 @@ fun ChatMessageBubble(
                                         borderIfReceived = true,
                                         onPhotoClick = { onExpandPhoto(messageWithUser) },
                                         onPhotoLongPress = if (enableMessageContextMenu) openPhotoContextMenu else null,
+                                        clickDropControls = clickDropControls,
                                     )
                                     val capRx = message.content.trim()
                                     if (capRx.isNotEmpty()) {

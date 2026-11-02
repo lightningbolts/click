@@ -9,6 +9,7 @@ import compose.project.click.click.data.CHAT_ATTACHMENTS_BUCKET
 import compose.project.click.click.data.CHAT_MEDIA_BUCKET
 import compose.project.click.click.data.SupabaseConfig
 import compose.project.click.click.data.api.ChatApiClient
+import compose.project.click.click.data.api.DropDevelopResultDto
 import compose.project.click.click.data.models.*
 import compose.project.click.click.data.models.ReadCursor
 import compose.project.click.click.data.storage.TokenStorage
@@ -967,8 +968,20 @@ class SupabaseChatRepository(
         viewerUserId: String,
         message: Message,
         extension: String,
+        signedUrl: String?,
     ): GatedDropOriginalResult =
-        loadGatedDropOriginalImpl(chatId = chatId, viewerUserId = viewerUserId, message = message, extension = extension)
+        loadGatedDropOriginalImpl(
+            chatId = chatId,
+            viewerUserId = viewerUserId,
+            message = message,
+            extension = extension,
+            signedUrl = signedUrl,
+        )
+
+    override suspend fun developChatDrops(messageIds: List<String>): Result<List<DropDevelopResultDto>> = developChatDropsImpl(messageIds)
+
+    override suspend fun loadChatDropDevelopedAt(messageIds: List<String>): Result<Map<String, String>> =
+        loadChatDropDevelopedAtImpl(messageIds)
 
     override suspend fun uploadClickDropOriginal(
         plainBytes: ByteArray,

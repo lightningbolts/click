@@ -18,7 +18,6 @@ import compose.project.click.click.data.models.Message // pragma: allowlist secr
 import compose.project.click.click.data.models.MessageReaction // pragma: allowlist secret
 import compose.project.click.click.data.models.MessageWithUser // pragma: allowlist secret
 import compose.project.click.click.data.models.hasLocalMediaUri // pragma: allowlist secret
-import compose.project.click.click.data.models.isDisposableRollLocked // pragma: allowlist secret
 import compose.project.click.click.data.models.isEncryptedMedia // pragma: allowlist secret
 import compose.project.click.click.data.models.isGatedDrop // pragma: allowlist secret
 import compose.project.click.click.data.models.mediaUrlOrNull // pragma: allowlist secret
@@ -272,6 +271,10 @@ class ChatViewModel(
 
     /** Gated Click Drop ids whose original is being developed right now (main-thread only). */
     internal val gatedDropLoadsInFlight = mutableSetOf<String>()
+
+    /** Tap to develop, "Develop all" and live develop for gated Click Drops (iOS `ConversationModel`). */
+    internal val clickDropHost by lazy { ChatViewModelClickDropHost(this) }
+    override val clickDropDevelop: ClickDropDevelopHost get() = clickDropHost
     internal val secureAudioPathCache =
         LruMemoryCache<String, String>(SECURE_CHAT_AUDIO_CACHE_MAX_ENTRIES)
 
@@ -488,8 +491,8 @@ class ChatViewModel(
         if (message.messageType.lowercase() != ChatMessageType.IMAGE) return
         val url = message.mediaUrlOrNull() ?: return
         if (url.isBlank()) return
-        if (message.isGatedDrop() && !message.isDisposableRollLocked() && !GatedDropOriginals.isLoaded(message.id)) {
-            // Due: develop the original. The preview below keeps the bubble filled meanwhile.
+        if (message.isGatedDrop() && clickDropHost.isDeveloped(message.id) && !GatedDropOriginals.isLoaded(message.id)) {
+            // Developed by this viewer: load the original. The preview below keeps the bubble filled meanwhile.
             ensureGatedDropOriginalLoaded(scopeId, viewerUserId, message)
         }
         val cachedBytes = secureImageBytesCache.get(message.id)

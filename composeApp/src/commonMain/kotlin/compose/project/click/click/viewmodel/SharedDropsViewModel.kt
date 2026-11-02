@@ -25,6 +25,7 @@ import compose.project.click.click.data.models.ChatDropReply
 import compose.project.click.click.data.models.ChatMessageType
 import compose.project.click.click.data.realtime.LiveBatch
 import compose.project.click.click.data.realtime.LiveUpdates
+import compose.project.click.click.util.ByteBudgetLruCache
 import compose.project.click.click.util.readChatMediaVaultBytes
 import compose.project.click.click.util.writeChatMediaVaultFile
 import kotlinx.coroutines.CancellationException
@@ -140,6 +141,9 @@ object VaultSharedDropsDisk : SharedDropsDisk {
     }
 }
 
+/** In-memory cap for developed originals (JPEG bytes); the rest stay on disk until shown again. */
+internal const val SHARED_DROP_ORIGINALS_BUDGET_BYTES: Long = 48L * 1024 * 1024
+
 internal const val SHARED_DROP_DEVELOP_FAILED = "Couldn't develop right now. Try again in a moment."
 internal const val SHARED_DROP_SHARE_FAILED = "Couldn't share your drop. Tap Retry — it won't be shared twice."
 internal const val SHARED_DROP_ARCHIVE_FAILED = "Couldn't load your drops."
@@ -231,16 +235,40 @@ class SharedDropsViewModel(
     private val reactions: ReactionsService = ReactionsApi(),
     private val replySender: SharedDropReplySender = ChatSharedDropReplySender,
     liveHints: Flow<LiveBatch> = LiveUpdates.batches,
+    originalsBudgetBytes: Long = SHARED_DROP_ORIGINALS_BUDGET_BYTES,
 ) : ViewModel() {
     private val json = Json { ignoreUnknownKeys = true }
 
     private val _state = MutableStateFlow(SharedDropsUiState())
     val state: StateFlow<SharedDropsUiState> = _state.asStateFlow()
 
+    /**
+     * Developed originals held in memory, least recently shown evicted first once they pass
+     * [originalsBudgetBytes]. Each is also on disk, so an evicted one reloads when it's shown again.
+     */
+    private val originalsCache = ByteBudgetLruCache<String, ByteArray>(originalsBudgetBytes) { it.size.toLong() }
+
     private val _originals = MutableStateFlow<Map<String, ByteArray>>(emptyMap())
 
-    /** Developed originals by drop ID (disk first, then the signed URL). */
+    /** Developed originals by drop ID (disk first, then the signed URL), capped by [originalsBudgetBytes]. */
     val originals: StateFlow<Map<String, ByteArray>> = _originals.asStateFlow()
+
+    private fun putOriginal(
+        id: String,
+        bytes: ByteArray,
+    ) {
+        originalsCache.put(id, bytes)
+        _originals.value = originalsCache.snapshot()
+    }
+
+    private fun removeOriginal(id: String) {
+        if (originalsCache.remove(id) != null) _originals.value = originalsCache.snapshot()
+    }
+
+    private fun clearOriginals() {
+        originalsCache.clear()
+        _originals.value = emptyMap()
+    }
 
     private val _previews = MutableStateFlow<Map<String, ByteArray>>(emptyMap())
 
@@ -284,7 +312,7 @@ class SharedDropsViewModel(
             // Another account's drops never show, even for a frame.
             loadedForUser = uid
             _state.value = SharedDropsUiState()
-            _originals.value = emptyMap()
+            clearOriginals()
             _previews.value = emptyMap()
             disk
                 .read(stripKey(uid), "json")
@@ -335,10 +363,12 @@ class SharedDropsViewModel(
                 }
             }
         }
-        if (drop.state(now()) == ClickDropDevelopState.Developed && id !in _originals.value) {
+        // Shown again: keep it in memory ahead of drops that scrolled away.
+        if (originalsCache.get(id) != null) return
+        if (drop.state(now()) == ClickDropDevelopState.Developed) {
             val cached = disk.read(originalKey(uid, id), "jpg")
             if (cached != null) {
-                _originals.update { it + (id to cached) }
+                putOriginal(id, cached)
             } else {
                 load("o:$id") {
                     // A copy from disk has no URL; developing again is idempotent and signs a fresh one.
@@ -370,7 +400,7 @@ class SharedDropsViewModel(
     ) {
         val bytes = service.download(url).getOrNull()?.takeIf { it.isNotEmpty() } ?: return
         disk.write(originalKey(uid, id), bytes, "jpg")
-        _originals.update { it + (id to bytes) }
+        putOriginal(id, bytes)
     }
 
     /** The story opening on a ready drop: marks it developed for this viewer and fetches the original. */
@@ -443,7 +473,7 @@ class SharedDropsViewModel(
                     // You already have your own original: no download when it develops.
                     disk.write(originalKey(uid, drop.id), pending.jpeg, "jpg")
                     preview?.let { p -> _previews.update { it + (drop.id to p) } }
-                    _originals.update { it + (drop.id to pending.jpeg) }
+                    putOriginal(drop.id, pending.jpeg)
                     commit(uid, _state.value.drops.withShared(drop))
                     _state.update { it.copy(posting = false, pendingPost = null) }
                 }.onFailure { error ->
@@ -470,7 +500,7 @@ class SharedDropsViewModel(
                 .onSuccess {
                     _state.update { s -> s.copy(archive = s.archive.filterNot { it.id == drop.id }) }
                     commit(uid, _state.value.drops.filterNot { it.id == drop.id })
-                    _originals.update { it - drop.id }
+                    removeOriginal(drop.id)
                     _previews.update { it - drop.id }
                 }.onFailure { _state.update { it.copy(notice = "Couldn't delete it. Try again.") } }
         }
