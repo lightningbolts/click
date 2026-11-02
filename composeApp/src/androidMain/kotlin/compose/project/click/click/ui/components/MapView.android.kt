@@ -229,7 +229,7 @@ actual fun PlatformMap(
                             ?.let { loadedAvatarBitmaps[it] }
                     // Fixed 44dp diameter for all avatar pins (squad only bumps z-index / pulse).
                     val avatarCacheKey =
-                        "${pin.id}|${pin.avatarInitials}|$markerHue|${pin.avatarFillArgb}|${pin.pinShape}|${photo?.generationId ?: 0}|${pin.stackCount}"
+                        "${pin.id}|${pin.avatarInitials}|$markerHue|${pin.avatarFillArgb}|${pin.pinShape}|${photo?.generationId ?: 0}|${pin.stackCount}|${pin.ringArgb}|${pin.cornerBadge}"
                     val icon =
                         avatarPinCache.getOrPut(avatarCacheKey) {
                             if (pin.beaconKind != null || pin.kind == MapPinKind.PLACE) {
@@ -244,6 +244,8 @@ actual fun PlatformMap(
                                     initials = pin.avatarInitials,
                                     photo = photo,
                                     stackCount = pin.stackCount,
+                                    ringArgb = pin.ringArgb,
+                                    cornerBadge = pin.cornerBadge,
                                 )
                             } else {
                                 bitmapDescriptorForCircularAvatarPin(
@@ -397,11 +399,15 @@ private fun bitmapDescriptorForShapedBeaconPin(
     initials: String,
     photo: Bitmap?,
     stackCount: Int = 1,
+    ringArgb: Int? = null,
+    cornerBadge: String? = null,
 ): BitmapDescriptor {
     val sizePx = with(density) { 44.dp.roundToPx() }.coerceAtLeast(36)
     val bmp = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(bmp)
-    val pad = sizePx * 0.08f
+    // A ringed pin draws its shape smaller so the ring fits outside it (iOS `PlacePinView`).
+    val ringWidth = with(density) { 3.dp.toPx() }
+    val pad = if (ringArgb != null) sizePx * 0.08f + ringWidth + 1f else sizePx * 0.08f
     val path = beaconShapePath(shape, sizePx.toFloat(), pad)
     canvas.save()
     canvas.clipPath(path)
@@ -451,8 +457,50 @@ private fun bitmapDescriptorForShapedBeaconPin(
             strokeWidth = with(density) { 2.dp.toPx() }.coerceAtLeast(2f)
         }
     canvas.drawPath(path, border)
+    if (ringArgb != null) {
+        val ringPad = sizePx * 0.08f + ringWidth / 2f
+        val ring =
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = ringArgb
+                style = Paint.Style.STROKE
+                strokeWidth = ringWidth
+            }
+        canvas.drawPath(beaconShapePath(shape, sizePx.toFloat(), ringPad), ring)
+    }
     drawStackBadge(canvas, sizePx, stackCount)
+    drawCornerBadge(canvas, sizePx, cornerBadge, leftSide = stackCount > 1)
     return BitmapDescriptorFactory.fromBitmap(bmp)
+}
+
+/**
+ * "LIVE" (red) or a start time (dark) pill in a top corner, like iOS `PlacePinView`'s badge. It
+ * moves to the left corner when the stack count badge holds the right one.
+ */
+private fun drawCornerBadge(
+    canvas: Canvas,
+    sizePx: Int,
+    label: String?,
+    leftSide: Boolean,
+) {
+    val text = label?.trim()?.takeIf { it.isNotEmpty() } ?: return
+    val textPaint =
+        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.WHITE
+            textAlign = Paint.Align.CENTER
+            textSize = sizePx * 0.2f
+            isFakeBoldText = true
+        }
+    val height = textPaint.textSize * 1.3f
+    val width = (textPaint.measureText(text) + textPaint.textSize * 0.6f).coerceAtMost(sizePx.toFloat())
+    val left = if (leftSide) 0f else sizePx - width
+    val rect = RectF(left, 0f, left + width, height)
+    val fill =
+        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = if (text == "LIVE") android.graphics.Color.rgb(229, 57, 53) else android.graphics.Color.argb(240, 17, 17, 17)
+            style = Paint.Style.FILL
+        }
+    canvas.drawRoundRect(rect, height / 2f, height / 2f, fill)
+    canvas.drawText(text, rect.centerX(), rect.centerY() - (textPaint.descent() + textPaint.ascent()) / 2f, textPaint)
 }
 
 /**

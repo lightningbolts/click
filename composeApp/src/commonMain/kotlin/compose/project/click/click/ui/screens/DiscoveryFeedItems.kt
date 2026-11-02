@@ -11,6 +11,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import compose.project.click.click.data.models.MapBeacon // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
+import compose.project.click.click.data.places.PlaceOrdering // pragma: allowlist secret
+import compose.project.click.click.data.places.PlaceSummaryDto // pragma: allowlist secret
 import compose.project.click.click.events.eventSchedule // pragma: allowlist secret
 import compose.project.click.click.events.formatEventScheduleRange // pragma: allowlist secret
 import compose.project.click.click.events.isActiveForDiscoveryFeed // pragma: allowlist secret
@@ -46,6 +48,16 @@ internal sealed class DiscoveryFeedItem {
         override val key: String = "beacon-${beacon.id}"
     }
 
+    /** A Click Place (G5); present only while `click_places` is on and the Places layer shows. */
+    data class Place(
+        val place: PlaceSummaryDto,
+        val distanceM: Double,
+    ) : DiscoveryFeedItem() {
+        override val sortDistanceM: Double = distanceM
+        override val sortRecentEpochMs: Long = 0L
+        override val key: String = "place-${place.id}"
+    }
+
     data class Connection(
         val point: ConnectionMapPoint,
         val distanceM: Double,
@@ -62,6 +74,7 @@ internal fun buildDiscoveryFeedItems(
     renderData: MapRenderData,
     userLat: Double?,
     userLon: Double?,
+    places: List<PlaceSummaryDto> = emptyList(),
 ): List<DiscoveryFeedItem> {
     val now = Clock.System.now().toEpochMilliseconds()
 
@@ -124,7 +137,20 @@ internal fun buildDiscoveryFeedItems(
             )
         }
 
-    return connRows + hubRows + beaconRows
+    val placeRows =
+        places.map { place ->
+            DiscoveryFeedItem.Place(
+                place = place,
+                distanceM =
+                    if (userLat != null && userLon != null) {
+                        dist(place.latitude, place.longitude)
+                    } else {
+                        place.distanceMeters ?: Double.MAX_VALUE
+                    },
+            )
+        }
+
+    return connRows + hubRows + beaconRows + placeRows
 }
 
 internal data class DiscoveryFeedSection(
@@ -132,7 +158,19 @@ internal data class DiscoveryFeedSection(
     val items: List<DiscoveryFeedItem>,
 )
 
-internal fun groupDiscoveryFeedIntoSections(items: List<DiscoveryFeedItem>): List<DiscoveryFeedSection> {
+/** Section title for Click Places (iOS `MapLayer.places.label`). */
+internal const val NEARBY_PLACES_SECTION_TITLE: String = "Places"
+
+/**
+ * Sections in list order. Places sit after Events (before them when there are none), as iOS
+ * `MapFeatureModel.relevanceSections` puts them between events and hubs. With
+ * [placesInPulseOrder] (Relevance) Places follow iOS `PlaceOrdering`: live event, then live Pulse
+ * (newest first), then distance; otherwise they keep the order they came in.
+ */
+internal fun groupDiscoveryFeedIntoSections(
+    items: List<DiscoveryFeedItem>,
+    placesInPulseOrder: Boolean = false,
+): List<DiscoveryFeedSection> {
     if (items.isEmpty()) return emptyList()
     val sections = mutableListOf<DiscoveryFeedSection>()
     val hubs = items.filterIsInstance<DiscoveryFeedItem.Hub>()
@@ -163,6 +201,17 @@ internal fun groupDiscoveryFeedIntoSections(items: List<DiscoveryFeedItem>): Lis
                         items = rows,
                     )
             }
+    }
+    val places = items.filterIsInstance<DiscoveryFeedItem.Place>()
+    if (places.isNotEmpty()) {
+        val rows =
+            if (placesInPulseOrder) {
+                PlaceOrdering.sorted(places, { it.place }, { it.distanceM })
+            } else {
+                places
+            }
+        val eventsIndex = sections.indexOfFirst { it.title == "Events" }
+        sections.add(if (eventsIndex >= 0) eventsIndex + 1 else 0, DiscoveryFeedSection(NEARBY_PLACES_SECTION_TITLE, rows))
     }
     return sections
 }

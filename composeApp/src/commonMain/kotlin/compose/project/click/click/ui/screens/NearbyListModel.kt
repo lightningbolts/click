@@ -4,6 +4,7 @@ import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlis
 import compose.project.click.click.events.eventSchedule // pragma: allowlist secret
 import compose.project.click.click.ui.utils.displayDynamicTitle // pragma: allowlist secret
 import compose.project.click.click.ui.utils.displayTypeTitle // pragma: allowlist secret
+import compose.project.click.click.viewmodel.MapLayerFilter // pragma: allowlist secret
 import kotlin.math.max
 import kotlin.math.pow
 
@@ -28,6 +29,7 @@ internal val DiscoveryFeedItem.nearbyTitle: String
         when (this) {
             is DiscoveryFeedItem.Beacon -> beacon.displayDynamicTitle()
             is DiscoveryFeedItem.Hub -> hub.name
+            is DiscoveryFeedItem.Place -> place.name
             is DiscoveryFeedItem.Connection -> point.displayName
         }
 
@@ -37,6 +39,7 @@ internal val DiscoveryFeedItem.nearbyPeopleCount: Int?
         when (this) {
             is DiscoveryFeedItem.Beacon -> if (beacon.kind == MapBeaconKind.EVENT) beacon.rsvpCount else null
             is DiscoveryFeedItem.Hub -> hub.activeUserCount
+            is DiscoveryFeedItem.Place -> place.hereNowCount
             is DiscoveryFeedItem.Connection -> null
         }
 
@@ -183,6 +186,16 @@ internal fun DiscoveryFeedItem.nearbySearchFields(): List<String> =
                 beacon.creatorDisplayName,
             )
         is DiscoveryFeedItem.Hub -> listOf(nearbyTitle, "Hub", ttlLabel)
+        // iOS `NearbyListView.matches`: category, address, city and the next event's title.
+        is DiscoveryFeedItem.Place ->
+            listOfNotNull(
+                nearbyTitle,
+                NEARBY_PLACES_SECTION_TITLE,
+                place.placeCategory.label,
+                place.addressLine,
+                place.city,
+                place.nextEvent?.title,
+            )
         is DiscoveryFeedItem.Connection -> listOf(nearbyTitle, point.locationLabel)
     }
 
@@ -202,6 +215,7 @@ internal fun nearbySections(
 ): List<DiscoveryFeedSection> =
     groupDiscoveryFeedIntoSections(
         sortNearbyItems(items, sort, nowEpochMs).filter { it.matchesNearbyQuery(query) },
+        placesInPulseOrder = sort == NearbySort.Relevance,
     )
 
 /** Empty-list copy while searching (iOS `NearbyListView.list`). */
@@ -210,3 +224,15 @@ internal fun nearbyNoResultsTitle(query: String): String = "No results for “${
 internal const val NEARBY_NO_RESULTS_HINT: String = "Try another name, place or filter."
 
 internal const val NEARBY_SEARCH_PROMPT: String = "Search places, events, people"
+
+/** Layer chips above the Nearby list; Places joins (after Events) only while `click_places` is on. */
+internal fun nearbyLayerChips(placesEnabled: Boolean): List<MapLayerFilter> =
+    listOfNotNull(
+        MapLayerFilter.EVENTS,
+        MapLayerFilter.PLACES.takeIf { placesEnabled },
+        MapLayerFilter.COMMUNITY_HUBS,
+        MapLayerFilter.SOCIAL_VIBES,
+        MapLayerFilter.SOUNDTRACKS,
+        MapLayerFilter.ALERTS_UTILITIES,
+        MapLayerFilter.MY_CONNECTIONS,
+    )

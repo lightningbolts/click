@@ -98,6 +98,11 @@ interface TokenStorage {
 
     suspend fun getRecentEmoji(): String? = null
 
+    /** Click Places filters as JSON (`places.filters.v1`, like iOS). Device-local. */
+    suspend fun savePlaceFilters(json: String?) {}
+
+    suspend fun getPlaceFilters(): String? = null
+
     suspend fun saveLocationExplainerSeen(seen: Boolean)
 
     suspend fun getLocationExplainerSeen(): Boolean?

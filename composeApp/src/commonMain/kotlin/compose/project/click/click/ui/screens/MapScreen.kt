@@ -508,6 +508,7 @@ fun MapScreen(
                                 renderData,
                                 effectiveUserLat,
                                 effectiveUserLon,
+                                mapPlaces,
                             ) {
                                 buildDiscoveryFeedItems(
                                     hubs = communityHubs,
@@ -515,6 +516,7 @@ fun MapScreen(
                                     renderData = renderData,
                                     userLat = effectiveUserLat,
                                     userLon = effectiveUserLon,
+                                    places = mapPlaces,
                                 )
                             }
                         val eventNearbyCount =

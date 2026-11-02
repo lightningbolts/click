@@ -77,6 +77,7 @@ class AndroidTokenStorage(
         private const val KEY_FEATURE_FLAGS_CACHE = "feature_flags_cache"
         private const val KEY_PUSH_PREVIEW_KEYS = "push_preview_epoch_keys"
         private const val KEY_RECENT_EMOJI = "recent_emoji"
+        private const val KEY_PLACE_FILTERS = "places.filters.v1"
         private const val KEY_LOCATION_EXPLAINER_SEEN = "location_explainer_seen"
         private const val KEY_ONBOARDING_STATE = "onboarding_state"
         private const val KEY_HAS_COMPLETED_ONBOARDING = "has_completed_onboarding"
@@ -263,6 +264,15 @@ class AndroidTokenStorage(
     }
 
     override suspend fun getRecentEmoji(): String? = sharedPreferences.getString(KEY_RECENT_EMOJI, null)
+
+    override suspend fun savePlaceFilters(json: String?) {
+        sharedPreferences.edit().apply {
+            if (json == null) remove(KEY_PLACE_FILTERS) else putString(KEY_PLACE_FILTERS, json)
+            apply()
+        }
+    }
+
+    override suspend fun getPlaceFilters(): String? = sharedPreferences.getString(KEY_PLACE_FILTERS, null)
 
     override suspend fun saveLocationExplainerSeen(seen: Boolean) {
         sharedPreferences.edit().apply {
