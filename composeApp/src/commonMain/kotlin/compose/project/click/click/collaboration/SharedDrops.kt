@@ -1,5 +1,6 @@
 package compose.project.click.click.collaboration
 
+import compose.project.click.click.data.api.ReactionsState
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.serialization.SerialName
@@ -53,6 +54,8 @@ data class SharedDrop(
     @SerialName("original_url") val originalUrl: String? = null,
     /** Locket-style; others get it only once the drop develops. */
     val caption: String? = null,
+    /** Inline once this viewer has developed it, so the story opens with them in place. */
+    val reactions: ReactionsState? = null,
 ) {
     val userId: String get() = user.id
     val revealAt: Instant? get() = parseInstantOrNull(revealAtIso)
@@ -115,4 +118,19 @@ data class SharedDropGroup(
             return groups.filter { it.isMine } + others.filter { it.hasUnwatched(now) } + others.filterNot { it.hasUnwatched(now) }
         }
     }
+}
+
+/**
+ * The strip group a pushed drop opens in, once the drop is in the strip and has developed (iOS
+ * `SharedDropsStrip.openPendingDrop`); null until then, so the request waits for the next refresh.
+ */
+fun openableGroupIndex(
+    dropId: String,
+    groups: List<SharedDropGroup>,
+    now: Instant = Clock.System.now(),
+): Int? {
+    val index = groups.indexOfFirst { g -> g.drops.any { it.id == dropId } }
+    if (index < 0) return null
+    val drop = groups[index].drops.first { it.id == dropId }
+    return index.takeUnless { drop.state(now).isPending }
 }

@@ -16,7 +16,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import compose.project.click.click.collaboration.SharedDropGroup
+import compose.project.click.click.collaboration.archiveStoryGroup
+import compose.project.click.click.collaboration.openableGroupIndex
 import compose.project.click.click.data.AppDataManager
+import compose.project.click.click.deeplink.SharedDropOpenRequests
 import compose.project.click.click.viewmodel.SharedDropsViewModel
 import compose.project.click.click.viewmodel.sharedDropsNextTickMs
 import kotlinx.coroutines.delay
@@ -24,12 +27,14 @@ import kotlinx.datetime.Clock
 
 /*
  * Shared drops on Home, behind `shared_drops` (iOS `Click/Features/Home/SharedDropsStrip.swift` and
- * `SharedDropStorySource.swift`): the strip, the share flow and the story viewer.
+ * `SharedDropStorySource.swift`): the strip, the share flow, "View all" and the story viewer. A
+ * `shared_drop_released` push (or a reaction push) opens that drop's story once it's in the strip.
  */
 
 private data class StoryRequest(
     val groups: List<SharedDropGroup>,
     val groupIndex: Int,
+    val startDropId: String? = null,
 )
 
 @Composable
@@ -44,6 +49,8 @@ fun SharedDropsHomeSection(
     val currentUser by AppDataManager.currentUser.collectAsState()
     var composing by rememberSaveable { mutableStateOf(false) }
     var story by remember { mutableStateOf<StoryRequest?>(null) }
+    var showingArchive by rememberSaveable { mutableStateOf(false) }
+    val pendingOpen by SharedDropOpenRequests.pending.collectAsState()
     // Re-resolves states each minute and the moment the next drop reveals.
     val now by produceState(Clock.System.now(), state.drops) {
         while (true) {
@@ -54,6 +61,15 @@ fun SharedDropsHomeSection(
     val groups = remember(state.drops, now) { SharedDropGroup.group(state.drops, now) }
 
     LaunchedEffect(currentUser?.id) { if (currentUser?.id != null) viewModel.refresh() }
+    // A push for a drop that isn't in the strip yet: fetch the live strip, which has it.
+    LaunchedEffect(pendingOpen) { if (pendingOpen != null && currentUser?.id != null) viewModel.refresh() }
+    LaunchedEffect(pendingOpen, state.drops, story) {
+        val id = pendingOpen ?: return@LaunchedEffect
+        if (story != null) return@LaunchedEffect
+        val request = storyRequestFor(id, groups, now) ?: return@LaunchedEffect
+        SharedDropOpenRequests.consume(id)
+        story = request
+    }
     LaunchedEffect(state.notice) {
         state.notice?.let {
             onToast(it)
@@ -75,8 +91,24 @@ fun SharedDropsHomeSection(
             }
         },
         modifier = modifier,
+        onViewAll = { showingArchive = true }.takeIf { state.drops.isNotEmpty() || state.archive.isNotEmpty() },
         posting = state.posting,
     )
+
+    if (showingArchive) {
+        SharedDropsArchiveScreen(
+            viewModel = viewModel,
+            onOpen = { drop ->
+                val opened = Clock.System.now()
+                if (drop.state(opened).isPending) {
+                    clickDropCountdownLabel(drop.state(opened), opened)?.let(onToast)
+                } else {
+                    story = StoryRequest(listOf(archiveStoryGroup(state.archive)), 0, drop.id)
+                }
+            },
+            onDismiss = { showingArchive = false },
+        )
+    }
 
     if (composing) {
         SharedDropComposer(
@@ -102,9 +134,15 @@ fun SharedDropsHomeSection(
         SharedDropStoryViewer(
             groups = request.groups,
             startGroup = request.groupIndex,
-            startDropId = null,
+            startDropId = request.startDropId,
             viewModel = viewModel,
             onDismiss = { story = null },
         )
     }
 }
+
+private fun storyRequestFor(
+    dropId: String,
+    groups: List<SharedDropGroup>,
+    now: kotlinx.datetime.Instant,
+): StoryRequest? = openableGroupIndex(dropId, groups, now)?.let { StoryRequest(groups, it, dropId) }

@@ -34,5 +34,9 @@ fun openPushRouteInApp(route: PushRoute): Boolean =
             AppDeepLinkRouter.open(AppDeepLink.Clicks)
             true
         }
+        is PushRoute.SharedDrop -> {
+            AppDeepLinkRouter.open(AppDeepLink.SharedDrop(route.dropId))
+            true
+        }
         PushRoute.OpenApp -> false
     }

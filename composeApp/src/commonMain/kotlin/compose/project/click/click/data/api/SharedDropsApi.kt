@@ -9,6 +9,7 @@ import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
+import io.ktor.http.encodeURLParameter
 import io.ktor.http.encodeURLPathPart
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -18,7 +19,7 @@ import kotlin.io.encoding.ExperimentalEncodingApi
 /*
  * Shared Click Drops (flag `shared_drops`): click-web `app/api/me/shared-drops` (strip, post),
  * `app/api/me/shared-drops/[dropId]` (delete), `app/api/drops/develop` (kind `shared`) and
- * `app/api/drops/report`. Mirrors iOS `Click/Features/Home/SharedDropsStore.swift`.
+ * `app/api/drops/report` and `app/api/me/shared-drops/archive` ("View all"). Mirrors iOS `Click/Features/Home/SharedDropsStore.swift`.
  */
 
 @Serializable
@@ -26,6 +27,26 @@ internal data class SharedDropsStripResponse(
     val teaser: String? = null,
     val drops: List<SharedDrop> = emptyList(),
 )
+
+/** One page of `GET /api/me/shared-drops/archive`; [nextBefore] is null at the end. */
+@Serializable
+data class SharedDropArchivePage(
+    val drops: List<SharedDrop> = emptyList(),
+    @SerialName("next_before") val nextBefore: String? = null,
+)
+
+/** The archive URL for the page before [before] (null: the newest page). */
+internal fun sharedDropArchiveUrl(
+    base: String,
+    before: String?,
+    limit: Int = SHARED_DROP_ARCHIVE_PAGE,
+): String {
+    val query = StringBuilder("limit=").append(limit)
+    before?.trim()?.takeIf { it.isNotEmpty() }?.let { query.append("&before=").append(it.encodeURLParameter()) }
+    return "$base/archive?$query"
+}
+
+internal const val SHARED_DROP_ARCHIVE_PAGE = 30
 
 @Serializable
 internal data class SharedDropResponse(
@@ -90,6 +111,9 @@ interface SharedDropsService {
     /** The bounded Home strip: yours and your connections', newest first. */
     suspend fun strip(): Result<List<SharedDrop>>
 
+    /** One page of "View all": every drop you can see, newest first, older ones included. */
+    suspend fun archive(before: String?): Result<SharedDropArchivePage>
+
     /** Shares one drop; retrying with the same [clientDropId] returns the drop already made. */
     suspend fun share(body: SharedDropCreateBody): Result<SharedDrop>
 
@@ -120,6 +144,16 @@ class SharedDropsApi(
             val response = api.clickWebClient.get(base)
             if (response.status.value in 200..299) {
                 Result.success(response.body<SharedDropsStripResponse>().drops)
+            } else {
+                api.clickWebFailure(response)
+            }
+        }
+
+    override suspend fun archive(before: String?): Result<SharedDropArchivePage> =
+        call {
+            val response = api.clickWebClient.get(sharedDropArchiveUrl(base, before))
+            if (response.status.value in 200..299) {
+                Result.success(response.body<SharedDropArchivePage>())
             } else {
                 api.clickWebFailure(response)
             }

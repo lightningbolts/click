@@ -5,17 +5,29 @@ import compose.project.click.click.collaboration.SharedDrop
 import compose.project.click.click.collaboration.SharedDropAudience
 import compose.project.click.click.collaboration.SharedDropUser
 import compose.project.click.click.data.api.DropDevelopResultDto
+import compose.project.click.click.data.api.ReactionTarget
+import compose.project.click.click.data.api.ReactionsService
+import compose.project.click.click.data.api.ReactionsState
+import compose.project.click.click.data.api.Reactor
+import compose.project.click.click.data.api.SharedDropArchivePage
 import compose.project.click.click.data.api.SharedDropCreateBody
 import compose.project.click.click.data.api.SharedDropPostException
 import compose.project.click.click.data.api.SharedDropsService
+import compose.project.click.click.data.realtime.LiveBatch
+import compose.project.click.click.data.realtime.LiveKind
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import kotlinx.datetime.Instant
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -33,8 +45,15 @@ private class FakeSharedDropsService : SharedDropsService {
     val developed = mutableListOf<String>()
     val deleted = mutableListOf<String>()
     val downloads = mutableMapOf<String, ByteArray>()
+    val archivePages = mutableMapOf<String?, Result<SharedDropArchivePage>>()
+    val archiveCalls = mutableListOf<String?>()
 
     override suspend fun strip() = stripResult
+
+    override suspend fun archive(before: String?): Result<SharedDropArchivePage> {
+        archiveCalls += before
+        return archivePages[before] ?: Result.failure(Exception("offline"))
+    }
 
     override suspend fun share(body: SharedDropCreateBody): Result<SharedDrop> {
         shared += body
@@ -58,6 +77,42 @@ private class FakeSharedDropsService : SharedDropsService {
 
     override suspend fun download(url: String): Result<ByteArray> =
         downloads[url]?.let { Result.success(it) } ?: Result.failure(Exception("404"))
+}
+
+private class FakeReactions : ReactionsService {
+    var reactResult: Result<ReactionsState> = Result.success(ReactionsState())
+    var loadResult: Result<ReactionsState> = Result.success(ReactionsState())
+    val reacted = mutableListOf<Pair<String, String?>>()
+
+    override suspend fun reactions(
+        target: ReactionTarget,
+        id: String,
+    ) = loadResult
+
+    override suspend fun react(
+        target: ReactionTarget,
+        id: String,
+        emoji: String?,
+    ): Result<ReactionsState> {
+        assertEquals(ReactionTarget.SHARED_DROP, target)
+        reacted += id to emoji
+        return reactResult
+    }
+}
+
+private class FakeReplies : SharedDropReplySender {
+    var succeed = true
+    val sent = mutableListOf<Triple<String, String, JsonObject>>()
+
+    override suspend fun send(
+        connectionId: String,
+        userId: String,
+        text: String,
+        metadata: JsonObject,
+    ): Boolean {
+        sent += Triple(connectionId, text, metadata)
+        return succeed
+    }
 }
 
 private class FakeDisk : SharedDropsDisk {
@@ -91,6 +146,9 @@ class SharedDropsViewModelTest {
         developed: String? = null,
         preview: String? = null,
         original: String? = null,
+        connection: String? = null,
+        reactions: ReactionsState? = null,
+        created: String? = null,
     ) = SharedDrop(
         id = id,
         user = SharedDropUser(user, user),
@@ -99,6 +157,9 @@ class SharedDropsViewModelTest {
         developedAtIso = developed,
         previewUrl = preview,
         originalUrl = original,
+        connectionId = connection,
+        reactions = reactions,
+        createdAt = created,
     )
 
     private fun TestScope.viewModel(
@@ -106,6 +167,9 @@ class SharedDropsViewModelTest {
         disk: FakeDisk = FakeDisk(),
         user: () -> String? = { "me" },
         preview: ByteArray? = byteArrayOf(7),
+        reactions: FakeReactions = FakeReactions(),
+        replies: FakeReplies = FakeReplies(),
+        live: Flow<LiveBatch> = emptyFlow(),
     ): SharedDropsViewModel {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
         return SharedDropsViewModel(
@@ -116,6 +180,9 @@ class SharedDropsViewModelTest {
             makePreview = { preview },
             imageSize = { 30 to 40 },
             now = { now },
+            reactions = reactions,
+            replySender = replies,
+            liveHints = live,
         )
     }
 
@@ -348,5 +415,240 @@ class SharedDropsViewModelTest {
         assertEquals(60_250, sharedDropsNextTickMs(listOf(drop("a", reveal = "2026-10-01T12:05:00Z")), now))
         assertEquals(30_250, sharedDropsNextTickMs(listOf(drop("a", reveal = "2026-10-01T12:00:30Z")), now))
         assertEquals(750, sharedDropsNextTickMs(listOf(drop("a", reveal = "2026-10-01T12:00:00.100Z")), now))
+    }
+
+    @Test
+    fun reactingShowsAtOnceThenAnswersInTheChatWithTheDrop() =
+        runTest {
+            try {
+                val service = FakeSharedDropsService()
+                val d = drop("a", developed = past, connection = "c1")
+                service.stripResult = Result.success(listOf(d))
+                val reactions = FakeReactions()
+                val saved = ReactionsState(mine = "🔥", reactions = listOf(Reactor("u2", "Sam Lee", null, "❤️")))
+                reactions.reactResult = Result.success(saved)
+                val replies = FakeReplies()
+                val vm = viewModel(service, reactions = reactions, replies = replies)
+                vm.refresh()
+                vm.react(d, "🔥")
+                assertEquals(listOf<Pair<String, String?>>("a" to "🔥"), reactions.reacted)
+                assertEquals(
+                    saved,
+                    vm.state.value.drops
+                        .single()
+                        .reactions,
+                )
+                val (connection, text, metadata) = replies.sent.single()
+                assertEquals("c1", connection)
+                assertEquals("🔥", text)
+                val wire = metadata["drop_reply"] as JsonObject
+                assertEquals(JsonPrimitive("a"), wire["id"])
+                assertEquals(JsonPrimitive(true), wire["reaction"])
+                assertEquals("Reaction sent to maya", vm.state.value.notice)
+            } finally {
+                Dispatchers.resetMain()
+            }
+        }
+
+    @Test
+    fun aFailedReactionPutsTheOldOneBackAndTakingItBackSendsNothing() =
+        runTest {
+            try {
+                val service = FakeSharedDropsService()
+                val before = ReactionsState(mine = "😂")
+                val d = drop("a", developed = past, connection = "c1", reactions = before)
+                service.stripResult = Result.success(listOf(d))
+                val reactions = FakeReactions()
+                reactions.reactResult = Result.failure(Exception("500"))
+                val replies = FakeReplies()
+                val vm = viewModel(service, reactions = reactions, replies = replies)
+                vm.refresh()
+                vm.react(d, "🔥")
+                assertEquals(
+                    before,
+                    vm.state.value.drops
+                        .single()
+                        .reactions,
+                )
+                reactions.reactResult = Result.success(ReactionsState())
+                vm.react(d, null)
+                assertEquals(listOf("a" to "🔥", "a" to null), reactions.reacted)
+                assertNull(
+                    vm.state.value.drops
+                        .single()
+                        .reactions
+                        ?.mine,
+                )
+                assertTrue(replies.sent.isEmpty())
+            } finally {
+                Dispatchers.resetMain()
+            }
+        }
+
+    @Test
+    fun ownDropsAreNeverReactedOrRepliedTo() =
+        runTest {
+            try {
+                val reactions = FakeReactions()
+                val replies = FakeReplies()
+                val vm = viewModel(FakeSharedDropsService(), reactions = reactions, replies = replies)
+                val mine = drop("a", mine = true, developed = past, connection = "c1")
+                vm.react(mine, "🔥")
+                vm.sendReply(mine, "hi")
+                assertTrue(reactions.reacted.isEmpty())
+                assertTrue(replies.sent.isEmpty())
+            } finally {
+                Dispatchers.resetMain()
+            }
+        }
+
+    @Test
+    fun aReplyGoesToThePostersChatAndSaysWhetherItWent() =
+        runTest {
+            try {
+                val replies = FakeReplies()
+                val vm = viewModel(FakeSharedDropsService(), replies = replies)
+                val d = drop("a", developed = past, connection = "c1")
+                vm.sendReply(d, "  love this  ")
+                assertEquals("love this", replies.sent.single().second)
+                assertEquals(JsonPrimitive(false), (replies.sent.single().third["drop_reply"] as JsonObject)["reaction"])
+                assertEquals("Sent to maya", vm.state.value.notice)
+                replies.succeed = false
+                vm.sendReply(d, "again")
+                assertEquals("Couldn't send. Try again.", vm.state.value.notice)
+                vm.sendReply(d.copy(connectionId = null), "nowhere")
+                vm.sendReply(d, "   ")
+                assertEquals(2, replies.sent.size)
+            } finally {
+                Dispatchers.resetMain()
+            }
+        }
+
+    @Test
+    fun theArchivePagesWithoutDuplicatesAndStopsAtTheEnd() =
+        runTest {
+            try {
+                val service = FakeSharedDropsService()
+                service.archivePages[null] = Result.success(SharedDropArchivePage(listOf(drop("a"), drop("b")), nextBefore = "t1"))
+                service.archivePages["t1"] = Result.success(SharedDropArchivePage(listOf(drop("b"), drop("c")), nextBefore = null))
+                val vm = viewModel(service)
+                vm.loadArchive()
+                assertTrue(vm.state.value.archiveLoaded)
+                assertEquals("t1", vm.state.value.archiveNextBefore)
+                vm.loadMoreArchive()
+                assertEquals(
+                    listOf("a", "b", "c"),
+                    vm.state.value.archive
+                        .map { it.id },
+                )
+                assertNull(vm.state.value.archiveNextBefore)
+                vm.loadMoreArchive()
+                assertEquals(listOf(null, "t1"), service.archiveCalls)
+                assertEquals(
+                    "b",
+                    vm.state.value
+                        .drop("b")
+                        ?.id,
+                )
+            } finally {
+                Dispatchers.resetMain()
+            }
+        }
+
+    @Test
+    fun archiveFailuresSayWhatTheyCan() =
+        runTest {
+            try {
+                val service = FakeSharedDropsService()
+                val vm = viewModel(service)
+                vm.loadArchive()
+                assertEquals(SHARED_DROP_ARCHIVE_FAILED, vm.state.value.archiveError)
+                assertFalse(vm.state.value.archiveLoaded)
+                service.archivePages[null] = Result.success(SharedDropArchivePage(listOf(drop("a")), nextBefore = "t1"))
+                vm.loadArchive()
+                assertNull(vm.state.value.archiveError)
+                vm.loadMoreArchive()
+                assertTrue(vm.state.value.archiveMoreFailed)
+                assertEquals(
+                    listOf("a"),
+                    vm.state.value.archive
+                        .map { it.id },
+                )
+            } finally {
+                Dispatchers.resetMain()
+            }
+        }
+
+    @Test
+    fun developingFromTheArchiveMarksItThereAndLoadsReactions() =
+        runTest {
+            try {
+                val service = FakeSharedDropsService()
+                service.archivePages[null] = Result.success(SharedDropArchivePage(listOf(drop("old")), nextBefore = null))
+                service.developResult = Result.success(DropDevelopResultDto("shared", "old", "developed", developedAt = past))
+                val reactions = FakeReactions()
+                reactions.loadResult = Result.success(ReactionsState(isOwner = false, mine = "👏"))
+                val vm = viewModel(service, reactions = reactions)
+                vm.refresh()
+                vm.loadArchive()
+                vm.develop(
+                    vm.state.value.archive
+                        .single(),
+                )
+                val developed =
+                    vm.state.value.archive
+                        .single()
+                assertEquals(ClickDropDevelopState.Developed, developed.state(now))
+                assertEquals("👏", developed.reactions?.mine)
+            } finally {
+                Dispatchers.resetMain()
+            }
+        }
+
+    @Test
+    fun aLiveDropsHintRefreshesTheStrip() =
+        runTest {
+            try {
+                val service = FakeSharedDropsService()
+                val live = MutableSharedFlow<LiveBatch>(extraBufferCapacity = 4)
+                val vm = viewModel(service, live = live)
+                vm.refresh()
+                assertTrue(
+                    vm.state.value.drops
+                        .isEmpty(),
+                )
+                service.stripResult = Result.success(listOf(drop("new")))
+                live.emit(LiveBatch(setOf(LiveKind.NUDGES)))
+                assertTrue(
+                    vm.state.value.drops
+                        .isEmpty(),
+                )
+                live.emit(LiveBatch(setOf(LiveKind.DROPS)))
+                assertEquals(
+                    listOf("new"),
+                    vm.state.value.drops
+                        .map { it.id },
+                )
+            } finally {
+                Dispatchers.resetMain()
+            }
+        }
+
+    @Test
+    fun replyCopyAndWhoCanReply() {
+        assertEquals("Reaction sent to Maya", sharedDropReplyNotice("Maya", isReaction = true, sent = true))
+        assertEquals("Sent to Maya", sharedDropReplyNotice("Maya", isReaction = false, sent = true))
+        assertEquals("Couldn't send. Try again.", sharedDropReplyNotice("Maya", isReaction = true, sent = false))
+        assertTrue(drop("a", connection = "c1").canReply(now))
+        assertFalse(drop("a", connection = "c1", reveal = future).canReply(now))
+        assertFalse(drop("a", connection = "c1", mine = true).canReply(now))
+        assertFalse(drop("a").canReply(now))
+    }
+
+    @Test
+    fun replyPhotoKeysMatchTheStripCache() {
+        assertEquals("shared-drop-me-a-original", sharedDropOriginalKey("me", "a"))
+        assertEquals("shared-drop-me-a-preview", sharedDropPreviewKey("me", "a"))
+        assertEquals(listOf("a", "b", "c"), listOf(drop("a"), drop("b")).appendingPage(listOf(drop("b"), drop("c"))).map { it.id })
     }
 }
