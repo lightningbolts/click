@@ -10,7 +10,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
 import kotlinx.datetime.Clock
 
-/** Rebuilds the T-60 / T-15 event reminders from the RSVP cache, saved events and the Alerts preference. */
+/** Rebuilds the T-60 event reminders from the RSVP cache, saved events and the Alerts preference. */
 internal suspend fun AppDataManager.resyncEventReminders() {
     val userId = _currentUser.value?.id ?: return
     val going =
