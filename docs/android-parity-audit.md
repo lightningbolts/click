@@ -444,7 +444,7 @@ These need physical devices. The code goes behind interfaces with fakes so the l
 
 ---
 
-## 8. Phase 3 progress (2026-11-01)
+## 8. Phase 3 progress (updated 2026-11-02)
 
 Each PR builds (`assembleDebug`), passes `spotlessCheck` and all unit tests locally, and is cut from `origin/main` unless stacked. Device checks are listed in each PR.
 
@@ -477,11 +477,29 @@ Each PR builds (`assembleDebug`), passes `spotlessCheck` and all unit tests loca
 | G6-9 Pinned messages | lightningbolts/click#152 | |
 | G7-1 / P2-9 Approve a new device from this phone | lightningbolts/click#153 | Biometric or screen-lock confirmation; fails closed below Android 10. |
 | (found) Plan map link escaping | lightningbolts/click#144 | |
+| G1-2 Live updates, G1-6 product telemetry | lightningbolts/click#154 | Sends `X-Click-Platform`; click-web doesn't read it yet. |
+| G2-1 Click Drops send, shared drops | lightningbolts/click#155 | |
+| G4-1..3 Connect capture quality, `sensor_observation` | lightningbolts/click#156 | Needs `connect_postgrest_fallback` added to click-web `FEATURE_KEYS`. |
+| G5-1, G5-3, part of G5-4 Places: API, Place page, Me › Places | lightningbolts/click#157 | |
+| G2 Reactions, drop replies, shared drops archive | lightningbolts/click#158 | |
+| P2-16 Ticketing purchase | lightningbolts/click#159 | Checkout `client` field rejects `android` server-side. |
+| G6-8 GIFs, G6-10 mute menu | lightningbolts/click#160 | Needs `KLIPY_APP_KEY` in release builds; empty hides GIFs. |
+| Server search (`/api/search`) | lightningbolts/click#161 | |
+| G3-7 Nearby paging, sort, search; pin stacking | lightningbolts/click#162 | |
+| G4-4..7, G4-12 Group-tap review, late joiners, encounter details, follow-up | lightningbolts/click#163 | Ports from #127 credited. |
+| G2-2 Develop, live develop, bloom; archive memory cap | lightningbolts/click#164 | |
+| G5-2, G5-4 Places map layer, `/p/` links, privacy toggle, search | lightningbolts/click#165 | |
+| P2-19 Multi-Tap `prepareGroup` | lightningbolts/click#166 | |
 
-**Merge order:** #132, then #134 → #135 → #148, then #133 → #145 / #150. The rest are independent.
+All PRs above are merged into `main`.
 
-**Still open** (larger, each needs its own PRs): Click Drops develop/send, shared drops and story (G2), Places (G5), ticketing purchase (P2-16), GIFs and mute menu (G6-8, G6-10), server search (`/api/search`), connect capture quality and `sensor_observation` (G4), live updates (G1-2), product telemetry (G1-6), Nearby paging and pin stacking (G3-7), shape and spacing tokens with a screen sweep (P1-4).
+**Still open:**
+- P1-4 shape and spacing tokens (PR in progress); a full screen sweep is not planned.
+- Places: filters, a Nearby-list section, venue writes through the Places APIs and manager invites (G5-5).
+- G4: altitude follow-up (no Android equivalent of CoreMotion's absolute altimeter) and an encounter details card after a QR connect.
+- G2: legacy (non-gated) drops still use the 24 h lock when `drops_develop` is on.
+- Server-side: `connect_postgrest_fallback` in `FEATURE_KEYS`; ticket checkout accepting `client: "android"`; reading `X-Click-Platform`.
 
 ## 9. Environment note for Phase 3
 
-`./gradlew assembleDebug` needs the Android SDK (platform 36, build-tools). The cloud environment used for this audit denies `dl.google.com`, so the SDK can't be installed and no build or unit test can run here. To run Phase 3 in that environment, add `dl.google.com` to the environment's allowed domains (see https://code.claude.com/docs/en/cloud-environments#network-access). Locally and in GitHub CI (`.github/workflows/android-ci.yml`) the build works as documented in `AGENTS.md`.
+The cloud environment now allows `dl.google.com`, so the Android SDK is installed and the full gate runs here: `spotlessCheck :composeApp:testDebugUnitTest :composeApp:assembleDebug :composeApp:verifyRoborazziDebug`. Spotless uses `ratchetFrom origin/main` and fails inside git worktrees, so build from full clones.
