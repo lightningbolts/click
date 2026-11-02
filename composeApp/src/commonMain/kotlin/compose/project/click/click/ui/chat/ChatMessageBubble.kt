@@ -52,6 +52,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import compose.project.click.click.PlatformHapticsPolicy
 import compose.project.click.click.chat.attachments.AttachmentCrypto
+import compose.project.click.click.data.models.ChatGif // pragma: allowlist secret
 import compose.project.click.click.data.models.ChatMessageType
 import compose.project.click.click.data.models.HangoutPlan
 import compose.project.click.click.data.models.Message
@@ -62,6 +63,7 @@ import compose.project.click.click.data.models.PlanResponses
 import compose.project.click.click.data.models.PlanRsvp
 import compose.project.click.click.data.models.disposableRollRevealAtIso
 import compose.project.click.click.data.models.dropReplyOrNull
+import compose.project.click.click.data.models.gifOrNull // pragma: allowlist secret
 import compose.project.click.click.data.models.hasLocalMediaUri
 import compose.project.click.click.data.models.hubMediaPathOrNull
 import compose.project.click.click.data.models.isBeaconChatMessage
@@ -166,6 +168,17 @@ fun ChatMessageBubble(
         BeaconChatMessageBubble(
             messageWithUser = messageWithUser,
             onOpenBeacon = onOpenBeacon,
+            onLongPress = onLongPress,
+            onSwipeReply = onSwipeReply,
+            enableMessageContextMenu = enableMessageContextMenu,
+        )
+        return
+    }
+    val gif = remember(message.id, message.content, message.metadata, message.messageType) { message.gifOrNull() }
+    if (gif != null) {
+        GifChatMessageBubble(
+            messageWithUser = messageWithUser,
+            gif = gif,
             onLongPress = onLongPress,
             onSwipeReply = onSwipeReply,
             enableMessageContextMenu = enableMessageContextMenu,
@@ -1079,6 +1092,42 @@ private fun BeaconChatMessageBubble(
     onSwipeReply: (MessageWithUser) -> Unit,
     enableMessageContextMenu: Boolean,
 ) {
+    SwipeReplyCardBubble(messageWithUser = messageWithUser, onSwipeReply = onSwipeReply) {
+        BeaconChatCard(
+            message = messageWithUser.message,
+            isSent = messageWithUser.isSent,
+            onOpenBeacon = onOpenBeacon,
+            onLongPress = { onLongPress(messageWithUser) },
+            enableContextMenu = enableMessageContextMenu,
+        )
+    }
+}
+
+/** A KLIPY GIF with the same reply-swipe + long-press affordances as normal bubbles (iOS `GifMessageView`). */
+@Composable
+private fun GifChatMessageBubble(
+    messageWithUser: MessageWithUser,
+    gif: ChatGif,
+    onLongPress: (MessageWithUser) -> Unit,
+    onSwipeReply: (MessageWithUser) -> Unit,
+    enableMessageContextMenu: Boolean,
+) {
+    SwipeReplyCardBubble(messageWithUser = messageWithUser, onSwipeReply = onSwipeReply) {
+        GifMessageCard(
+            gif = gif,
+            onLongPress = { onLongPress(messageWithUser) },
+            enableContextMenu = enableMessageContextMenu,
+        )
+    }
+}
+
+/** A standalone card (beacon, GIF) aligned to its side, with reply-swipe on the card only. */
+@Composable
+private fun SwipeReplyCardBubble(
+    messageWithUser: MessageWithUser,
+    onSwipeReply: (MessageWithUser) -> Unit,
+    card: @Composable () -> Unit,
+) {
     val message = messageWithUser.message
     val isSent = messageWithUser.isSent
     val density = LocalDensity.current
@@ -1196,13 +1245,7 @@ private fun BeaconChatMessageBubble(
                         .graphicsLayer { translationX = displayVisualPx.floatValue }
                         .then(swipeDragModifier),
             ) {
-                BeaconChatCard(
-                    message = message,
-                    isSent = isSent,
-                    onOpenBeacon = onOpenBeacon,
-                    onLongPress = { onLongPress(messageWithUser) },
-                    enableContextMenu = enableMessageContextMenu,
-                )
+                card()
             }
         }
         if (isSent) {

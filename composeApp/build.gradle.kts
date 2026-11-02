@@ -94,6 +94,9 @@ kotlin {
 
             // Jetpack Glance for home-screen widgets
             implementation("androidx.glance:glance-appwidget:1.1.1")
+
+            // Animated GIF / WebP decoding for KLIPY GIF messages
+            implementation("io.coil-kt.coil3:coil-gif:3.0.4")
         }
         commonMain.dependencies {
             implementation(compose.runtime)
