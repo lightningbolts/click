@@ -36,6 +36,17 @@ data class ConnectionEncounter(
     val exactBarometricElevationM: Double? = null,
     @SerialName("relative_altitude_m")
     val relativeAltitudeM: Double? = null,
+    /** Station pressure from this reporter's barometer (kPa; G4-12 pressure pill). */
+    @SerialName("barometric_pressure_kpa")
+    val barometricPressureKpa: Double? = null,
+    /** GNSS altitude above mean sea level; shown only when [gpsVerticalAccuracyM] is tight (G4-12). */
+    @SerialName("gps_altitude_m")
+    val gpsAltitudeM: Double? = null,
+    @SerialName("gps_vertical_accuracy_m")
+    val gpsVerticalAccuracyM: Double? = null,
+    /** This reporter's horizontal accuracy for [gpsLat] / [gpsLon] (G4-6 "Location ±N m"). */
+    @SerialName("gps_horizontal_accuracy_m")
+    val gpsHorizontalAccuracyM: Double? = null,
     @SerialName("lux_level")
     val luxLevel: Double? = null,
     @SerialName("motion_variance")
@@ -80,20 +91,21 @@ private fun ConnectionEncounter.richnessScore(): Int {
     return score
 }
 
-private inline fun <T> Iterable<ConnectionEncounter>.firstValue(select: (ConnectionEncounter) -> T?): T? =
-    firstNotNullOfOrNull(select)
+private inline fun <T> Iterable<ConnectionEncounter>.firstValue(select: (ConnectionEncounter) -> T?): T? = firstNotNullOfOrNull(select)
 
 private fun String?.ifPresent(): String? = this?.trim()?.takeIf { it.isNotEmpty() }
 
 private fun mergeEncounterRows(rows: List<ConnectionEncounter>): ConnectionEncounter {
-    val ranked = rows.sortedWith(
-        compareByDescending<ConnectionEncounter> { it.richnessScore() }
-            .thenByDescending { it.encounteredAtInstant() ?: Instant.DISTANT_PAST }
-            .thenBy { it.id },
-    )
+    val ranked =
+        rows.sortedWith(
+            compareByDescending<ConnectionEncounter> { it.richnessScore() }
+                .thenByDescending { it.encounteredAtInstant() ?: Instant.DISTANT_PAST }
+                .thenBy { it.id },
+        )
     val base = ranked.first()
     val tags = rows.flatMap { it.contextTags }.mapNotNull { it.ifPresent() }.distinct()
     val gpsRow = ranked.firstOrNull { it.gpsLat != null && it.gpsLon != null }
+    val gnssAltitudeRow = ranked.firstOrNull { it.gpsAltitudeM?.isFinite() == true }
     return base.copy(
         locationName = ranked.firstValue { it.locationName.ifPresent() },
         displayLocation = ranked.firstValue { it.displayLocation.ifPresent() },
@@ -106,6 +118,11 @@ private fun mergeEncounterRows(rows: List<ConnectionEncounter>): ConnectionEncou
         exactNoiseLevelDb = ranked.firstValue { it.exactNoiseLevelDb?.takeIf { v -> v.isFinite() } },
         exactBarometricElevationM = ranked.firstValue { it.exactBarometricElevationM?.takeIf { v -> v.isFinite() } },
         relativeAltitudeM = ranked.firstValue { it.relativeAltitudeM?.takeIf { v -> v.isFinite() } },
+        barometricPressureKpa = ranked.firstValue { it.barometricPressureKpa?.takeIf { v -> v.isFinite() && v > 0 } },
+        // GNSS altitude and its vertical accuracy only make sense from the same reporter's row.
+        gpsAltitudeM = gnssAltitudeRow?.gpsAltitudeM,
+        gpsVerticalAccuracyM = gnssAltitudeRow?.gpsVerticalAccuracyM,
+        gpsHorizontalAccuracyM = gpsRow?.gpsHorizontalAccuracyM,
         luxLevel = ranked.firstValue { it.luxLevel?.takeIf { v -> v.isFinite() } },
         motionVariance = ranked.firstValue { it.motionVariance?.takeIf { v -> v.isFinite() } },
         compassAzimuth = ranked.firstValue { it.compassAzimuth?.takeIf { v -> v.isFinite() } },
@@ -131,8 +148,7 @@ fun richerConnectionEncounters(
     a: List<ConnectionEncounter>,
     b: List<ConnectionEncounter>,
 ): List<ConnectionEncounter> {
-    fun hasPlace(rows: List<ConnectionEncounter>) =
-        rows.any { !it.locationName.isNullOrBlank() || !it.displayLocation.isNullOrBlank() }
+    fun hasPlace(rows: List<ConnectionEncounter>) = rows.any { !it.locationName.isNullOrBlank() || !it.displayLocation.isNullOrBlank() }
     return when {
         hasPlace(a) && !hasPlace(b) -> a
         hasPlace(b) && !hasPlace(a) -> b
@@ -144,24 +160,29 @@ fun richerConnectionEncounters(
 
 fun ConnectionEncounter.toMemoryCapsule(): MemoryCapsule {
     val at = encounteredAtInstant()?.toEpochMilliseconds() ?: 0L
-    val tag = contextTags.firstOrNull()?.trim()?.takeIf { it.isNotEmpty() }?.let {
-        ContextTag(id = "custom", label = it, emoji = "✏️")
-    }
-    val noise = noiseLevel?.trim()?.takeIf { it.isNotEmpty() }?.let {
-        runCatching { NoiseLevelCategory.valueOf(it.uppercase().replace(' ', '_')) }.getOrNull()
-    }
-    val height = elevationCategory?.trim()?.takeIf { it.isNotEmpty() }?.let {
-        runCatching { HeightCategory.valueOf(it.uppercase().replace(' ', '_')) }.getOrNull()
-    }
-    val geo = gpsLat?.let { la ->
-        gpsLon?.let { lo ->
-            if (la.isFinite() && lo.isFinite() && !(la == 0.0 && lo == 0.0)) GeoLocation(lat = la, lon = lo) else null
+    val tag =
+        contextTags.firstOrNull()?.trim()?.takeIf { it.isNotEmpty() }?.let {
+            ContextTag(id = "custom", label = it, emoji = "✏️")
         }
-    }
+    val noise =
+        noiseLevel?.trim()?.takeIf { it.isNotEmpty() }?.let {
+            runCatching { NoiseLevelCategory.valueOf(it.uppercase().replace(' ', '_')) }.getOrNull()
+        }
+    val height =
+        elevationCategory?.trim()?.takeIf { it.isNotEmpty() }?.let {
+            runCatching { HeightCategory.valueOf(it.uppercase().replace(' ', '_')) }.getOrNull()
+        }
+    val geo =
+        gpsLat?.let { la ->
+            gpsLon?.let { lo ->
+                if (la.isFinite() && lo.isFinite() && !(la == 0.0 && lo == 0.0)) GeoLocation(lat = la, lon = lo) else null
+            }
+        }
     return MemoryCapsule(
         connectionId = this.connectionId,
-        locationName = locationName?.trim()?.takeIf { it.isNotEmpty() }
-            ?: displayLocation?.trim()?.takeIf { it.isNotEmpty() },
+        locationName =
+            locationName?.trim()?.takeIf { it.isNotEmpty() }
+                ?: displayLocation?.trim()?.takeIf { it.isNotEmpty() },
         geoLocation = geo,
         connectedAtMs = at,
         weatherSnapshot = weatherSnapshot,

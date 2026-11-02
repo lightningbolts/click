@@ -44,6 +44,7 @@ import compose.project.click.click.ui.components.ClickButtonVariant // pragma: a
 import compose.project.click.click.ui.components.ClickScreenSpacing // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionContextPresentation // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionContextSheet // pragma: allowlist secret
+import compose.project.click.click.ui.components.EncounterDetailsCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.HeaderBackIconButton // pragma: allowlist secret
 import compose.project.click.click.ui.components.HeaderChromeIconButton // pragma: allowlist secret
 import compose.project.click.click.ui.components.PageHeader // pragma: allowlist secret
@@ -404,6 +405,8 @@ fun NfcScreen(
                     val tagging = connectionState as ConnectionState.TaggingContext
                     var calendarLockInProgress by remember { mutableStateOf(false) }
                     val supabaseRepo = remember { SupabaseRepository() }
+                    val lastVerification by connectionViewModel.lastVerification.collectAsState()
+                    val followUpAccuracy by connectionViewModel.followUpAccuracyMeters.collectAsState()
                     val reconnectConnectionId = tagging.newConnections.firstOrNull()?.id
                     val reconnectPeerId =
                         tagging.targetUsers.firstOrNull { it.id != userId }?.id
@@ -414,9 +417,13 @@ fun NfcScreen(
                             tagging.targetUsers.size >= 2 -> tagging.targetUsers
                             else -> emptyList()
                         }
+                    // In the review the choice is authoritative (an empty one means everyone was removed).
                     val sheetInitialSelectedIds =
-                        tagging.selectedPeerIds
-                            .ifEmpty { sheetSelectableUsers.map { it.id }.toSet() }
+                        if (tagging.requiresSelection) {
+                            tagging.selectedPeerIds
+                        } else {
+                            tagging.selectedPeerIds.ifEmpty { sheetSelectableUsers.map { it.id }.toSet() }
+                        }
                     // requiresSelection must use Connect → confirmHostProximitySelection (not Save Encounter).
                     val presentation =
                         if (!tagging.isNewConnection && !tagging.requiresSelection) {
@@ -492,7 +499,26 @@ fun NfcScreen(
                             } else {
                                 null
                             },
-                        confirmLabel = if (tagging.existingConnectionId != null) "Save this Click" else "Connect",
+                        existingGroup = tagging.requiresSelection && !tagging.existingConnectionId.isNullOrBlank(),
+                        encounterDetails =
+                            if (reconnectConnectionId != null && !tagging.requiresSelection) {
+                                {
+                                    EncounterDetailsCard(
+                                        connectionId = reconnectConnectionId,
+                                        groupPeerNames =
+                                            if (tagging.isGroup) {
+                                                tagging.targetUsers.filter { it.id != userId }.map { it.displayName }
+                                            } else {
+                                                emptyList()
+                                            },
+                                        verification = lastVerification,
+                                        isQr = false,
+                                        refinedAccuracyMeters = followUpAccuracy,
+                                    )
+                                }
+                            } else {
+                                null
+                            },
                         onSaveEncounter = { selectedIds ->
                             scope.launch {
                                 connectionViewModel.saveReconnectEncounter(

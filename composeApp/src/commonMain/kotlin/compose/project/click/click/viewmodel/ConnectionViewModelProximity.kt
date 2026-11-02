@@ -2,6 +2,7 @@ package compose.project.click.click.viewmodel
 
 import androidx.lifecycle.viewModelScope
 import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
+import compose.project.click.click.connect.ConnectionVerification // pragma: allowlist secret
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.WeatherService // pragma: allowlist secret
 import compose.project.click.click.data.models.Connection // pragma: allowlist secret
@@ -47,6 +48,8 @@ import kotlin.random.Random
 internal fun ConnectionViewModel.handleInstantProximityOutcome(
     outcome: BindProximityHandshakeOutcome,
     currentUserId: String,
+    /** Keeps a G4-5 group watch's original window when it replaces the shown result. */
+    groupWatchDeadlineMs: Long? = null,
 ) {
     activateCollaborationSessionIfPresent(outcome)
     lastProximityEncounterLoggedAggregate = outcome.encounterLogged
@@ -88,6 +91,8 @@ internal fun ConnectionViewModel.handleInstantProximityOutcome(
             peerUserIds = others,
             connectionIds = listOfNotNull(outcome.connectionId),
         )
+        // G4-5: someone who tapped a moment later can still grow this group.
+        startGroupWatchFor(outcome, currentUserId, groupWatchDeadlineMs)
         _connectionState.value =
             ConnectionState.TaggingContext(
                 newConnections = listOf(groupConnection),
@@ -123,6 +128,8 @@ internal fun ConnectionViewModel.handleInstantProximityOutcome(
             peerUserIds = listOf(peer.id),
             connectionIds = listOf(outcome.connectionId),
         )
+        // G4-5: someone who tapped a moment later can still turn this into a group.
+        startGroupWatchFor(outcome, currentUserId, groupWatchDeadlineMs)
         _connectionState.value =
             ConnectionState.TaggingContext(
                 newConnections = listOf(connection),
@@ -214,6 +221,20 @@ internal fun ConnectionViewModel.handleAwaitingHostSelection(
             existingConnectionId = awaiting.existingConnectionId,
         )
     hostSelectionSync.reset()
+    // G4-4: another phone's confirm or a late joiner updates this review.
+    startReviewWatch(awaiting.pendingHandshakeId, currentUserId)
+}
+
+private fun ConnectionViewModel.startGroupWatchFor(
+    outcome: BindProximityHandshakeOutcome,
+    currentUserId: String,
+    deadlineMs: Long?,
+) {
+    if (deadlineMs != null) {
+        startGroupWatch(outcome.pendingHandshakeId, outcome.connectionId, currentUserId, deadlineMs)
+    } else {
+        startGroupWatch(outcome.pendingHandshakeId, outcome.connectionId, currentUserId)
+    }
 }
 
 internal fun ConnectionViewModel.startPendingProximityRecovery(
@@ -457,6 +478,16 @@ internal fun ConnectionViewModel.startTapProximityHandshakeImpl(
                     val proximitySensorContext = sensorDeferred?.awaitWithin(PROXIMITY_SENSOR_WAIT_MS)
                     val vibe = vibeDeferred.awaitWithin(PROXIMITY_SENSOR_WAIT_MS)
                     lastProximityHardwareVibe = vibe
+                    // G4-6: what confirmed this tap on this phone, for the result's "Verified by".
+                    _lastVerification.value =
+                        ConnectionVerification.forTap(
+                            bluetooth = detectedDevicesBle.isNotEmpty(),
+                            sound = heardTokensAudio.isNotEmpty(),
+                            locationAccuracyMeters =
+                                capturedFix?.horizontalAccuracyMeters ?: location?.accuracyMeters,
+                            hasLocation = location != null,
+                            simulator = simulatorMock,
+                        )
 
                     _connectionState.value = ConnectionState.ProximityResolving
                     val bindResult =
@@ -496,6 +527,8 @@ internal fun ConnectionViewModel.startTapProximityHandshakeImpl(
                         }
 
                     if (bindResult.isSuccess) {
+                        // G4-7: tighten this phone's fix while still; sent once the flow confirms its IDs.
+                        captured?.let { beginEncounterFollowUp(it) }
                         when (val handshake = bindResult.getOrNull()!!) {
                             is BindProximityHandshakeResult.PendingServerMatch -> {
                                 ConnectionFlowTelemetry.recordPending()

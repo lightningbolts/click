@@ -45,6 +45,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -250,6 +252,61 @@ private fun StackedProfileAvatarRow(
     }
 }
 
+/** "Who's in this Click?" row (G4-4; iOS `PeopleReviewView.row`): name, status line and Remove / Add back. */
+@Composable
+private fun PeopleReviewRow(
+    profile: UserProfile,
+    removed: Boolean,
+    onToggle: () -> Unit,
+) {
+    val name = profile.displayName.trim().ifBlank { "Connection" }
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        ProfileAvatarBubble(
+            profile = profile,
+            size = 40.dp,
+            borderColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            modifier = Modifier.alpha(if (removed) 0.45f else 1f),
+        )
+        Spacer(modifier = Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = name,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = if (removed) GlassSheetTokens.OnOledMuted() else GlassSheetTokens.OnOled(),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = if (removed) PEOPLE_REVIEW_REMOVED_STATUS else "Connecting",
+                style = MaterialTheme.typography.bodySmall,
+                color = GlassSheetTokens.OnOledMuted(),
+                maxLines = 1,
+            )
+        }
+        Spacer(modifier = Modifier.width(8.dp))
+        ClickButton(
+            onClick = {
+                PlatformHapticsPolicy.lightImpact()
+                onToggle()
+            },
+            variant = ClickButtonVariant.Secondary,
+            modifier =
+                Modifier.semantics {
+                    contentDescription = if (removed) "Add $name back" else "Remove $name"
+                },
+        ) {
+            Text(if (removed) "Add back" else "Remove")
+        }
+    }
+}
+
 @Composable
 private fun ConnectionContextSelectableUserRow(
     profile: UserProfile,
@@ -321,10 +378,15 @@ fun ConnectionContextSheet(
     onSendClickDrop: (() -> Unit)? = null,
     /** The tap bind already saved this crossing server-side (it may have been folded into an Extended Hangout). */
     encounterAlreadySaved: Boolean = false,
-    /** Called with the new choice each time someone is removed or added back in the people list. */
+    /**
+     * Called with the new choice each time someone is removed or added back. Set only for the
+     * "Who's in this Click?" review of a group tap (G4-4), which then shows Remove / Add back rows.
+     */
     onSelectionChanged: ((Set<String>) -> Unit)? = null,
-    /** Label for the confirm button ("Save this Click" when everyone already shares a group). */
-    confirmLabel: String = "Connect",
+    /** This exact group already exists (`existing_connection_id`): confirming saves this Click on it. */
+    existingGroup: Boolean = false,
+    /** Encounter details for a connection that already exists (G4-6), shown under the header. */
+    encounterDetails: (@Composable () -> Unit)? = null,
 ) {
     val localNow =
         remember {
@@ -379,10 +441,12 @@ fun ConnectionContextSheet(
     var ambientNoiseOptIn by remember(initialNoiseOptIn) { mutableStateOf(initialNoiseOptIn) }
     val uniqueSelectableUsers = remember(selectableUsers) { selectableUsers.distinctBy { it.id } }
     val showPeerMultiSelect = uniqueSelectableUsers.size >= 2
+    val isPeopleReview = onSelectionChanged != null
     var selectedUserIds by remember(uniqueSelectableUsers, initialSelectedUserIds) {
         mutableStateOf(
             (
-                if (initialSelectedUserIds.isNotEmpty()) {
+                // In the review an empty choice is real (everyone removed), never "everyone".
+                if (initialSelectedUserIds.isNotEmpty() || isPeopleReview) {
                     initialSelectedUserIds.filter { id -> uniqueSelectableUsers.any { it.id == id } }
                 } else {
                     uniqueSelectableUsers.map { it.id }
@@ -528,14 +592,13 @@ fun ConnectionContextSheet(
             }
         ConnectionContextPresentation.NewSpark ->
             when {
+                showPeerMultiSelect && isPeopleReview -> {
+                    titleText = "Who's in this Click?"
+                    subtitleText = peopleReviewSubtitle(existingGroup)
+                }
                 showPeerMultiSelect -> {
                     titleText = "Who's in this Click?"
-                    subtitleText =
-                        if (confirmLabel == "Connect") {
-                            "Remove anyone who wasn't part of this, then pick optional context."
-                        } else {
-                            "You're already a group. Remove anyone who wasn't here, then save this Click."
-                        }
+                    subtitleText = "Remove anyone who wasn't part of this, then pick optional context."
                 }
                 connectedUsers.isEmpty() -> {
                     titleText = "Sparking a new connection…"
@@ -604,6 +667,8 @@ fun ConnectionContextSheet(
             if (!showPeerMultiSelect && connectedUsers.isNotEmpty()) {
                 ConnectionContextHeaderAvatars(connectedUsers)
             }
+
+            encounterDetails?.invoke()
 
             if (!locationName.isNullOrBlank()) {
                 Text(
@@ -674,7 +739,45 @@ fun ConnectionContextSheet(
                 }
             }
 
-            if (showPeerMultiSelect) {
+            if (showPeerMultiSelect && isPeopleReview) {
+                val (included, removed) = uniqueSelectableUsers.partition { it.id in selectedUserIds }
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    Text(
+                        text = peopleReviewConnectingTitle(included.size),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = GlassSheetTokens.OnOledMuted(),
+                    )
+                    if (included.isEmpty()) {
+                        Text(
+                            text = PEOPLE_REVIEW_EVERYONE_REMOVED,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = GlassSheetTokens.OnOledMuted(),
+                        )
+                    }
+                    included.forEach { profile ->
+                        PeopleReviewRow(profile = profile, removed = false, onToggle = { toggleSelectableUser(profile.id) })
+                    }
+                    if (removed.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = PEOPLE_REVIEW_NOT_CONNECTING_TITLE,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = GlassSheetTokens.OnOledMuted(),
+                        )
+                        removed.forEach { profile ->
+                            PeopleReviewRow(profile = profile, removed = true, onToggle = { toggleSelectableUser(profile.id) })
+                        }
+                    }
+                }
+                HorizontalDivider(
+                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.22f),
+                )
+            } else if (showPeerMultiSelect) {
                 Text(
                     text = "People",
                     style = MaterialTheme.typography.titleMedium,
@@ -885,18 +988,37 @@ fun ConnectionContextSheet(
                             }
                         }
                     } else {
+                        // Removing everyone in the review skips the tap (iOS `skipTap`): nothing is created.
+                        val skipsReview = isPeopleReview && selectionRequiredAndEmpty
                         ClickButton(
                             onClick = {
                                 PlatformHapticsPolicy.lightImpact()
-                                onConfirm(resolveSelectedTag(), ambientNoiseOptIn, resolvedSelectedIds)
+                                if (skipsReview) {
+                                    dismissSheet()
+                                } else {
+                                    onConfirm(resolveSelectedTag(), ambientNoiseOptIn, resolvedSelectedIds)
+                                }
                             },
                             modifier =
                                 Modifier
                                     .weight(1f)
                                     .scale(springBtn),
-                            enabled = !isCustomSelectionInvalid && !selectionRequiredAndEmpty,
+                            enabled = !isCustomSelectionInvalid && (skipsReview || !selectionRequiredAndEmpty),
                         ) {
-                            Text(confirmLabel)
+                            Text(
+                                if (isPeopleReview && showPeerMultiSelect) {
+                                    peopleReviewPrimaryTitle(
+                                        includedNames =
+                                            uniqueSelectableUsers
+                                                .filter { it.id in selectedUserIds }
+                                                .map { it.displayName },
+                                        existingGroup = existingGroup,
+                                        removedCount = uniqueSelectableUsers.count { it.id !in selectedUserIds },
+                                    )
+                                } else {
+                                    "Connect"
+                                },
+                            )
                         }
                     }
                 }
