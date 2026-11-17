@@ -81,8 +81,18 @@ internal fun ClickPassSheet(
     ticketed: Boolean = false,
     eventCancelled: Boolean = false,
 ) {
-    if (ticketed) {
-        TicketedPassSheet(beaconId, eventTitle, eventCancelled, onDismiss, remember(api) { ApiTicketingClient(api) })
+    // No tickets on a ticketed event: an RSVP from before tickets went on sale still has its pass, and the door
+    // still admits it (iOS `ClickPassView.screen`, #29).
+    var noTickets by remember(beaconId) { mutableStateOf(false) }
+    if (ticketed && !noTickets) {
+        TicketedPassSheet(
+            beaconId,
+            eventTitle,
+            eventCancelled,
+            onDismiss,
+            remember(api) { ApiTicketingClient(api) },
+            onNoTickets = { noTickets = true },
+        )
         return
     }
     var load by remember(beaconId) { mutableStateOf<PassLoad>(PassLoad.Loading) }
@@ -98,7 +108,12 @@ internal fun ClickPassSheet(
                 onFailure = { err ->
                     PassLoad.Unavailable(
                         when ((err as? ClickPassUnavailableException)?.reason) {
-                            ClickPassUnavailable.NOT_GOING -> "RSVP to the event and your Click Pass appears here."
+                            ClickPassUnavailable.NOT_GOING ->
+                                if (ticketed) {
+                                    "Your tickets for this event show up here."
+                                } else {
+                                    "RSVP to the event and your Click Pass appears here."
+                                }
                             ClickPassUnavailable.UNAVAILABLE -> "Click Pass isn't available right now."
                             null -> "Couldn't load your Click Pass."
                         },
@@ -154,6 +169,7 @@ private fun TicketedPassSheet(
     eventCancelled: Boolean,
     onDismiss: () -> Unit,
     client: TicketingClient,
+    onNoTickets: () -> Unit,
 ) {
     var tickets by remember(beaconId) { mutableStateOf<List<OwnedTicket>?>(null) }
     var failure by remember(beaconId) { mutableStateOf<String?>(null) }
@@ -165,7 +181,10 @@ private fun TicketedPassSheet(
     LaunchedEffect(beaconId, reload) {
         failure = null
         runCatching { client.eventTickets(beaconId) }
-            .onSuccess { tickets = it }
+            .onSuccess {
+                tickets = it
+                if (it.isEmpty()) onNoTickets()
+            }
             .onFailure { err -> if (tickets == null) failure = (err as? TicketingException)?.userMessage ?: "Couldn't load your tickets." }
     }
     ClickFormBottomSheet(onDismissRequest = onDismiss) {
@@ -267,6 +286,14 @@ internal fun PassScannerSheet(
                             tint = if (verdict.good) Color(0xFF1FA855) else MaterialTheme.colorScheme.error,
                         )
                         scan.holderName?.let { Text(it, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold) }
+                        scan.tierName?.let {
+                            Text(
+                                it,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                            )
+                        }
                         Text(verdict.title, style = MaterialTheme.typography.titleMedium)
                         verdict.detail?.let {
                             Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)

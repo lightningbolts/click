@@ -37,7 +37,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -52,9 +51,11 @@ import coil3.ComponentRegistry
 import coil3.ImageLoader
 import coil3.compose.AsyncImage
 import coil3.compose.AsyncImagePainter
+import coil3.PlatformContext
 import coil3.compose.LocalPlatformContext
 import coil3.request.ImageRequest
 import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret
+import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
 import compose.project.click.click.data.api.KlipyClient // pragma: allowlist secret
 import compose.project.click.click.data.models.ChatGif // pragma: allowlist secret
 import compose.project.click.click.ui.components.ClickFormBottomSheet // pragma: allowlist secret
@@ -66,16 +67,24 @@ import kotlinx.coroutines.launch
 /** Registers the platform's animated GIF / WebP decoders (Coil's default decoders show one frame). */
 internal expect fun ComponentRegistry.Builder.addAnimatedImageDecoders()
 
-/** An image loader that animates GIF / WebP; shares Coil's memory and disk caches setup. */
+/** One app-wide GIF loader, so every bubble and the picker share its memory cache (no re-decode on scroll-back). */
+private var sharedGifImageLoader: ImageLoader? = null
+
+/**
+ * The app-wide image loader that animates GIF / WebP. Built once (Coil keeps only the application
+ * context), so all GIF bubbles and the picker share one memory cache instead of one per bubble.
+ */
+internal fun gifImageLoader(context: PlatformContext): ImageLoader =
+    sharedGifImageLoader ?: ImageLoader
+        .Builder(context)
+        .components { addAnimatedImageDecoders() }
+        .build()
+        .also { sharedGifImageLoader = it }
+
 @Composable
 internal fun rememberGifImageLoader(): ImageLoader {
     val context = LocalPlatformContext.current
-    return remember(context) {
-        ImageLoader
-            .Builder(context)
-            .components { addAnimatedImageDecoders() }
-            .build()
-    }
+    return remember(context) { gifImageLoader(context) }
 }
 
 /**
@@ -175,7 +184,6 @@ internal fun GifPickerSheet(
     val region = remember { Locale.current.region }
     var state by remember { mutableStateOf(GifPickerState()) }
     var reloadToken by remember { mutableIntStateOf(0) }
-    val scope = rememberCoroutineScope()
     val loader = rememberGifImageLoader()
     val gridState = rememberLazyStaggeredGridState()
 
@@ -259,7 +267,9 @@ internal fun GifPickerSheet(
                                     onClick = {
                                         PlatformHapticsPolicy.lightImpact()
                                         val query = state.query
-                                        scope.launch { client.triggerShare(item.slug, customerId, query) }
+                                        // onPick closes the sheet at once; an app-level scope keeps KLIPY's share
+                                        // analytics POST from being cancelled with it (iOS uses Task.detached).
+                                        AppDataManager.scope.launch { client.triggerShare(item.slug, customerId, query) }
                                         onPick(item.toChatGif())
                                     },
                                 )

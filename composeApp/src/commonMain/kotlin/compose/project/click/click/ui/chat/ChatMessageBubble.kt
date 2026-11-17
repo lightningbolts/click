@@ -296,6 +296,7 @@ fun ChatMessageBubble(
     val developFlowDrop = isImageMessage && dropHost != null && message.usesClickDropDevelopFlow()
     val gatedOriginals = GatedDropOriginals.loaded.collectAsState().value
     val gatedOriginalOnScreen = gatedDrop && message.id in gatedOriginals
+    val gatedOriginalFailed = gatedDrop && message.id in GatedDropOriginals.failed.collectAsState().value
     val dropBook = dropHost?.clickDropBook?.collectAsState()?.value
     val dropRef =
         remember(message.id, message.metadata, gatedDrop, developFlowDrop) {
@@ -360,6 +361,15 @@ fun ChatMessageBubble(
                     if (scopeId != null && viewerId != null) dropHost.developClickDrops(scopeId, viewerId, listOf(message))
                 },
                 onShown = { dropHost.didShowClickDropDevelop(dropRef.id) },
+                originalFailed = gatedOriginalFailed,
+                onRetryOriginal = {
+                    val scopeId = activeChatId
+                    val viewerId = currentUserId
+                    if (scopeId != null && viewerId != null) {
+                        GatedDropOriginals.clearFailed(message.id)
+                        secureMediaHost?.ensureSecureChatImageLoaded(scopeId, viewerId, message)
+                    }
+                },
             )
         } else {
             null

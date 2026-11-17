@@ -5,6 +5,7 @@ package compose.project.click.click.data.models // pragma: allowlist secret
 import kotlinx.datetime.Instant
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.Transient
 import kotlinx.serialization.json.JsonElement
 
 @Serializable
@@ -258,6 +259,13 @@ data class LocationPreferences(
      */
     @SerialName("place_visits_visible_to_connections")
     val placeVisitsVisible: Boolean = false,
+    /**
+     * True only when [placeVisitsVisible] came from the server (read with the Places column) or
+     * the user set it here. Never persisted: a snapshot or a read without the column leaves it
+     * false, so a save cannot overwrite the server's value with the `false` default.
+     */
+    @Transient
+    val placeVisitsLoaded: Boolean = false,
 ) {
     companion object {
         const val PLACE_VISITS_COLUMN = "place_visits_visible_to_connections"

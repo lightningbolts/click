@@ -26,8 +26,15 @@ import kotlinx.serialization.json.intOrNull
  * It decrypts with `metadata.drop_original` (v2 chats) or the chat's legacy media keys (v1 chats).
  */
 
-/** Vault key for a developed original, next to the preview stored under the message id (same as iOS). */
-fun gatedDropOriginalVaultKey(messageId: String): String = "$messageId-original"
+/**
+ * Vault (and memory cache) key for a developed original, next to the preview stored under the message
+ * id. Unlike iOS (`"$id-original"`, wiped at sign-out) it carries the viewer, so another account on
+ * this device never finds an original it hasn't developed.
+ */
+fun gatedDropOriginalVaultKey(
+    viewerUserId: String,
+    messageId: String,
+): String = "$messageId-original-${viewerUserId.trim()}"
 
 /**
  * Message ids whose developed original is on screen. Until a gated drop is listed here, the UI
@@ -39,13 +46,33 @@ object GatedDropOriginals {
 
     fun isLoaded(messageId: String): Boolean = messageId in _loaded.value
 
+    /** Gated drops whose original failed to load (bubble offers "Tap to retry"). */
+    private val _failed = MutableStateFlow<Set<String>>(emptySet())
+    val failed: StateFlow<Set<String>> = _failed.asStateFlow()
+
     fun markLoaded(messageId: String) {
         if (messageId.isBlank()) return
+        _failed.update { it - messageId }
         _loaded.update { it + messageId }
+    }
+
+    /** The original is no longer in hand (evicted, or its vault file is gone): back to awaiting it. */
+    fun forget(messageId: String) {
+        if (messageId in _loaded.value) _loaded.update { it - messageId }
+    }
+
+    fun markFailed(messageId: String) {
+        if (messageId.isBlank()) return
+        _failed.update { it + messageId }
+    }
+
+    fun clearFailed(messageId: String) {
+        if (messageId in _failed.value) _failed.update { it - messageId }
     }
 
     fun clear() {
         _loaded.value = emptySet()
+        _failed.value = emptySet()
     }
 }
 
@@ -96,7 +123,8 @@ internal suspend fun SupabaseChatRepository.loadGatedDropOriginalImpl(
     signedUrl: String? = null,
 ): GatedDropOriginalResult {
     if (!message.isGatedDrop() || message.isDisposableRollLocked()) return GatedDropOriginalResult.Unavailable
-    val vaultKey = gatedDropOriginalVaultKey(message.id)
+    val vaultKey = gatedDropOriginalVaultKey(viewerUserId, message.id)
+    // Only skips the download (e.g. the sender's own original): callers load once the server says developed.
     readChatMediaVaultBytes(vaultKey, extension)?.takeIf { it.isNotEmpty() }?.let {
         return GatedDropOriginalResult.Developed(it)
     }

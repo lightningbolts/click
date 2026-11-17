@@ -22,6 +22,13 @@ expect fun chatMediaVaultLocalPath(messageId: String, preferredExtension: String
 /** Reads bytes from a file:// URI produced by the vault or message metadata. */
 expect fun readFileUriBytes(fileUri: String): ByteArray?
 
+/**
+ * Deletes every vaulted file (decrypted chat media, drop previews and originals, shared-drop
+ * strips). Called on sign-out so nothing carries over to the next account (iOS wipes
+ * `ChatMediaVault` in `clearSessionCaches`).
+ */
+expect fun wipeChatMediaVault()
+
 private val VAULT_IMAGE_EXTENSIONS = listOf("jpg", "jpeg", "png", "webp", "heic", "gif")
 private val VAULT_AUDIO_EXTENSIONS = listOf("m4a", "mp3", "wav", "webm", "ogg", "aac", "caf")
 private val VAULT_FILE_EXTENSIONS = listOf(

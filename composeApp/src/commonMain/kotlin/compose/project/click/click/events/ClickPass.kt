@@ -90,6 +90,8 @@ data class PassScan(
     val holderAvatarUrl: String?,
     val checkedInAtMs: Long?,
     val checkInCount: Int?,
+    /** The ticket's tier ("VIP") for a ticket scan; null for RSVP passes (iOS `PassScannerView`). */
+    val tierName: String? = null,
 )
 
 internal fun parsePassScan(root: JsonObject): PassScan {
@@ -100,6 +102,7 @@ internal fun parsePassScan(root: JsonObject): PassScan {
         holderAvatarUrl = attendee?.str("avatar_url")?.trim()?.takeIf { it.isNotEmpty() },
         checkedInAtMs = root.instant("checked_in_at"),
         checkInCount = (root["check_in_count"] as? JsonPrimitive)?.intOrNull,
+        tierName = root.str("tier_name")?.trim()?.takeIf { it.isNotEmpty() },
     )
 }
 

@@ -113,8 +113,8 @@ class EncounterFollowUpWorker(
                 ApiClient().clickWebClient.post("${ApiClient.clickWebAuthOrigin}$path") {
                     setBody(TextContent(body, ContentType.Application.Json))
                 }
-            // 5xx and network errors retry within WorkManager's backoff; 4xx (window passed) never do.
-            if (response.status.value >= 500) Result.retry() else Result.success()
+            // 5xx and network errors retry (at most 3 runs) within WorkManager's backoff; 4xx (window passed) never do.
+            if (response.status.value >= 500 && runAttemptCount < 3) Result.retry() else Result.success()
         }.getOrElse { if (runAttemptCount < 3) Result.retry() else Result.success() }
     }
 

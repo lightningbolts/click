@@ -294,9 +294,12 @@ class PlaceDetailController(
     suspend fun answerWouldReturn(value: Int?) {
         _state.update { it.copy(showWouldReturn = false) }
         if (value == null) return
-        // A failed send brings the prompt back so the answer isn't silently lost.
-        repository.submitPulse(placeId, PlacesRequests.pulseBody(wouldReturn = value)).onFailure {
-            _state.update { it.copy(showWouldReturn = it.wouldReturnQuestion != null) }
+        // A network failure brings the prompt back so the answer isn't silently lost; a rejection
+        // (window passed: 403 not_present, 429) ends it, like iOS ignoring the failure.
+        repository.submitPulse(placeId, PlacesRequests.pulseBody(wouldReturn = value)).onFailure { e ->
+            if (e.placeError() == PlaceError.Network) {
+                _state.update { it.copy(showWouldReturn = it.wouldReturnQuestion != null) }
+            }
         }
     }
 }

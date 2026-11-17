@@ -1,5 +1,6 @@
 package compose.project.click.click.events // pragma: allowlist secret
 
+import compose.project.click.click.platform.usesFahrenheitFor
 import kotlinx.serialization.json.Json
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -19,7 +20,8 @@ class EventWeatherTest {
     @Test
     fun parsesNowAndForecast() {
         val w = PlaceWeather.parse(body)
-        assertEquals("64°", w.now!!.temperatureLabel)
+        assertEquals("64°", w.now!!.temperatureLabel(fahrenheit = true))
+        assertEquals("18°", w.now!!.temperatureLabel(fahrenheit = false))
         assertEquals("Rain", w.atStart!!.condition)
         assertEquals(70, w.atStart!!.precipitationChance)
         assertEquals("rain", w.leadReading!!.icon)
@@ -27,12 +29,13 @@ class EventWeatherTest {
 
     @Test
     fun summaryNowOnlyWithoutStart() {
-        assertEquals("64° Cloudy now", PlaceWeather.parse(body).summary(startEpochMs = null))
+        assertEquals("64° Cloudy now", PlaceWeather.parse(body).summary(startEpochMs = null, fahrenheit = true))
+        assertEquals("18° Cloudy now", PlaceWeather.parse(body).summary(startEpochMs = null, fahrenheit = false))
     }
 
     @Test
     fun summaryAddsStartForecastAndRainChance() {
-        val summary = PlaceWeather.parse(body).summary(startEpochMs = 1_700_000_000_000L)!!
+        val summary = PlaceWeather.parse(body).summary(startEpochMs = 1_700_000_000_000L, fahrenheit = true)!!
         assertEquals(true, summary.startsWith("64° Cloudy now · 58° Rain at "), summary)
         assertEquals(true, summary.endsWith(", 70% chance of rain"), summary)
     }
@@ -46,7 +49,20 @@ class EventWeatherTest {
                 ),
             )
         assertEquals(false, w.summary(1_700_000_000_000L)!!.contains("chance"))
-        assertEquals("32°", w.atStart!!.temperatureLabel)
+        assertEquals("32°", w.atStart!!.temperatureLabel(fahrenheit = true))
+        assertEquals("0°", w.atStart!!.temperatureLabel(fahrenheit = false))
+    }
+
+    @Test
+    fun unitFollowsRegionAndRegionalPreference() {
+        assertEquals(true, usesFahrenheitFor("US"))
+        assertEquals(true, usesFahrenheitFor("lr"))
+        assertEquals(true, usesFahrenheitFor("PW"))
+        assertEquals(false, usesFahrenheitFor("GB"))
+        assertEquals(false, usesFahrenheitFor("DE"))
+        assertEquals(false, usesFahrenheitFor(null))
+        assertEquals(false, usesFahrenheitFor("US", unitOverride = "celsius"))
+        assertEquals(true, usesFahrenheitFor("FR", unitOverride = "fahrenhe"))
     }
 
     @Test

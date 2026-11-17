@@ -52,3 +52,10 @@ actual fun readFileUriBytes(fileUri: String): ByteArray? {
     if (!file.isFile || file.length() <= 0L) return null
     return runCatching { file.readBytes() }.getOrNull()
 }
+
+actual fun wipeChatMediaVault() {
+    runCatching {
+        val ctx = AndroidChatImageSaveContext.applicationContext
+        File(ctx.filesDir, VAULT_FOLDER).deleteRecursively()
+    }
+}

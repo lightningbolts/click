@@ -97,6 +97,8 @@ data class ProfileSheetMedia(
     val durationSeconds: Int? = null,
     val isDisposableRoll: Boolean = false,
     val collaborationTtlIso: String? = null,
+    /** `metadata.drop_gated`: the media here is only the pixelated preview, never the photo. */
+    val isGatedDrop: Boolean = false,
 )
 
 enum class ProfileSheetMediaType {

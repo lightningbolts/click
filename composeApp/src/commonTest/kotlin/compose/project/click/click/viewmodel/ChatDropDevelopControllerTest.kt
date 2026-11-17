@@ -56,7 +56,6 @@ class ChatDropDevelopControllerTest {
 
     private fun TestScope.harness(
         service: FakeDevelopService,
-        local: Set<String> = emptySet(),
         clock: () -> Instant = { now },
     ): Harness {
         val developed = mutableListOf<Pair<String, String?>>()
@@ -65,7 +64,6 @@ class ChatDropDevelopControllerTest {
             ChatDropDevelopController(
                 scope = this,
                 service = service,
-                hasLocalOriginal = { it in local },
                 onDeveloped = { id, url -> developed += id to url },
                 onError = { errors += it },
                 now = clock,
@@ -154,22 +152,42 @@ class ChatDropDevelopControllerTest {
         }
 
     @Test
-    fun checkUsesTheVaultFirstThenAsksTheServerOnce() =
+    fun checkAsksTheServerOnceForEveryRevealedDrop() =
         runTest {
             val service = FakeDevelopService()
             service.viewsResult = Result.success(mapOf("b" to "2026-09-30T10:00:00Z"))
-            val h = harness(service, local = setOf("a"))
+            val h = harness(service)
             h.controller.check(listOf(ready, ready2, pending))
             h.controller.check(listOf(ready, ready2, pending))
             advanceUntilIdle()
             h.controller.check(listOf(ready, ready2, pending))
             advanceUntilIdle()
-            assertEquals(listOf(listOf("b")), service.viewCalls)
+            // No local shortcut: even a drop whose original is on this device asks the server.
+            assertEquals(listOf(listOf("a", "b")), service.viewCalls)
             val book = h.controller.book.value
-            assertEquals(ClickDropDevelopState.Developed, book.state(ready, now))
+            assertEquals(ClickDropDevelopState.Ready, book.state(ready, now))
             assertEquals(ClickDropDevelopState.Developed, book.state(ready2, now))
             assertTrue(book.fresh.isEmpty())
             assertTrue(h.developed.isEmpty())
+        }
+
+    @Test
+    fun aFailedBatchOnlyPutsItsOwnDropsBackToReady() =
+        runTest {
+            val service = FakeDevelopService()
+            val drops = (1..60).map { ClickDropRevealRef("d$it", now - 60.seconds) }
+            val ok = service.developResult
+            service.developResult = { ids -> if (service.developCalls.size == 1) ok(ids) else Result.failure(Exception("429")) }
+            val h = harness(service)
+            h.controller.develop(drops)
+            advanceUntilIdle()
+            assertEquals(listOf(50, 10), service.developCalls.map { it.size })
+            val book = h.controller.book.value
+            assertEquals(50, book.developedAt.size)
+            assertEquals(drops.drop(50), book.ready(drops, now))
+            assertTrue(book.developing.isEmpty())
+            assertEquals(50, h.developed.size)
+            assertEquals(listOf(CLICK_DROP_DEVELOP_FAILED), h.errors)
         }
 
     @Test

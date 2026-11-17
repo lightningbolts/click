@@ -35,9 +35,13 @@ internal fun liveRefetchPlan(
 
 private var liveUpdatesRefetchJob: Job? = null
 
+/** The launched [LiveUpdates.start]; sign-out cancels it so it can't bind after `stop()`. */
+private var liveUpdatesStartJob: Job? = null
+
 /** Joins the Live updates topics for [userId] and refetches the app-wide data a hint names. */
 internal fun AppDataManager.startLiveUpdatesRefetch(userId: String) {
-    scope.launch { runCatching { LiveUpdates.start(userId) } }
+    liveUpdatesStartJob?.cancel()
+    liveUpdatesStartJob = scope.launch { runCatching { LiveUpdates.start(userId) } }
     if (liveUpdatesRefetchJob?.isActive == true) return
     liveUpdatesRefetchJob =
         scope.launch {
@@ -52,4 +56,10 @@ internal fun AppDataManager.startLiveUpdatesRefetch(userId: String) {
                 }
             }
         }
+}
+
+/** Sign-out: drop a start that hasn't bound yet (call before [LiveUpdates.stop]). */
+internal fun cancelLiveUpdatesStart() {
+    liveUpdatesStartJob?.cancel()
+    liveUpdatesStartJob = null
 }

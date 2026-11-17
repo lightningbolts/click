@@ -120,20 +120,25 @@ internal data class AvatarUploadBodyDto(
     @SerialName("mime_type") val mimeType: String,
 )
 
+/**
+ * Every field is required (no defaults): the client [kotlinx.serialization.json.Json] does not
+ * encode defaults, and web merges with `incoming[key] ?? prev[key]`, so a defaulted `true`
+ * would be dropped and a re-enabled toggle would never reach the server.
+ */
 @Serializable
 data class NotificationPreferencesPatchBody(
     @SerialName("message_push_enabled")
     val messagePushEnabled: Boolean,
     @SerialName("event_reminder_push_enabled")
-    val eventReminderPushEnabled: Boolean = true,
+    val eventReminderPushEnabled: Boolean,
     @SerialName("availability_match_push_enabled")
-    val availabilityMatchPushEnabled: Boolean = true,
+    val availabilityMatchPushEnabled: Boolean,
     @SerialName("hub_message_push_enabled")
-    val hubMessagePushEnabled: Boolean = true,
+    val hubMessagePushEnabled: Boolean,
     @SerialName("reconnect_nudge_push_enabled")
-    val reconnectNudgePushEnabled: Boolean = true,
+    val reconnectNudgePushEnabled: Boolean,
     @SerialName("drop_release_push_enabled")
-    val dropReleasePushEnabled: Boolean = true,
+    val dropReleasePushEnabled: Boolean,
 )
 
 @Serializable

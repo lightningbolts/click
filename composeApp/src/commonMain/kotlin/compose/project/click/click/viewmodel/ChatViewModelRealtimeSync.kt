@@ -168,6 +168,9 @@ internal fun ChatViewModel.subscribeToNewMessages(
                                 is ChatRealtimeEvent.Reaction -> {
                                     applyReactionChangeEvent(envelope.event)
                                 }
+                                is ChatRealtimeEvent.PinsChanged -> {
+                                    if (pinsChatId == chatId) refreshPinsForOpenChat(chatId)
+                                }
                                 is ChatRealtimeEvent.ReadCursorMoved -> {
                                     val cursor = envelope.cursor
                                     val current = _readCursors.value[cursor.userId] ?: 0L

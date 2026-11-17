@@ -63,9 +63,9 @@ fun SharedDropsHomeSection(
     LaunchedEffect(currentUser?.id) { if (currentUser?.id != null) viewModel.refresh() }
     // A push for a drop that isn't in the strip yet: fetch the live strip, which has it.
     LaunchedEffect(pendingOpen) { if (pendingOpen != null && currentUser?.id != null) viewModel.refresh() }
-    LaunchedEffect(pendingOpen, state.drops, story) {
+    LaunchedEffect(pendingOpen, state.drops, state.loadedForUser, story) {
         val id = pendingOpen ?: return@LaunchedEffect
-        if (story != null) return@LaunchedEffect
+        if (story != null || state.loadedForUser != currentUser?.id) return@LaunchedEffect
         val request = storyRequestFor(id, groups, now) ?: return@LaunchedEffect
         SharedDropOpenRequests.consume(id)
         story = request
@@ -76,6 +76,9 @@ fun SharedDropsHomeSection(
             viewModel.clearNotice()
         }
     }
+
+    // The first frame after an account switch still holds the last account's strip: draw nothing until refresh() resets it.
+    if (currentUser?.id == null || state.loadedForUser != currentUser?.id) return
 
     SharedDropsStrip(
         groups = groups,

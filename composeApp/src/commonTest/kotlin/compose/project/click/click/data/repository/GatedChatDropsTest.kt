@@ -12,6 +12,7 @@ import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -97,8 +98,24 @@ class GatedChatDropsTest {
     }
 
     @Test
-    fun originalVaultKeyMatchesIos() {
-        assertEquals("m1-original", gatedDropOriginalVaultKey("m1"))
+    fun originalVaultKeyIsPerViewer() {
+        assertEquals("m1-original-u1", gatedDropOriginalVaultKey("u1", "m1"))
+        assertNotEquals(gatedDropOriginalVaultKey("u1", "m1"), gatedDropOriginalVaultKey("u2", "m1"))
+    }
+
+    @Test
+    fun forgettingAnOriginalGoesBackToAwaitingAndFailuresClearOnLoad() {
+        val m = message(gatedV2)
+        GatedDropOriginals.markLoaded("m1")
+        GatedDropOriginals.forget("m1")
+        assertTrue(m.isGatedDropAwaitingOriginal())
+        GatedDropOriginals.markFailed("m1")
+        assertTrue("m1" in GatedDropOriginals.failed.value)
+        GatedDropOriginals.markLoaded("m1")
+        assertFalse("m1" in GatedDropOriginals.failed.value)
+        GatedDropOriginals.markFailed("m1")
+        GatedDropOriginals.clear()
+        assertTrue(GatedDropOriginals.failed.value.isEmpty())
     }
 
     @Test

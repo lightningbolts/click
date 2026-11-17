@@ -67,4 +67,48 @@ class ActivityTest {
         assertEquals(listOf("a", "b"), merged.map { it.id })
         assertEquals("Maya and 2 others reacted", merged.first().title, "the newest copy wins")
     }
+
+    @Test
+    fun firstPageReplacesItemsAndPendingButKeepsTheLaterSeenMark() {
+        val before =
+            ActivityState(
+                items = listOf(item("old", "2026-11-07T17:00:00Z"), item("other-user", "2026-11-07T16:00:00Z")),
+                seenAt = "2026-11-07T17:00:00Z",
+                nextBefore = "2026-11-07T16:00:00Z",
+                pendingRequests = setOf("accepted-elsewhere"),
+                loading = true,
+                loadedOnce = true,
+            )
+        val page =
+            ActivityPageDto(
+                items = listOf(item("new", "2026-11-07T17:30:00Z"), item("old", "2026-11-07T17:00:00Z")),
+                seenAt = "2026-11-07T10:00:00Z",
+                nextBefore = "2026-11-07T17:00:00Z",
+                pendingRequests = listOf("c2"),
+            )
+        val after = before.withFirstPage(page)
+        assertEquals(listOf("new", "old"), after.items.map { it.id })
+        assertEquals(setOf("c2"), after.pendingRequests)
+        assertEquals("2026-11-07T17:00:00Z", after.seenAt, "local markSeen is newer than the GET")
+        assertEquals("2026-11-07T17:00:00Z", after.nextBefore)
+        assertEquals(false, after.loading)
+        assertEquals("2026-11-07T18:00:00Z", ActivityState().withFirstPage(page.copy(seenAt = "2026-11-07T18:00:00Z")).seenAt)
+    }
+
+    @Test
+    fun laterSeenAtNeverMovesBack() {
+        assertEquals("2026-11-07T12:00:00Z", laterSeenAt("2026-11-07T12:00:00Z", "2026-11-07T11:00:00Z"))
+        assertEquals("2026-11-07T13:00:00Z", laterSeenAt("2026-11-07T12:00:00Z", "2026-11-07T13:00:00Z"))
+        assertEquals("2026-11-07T12:00:00Z", laterSeenAt(null, "2026-11-07T12:00:00Z"))
+        assertEquals("2026-11-07T12:00:00Z", laterSeenAt("2026-11-07T12:00:00Z", null))
+        assertNull(laterSeenAt(null, null))
+    }
+
+    @Test
+    fun clearBumpsTheGeneration() {
+        val before = ActivityStore.state.value.generation
+        ActivityStore.clear()
+        assertEquals(before + 1, ActivityStore.state.value.generation)
+        assertEquals(emptyList(), ActivityStore.state.value.items)
+    }
 }

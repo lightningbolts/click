@@ -801,7 +801,7 @@ class SupabaseRepository {
                     ) {
                         filter { eq("id", userId) }
                     }.decodeList<LocationPreferences>()
-            result.firstOrNull() ?: LocationPreferences()
+            result.firstOrNull()?.copy(placeVisitsLoaded = includePlaceVisits) ?: LocationPreferences()
         } catch (e: Exception) {
             println("Error fetching location preferences (redacted): ${e.redactedRestMessage()}")
             LocationPreferences()

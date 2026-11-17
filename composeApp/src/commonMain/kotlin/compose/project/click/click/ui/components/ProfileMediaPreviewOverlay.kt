@@ -45,6 +45,8 @@ internal fun ProfileMediaPreviewOverlay(
     resolvedAudioLocalPaths: Map<String, String>,
 ) {
     val previewMedia = mediaPreviewModel ?: return
+    // Locked drops (incl. gated / develop-flow drops, whose media here isn't the photo) never open or export.
+    if (previewMedia.isDisposableRollLocked()) return
     val media = previewMedia
     val bitmapForPreview = resolvedMediaBitmaps[media.id]
     val isImage = media.mediaType == ProfileSheetMediaType.Image

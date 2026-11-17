@@ -47,7 +47,8 @@ internal suspend fun SupabaseChatRepository.registerThisE2eeDevice(token: String
         loadIdentity = MessageCryptoV2::loadOrCreateDeviceIdentity,
         infoOf = { it.info },
         discardIdentity = DeviceIdentityStorage::discard,
-        onIdentityReplaced = { E2eeV2SessionCache.clear() },
+        // [E2eeIdentityEvents.identityReplaced] already cleared every session cache.
+        onIdentityReplaced = {},
         register = { info -> apiClient.registerE2eeV2Device(info.deviceId, info.publicKeySpkiBase64, token) },
     )
 
@@ -350,6 +351,7 @@ internal suspend fun SupabaseChatRepository.resolveE2eeV2ChatCrypto(
         }
     if (registration.revoked) throw E2eeV2RequiredException()
     val identity = registration.identity
+    val identityGeneration = E2eeIdentityEvents.generation
     val devices =
         apiClient.discoverE2eeV2Devices(chatId, token).getOrElse { throw E2eeV2RequiredException() }
     val registered =
@@ -472,7 +474,8 @@ internal suspend fun SupabaseChatRepository.resolveE2eeV2ChatCrypto(
         // Encode before the cache can zeroize these keys on a later replacement.
         compose.project.click.click.crypto.PushPreviewKeyStore
             .remember(tokenStorage, chatId, session.epochKeys)
-        E2eeV2SessionCache.put(chatId, session)
+        // Another path re-keyed while this one was suspended: don't cache keys for the old device.
+        if (identityGeneration == E2eeIdentityEvents.generation) E2eeV2SessionCache.put(chatId, session)
     }
 }
 

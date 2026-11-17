@@ -53,6 +53,9 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -151,7 +154,12 @@ class MapViewModel : ViewModel() {
             initialValue = emptyList(),
         )
     internal val placesRepository: PlacesRepository by lazy { ClickWebPlacesRepository() }
+
+    /** Last successful `places/nearby` fetch (the throttle mark). */
     internal var lastPlacesFetch: PlacesFetchMark? = null
+
+    /** Where the in-flight [placesFetchJob] asked, so nearby repeats don't restart it. */
+    internal var placesFetchInFlight: PlacesFetchMark? = null
     internal var placesFetchJob: Job? = null
 
     /** Layer-filtered beacons for the discovery feed (matches map chip filters). */
@@ -382,6 +390,15 @@ class MapViewModel : ViewModel() {
                     warmDiscoveryFeed()
                 }
             }
+        }
+        // Places rows carry the viewer's own history (`viewer.has_history`): another account
+        // must not see them or wait out this account's fetch throttle (iOS `places.clearCache()`).
+        viewModelScope.launch {
+            AppDataManager.currentUser
+                .map { it?.id }
+                .distinctUntilChanged()
+                .drop(1)
+                .collect { resetMapPlaces() }
         }
         viewModelScope.launch {
             AppDataManager.isDataLoaded.collect { loaded ->

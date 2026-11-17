@@ -173,8 +173,19 @@ internal fun ChatBubblePhotoContent(
         clickDropControls
             ?.takeIf { awaitingOriginal && it.state == ClickDropDevelopState.Ready && !it.developing }
             ?.onDevelop
-    val expandClick = onPhotoClick.takeIf { canExpand } ?: developClick
-    val tapLabel = if (developClick != null && !canExpand) "Develop Click Drop" else "Open photo"
+    // Developed, but its original didn't load: a tap tries again (iOS "Couldn't load photo. Tap to retry.").
+    val retryClick =
+        clickDropControls
+            ?.takeIf { awaitingOriginal && it.state == ClickDropDevelopState.Developed && it.originalFailed }
+            ?.onRetryOriginal
+    val expandClick = onPhotoClick.takeIf { canExpand } ?: developClick ?: retryClick
+    val tapLabel =
+        when {
+            canExpand -> "Open photo"
+            developClick != null -> "Develop Click Drop"
+            retryClick != null -> "Retry loading photo"
+            else -> "Open photo"
+        }
     val photoLongPress = onPhotoLongPress
     val photoGestureModifier =
         if (expandClick != null || photoLongPress != null) {
@@ -217,10 +228,13 @@ internal fun ChatBubblePhotoContent(
         }
     val dropLabelState = clickDropControls?.state
     val dropDeveloping = clickDropControls?.developing == true
+    val dropOriginalFailed = clickDropControls?.originalFailed == true
     val countdownLabel =
-        remember(message.id, rollLocked, dropLabelState, dropDeveloping) {
+        remember(message.id, rollLocked, dropLabelState, dropDeveloping, dropOriginalFailed) {
             if (!rollLocked) return@remember null
-            if (awaitingOriginal && dropLabelState != null) return@remember chatClickDropLabel(dropLabelState, dropDeveloping)
+            if (awaitingOriginal && dropLabelState != null) {
+                return@remember chatClickDropLabel(dropLabelState, dropDeveloping, originalFailed = dropOriginalFailed)
+            }
             val ttlIso = message.disposableRollRevealAtIso() ?: return@remember "Locked"
             val ttl = runCatching { Instant.parse(ttlIso) }.getOrNull() ?: return@remember "Locked"
             val remainMs = (ttl.toEpochMilliseconds() - Clock.System.now().toEpochMilliseconds()).coerceAtLeast(0L)
@@ -540,4 +554,7 @@ internal data class ClickDropBubbleControls(
     val fresh: Boolean,
     val onDevelop: () -> Unit,
     val onShown: () -> Unit,
+    /** Developed, but loading its original failed: show "Couldn't load photo. Tap to retry.". */
+    val originalFailed: Boolean = false,
+    val onRetryOriginal: () -> Unit = {},
 )

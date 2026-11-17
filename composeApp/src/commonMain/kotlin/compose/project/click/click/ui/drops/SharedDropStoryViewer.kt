@@ -95,17 +95,23 @@ fun SharedDropStoryViewer(
     viewModel: SharedDropsViewModel,
     onDismiss: () -> Unit,
 ) {
-    if (groups.isEmpty()) return
-    val pager = rememberPagerState(initialPage = startGroup.coerceIn(0, groups.lastIndex)) { groups.size }
+    // People whose drops are all still developing get no page: it would be blank, with no way out.
+    val shown = remember(groups) { groups.filter { it.viewable().isNotEmpty() } }
+    if (shown.isEmpty()) {
+        LaunchedEffect(Unit) { onDismiss() }
+        return
+    }
+    val start = remember(groups, startGroup) { shown.indexOf(groups.getOrNull(startGroup)).coerceAtLeast(0) }
+    val pager = rememberPagerState(initialPage = start) { shown.size }
     val scope = rememberCoroutineScope()
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
-        HorizontalPager(state = pager, modifier = Modifier.fillMaxSize().background(Color.Black), key = { groups[it].userId }) { page ->
+        HorizontalPager(state = pager, modifier = Modifier.fillMaxSize().background(Color.Black), key = { shown[it].userId }) { page ->
             StoryPage(
-                group = groups[page],
+                group = shown[page],
                 isCurrent = pager.currentPage == page,
-                startDropId = if (page == startGroup) startDropId else null,
+                startDropId = if (page == start) startDropId else null,
                 viewModel = viewModel,
-                onNextGroup = { if (page < groups.lastIndex) scope.launch { pager.animateScrollToPage(page + 1) } else onDismiss() },
+                onNextGroup = { if (page < shown.lastIndex) scope.launch { pager.animateScrollToPage(page + 1) } else onDismiss() },
                 onPreviousGroup = { if (page > 0) scope.launch { pager.animateScrollToPage(page - 1) } },
                 onClose = onDismiss,
             )

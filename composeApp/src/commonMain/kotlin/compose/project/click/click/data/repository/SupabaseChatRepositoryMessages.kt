@@ -11,6 +11,7 @@ import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.Columns
 import io.github.jan.supabase.postgrest.query.Order
+import io.github.jan.supabase.postgrest.query.filter.FilterOperator
 import io.github.jan.supabase.realtime.PostgresAction
 import io.github.jan.supabase.realtime.channel
 import io.github.jan.supabase.realtime.decodeRecord
@@ -193,7 +194,16 @@ internal suspend fun SupabaseChatRepository.subscribeToMessagesImpl(
                 )
             }
 
-    val merged = merge(messageFlow, reactionFlow, readCursorFlow)
+    // Pins set by the other member (iOS `ChatRealtimeManager` subscribes to message_pins too).
+    // Same channel, so it is removed with the chat subscription on leave.
+    val pinFlow =
+        channel
+            .postgresChangeFlow<PostgresAction>(schema = "public") {
+                table = "message_pins"
+                filter("chat_id", FilterOperator.EQ, chatId)
+            }.map { ChatRealtimeEvent.PinsChanged }
+
+    val merged = merge(messageFlow, reactionFlow, readCursorFlow, pinFlow)
     return SupabaseMessageSubscription(channel) to merged
 }
 

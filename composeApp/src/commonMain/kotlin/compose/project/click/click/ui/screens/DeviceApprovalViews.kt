@@ -59,8 +59,11 @@ import compose.project.click.click.ui.components.ClickPlatformSheet // pragma: a
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
-/** 409 (already decided) and 410 (expired / device gone): nothing left to decide on this request. */
-internal fun isApprovalClosed(error: Throwable): Boolean = error is DeviceApprovalHttpException && error.status in setOf(409, 410)
+/**
+ * 409 (already decided), 410 (expired / device gone) and 404 (the challenge route's answer once the
+ * request is no longer pending): nothing left to decide on this request.
+ */
+internal fun isApprovalClosed(error: Throwable): Boolean = error is DeviceApprovalHttpException && error.status in setOf(404, 409, 410)
 
 /** Phases of the approval sheet; pure so the copy and buttons can be tested. */
 internal sealed interface ApprovalPhase {
@@ -89,6 +92,9 @@ internal fun approvalFailureMessage(error: Throwable): String? =
             "Device authentication is required to approve this request. Set a screen lock, or use the link we emailed you."
         is DeviceApprovalHttpException ->
             when (error.status) {
+                404 -> "This request was already decided or it expired."
+                // `APPROVER_NOT_ALLOWED`: retrying from this device can't succeed.
+                403 -> "This device can't approve that request. Approve it from another device you use, or with the emailed link."
                 409 -> "This request was already decided on another device."
                 410 -> "This request expired or that device was signed out. It can ask again from there."
                 else -> "Couldn't reach Click. Check your connection and try again."
@@ -306,7 +312,8 @@ fun DeviceHistoryBanner(modifier: Modifier = Modifier) {
                                             val updated =
                                                 AppDataManager.chatRepository.askForHistoryImpl(reopen = true)
                                                     ?: error("Not signed in")
-                                            DeviceApprovalStore.set(updated)
+                                            // The answer carries only `own`; keep the incoming requests.
+                                            DeviceApprovalStore.setOwn(updated.own)
                                         }
                                         DeviceApprovalCopy.WaitingAction.EMAIL_LINK -> {
                                             AppDataManager.chatRepository.emailDeviceApprovalLinkImpl(own.id)

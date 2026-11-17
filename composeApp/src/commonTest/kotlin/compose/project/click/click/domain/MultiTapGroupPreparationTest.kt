@@ -67,6 +67,22 @@ class MultiTapGroupPreparationTest {
     }
 
     @Test
+    fun stateForHidesAnotherClicksSetup() {
+        val ready = MultiTapGroupState.Ready(members, "g", createdHere = false)
+        assertEquals(ready, MultiTapGroupPreparation.stateFor(ready, members))
+        assertEquals(MultiTapGroupState.Idle, MultiTapGroupPreparation.stateFor(ready, listOf("a", "b", "d")))
+        assertEquals(MultiTapGroupState.Idle, MultiTapGroupPreparation.stateFor(MultiTapGroupState.Idle, members))
+    }
+
+    @Test
+    fun shownResultNeverAutoRetriesAFailureForTheSameMembers() {
+        assertTrue(MultiTapGroupPreparation.shouldAutoStart(MultiTapGroupState.Idle, members))
+        assertFalse(MultiTapGroupPreparation.shouldAutoStart(MultiTapGroupState.Preparing(members), members))
+        assertFalse(MultiTapGroupPreparation.shouldAutoStart(MultiTapGroupState.Failed(members, "x"), members))
+        assertTrue(MultiTapGroupPreparation.shouldAutoStart(MultiTapGroupState.Failed(listOf("a", "b"), "x"), members))
+    }
+
+    @Test
     fun creatorCreatesImmediatelyWithoutWaiting() =
         runTest {
             val waits = mutableListOf<Long>()
@@ -168,17 +184,63 @@ class MultiTapGroupPreparationTest {
     @Test
     fun createFailureWithNoGroupFails() =
         runTest {
+            var creates = 0
             val result =
                 MultiTapGroupPreparation.prepare(
                     viewerId = "a",
                     memberIds = members,
                     findExisting = { throw IllegalStateException("network") },
-                    create = { throw IllegalStateException("Missing verified connection") },
+                    create = {
+                        creates++
+                        throw IllegalStateException("Missing verified connection")
+                    },
                     wait = {},
                 )
             val failed = assertIs<MultiTapGroupState.Failed>(result)
             assertEquals("Couldn't set up the group chat. Missing verified connection", failed.message)
             assertEquals(members, failed.memberUserIds)
+            assertEquals(2, creates)
+        }
+
+    @Test
+    fun failedCreateIsRetriedOnceAfterAPause() =
+        runTest {
+            val waits = mutableListOf<Long>()
+            var creates = 0
+            val result =
+                MultiTapGroupPreparation.prepare(
+                    viewerId = "a",
+                    memberIds = members,
+                    findExisting = { emptyList() },
+                    create = {
+                        creates++
+                        if (creates == 1) Result.failure(IllegalStateException("Missing verified connection")) else Result.success("second")
+                    },
+                    wait = { waits += it },
+                )
+            assertEquals(MultiTapGroupState.Ready(members, "second", createdHere = true), result)
+            assertEquals(2, creates)
+            assertEquals(listOf(MultiTapGroupPreparation.CREATE_RETRY_DELAY_MS), waits)
+        }
+
+    @Test
+    fun retryIsSkippedWhenTheGroupAppearsDuringThePause() =
+        runTest {
+            var paused = false
+            var creates = 0
+            val result =
+                MultiTapGroupPreparation.prepare(
+                    viewerId = "a",
+                    memberIds = members,
+                    findExisting = { if (paused) listOf(group("other", "a", "b", "c")) else emptyList() },
+                    create = {
+                        creates++
+                        Result.failure(IllegalStateException("x"))
+                    },
+                    wait = { paused = true },
+                )
+            assertEquals(MultiTapGroupState.Ready(members, "other", createdHere = false), result)
+            assertEquals(1, creates)
         }
 
     @Test

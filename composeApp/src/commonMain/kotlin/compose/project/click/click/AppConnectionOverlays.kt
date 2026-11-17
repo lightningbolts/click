@@ -31,6 +31,7 @@ import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.models.toConnectionPayloadWeatherJson // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
 import compose.project.click.click.data.storage.TokenStorage // pragma: allowlist secret
+import compose.project.click.click.notifications.ChatDeepLinkManager // pragma: allowlist secret
 import compose.project.click.click.sensors.AmbientNoiseMonitor // pragma: allowlist secret
 import compose.project.click.click.sensors.BarometricHeightMonitor // pragma: allowlist secret
 import compose.project.click.click.sensors.HardwareVibeMonitor // pragma: allowlist secret
@@ -42,12 +43,16 @@ import compose.project.click.click.ui.components.ConnectionRevealOverlay // prag
 import compose.project.click.click.ui.components.ConnectionRevealPhase // pragma: allowlist secret
 import compose.project.click.click.ui.components.ConnectionRevealUiState // pragma: allowlist secret
 import compose.project.click.click.ui.components.EncounterDetailsCard // pragma: allowlist secret
+import compose.project.click.click.ui.components.MultiTapGroupStatus // pragma: allowlist secret
 import compose.project.click.click.ui.screens.* // pragma: allowlist secret
 import compose.project.click.click.ui.theme.* // pragma: allowlist secret
 import compose.project.click.click.utils.LocationResult // pragma: allowlist secret
 import compose.project.click.click.viewmodel.ChatViewModel // pragma: allowlist secret
 import compose.project.click.click.viewmodel.ConnectionState // pragma: allowlist secret
 import compose.project.click.click.viewmodel.ConnectionViewModel // pragma: allowlist secret
+import compose.project.click.click.viewmodel.groupSetupStateFor // pragma: allowlist secret
+import compose.project.click.click.viewmodel.openMultiTapGroupChat // pragma: allowlist secret
+import compose.project.click.click.viewmodel.retryMultiTapGroupPreparation // pragma: allowlist secret
 import io.ktor.client.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.serialization.kotlinx.json.*
@@ -125,6 +130,7 @@ internal fun AppConnectionOverlays(
         var calendarLockInProgress by remember { mutableStateOf(false) }
         val lastVerification by connectionViewModel.lastVerification.collectAsState()
         val followUpAccuracy by connectionViewModel.followUpAccuracyMeters.collectAsState()
+        val multiTapGroupState by connectionViewModel.multiTapGroupState.collectAsState()
         val reconnectConnectionId = tagging.newConnections.firstOrNull()?.id
         val reconnectPeerId =
             tagging.targetUsers.firstOrNull { it.id != currentUser.id }?.id
@@ -234,6 +240,17 @@ internal fun AppConnectionOverlays(
                             verification = lastVerification,
                             isQr = false,
                             refinedAccuracyMeters = followUpAccuracy,
+                        )
+                        // P2-19: the group chat being set up (iOS `PostConnectView.groupActions`).
+                        MultiTapGroupStatus(
+                            state = groupSetupStateFor(multiTapGroupState, tagging, currentUser.id),
+                            onOpenGroupChat = {
+                                connectionViewModel.openMultiTapGroupChat { chatId ->
+                                    finishWithoutTags()
+                                    ChatDeepLinkManager.setPendingChat(chatId)
+                                }
+                            },
+                            onRetry = { connectionViewModel.retryMultiTapGroupPreparation() },
                         )
                     }
                 } else {

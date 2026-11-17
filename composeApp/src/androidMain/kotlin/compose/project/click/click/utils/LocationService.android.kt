@@ -168,10 +168,7 @@ actual class LocationService {
                     maxAccuracyMeters = LAST_KNOWN_MAX_ACCURACY_METERS,
                 )
             if (lastLocation != null) {
-                println(
-                    "LocationService.android: Using last known location: " +
-                        "${lastLocation.latitude}, ${lastLocation.longitude}",
-                )
+                println("LocationService.android: Using last known location")
                 return lastLocation
             }
 
@@ -183,20 +180,14 @@ actual class LocationService {
                     maxAccuracyMeters = DISCOVERY_LAST_KNOWN_MAX_ACCURACY_METERS,
                 )
             if (coarse != null) {
-                println(
-                    "LocationService.android: Coarse last-known for discovery: " +
-                        "${coarse.latitude}, ${coarse.longitude}",
-                )
+                println("LocationService.android: Coarse last-known for discovery")
                 return coarse
             }
 
             // Cold start: wait briefly for a fresh fix, then give up.
             val freshLocation = withTimeoutOrNull(FRESH_LOCATION_TIMEOUT_MS) { getFreshLocation() }
             if (freshLocation != null) {
-                println(
-                    "LocationService.android: Got fresh location: " +
-                        "${freshLocation.latitude}, ${freshLocation.longitude}",
-                )
+                println("LocationService.android: Got fresh location")
             } else {
                 println("LocationService.android: Fresh location timed out or unavailable")
             }

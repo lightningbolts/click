@@ -129,7 +129,8 @@ class MainActivity : ComponentActivity() {
     private fun handleEventUniversalLinkIntent(intent: Intent?) {
         if (intent?.action != Intent.ACTION_VIEW) return
         val uriString = intent.dataString ?: return
-        // Stripe's return (/e/{id}/tickets/return) goes to the open ticket picker, not the map.
+        // Stripe's return (/e/{id}/tickets/return) goes to the ticket picker waiting on it; with no picker waiting it
+        // opens the event like any /e/ link.
         if (TicketCheckoutReturns.handleIncomingUrl(uriString)) return
         EventDeepLinkRouter.handleIncomingUrl(uriString)
     }

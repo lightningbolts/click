@@ -22,4 +22,13 @@ class ChatClickDropLabelTest {
         assertEquals("Developing…", chatClickDropLabel(ClickDropDevelopState.Ready, developing = true, now = now))
         assertEquals("Developing…", chatClickDropLabel(ClickDropDevelopState.Developed, developing = false, now = now))
     }
+
+    @Test
+    fun aFailedOriginalOffersARetry() {
+        assertEquals(
+            "Couldn't load photo. Tap to retry.",
+            chatClickDropLabel(ClickDropDevelopState.Developed, developing = false, now = now, originalFailed = true),
+        )
+        assertEquals("Tap to develop", chatClickDropLabel(ClickDropDevelopState.Ready, developing = false, now = now, originalFailed = true))
+    }
 }

@@ -209,6 +209,30 @@ class DeviceApprovalsTest {
     }
 
     @Test
+    fun challengeNotFoundClosesTheRequestAndForbiddenSaysWhy() {
+        // challenge/route.ts: 404 once the request is no longer pending, 403 APPROVER_NOT_ALLOWED.
+        val gone = DeviceApprovalHttpException(404, "Request not found")
+        val forbidden = DeviceApprovalHttpException(403, "This device can’t approve that request")
+        assertTrue(isApprovalClosed(gone))
+        assertTrue(approvalFailureMessage(gone)!!.contains("already decided or it expired"))
+        assertTrue(!isApprovalClosed(forbidden))
+        assertTrue(approvalFailureMessage(forbidden)!!.startsWith("This device can't approve"))
+    }
+
+    @Test
+    fun askAgainReplacesOnlyOwnAndKeepsIncoming() {
+        DeviceApprovalStore.reset()
+        val pending = DeviceApproval("a", DeviceApproval.Status.PENDING, "iPhone", null, expired = false, emailSent = false)
+        val denied = DeviceApproval("mine", DeviceApproval.Status.DENIED, "Pixel", null, expired = false, emailSent = false)
+        DeviceApprovalStore.set(DeviceApprovals(incoming = listOf(pending), own = denied))
+        val asked = denied.copy(status = DeviceApproval.Status.PENDING)
+        DeviceApprovalStore.setOwn(asked)
+        assertEquals(listOf(pending), DeviceApprovalStore.state.value.incoming)
+        assertEquals(asked, DeviceApprovalStore.state.value.own)
+        DeviceApprovalStore.reset()
+    }
+
+    @Test
     fun staleRefreshCannotOverwriteNewerState() {
         DeviceApprovalStore.reset()
         val pending = DeviceApproval("a", DeviceApproval.Status.PENDING, "iPhone", null, expired = false, emailSent = false)

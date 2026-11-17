@@ -273,7 +273,8 @@ internal fun CommunityBeaconDetail(
 
         val viewerIsCreator =
             isCreator || (!currentUser?.id.isNullOrBlank() && beacon.createdByUserId == currentUser?.id)
-        if (!viewerIsCreator) {
+        // Report ships with `alert_confirmations` (iOS `BeaconDetailView`); off or unknown hides it.
+        if (!viewerIsCreator && flags.isEnabled(FeatureFlag.ALERT_CONFIRMATIONS)) {
             BeaconReportButton(beaconId = beacon.id)
         }
     }

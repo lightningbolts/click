@@ -1,5 +1,6 @@
 package compose.project.click.click.events // pragma: allowlist secret
 
+import compose.project.click.click.platform.platformUsesFahrenheit
 import compose.project.click.click.util.formatClockTime // pragma: allowlist secret
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -22,8 +23,13 @@ data class PlaceWeatherReading(
     val isDay: Boolean,
     val precipitationChance: Int?,
 ) {
-    /** Fahrenheit, matching the rest of the Android app's weather labels. */
-    val temperatureLabel: String get() = "${(temperatureCelsius * 9.0 / 5.0 + 32.0).roundToInt()}°"
+    /** "64°" / "18°" in the reader's own unit (iOS `Reading.temperature` formats by locale). */
+    fun temperatureLabel(fahrenheit: Boolean): String =
+        if (fahrenheit) {
+            "${(temperatureCelsius * 9.0 / 5.0 + 32.0).roundToInt()}°"
+        } else {
+            "${temperatureCelsius.roundToInt()}°"
+        }
 }
 
 data class PlaceWeather(
@@ -31,11 +37,14 @@ data class PlaceWeather(
     val atStart: PlaceWeatherReading?,
 ) {
     /** "64° Cloudy now · 58° Rain at 7:00 PM, 70% chance of rain" (iOS `PlaceWeather.summary`). */
-    fun summary(startEpochMs: Long?): String? {
+    fun summary(
+        startEpochMs: Long?,
+        fahrenheit: Boolean = platformUsesFahrenheit(),
+    ): String? {
         val parts = mutableListOf<String>()
-        now?.let { parts += "${it.temperatureLabel} ${it.condition} now" }
+        now?.let { parts += "${it.temperatureLabel(fahrenheit)} ${it.condition} now" }
         if (atStart != null && startEpochMs != null) {
-            var line = "${atStart.temperatureLabel} ${atStart.condition} at ${formatClockTime(startEpochMs)}"
+            var line = "${atStart.temperatureLabel(fahrenheit)} ${atStart.condition} at ${formatClockTime(startEpochMs)}"
             atStart.precipitationChance?.takeIf { it >= 30 }?.let { line += ", $it% chance of rain" }
             parts += line
         }

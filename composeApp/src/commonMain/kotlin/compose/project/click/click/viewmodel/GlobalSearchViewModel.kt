@@ -400,7 +400,10 @@ class GlobalSearchViewModel(
     }
 
     private fun publish() {
-        _results.value = GlobalSearchResults(mergeServerResults(localItems, serverPayload, activeHubs()))
+        _results.value =
+            GlobalSearchResults(
+                mergeServerResults(localItems, serverPayload, activeHubs(), junctionArchivedConnectionIds()),
+            )
     }
 
     /**
@@ -737,16 +740,30 @@ class GlobalSearchViewModel(
             // when that request didn't succeed.
             val apiHitsD =
                 async {
-                    val outcome =
+                    var outcome =
                         try {
                             serverRequest?.await()
                         } catch (e: CancellationException) {
-                            // A retry replaced the request; this scan still falls back below.
                             if (!isActive) throw e
                             null
                         }
-                    when (outcome) {
-                        is GlobalSearchOutcome.Success -> outcome.payload.hits
+                    // A retry replaced the request: wait for that one instead of also calling
+                    // `/api/chat/search` (its hits are merged by publish()).
+                    val replacement = this@GlobalSearchViewModel.serverRequest
+                    var awaitedReplacement = false
+                    if (outcome == null && replacement != null && replacement !== serverRequest) {
+                        awaitedReplacement = true
+                        outcome =
+                            try {
+                                replacement.await()
+                            } catch (e: CancellationException) {
+                                if (!isActive) throw e
+                                null
+                            }
+                    }
+                    when {
+                        outcome is GlobalSearchOutcome.Success -> outcome.payload.hits
+                        awaitedReplacement && outcome == null -> emptyList()
                         else -> searchConversationHits(lowerQuery)
                     }
                 }
@@ -950,7 +967,7 @@ class GlobalSearchViewModel(
         }
 }
 
-private fun ConversationSearchHit.toMessageHit( // pragma: allowlist secret
+internal fun ConversationSearchHit.toMessageHit( // pragma: allowlist secret
     archivedIds: Set<String>,
     hubs: List<ActiveHubEntry>,
 ): SearchResult.MessageHit {

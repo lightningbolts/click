@@ -12,8 +12,10 @@ import compose.project.click.click.data.models.MessageWithUser // pragma: allowl
 import compose.project.click.click.data.models.audioCacheFileExtension // pragma: allowlist secret
 import compose.project.click.click.data.models.hasLocalMediaUri // pragma: allowlist secret
 import compose.project.click.click.data.models.isEncryptedMedia // pragma: allowlist secret
+import compose.project.click.click.data.models.isGatedDrop // pragma: allowlist secret
 import compose.project.click.click.data.models.mediaUrlOrNull // pragma: allowlist secret
 import compose.project.click.click.data.repository.GatedDropOriginals // pragma: allowlist secret
+import compose.project.click.click.data.repository.gatedDropOriginalVaultKey // pragma: allowlist secret
 import compose.project.click.click.data.repository.isGatedDropAwaitingOriginal // pragma: allowlist secret
 import compose.project.click.click.ui.chat.deleteSecureChatAudioTempFile // pragma: allowlist secret
 import compose.project.click.click.ui.chat.secureChatImageBitmapCache // pragma: allowlist secret
@@ -47,12 +49,20 @@ internal fun ChatViewModel.clearSecureChatMediaCache(purgePersistentCache: Boole
 
 internal fun ChatViewModel.hydrateSecureMediaStateFromByteCache(messages: List<MessageWithUser>) {
     if (messages.isEmpty()) return
+    val viewer = _currentUserId.value
     _secureChatMediaLoadState.update { map ->
         var out = map
         for (mwu in messages) {
             val id = mwu.message.id
             if (out[id]?.imageBytes != null) continue
-            val bytes = secureImageBytesCache.get(id)?.takeIf { it.isNotEmpty() } ?: continue
+            // A gated drop marked loaded shows only its original (kept under its own key), never the preview.
+            val key =
+                if (mwu.message.isGatedDrop() && GatedDropOriginals.isLoaded(id)) {
+                    viewer?.let { gatedDropOriginalVaultKey(it, id) } ?: continue
+                } else {
+                    id
+                }
+            val bytes = secureImageBytesCache.get(key)?.takeIf { it.isNotEmpty() } ?: continue
             out = out + (id to SecureChatMediaLoadState(loading = false, imageBytes = bytes))
         }
         out
@@ -78,6 +88,7 @@ internal suspend fun ChatViewModel.hydrateSecureMediaFromDiskVault(messages: Lis
 
 internal suspend fun ChatViewModel.applyDiskVaultHydration(batch: List<MessageWithUser>) {
     if (batch.isEmpty()) return
+    val viewer = _currentUserId.value
     val updates =
         withContext(Dispatchers.Default) {
             val out = LinkedHashMap<String, SecureChatMediaLoadState>()
@@ -88,6 +99,14 @@ internal suspend fun ChatViewModel.applyDiskVaultHydration(batch: List<MessageWi
                 when (msg.messageType.lowercase()) {
                     ChatMessageType.IMAGE -> {
                         if (_secureChatMediaLoadState.value[id]?.imageBytes != null) continue
+                        if (msg.isGatedDrop() && GatedDropOriginals.isLoaded(id)) {
+                            // Marked loaded: show the original from memory or this viewer's vault. When it's
+                            // gone, show nothing here; the bubble's ensure path reloads it (never the preview).
+                            loadedGatedDropOriginalBytes(msg, viewer)?.let {
+                                out[id] = SecureChatMediaLoadState(loading = false, imageBytes = it)
+                            }
+                            continue
+                        }
                         val memCached = secureImageBytesCache.get(id)?.takeIf { it.isNotEmpty() }
                         if (memCached != null) {
                             out[id] = SecureChatMediaLoadState(loading = false, imageBytes = memCached)
@@ -173,6 +192,15 @@ internal fun ChatViewModel.cacheSecureAudioOnDisk(
 internal suspend fun ChatViewModel.fetchDecryptedChatMediaBytesImpl(message: Message): ByteArray? {
     // Never hand out a gated drop's pixelated preview as the photo (save, share, expand).
     if (message.isGatedDropAwaitingOriginal()) return null
+    if (message.isGatedDrop()) {
+        // Only the original's own key: the message id holds the preview.
+        return withContext(chatMediaDispatcher) { loadedGatedDropOriginalBytes(message, _currentUserId.value) }
+            ?: run {
+                // Marked loaded but the original is gone: back to awaiting, so the bubble reloads it.
+                GatedDropOriginals.forget(message.id)
+                null
+            }
+    }
     secureImageBytesCache.get(message.id)?.takeIf { it.isNotEmpty() }?.let { return it }
     readChatMediaVaultBytesForMessage(
         messageId = message.id,

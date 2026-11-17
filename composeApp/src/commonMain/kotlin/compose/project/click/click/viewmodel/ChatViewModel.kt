@@ -25,7 +25,6 @@ import compose.project.click.click.data.models.originalMimeTypeOrNull // pragma:
 import compose.project.click.click.data.realtime.RealtimeCoordinator
 import compose.project.click.click.data.repository.ChatMessageSubscription // pragma: allowlist secret
 import compose.project.click.click.data.repository.ChatRepository // pragma: allowlist secret
-import compose.project.click.click.data.repository.GatedDropOriginals // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseChatRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
 import compose.project.click.click.data.repository.e2eeV2MediaMetadataOrNull // pragma: allowlist secret
@@ -269,8 +268,8 @@ class ChatViewModel(
         LruMemoryCache<String, ByteArray>(SECURE_CHAT_IMAGE_CACHE_MAX_ENTRIES)
     internal val secureImageNetworkLoads = Semaphore(SECURE_CHAT_IMAGE_NETWORK_CONCURRENCY)
 
-    /** Gated Click Drop ids whose original is being developed right now (main-thread only). */
-    internal val gatedDropLoadsInFlight = mutableSetOf<String>()
+    /** Gated Click Drop ids whose original is being developed right now (atomic updates: added on Main, removed on IO). */
+    internal val gatedDropLoadsInFlight = MutableStateFlow<Set<String>>(emptySet())
 
     /** Tap to develop, "Develop all" and live develop for gated Click Drops (iOS `ConversationModel`). */
     internal val clickDropHost by lazy { ChatViewModelClickDropHost(this) }
@@ -491,14 +490,16 @@ class ChatViewModel(
         if (message.messageType.lowercase() != ChatMessageType.IMAGE) return
         val url = message.mediaUrlOrNull() ?: return
         if (url.isBlank()) return
-        if (message.isGatedDrop() && clickDropHost.isDeveloped(message.id) && !GatedDropOriginals.isLoaded(message.id)) {
-            // Developed by this viewer: load the original. The preview below keeps the bubble filled meanwhile.
-            ensureGatedDropOriginalLoaded(scopeId, viewerUserId, message)
-        }
+        // A gated drop's original lives under its own key; what follows only ever loads the preview.
+        if (message.isGatedDrop() && showOrLoadGatedDropOriginal(scopeId, viewerUserId, message)) return
         val cachedBytes = secureImageBytesCache.get(message.id)
         if (cachedBytes != null && cachedBytes.isNotEmpty()) {
             _secureChatMediaLoadState.update {
-                it + (message.id to SecureChatMediaLoadState(loading = false, imageBytes = cachedBytes))
+                if (holdsGatedDropOriginal(viewerUserId, message)) {
+                    it
+                } else {
+                    it + (message.id to SecureChatMediaLoadState(loading = false, imageBytes = cachedBytes))
+                }
             }
             return
         }
@@ -515,7 +516,12 @@ class ChatViewModel(
             )?.takeIf { it.isNotEmpty() }?.let { vaultBytes ->
                 secureImageBytesCache.put(message.id, vaultBytes)
                 _secureChatMediaLoadState.update {
-                    it + (message.id to SecureChatMediaLoadState(loading = false, imageBytes = vaultBytes))
+                    // Never let a late preview replace a gated drop's original.
+                    if (holdsGatedDropOriginal(viewerUserId, message)) {
+                        it
+                    } else {
+                        it + (message.id to SecureChatMediaLoadState(loading = false, imageBytes = vaultBytes))
+                    }
                 }
                 return@launch
             }
@@ -544,14 +550,22 @@ class ChatViewModel(
             if (bytes == null || bytes.isEmpty()) {
                 println("ChatViewModel: secure image bytes missing for message=${message.id}")
                 _secureChatMediaLoadState.update {
-                    it + (message.id to SecureChatMediaLoadState(loading = false, error = "Could not load image"))
+                    if (holdsGatedDropOriginal(viewerUserId, message)) {
+                        it
+                    } else {
+                        it + (message.id to SecureChatMediaLoadState(loading = false, error = "Could not load image"))
+                    }
                 }
             } else {
                 secureImageBytesCache.put(message.id, bytes)
                 val extension = imageExtension ?: imageVaultFileExtension(message.originalMimeTypeOrNull(), url)
                 writeChatMediaVaultFile(message.id, bytes, extension)
                 _secureChatMediaLoadState.update {
-                    it + (message.id to SecureChatMediaLoadState(loading = false, imageBytes = bytes))
+                    if (holdsGatedDropOriginal(viewerUserId, message)) {
+                        it
+                    } else {
+                        it + (message.id to SecureChatMediaLoadState(loading = false, imageBytes = bytes))
+                    }
                 }
             }
         }

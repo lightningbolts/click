@@ -46,6 +46,8 @@ fun ConnectionViewModel.warmUpConnectionCapture(method: String) {
                 captureSession = it
             }
         val baroOptIn = runCatching { createTokenStorage().getBarometricContextOptIn() }.getOrNull() ?: false
+        // Stopped (screen left, flow reset or view model cleared) during the read: never start a detached session.
+        if (captureSession !== session) return@launch
         session.start(
             location = AppDataManager.shouldCaptureLocationAtTap(),
             barometer = baroOptIn,

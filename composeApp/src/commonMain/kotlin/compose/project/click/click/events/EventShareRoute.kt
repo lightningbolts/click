@@ -2,6 +2,7 @@ package compose.project.click.click.events
 
 import compose.project.click.click.data.models.MapBeacon
 import compose.project.click.click.qr.CLICK_WEB_BASE_URL
+import io.ktor.http.encodeURLParameter
 import kotlin.math.abs
 
 /** HTTPS Maps URL — preferred open target. */
@@ -20,13 +21,16 @@ fun eventMapsAppleHttpUrl(
         label
             ?.trim()
             ?.takeIf { it.isNotEmpty() }
-            ?.replace(" ", "+")
             ?.take(80)
+            ?.encodeURLParameter()
             ?: "$latitude,$longitude"
     return "https://maps.apple.com/?ll=$latitude,$longitude&q=$q"
 }
 
-/** Legacy geo: URI — prefer [eventMapsHttpUrl]. */
+/**
+ * Legacy geo: URI — prefer [eventMapsHttpUrl]. The label is percent-encoded (as `planMapsUri` does) so `&`, `#`
+ * and the like in a title don't split `q` or start a fragment.
+ */
 fun eventMapsGeoUri(
     latitude: Double,
     longitude: Double,
@@ -39,6 +43,7 @@ fun eventMapsGeoUri(
             ?.replace("(", "")
             ?.replace(")", "")
             ?.take(80)
+            ?.encodeURLParameter()
     return if (safeLabel != null) {
         "geo:$latitude,$longitude?q=$latitude,$longitude($safeLabel)"
     } else {

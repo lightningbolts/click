@@ -38,6 +38,9 @@ sealed class ChatRealtimeEvent {
     data class ReadCursorMoved(
         val cursor: compose.project.click.click.data.models.ReadCursor,
     ) : ChatRealtimeEvent()
+
+    /** A row in [message_pins] for this chat changed (anyone pinned / unpinned); reload pins. */
+    object PinsChanged : ChatRealtimeEvent()
 }
 
 /**

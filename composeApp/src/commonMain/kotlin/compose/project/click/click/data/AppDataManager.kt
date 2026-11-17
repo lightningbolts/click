@@ -950,7 +950,8 @@ object AppDataManager {
         val previous = _locationPreferences.value
         _locationPreferences.value = prefs
         scope.launch {
-            val includePlaceVisits = FeatureFlags.isEnabled(FeatureFlag.CLICK_PLACES)
+            // Write the Places column only if it was read (or set) here; flags can turn on after load.
+            val includePlaceVisits = FeatureFlags.isEnabled(FeatureFlag.CLICK_PLACES) && prefs.placeVisitsLoaded
             val saved =
                 runCatching { supabaseRepository.updateLocationPreferences(userId, prefs, includePlaceVisits) }.getOrDefault(false)
             if (!saved && _locationPreferences.value == prefs) {
@@ -989,7 +990,7 @@ object AppDataManager {
 
     /** "Show my Place visits to my Clicks" (Click Places; the row shows only with the flag on). */
     fun setPlaceVisitsVisible(enabled: Boolean) {
-        updateLocationPreferences(_locationPreferences.value.copy(placeVisitsVisible = enabled))
+        updateLocationPreferences(_locationPreferences.value.copy(placeVisitsVisible = enabled, placeVisitsLoaded = true))
     }
 
     /**

@@ -11,6 +11,11 @@ import kotlinx.datetime.Clock
 internal fun ChatViewModel.loadPinsImpl(chatId: String) {
     if (chatId.isBlank()) return
     pinsChatId = chatId
+    refreshPinsForOpenChat(chatId)
+}
+
+/** Re-fetches pins for [chatId] without changing which chat owns the banner. */
+internal fun ChatViewModel.refreshPinsForOpenChat(chatId: String) {
     viewModelScope.launch {
         chatApi.getChatPinsImpl(chatId).onSuccess { pins ->
             if (pinsChatId == chatId) _pinnedMessages.value = pins
@@ -31,10 +36,14 @@ internal fun ChatViewModel.togglePinImpl(messageId: String) {
         }
     viewModelScope.launch {
         chatApi.setChatPinImpl(messageId, pinning).fold(
-            onSuccess = { loadPinsImpl(chatId) },
+            // The VM is reused across chats: only touch pins if this chat is still the open one,
+            // and never reassign pinsChatId from here (loadPinsImpl would otherwise retarget it).
+            onSuccess = { if (pinsChatId == chatId) refreshPinsForOpenChat(chatId) },
             onFailure = {
-                _pinnedMessages.value = before
-                _messageSendError.value = if (pinning) "Couldn't pin that message." else "Couldn't unpin that message."
+                if (pinsChatId == chatId) {
+                    _pinnedMessages.value = before
+                    _messageSendError.value = if (pinning) "Couldn't pin that message." else "Couldn't unpin that message."
+                }
             },
         )
     }

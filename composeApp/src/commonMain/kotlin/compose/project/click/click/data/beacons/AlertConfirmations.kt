@@ -2,6 +2,8 @@ package compose.project.click.click.data.beacons
 
 import compose.project.click.click.data.api.ApiClient // pragma: allowlist secret
 import compose.project.click.click.data.api.ClickWebRequestException // pragma: allowlist secret
+import compose.project.click.click.data.devices.relativePastLabel // pragma: allowlist secret
+import compose.project.click.click.utils.LocationResult // pragma: allowlist secret
 import io.ktor.client.request.get
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
@@ -103,30 +105,30 @@ class AlertVoteRejectedException(
     val rejection: AlertVoteRejection,
 ) : Exception(rejection.message)
 
+/**
+ * A vote needs a fresh fix near the pin (iOS `currentLocation(maximumAge: 120, acceptableAccuracy: 100)`).
+ * Fixes come from a live high-accuracy capture started for the vote, so they are seconds old.
+ */
+const val ALERT_VOTE_FIX_TIMEOUT_MS: Long = 6_000L
+const val ALERT_VOTE_MAX_FIX_AGE_MS: Long = 120_000L
+const val ALERT_VOTE_MAX_FIX_ACCURACY_METERS: Double = 100.0
+
+/** [fix] when it is good enough to vote with: known accuracy within 100 m and at most 120 s old. */
+fun acceptableAlertVoteFix(
+    fix: LocationResult?,
+    fixAgeMs: Long,
+): LocationResult? {
+    fix ?: return null
+    val accuracy = fix.accuracyMeters ?: return null
+    if (!accuracy.isFinite() || accuracy > ALERT_VOTE_MAX_FIX_ACCURACY_METERS) return null
+    if (fixAgeMs < 0L || fixAgeMs > ALERT_VOTE_MAX_FIX_AGE_MS) return null
+    return fix
+}
+
 /** Quiet report reasons (iOS `BeaconDetailView`). Never shown to anyone. */
 val BEACON_REPORT_REASONS: List<String> = listOf("Not accurate anymore", "Inappropriate", "Spam")
 
 private val lenientJson = Json { ignoreUnknownKeys = true }
-
-/** "just now", "5 minutes ago", "3 hours ago", "yesterday", "4 days ago". */
-internal fun relativePastLabel(
-    epochMs: Long,
-    nowEpochMs: Long,
-): String {
-    val minutes = ((nowEpochMs - epochMs).coerceAtLeast(0L)) / 60_000L
-
-    fun plural(
-        n: Long,
-        unit: String,
-    ) = if (n == 1L) "1 $unit ago" else "$n ${unit}s ago"
-    return when {
-        minutes < 1 -> "just now"
-        minutes < 60 -> plural(minutes, "minute")
-        minutes < 24 * 60 -> plural(minutes / 60, "hour")
-        minutes < 48 * 60 -> "yesterday"
-        else -> plural(minutes / (24 * 60), "day")
-    }
-}
 
 /** GET `/api/beacons/{id}/confirm`. A 404 means the flag is off for this viewer: hide the section. */
 internal suspend fun ApiClient.getAlertConfirmation(beaconId: String): Result<AlertConfirmationState> =

@@ -104,9 +104,15 @@ object ChatMuteStore {
         if (until == null) {
             val ids = (listOf(chatId) + aliases.filterNotNull().filter { it.isNotBlank() && it in before }).distinct()
             _mutes.value = before - ids.toSet()
-            val ok = ids.all { api.putChatMuteImpl(it, muted = false, mutedUntilIso = null).isSuccess }
-            if (!ok) _mutes.value = before else persist(storage, _mutes.value)
-            return ok
+            // Send every id (no short-circuit) and roll back only the ones the server refused:
+            // an id it already unmuted must stay unmuted locally or the UI lies until the next refresh.
+            val failed = ids.filterNot { api.putChatMuteImpl(it, muted = false, mutedUntilIso = null).isSuccess }
+            if (failed.isNotEmpty()) {
+                val restored = failed.mapNotNull { id -> before[id]?.let { id to it } }
+                _mutes.value = _mutes.value + restored
+            }
+            persist(storage, _mutes.value)
+            return failed.isEmpty()
         }
         _mutes.value = before + (chatId to until)
         val ok = api.putChatMuteImpl(chatId, muted = true, mutedUntilIso = mutedUntilIso(until)).isSuccess

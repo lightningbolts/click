@@ -2,6 +2,7 @@ package compose.project.click.click.viewmodel
 
 import compose.project.click.click.crypto.DeviceIdentityStorage
 import compose.project.click.click.crypto.MessageCryptoV2
+import compose.project.click.click.data.repository.E2eeIdentityEvents
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
@@ -10,9 +11,20 @@ import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 abstract class HubE2eeV2SessionContract {
+    @Test
+    fun aReKeyElsewhereMakesACachedHubSessionStale() {
+        val identity = DeviceIdentityStorage.generateEphemeral()
+        val session = HubE2eeV2Session(1, mapOf(1 to MessageCryptoV2.generateEpochKey()), identity.info.deviceId, identity, "members")
+        assertTrue(session.isCurrentIdentity())
+        E2eeIdentityEvents.identityReplaced()
+        assertFalse(session.isCurrentIdentity())
+        session.clearKeys()
+    }
+
     @Test
     fun cacheReplacementDuringUploadDoesNotChangeSendKey() =
         runTest {
