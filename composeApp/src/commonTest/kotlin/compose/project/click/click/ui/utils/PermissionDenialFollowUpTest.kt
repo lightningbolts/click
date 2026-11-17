@@ -4,28 +4,43 @@ import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/** click-ios 6a8310d: "Don't allow" ends there; only a later request, already off, explains. */
+/** click-ios 6a8310d: "Don't allow" ends there; only a denial with no prompt explains. */
 class PermissionDenialFollowUpTest {
+    private val shownPrompt = 2_500L
+    private val noPrompt = 40L
+
     @Test
     fun firstDenialFromPromptEndsThere() {
-        // Never asked; the user saw the prompt and chose Don't allow.
-        assertFalse(shouldExplainDeniedLocation(askedBefore = false, rationaleBefore = false, rationaleAfter = true))
+        assertFalse(shouldExplainDeniedLocation(rationaleBefore = false, rationaleAfter = true, elapsedMs = shownPrompt))
     }
 
     @Test
     fun secondDenialFromPromptEndsThere() {
         // Denied once, prompt shown again, Don't allow: Android now says "don't ask again".
-        assertFalse(shouldExplainDeniedLocation(askedBefore = true, rationaleBefore = true, rationaleAfter = false))
+        assertFalse(shouldExplainDeniedLocation(rationaleBefore = true, rationaleAfter = false, elapsedMs = shownPrompt))
     }
 
     @Test
-    fun laterRequestWhileOffForGoodExplains() {
-        // The OS shows no prompt and denies at once.
-        assertTrue(shouldExplainDeniedLocation(askedBefore = true, rationaleBefore = false, rationaleAfter = false))
+    fun dismissedPromptEndsThere() {
+        // A dismissed prompt can leave both rationale flags false; the prompt still showed.
+        assertFalse(shouldExplainDeniedLocation(rationaleBefore = false, rationaleAfter = false, elapsedMs = shownPrompt))
     }
 
     @Test
-    fun dismissedPromptThenDenialEndsThere() {
-        assertFalse(shouldExplainDeniedLocation(askedBefore = true, rationaleBefore = false, rationaleAfter = true))
+    fun denialWithoutPromptExplains() {
+        // Off for good, including an install updated from a version that kept no record.
+        assertTrue(shouldExplainDeniedLocation(rationaleBefore = false, rationaleAfter = false, elapsedMs = noPrompt))
+    }
+
+    @Test
+    fun fastDenialWithRationaleEndsThere() {
+        assertFalse(shouldExplainDeniedLocation(rationaleBefore = true, rationaleAfter = true, elapsedMs = noPrompt))
+    }
+
+    @Test
+    fun boundaryCountsAsShownPrompt() {
+        assertFalse(
+            shouldExplainDeniedLocation(rationaleBefore = false, rationaleAfter = false, elapsedMs = NO_PROMPT_DENIAL_MAX_MS),
+        )
     }
 }

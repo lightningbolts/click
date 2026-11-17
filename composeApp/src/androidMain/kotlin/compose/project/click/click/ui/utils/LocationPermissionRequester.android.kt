@@ -3,7 +3,7 @@
 package compose.project.click.click.ui.utils
 
 import android.Manifest
-import android.content.Context
+import android.os.SystemClock
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -20,22 +20,19 @@ import androidx.compose.ui.platform.testTag
 import androidx.core.app.ActivityCompat
 import compose.project.click.click.ui.components.AnimatedClickDialog
 
-private const val PREFS = "click_permission_requests"
-private const val KEY_LOCATION_ASKED = "location_asked"
-
 /**
- * Asks for location. A "Don't allow" answer is respected: nothing opens Settings. Only a later
- * request, with location already off for good, shows a notice with an Open Settings button.
+ * Asks for location. A "Don't allow" answer is respected: nothing opens Settings. Only a request
+ * that Android denies without a prompt (location off for good) shows a notice with an Open
+ * Settings button.
  * Mirrors click-ios 6a8310d (App Review 5.1.1(iv)).
  */
 @Composable
 actual fun rememberPlatformLocationPermissionRequester(): ((onComplete: () -> Unit) -> Unit) {
     var pendingOnComplete by remember { mutableStateOf<(() -> Unit)?>(null) }
-    var askedBefore by remember { mutableStateOf(false) }
+    var launchedAtMs by remember { mutableStateOf(0L) }
     var rationaleBefore by remember { mutableStateOf(false) }
     var showsLocationOffNotice by remember { mutableStateOf(false) }
     val activity = LocalActivity.current as? ComponentActivity
-    val prefs = remember(activity) { activity?.getSharedPreferences(PREFS, Context.MODE_PRIVATE) }
 
     fun rationale(): Boolean =
         activity != null &&
@@ -47,7 +44,8 @@ actual fun rememberPlatformLocationPermissionRequester(): ((onComplete: () -> Un
         ) { granted ->
             val complete = pendingOnComplete
             pendingOnComplete = null
-            if (!granted && shouldExplainDeniedLocation(askedBefore, rationaleBefore, rationale())) {
+            val elapsedMs = SystemClock.elapsedRealtime() - launchedAtMs
+            if (!granted && shouldExplainDeniedLocation(rationaleBefore, rationale(), elapsedMs)) {
                 showsLocationOffNotice = true
             }
             complete?.invoke()
@@ -73,9 +71,8 @@ actual fun rememberPlatformLocationPermissionRequester(): ((onComplete: () -> Un
     }
 
     return { onComplete ->
-        askedBefore = prefs?.getBoolean(KEY_LOCATION_ASKED, false) ?: false
         rationaleBefore = rationale()
-        prefs?.edit()?.putBoolean(KEY_LOCATION_ASKED, true)?.apply()
+        launchedAtMs = SystemClock.elapsedRealtime()
         pendingOnComplete = onComplete
         launcher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
     }
