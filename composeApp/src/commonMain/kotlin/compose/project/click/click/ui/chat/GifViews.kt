@@ -49,9 +49,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import coil3.ComponentRegistry
 import coil3.ImageLoader
+import coil3.PlatformContext
 import coil3.compose.AsyncImage
 import coil3.compose.AsyncImagePainter
-import coil3.PlatformContext
 import coil3.compose.LocalPlatformContext
 import coil3.request.ImageRequest
 import compose.project.click.click.PlatformHapticsPolicy // pragma: allowlist secret

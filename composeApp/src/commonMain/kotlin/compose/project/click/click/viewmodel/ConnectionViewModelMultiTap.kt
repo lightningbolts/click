@@ -36,7 +36,10 @@ internal fun ConnectionViewModel.startGroupSetupForShownResult(state: Connection
     val tagging = state as? ConnectionState.TaggingContext ?: return
     if (tagging.requiresSelection || !tagging.isGroup || !tagging.isNewConnection) return
     if (tagging.newConnections.isEmpty() || tagging.newConnections.any { it.isPendingSync() }) return
-    val currentUserId = AppDataManager.currentUser.value?.id?.takeIf { it.isNotBlank() } ?: return
+    val currentUserId =
+        AppDataManager.currentUser.value
+            ?.id
+            ?.takeIf { it.isNotBlank() } ?: return
     val peers = tagging.targetUsers.filter { it.id.isNotBlank() && it.id != currentUserId }
     val members =
         MultiTapGroupPreparation.memberIds(

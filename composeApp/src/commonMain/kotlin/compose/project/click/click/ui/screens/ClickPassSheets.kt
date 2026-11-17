@@ -184,8 +184,7 @@ private fun TicketedPassSheet(
             .onSuccess {
                 tickets = it
                 if (it.isEmpty()) onNoTickets()
-            }
-            .onFailure { err -> if (tickets == null) failure = (err as? TicketingException)?.userMessage ?: "Couldn't load your tickets." }
+            }.onFailure { err -> if (tickets == null) failure = (err as? TicketingException)?.userMessage ?: "Couldn't load your tickets." }
     }
     ClickFormBottomSheet(onDismissRequest = onDismiss) {
         Column(

@@ -47,8 +47,8 @@ import compose.project.click.click.ui.components.ConnectionContextPresentation /
 import compose.project.click.click.ui.components.ConnectionContextSheet // pragma: allowlist secret
 import compose.project.click.click.ui.components.EncounterDetailsCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.HeaderBackIconButton // pragma: allowlist secret
-import compose.project.click.click.ui.components.MultiTapGroupStatus // pragma: allowlist secret
 import compose.project.click.click.ui.components.HeaderChromeIconButton // pragma: allowlist secret
+import compose.project.click.click.ui.components.MultiTapGroupStatus // pragma: allowlist secret
 import compose.project.click.click.ui.components.PageHeader // pragma: allowlist secret
 import compose.project.click.click.ui.components.bottomChromePadding // pragma: allowlist secret
 import compose.project.click.click.ui.theme.* // pragma: allowlist secret

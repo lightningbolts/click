@@ -88,16 +88,16 @@ object TicketCheckoutReturns {
     val pending: StateFlow<TicketCheckoutCallback?> = _pending.asStateFlow()
 
     /** The event whose picker has Stripe's page open, if any. */
-    private val _awaitingBeaconId = MutableStateFlow<String?>(null)
+    private val awaitingCheckoutBeaconId = MutableStateFlow<String?>(null)
 
     /** The picker for [beaconId] opened checkout and is waiting for Stripe's return. */
     fun beginAwaiting(beaconId: String) {
-        _awaitingBeaconId.value = beaconId
+        awaitingCheckoutBeaconId.value = beaconId
     }
 
     /** The picker for [beaconId] stopped waiting (return handled, or the picker went away). */
     fun stopAwaiting(beaconId: String) {
-        if (_awaitingBeaconId.value == beaconId) _awaitingBeaconId.value = null
+        if (awaitingCheckoutBeaconId.value == beaconId) awaitingCheckoutBeaconId.value = null
     }
 
     /**
@@ -106,7 +106,7 @@ object TicketCheckoutReturns {
      */
     fun handleIncomingUrl(url: String): Boolean {
         val callback = parseTicketCheckoutCallback(url) ?: return false
-        if (callback.beaconId != _awaitingBeaconId.value) return false
+        if (callback.beaconId != awaitingCheckoutBeaconId.value) return false
         _pending.value = callback
         return true
     }
@@ -126,7 +126,7 @@ object TicketCheckoutReturns {
 
     internal fun resetForTest() {
         _pending.value = null
-        _awaitingBeaconId.value = null
+        awaitingCheckoutBeaconId.value = null
     }
 }
 

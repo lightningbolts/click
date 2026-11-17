@@ -10,7 +10,11 @@ actual fun chatMediaVaultDirectory(): String {
     return File(ctx.filesDir, VAULT_FOLDER).apply { mkdirs() }.absolutePath
 }
 
-actual fun writeChatMediaVaultFile(messageId: String, bytes: ByteArray, extension: String): String? {
+actual fun writeChatMediaVaultFile(
+    messageId: String,
+    bytes: ByteArray,
+    extension: String,
+): String? {
     if (bytes.isEmpty() || messageId.isBlank()) return null
     return runCatching {
         val safeExt = extension.trim().trimStart('.').ifBlank { "bin" }
@@ -21,14 +25,20 @@ actual fun writeChatMediaVaultFile(messageId: String, bytes: ByteArray, extensio
     }.getOrNull()
 }
 
-actual fun readChatMediaVaultBytes(messageId: String, preferredExtension: String?): ByteArray? {
+actual fun readChatMediaVaultBytes(
+    messageId: String,
+    preferredExtension: String?,
+): ByteArray? {
     val path = chatMediaVaultLocalPath(messageId, preferredExtension) ?: return null
     val file = File(path)
     if (!file.isFile || file.length() <= 0L) return null
     return runCatching { file.readBytes() }.getOrNull()
 }
 
-actual fun chatMediaVaultLocalPath(messageId: String, preferredExtension: String?): String? {
+actual fun chatMediaVaultLocalPath(
+    messageId: String,
+    preferredExtension: String?,
+): String? {
     if (messageId.isBlank()) return null
     val safeId = messageId.replace(Regex("[^a-zA-Z0-9._-]"), "_")
     val dir = File(chatMediaVaultDirectory())

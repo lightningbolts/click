@@ -167,6 +167,7 @@ object MultiTapGroupPreparation {
                 existing()?.let { return ready(it.groupId, createdHere = false) }
             }
         }
+
         suspend fun attemptCreate(): Result<String> =
             try {
                 create()

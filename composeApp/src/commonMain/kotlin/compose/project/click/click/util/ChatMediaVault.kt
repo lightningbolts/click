@@ -11,13 +11,23 @@ import compose.project.click.click.data.models.originalMimeTypeOrNull
 expect fun chatMediaVaultDirectory(): String
 
 /** Writes decrypted chat media to the native cache and returns a file:// URI for UI playback. */
-expect fun writeChatMediaVaultFile(messageId: String, bytes: ByteArray, extension: String): String?
+expect fun writeChatMediaVaultFile(
+    messageId: String,
+    bytes: ByteArray,
+    extension: String,
+): String?
 
 /** Reads decrypted bytes from the on-device vault when present. */
-expect fun readChatMediaVaultBytes(messageId: String, preferredExtension: String? = null): ByteArray?
+expect fun readChatMediaVaultBytes(
+    messageId: String,
+    preferredExtension: String? = null,
+): ByteArray?
 
 /** Local filesystem path for a vaulted file when it already exists. */
-expect fun chatMediaVaultLocalPath(messageId: String, preferredExtension: String? = null): String?
+expect fun chatMediaVaultLocalPath(
+    messageId: String,
+    preferredExtension: String? = null,
+): String?
 
 /** Reads bytes from a file:// URI produced by the vault or message metadata. */
 expect fun readFileUriBytes(fileUri: String): ByteArray?
@@ -31,17 +41,36 @@ expect fun wipeChatMediaVault()
 
 private val VAULT_IMAGE_EXTENSIONS = listOf("jpg", "jpeg", "png", "webp", "heic", "gif")
 private val VAULT_AUDIO_EXTENSIONS = listOf("m4a", "mp3", "wav", "webm", "ogg", "aac", "caf")
-private val VAULT_FILE_EXTENSIONS = listOf(
-    "pdf", "zip", "bin", "txt", "json", "csv", "doc", "docx", "xls", "xlsx", "ppt", "pptx",
-    "mp4", "mov", "mkv", "epub", "pages", "numbers", "key",
-)
+private val VAULT_FILE_EXTENSIONS =
+    listOf(
+        "pdf",
+        "zip",
+        "bin",
+        "txt",
+        "json",
+        "csv",
+        "doc",
+        "docx",
+        "xls",
+        "xlsx",
+        "ppt",
+        "pptx",
+        "mp4",
+        "mov",
+        "mkv",
+        "epub",
+        "pages",
+        "numbers",
+        "key",
+    )
 
 internal fun vaultFileExtensionCandidates(preferredExtension: String?): List<String> {
-    val preferred = preferredExtension
-        ?.trim()
-        ?.trimStart('.')
-        ?.lowercase()
-        ?.takeIf { it.isNotEmpty() }
+    val preferred =
+        preferredExtension
+            ?.trim()
+            ?.trimStart('.')
+            ?.lowercase()
+            ?.takeIf { it.isNotEmpty() }
     return buildList {
         if (preferred != null) add(preferred)
         VAULT_IMAGE_EXTENSIONS.forEach { ext -> if (ext !in this) add(ext) }
@@ -50,7 +79,10 @@ internal fun vaultFileExtensionCandidates(preferredExtension: String?): List<Str
     }
 }
 
-fun imageVaultFileExtension(mimeType: String?, mediaUrl: String): String {
+fun imageVaultFileExtension(
+    mimeType: String?,
+    mediaUrl: String,
+): String {
     val mime = mimeType?.lowercase().orEmpty()
     return when {
         "png" in mime -> "png"
@@ -58,21 +90,25 @@ fun imageVaultFileExtension(mimeType: String?, mediaUrl: String): String {
         "gif" in mime -> "gif"
         "heic" in mime || "heif" in mime -> "heic"
         "jpeg" in mime || "jpg" in mime -> "jpg"
-        else -> mediaUrl.substringBefore('?')
-            .substringAfterLast('/', "")
-            .substringAfterLast('.', "")
-            .lowercase()
-            .takeIf { it.length in 2..5 && it.all { ch -> ch.isLetterOrDigit() } }
-            ?: "jpg"
+        else ->
+            mediaUrl
+                .substringBefore('?')
+                .substringAfterLast('/', "")
+                .substringAfterLast('.', "")
+                .lowercase()
+                .takeIf { it.length in 2..5 && it.all { ch -> ch.isLetterOrDigit() } }
+                ?: "jpg"
     }
 }
 
 fun AttachmentCrypto.Envelope.vaultCacheExtension(): String {
-    val fromName = name.substringBefore('?')
-        .substringAfterLast('/', name)
-        .substringAfterLast('.', "")
-        .lowercase()
-        .takeIf { it.length in 2..5 && it.all { ch -> ch.isLetterOrDigit() } }
+    val fromName =
+        name
+            .substringBefore('?')
+            .substringAfterLast('/', name)
+            .substringAfterLast('.', "")
+            .lowercase()
+            .takeIf { it.length in 2..5 && it.all { ch -> ch.isLetterOrDigit() } }
     if (fromName != null) return fromName
     val mime = mime.lowercase()
     return when {
@@ -93,18 +129,20 @@ fun AttachmentCrypto.Envelope.vaultCacheExtension(): String {
     }
 }
 
-fun chatMediaVaultExtensionForMessage(message: Message): String? {
-    return when (message.messageType.lowercase()) {
-        ChatMessageType.IMAGE -> imageVaultFileExtension(
-            message.originalMimeTypeOrNull(),
-            message.mediaUrlOrNull().orEmpty(),
-        )
+fun chatMediaVaultExtensionForMessage(message: Message): String? =
+    when (message.messageType.lowercase()) {
+        ChatMessageType.IMAGE ->
+            imageVaultFileExtension(
+                message.originalMimeTypeOrNull(),
+                message.mediaUrlOrNull().orEmpty(),
+            )
         ChatMessageType.AUDIO -> message.audioCacheFileExtension()
-        ChatMessageType.FILE -> AttachmentCrypto.resolveEnvelope(message.content, message.metadata)
-            ?.vaultCacheExtension()
+        ChatMessageType.FILE ->
+            AttachmentCrypto
+                .resolveEnvelope(message.content, message.metadata)
+                ?.vaultCacheExtension()
         else -> null
     }
-}
 
 fun fileUriToLocalPath(fileUri: String): String = fileUri.trim().removePrefix("file://")
 

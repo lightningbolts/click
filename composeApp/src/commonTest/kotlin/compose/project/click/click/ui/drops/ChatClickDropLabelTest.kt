@@ -29,6 +29,9 @@ class ChatClickDropLabelTest {
             "Couldn't load photo. Tap to retry.",
             chatClickDropLabel(ClickDropDevelopState.Developed, developing = false, now = now, originalFailed = true),
         )
-        assertEquals("Tap to develop", chatClickDropLabel(ClickDropDevelopState.Ready, developing = false, now = now, originalFailed = true))
+        assertEquals(
+            "Tap to develop",
+            chatClickDropLabel(ClickDropDevelopState.Ready, developing = false, now = now, originalFailed = true),
+        )
     }
 }

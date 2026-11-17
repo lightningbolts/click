@@ -231,7 +231,10 @@ class GlobalSearchServerViewModelTest {
             offline = false
             model.retryServerSearch()
             advanceUntilIdle()
-            assertTrue(model.results.value.items.any { it is SearchResult.MessageHit && it.result.message.id == "m-retry" })
+            assertTrue(
+                model.results.value.items
+                    .any { it is SearchResult.MessageHit && it.result.message.id == "m-retry" },
+            )
         }
 
     @Test
