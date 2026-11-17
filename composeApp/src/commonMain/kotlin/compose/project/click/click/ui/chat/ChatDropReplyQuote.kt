@@ -31,6 +31,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.data.AppDataManager
+import compose.project.click.click.data.api.ClickWebRequestException
 import compose.project.click.click.data.api.SharedDropsApi
 import compose.project.click.click.data.models.ChatDropReply
 import compose.project.click.click.ui.drops.rememberDecodedBitmap
@@ -97,35 +98,48 @@ private sealed interface DropReplyPhoto {
 
     data object Missing : DropReplyPhoto
 
+    /** Couldn't load right now (offline, still developing): no photo, but not "no longer available". */
+    data object Unavailable : DropReplyPhoto
+
     class Loaded(
         val bytes: ByteArray,
     ) : DropReplyPhoto
 }
 
-/** Drops a reply points at that can't be loaded, so each bubble doesn't ask the server again. */
+/** Drops the server said are gone (or not shared with you), so each bubble doesn't ask again. */
 private val missingDropReplies = mutableSetOf<String>()
 private val missingDropRepliesLock = Mutex()
 
-/** The strip's disk copy, then (once) the server: developing again is idempotent and signs a fresh URL. */
+/** One client for every drop-reply bubble (each `SharedDropsApi()` would open its own HTTP client). */
+private val dropReplyApi by lazy { SharedDropsApi() }
+
+/**
+ * The strip's disk copy, then the server: developing again is idempotent and signs a fresh URL.
+ * Only a definitive answer (`not_found` or a 404) is remembered; offline, pending or a failed
+ * download try again next time the bubble shows.
+ */
 private suspend fun loadDropReplyPhoto(dropId: String): DropReplyPhoto {
-    val uid = AppDataManager.currentUser.value?.id ?: return DropReplyPhoto.Missing
+    val uid = AppDataManager.currentUser.value?.id ?: return DropReplyPhoto.Unavailable
     val key = sharedDropOriginalKey(uid, dropId)
     readChatMediaVaultBytes(key, "jpg")?.takeIf { it.isNotEmpty() }?.let { return DropReplyPhoto.Loaded(it) }
     if (missingDropRepliesLock.withLock { dropId in missingDropReplies }) return DropReplyPhoto.Missing
     return try {
-        val api = SharedDropsApi()
-        val url = api.develop(dropId).getOrNull()?.url
-        val bytes = url?.let { api.download(it).getOrNull() }?.takeIf { it.isNotEmpty() }
-        if (bytes == null) {
+        val developed = dropReplyApi.develop(dropId)
+        val result = developed.getOrNull()
+        val error = developed.exceptionOrNull()
+        val status = (error as? ClickWebRequestException)?.statusCode
+        val gone = result?.status == "not_found" || status == 404
+        if (gone) {
             missingDropRepliesLock.withLock { missingDropReplies += dropId }
-            DropReplyPhoto.Missing
-        } else {
-            writeChatMediaVaultFile(key, bytes, "jpg")
-            DropReplyPhoto.Loaded(bytes)
+            return DropReplyPhoto.Missing
         }
+        val url = result?.takeIf { it.status == "developed" }?.url ?: return DropReplyPhoto.Unavailable
+        val bytes = dropReplyApi.download(url).getOrNull()?.takeIf { it.isNotEmpty() } ?: return DropReplyPhoto.Unavailable
+        writeChatMediaVaultFile(key, bytes, "jpg")
+        DropReplyPhoto.Loaded(bytes)
     } catch (e: CancellationException) {
         throw e
     } catch (_: Exception) {
-        DropReplyPhoto.Missing
+        DropReplyPhoto.Unavailable
     }
 }

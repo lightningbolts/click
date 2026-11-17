@@ -94,8 +94,10 @@ private suspend fun locatePlaceOnce(permissions: AppPermissionController): Place
         suspendCancellableCoroutine { cont -> permissions.request(AppPermission.Location) { if (cont.isActive) cont.resume(Unit) } }
     }
     if (permissions.state(AppPermission.Location) != AppPermissionState.Granted) return PlaceLocationOutcome.Denied
+    // A live fix only (iOS `preciseLocation`): never a cached last-known one, which could be from
+    // before the user left the Place. No fix in time reads as "location unavailable".
     val service = LocationService()
-    val fix = service.getHighAccuracyLocation(timeoutMs = 8000L) ?: service.getCurrentLocation() ?: return PlaceLocationOutcome.Unavailable
+    val fix = service.getHighAccuracyLocation(timeoutMs = 8000L) ?: return PlaceLocationOutcome.Unavailable
     return PlaceLocationOutcome.Fix(fix.latitude, fix.longitude, fix.accuracyMeters)
 }
 

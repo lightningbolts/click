@@ -186,6 +186,7 @@ fun chatClickDropLabel(
     state: ClickDropDevelopState,
     developing: Boolean,
     now: Instant = Clock.System.now(),
+    originalFailed: Boolean = false,
 ): String =
     when (state) {
         is ClickDropDevelopState.Pending ->
@@ -195,5 +196,8 @@ fun chatClickDropLabel(
                 "Click Drop · " + clickDropCountdownLabel(state, now).orEmpty().replaceFirstChar { it.lowercaseChar() }
             }
         ClickDropDevelopState.Ready -> if (developing) "Developing…" else "Tap to develop"
-        ClickDropDevelopState.Developed -> "Developing…"
+        ClickDropDevelopState.Developed -> if (originalFailed) CLICK_DROP_ORIGINAL_FAILED_LABEL else "Developing…"
     }
+
+/** A developed drop whose original didn't load (iOS `ClickDropBubble`): a tap retries. */
+const val CLICK_DROP_ORIGINAL_FAILED_LABEL = "Couldn't load photo. Tap to retry."

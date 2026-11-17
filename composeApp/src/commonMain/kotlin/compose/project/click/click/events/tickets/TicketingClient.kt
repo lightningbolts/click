@@ -50,9 +50,8 @@ interface TicketingClient {
 }
 
 /**
- * Body for `POST /api/beacons/{id}/tickets/checkout`: tier ids and quantities only, never prices.
- * `client` is left out: click-web's schema accepts only `web` / `ios` (`lib/api/schemas/ticketing.ts`) and would
- * reject `android`.
+ * Body for `POST /api/beacons/{id}/tickets/checkout`: tier ids and quantities only, never prices, plus
+ * `client: "android"` (click-web `checkoutBodySchema` accepts `web` / `ios` / `android`; it tags the Stripe session).
  */
 internal fun checkoutRequestBody(items: List<TicketLine>): JsonObject =
     buildJsonObject {
@@ -64,6 +63,7 @@ internal fun checkoutRequestBody(items: List<TicketLine>): JsonObject =
                 }
             }
         }
+        put("client", "android")
     }
 
 /** click-web backed [TicketingClient] (iOS `TicketingRepository`). */

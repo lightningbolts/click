@@ -1,5 +1,6 @@
 package compose.project.click.click.data.repository // pragma: allowlist secret
 
+import compose.project.click.click.crypto.DeviceIdentity // pragma: allowlist secret
 import compose.project.click.click.crypto.MessageCryptoV2 // pragma: allowlist secret
 import compose.project.click.click.data.api.DeviceApprovalChallengeDto // pragma: allowlist secret
 import compose.project.click.click.data.api.DeviceApprovalDecisionBody // pragma: allowlist secret
@@ -9,8 +10,10 @@ import compose.project.click.click.data.api.getDeviceApprovalChallenge // pragma
 import compose.project.click.click.data.api.getDeviceApprovals // pragma: allowlist secret
 import compose.project.click.click.data.api.postDeviceApprovalDecision // pragma: allowlist secret
 import compose.project.click.click.data.devices.DeviceApprovals // pragma: allowlist secret
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.withContext
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 
@@ -73,7 +76,8 @@ internal suspend fun runDeviceApprovalDecision(
         val pending = async { gateway.challenge(requestId, myDeviceId) }
         authorize?.invoke()
         val challenge = pending.await().getOrThrow()
-        val proof = deviceApprovalProof(challenge, myDeviceId, unwrap)
+        // X25519 unwrap: callers run on Main (rememberCoroutineScope).
+        val proof = withContext(Dispatchers.Default) { deviceApprovalProof(challenge, myDeviceId, unwrap) }
         gateway
             .decide(
                 requestId,
@@ -87,17 +91,26 @@ internal suspend fun runDeviceApprovalDecision(
     }
 }
 
+/** The identity lives in EncryptedSharedPreferences (Keystore); keep that off Main. */
+private suspend fun loadDeviceIdentityOffMain(): DeviceIdentity =
+    withContext(Dispatchers.Default) { MessageCryptoV2.loadOrCreateDeviceIdentity() }
+
+/** Registration loads (and may replace) the identity too. */
+private suspend fun SupabaseChatRepository.registerThisDeviceOffMain() {
+    withContext(Dispatchers.Default) { registerThisDeviceImpl() }
+}
+
 internal suspend fun SupabaseChatRepository.deviceApprovalsImpl(): DeviceApprovals? {
     val token = ensureFreshJwtForChat() ?: return null
-    val identity = runCatching { MessageCryptoV2.loadOrCreateDeviceIdentity() }.getOrNull() ?: return null
+    val identity = runCatching { loadDeviceIdentityOffMain() }.getOrNull() ?: return null
     return apiClient.getDeviceApprovals(identity.info.deviceId, token).getOrNull()?.let(DeviceApprovals::from)
 }
 
 /** Asks the account's other devices for history (idempotent); [reopen] asks again after a denial. */
 internal suspend fun SupabaseChatRepository.askForHistoryImpl(reopen: Boolean): DeviceApprovals? {
-    registerThisDeviceImpl()
+    registerThisDeviceOffMain()
     val token = ensureFreshJwtForChat() ?: return null
-    val identity = runCatching { MessageCryptoV2.loadOrCreateDeviceIdentity() }.getOrNull() ?: return null
+    val identity = runCatching { loadDeviceIdentityOffMain() }.getOrNull() ?: return null
     return apiClient.askForHistory(identity.info.deviceId, reopen, token).getOrThrow().let(DeviceApprovals::from)
 }
 
@@ -112,9 +125,9 @@ internal suspend fun SupabaseChatRepository.decideDeviceApprovalImpl(
     approve: Boolean,
     authorize: (suspend () -> Unit)?,
 ) {
-    registerThisDeviceImpl()
+    registerThisDeviceOffMain()
     val token = ensureFreshJwtForChat() ?: error("Not signed in")
-    val identity = MessageCryptoV2.loadOrCreateDeviceIdentity()
+    val identity = loadDeviceIdentityOffMain()
     val api = apiClient
     val gateway =
         object : DeviceApprovalGateway {

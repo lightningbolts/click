@@ -30,14 +30,16 @@ sealed interface ServerSearchState {
 }
 
 /**
- * Local rows first, then the server's people, events and hubs that aren't already shown.
- * Server message hits are merged by the message scan (it de-duplicates them against stored and
- * cached messages), so they're not added here.
+ * Local rows first, then the server's people, events, hubs and message hits that aren't already
+ * shown (iOS merges `remote.hits` directly). Message hits are de-duplicated by message id, so the
+ * message scan's own copies (stored / cached / decrypted) win; this also covers a retry, which
+ * does not rerun the scan.
  */
 internal fun mergeServerResults(
     local: List<SearchResult>,
     server: GlobalSearchPayload?,
     activeHubs: List<ActiveHubEntry> = emptyList(),
+    archivedConnectionIds: Set<String> = emptySet(),
 ): List<SearchResult> {
     if (server == null) return local
     val localBeaconIds = local.mapNotNullTo(HashSet()) { (it as? SearchResult.BeaconMatch)?.beacon?.id }
@@ -68,6 +70,11 @@ internal fun mergeServerResults(
             creatorId = active?.creatorId,
         )
     }
+    val localMessageIds = local.mapNotNullTo(HashSet()) { (it as? SearchResult.MessageHit)?.result?.message?.id }
+    server.hits
+        .distinctBy { it.messageId }
+        .filterNot { it.messageId in localMessageIds || isUndisplayableEncryptedSearchSnippet(it.snippet) }
+        .mapTo(out) { it.toMessageHit(archivedConnectionIds, activeHubs) }
     return out
 }
 

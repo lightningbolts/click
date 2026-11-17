@@ -108,9 +108,12 @@ actual fun PlatformMap(
         // pinch/double-tap zoom; mirroring state here fought gestures and caused random zoom jumps.
     }
 
-    // Report zoom changes back to the ViewModel.
+    // Report zoom back to the ViewModel once the camera settles, not on every pinch frame: each
+    // change re-clusters and restacks every pin (iOS restacks after the camera settles too).
     LaunchedEffect(cameraPositionState) {
-        snapshotFlow { cameraPositionState.position.zoom.toDouble() }
+        snapshotFlow {
+            if (cameraPositionState.isMoving) null else cameraPositionState.position.zoom.toDouble()
+        }.filterNotNull()
             .distinctUntilChanged()
             .collectLatest { onZoomChanged(it) }
     }

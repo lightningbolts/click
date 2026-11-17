@@ -179,6 +179,15 @@ class HubChatViewModel(
     internal var sessionJob: Job? = null
     internal var participantDenied: Boolean = false
     internal var hubE2eeV2Session: HubE2eeV2Session? = null
+        // A re-key anywhere in the app (E2eeIdentityEvents) makes this session belong to the old
+        // device: zero it and drop it instead of reading or sending with the revoked identity.
+        get() {
+            val session = field ?: return null
+            if (session.isCurrentIdentity()) return session
+            field = null
+            session.clearKeys()
+            return null
+        }
     internal var hubParticipantIds: Set<String> = emptySet()
 
     /** Visible hub members (Hub Info); empty when the server hides sender profiles. */

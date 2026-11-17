@@ -207,6 +207,37 @@ class GlobalSearchServerViewModelTest {
         }
 
     @Test
+    fun aRetryAfterOfflineShowsTheServersMessageHits() =
+        runVm {
+            var offline = true
+            val hit =
+                ConversationSearchHit( // pragma: allowlist secret
+                    messageId = "m-retry",
+                    chatId = "chat-1",
+                    conversationId = "chat-1",
+                    connectionId = "conn-1",
+                    senderId = "u-2",
+                    timestamp = 5L,
+                    snippet = "retry works",
+                    chatName = "Rae",
+                )
+            val model =
+                vm(server = {
+                    if (offline) GlobalSearchOutcome.Offline else GlobalSearchOutcome.Success(GlobalSearchPayload(hits = listOf(hit)))
+                })
+            model.search("ret", VIEWER)
+            advanceUntilIdle()
+            assertEquals(ServerSearchState.Offline, model.serverState.value)
+            offline = false
+            model.retryServerSearch()
+            advanceUntilIdle()
+            assertTrue(
+                model.results.value.items
+                    .any { it is SearchResult.MessageHit && it.result.message.id == "m-retry" },
+            )
+        }
+
+    @Test
     fun offlineIsReportedAsOffline() =
         runVm {
             val model = vm(server = { GlobalSearchOutcome.Offline })

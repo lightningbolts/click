@@ -29,12 +29,17 @@ import compose.project.click.click.util.ByteBudgetLruCache
 import compose.project.click.click.util.readChatMediaVaultBytes
 import compose.project.click.click.util.writeChatMediaVaultFile
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.IO
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.serialization.builtins.ListSerializer
@@ -73,6 +78,8 @@ data class SharedDropsUiState(
     val archiveError: String? = null,
     /** A later page failed: the grid shows "Couldn't load more. Retry". */
     val archiveMoreFailed: Boolean = false,
+    /** The account this state belongs to; Home hides the strip for anyone else, even for a frame. */
+    val loadedForUser: String? = null,
 ) {
     /** The strip's copy first (it's the fresher one), else the archive's (iOS `SharedDropsStore.drop`). */
     fun drop(id: String): SharedDrop? = drops.firstOrNull { it.id == id } ?: archive.firstOrNull { it.id == id }
@@ -111,33 +118,33 @@ object ChatSharedDropReplySender : SharedDropReplySender {
         }
 }
 
-/** Where developed photos, teasers and the last strip live on device (fakeable in tests). */
+/** Where developed photos, teasers and the last strip live on device (fakeable in tests). Never on Main. */
 interface SharedDropsDisk {
-    fun read(
+    suspend fun read(
         key: String,
         extension: String,
     ): ByteArray?
 
-    fun write(
+    suspend fun write(
         key: String,
         bytes: ByteArray,
         extension: String,
     )
 }
 
-/** The app's private media vault (the same store as chat media). */
+/** The app's private media vault (the same store as chat media), read and written on the IO pool. */
 object VaultSharedDropsDisk : SharedDropsDisk {
-    override fun read(
+    override suspend fun read(
         key: String,
         extension: String,
-    ): ByteArray? = readChatMediaVaultBytes(key, extension)?.takeIf { it.isNotEmpty() }
+    ): ByteArray? = withContext(Dispatchers.IO) { readChatMediaVaultBytes(key, extension)?.takeIf { it.isNotEmpty() } }
 
-    override fun write(
+    override suspend fun write(
         key: String,
         bytes: ByteArray,
         extension: String,
     ) {
-        writeChatMediaVaultFile(key, bytes, extension)
+        withContext(Dispatchers.IO) { writeChatMediaVaultFile(key, bytes, extension) }
     }
 }
 
@@ -277,6 +284,9 @@ class SharedDropsViewModel(
 
     private val loadingImages = mutableSetOf<String>()
     private var loadedForUser: String? = null
+
+    /** Strip writes land on disk in the order they were made (Mutex is fair). */
+    private val stripWriteLock = Mutex()
     private var archiveGeneration = 0
 
     init {
@@ -308,22 +318,28 @@ class SharedDropsViewModel(
     fun refresh() {
         if (!isEnabled()) return
         val uid = currentUserId()?.takeIf { it.isNotBlank() } ?: return
-        if (loadedForUser != uid) {
+        val switched = loadedForUser != uid
+        if (switched) {
             // Another account's drops never show, even for a frame.
             loadedForUser = uid
-            _state.value = SharedDropsUiState()
+            _state.value = SharedDropsUiState(loadedForUser = uid)
             clearOriginals()
             _previews.value = emptyMap()
-            disk
-                .read(stripKey(uid), "json")
-                ?.let { bytes ->
-                    runCatching { json.decodeFromString(ListSerializer(SharedDrop.serializer()), bytes.decodeToString()) }.getOrNull()
-                }?.let { cached ->
-                    _state.update { it.copy(drops = cached) }
-                    cached.forEach { warmImages(it) }
-                }
         }
         viewModelScope.launch {
+            if (switched) {
+                disk
+                    .read(stripKey(uid), "json")
+                    ?.let { bytes ->
+                        runCatching { json.decodeFromString(ListSerializer(SharedDrop.serializer()), bytes.decodeToString()) }.getOrNull()
+                    }?.let { cached ->
+                        // The live strip (or another account) may have landed while the disk was read.
+                        if (loadedForUser == uid && !_state.value.loaded) {
+                            _state.update { it.copy(drops = cached) }
+                            cached.forEach { warmImages(it) }
+                        }
+                    }
+            }
             service
                 .strip()
                 .onSuccess { list ->
@@ -341,7 +357,7 @@ class SharedDropsViewModel(
     ) {
         _state.update { it.copy(drops = list) }
         val encoded = json.encodeToString(ListSerializer(SharedDrop.serializer()), list.forDiskCache())
-        disk.write(stripKey(uid), encoded.encodeToByteArray(), "json")
+        viewModelScope.launch { stripWriteLock.withLock { disk.write(stripKey(uid), encoded.encodeToByteArray(), "json") } }
     }
 
     /** Loads the teaser (and the original once developed) for [drop], disk first. */
@@ -349,12 +365,12 @@ class SharedDropsViewModel(
         val uid = currentUserId() ?: return
         val id = drop.id
         if (id !in _previews.value) {
-            val cached = disk.read(previewKey(uid, id), "jpg")
-            if (cached != null) {
-                _previews.update { it + (id to cached) }
-            } else {
-                drop.previewUrl?.let { url ->
-                    load("p:$id") {
+            load("p:$id") {
+                val cached = disk.read(previewKey(uid, id), "jpg")
+                if (cached != null) {
+                    if (currentUserId() == uid) _previews.update { it + (id to cached) }
+                } else {
+                    drop.previewUrl?.let { url ->
                         service.download(url).getOrNull()?.takeIf { it.isNotEmpty() }?.let { bytes ->
                             disk.write(previewKey(uid, id), bytes, "jpg")
                             _previews.update { it + (id to bytes) }
@@ -366,11 +382,11 @@ class SharedDropsViewModel(
         // Shown again: keep it in memory ahead of drops that scrolled away.
         if (originalsCache.get(id) != null) return
         if (drop.state(now()) == ClickDropDevelopState.Developed) {
-            val cached = disk.read(originalKey(uid, id), "jpg")
-            if (cached != null) {
-                putOriginal(id, cached)
-            } else {
-                load("o:$id") {
+            load("o:$id") {
+                val cached = disk.read(originalKey(uid, id), "jpg")
+                if (cached != null) {
+                    if (currentUserId() == uid) putOriginal(id, cached)
+                } else {
                     // A copy from disk has no URL; developing again is idempotent and signs a fresh one.
                     val url = drop.originalUrl ?: service.develop(id).getOrNull()?.url
                     url?.let { downloadOriginal(uid, id, it) }

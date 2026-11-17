@@ -55,6 +55,13 @@ object ProductTelemetry {
     /** Backgrounded: send what is queued while the process is still alive. */
     fun onBackground() = launchSafely { sink.flush() }
 
+    /**
+     * Signed out: drop the previous account's queued events. Not awaited (a flush in flight could
+     * hold the lock for a network timeout); the sink's mutex is FIFO, so this clear runs before
+     * the next account's sign-in flush.
+     */
+    fun onSignedOut() = launchSafely { sink.clearQueue() }
+
     private fun launchSafely(block: suspend () -> Unit) {
         scope.launch { runCatching { block() } }
     }

@@ -34,6 +34,12 @@ class ClickPassTest {
             )
         assertEquals(PassScanResult.ALREADY_CHECKED_IN, scan.result)
         assertEquals("Lena", scan.holderName)
+        assertNull(scan.tierName, "RSVP passes have no tier")
+        val ticketScan =
+            parsePassScan(
+                obj("""{"result":"checked_in","attendee":{"user_id":"u","name":"Lena"},"tier_name":"VIP","check_in_count":3}"""),
+            )
+        assertEquals("VIP", ticketScan.tierName)
         assertEquals(PassScanResult.INVALID, parsePassScan(obj("""{"result":"???"}""")).result)
     }
 

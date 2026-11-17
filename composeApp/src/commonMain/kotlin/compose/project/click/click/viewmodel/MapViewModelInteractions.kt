@@ -7,8 +7,6 @@ package compose.project.click.click.viewmodel // pragma: allowlist secret
 
 import androidx.lifecycle.viewModelScope
 import compose.project.click.click.data.AppDataManager // pragma: allowlist secret
-import compose.project.click.click.data.flags.FeatureFlag // pragma: allowlist secret
-import compose.project.click.click.data.flags.FeatureFlags // pragma: allowlist secret
 import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.ui.components.MapPin // pragma: allowlist secret
 import compose.project.click.click.ui.components.MapPinKind // pragma: allowlist secret
@@ -19,6 +17,7 @@ import compose.project.click.click.ui.utils.MapPinStack // pragma: allowlist sec
 import compose.project.click.click.ui.utils.MapPinStacking // pragma: allowlist secret
 import compose.project.click.click.ui.utils.MapPlacesLayer // pragma: allowlist secret
 import compose.project.click.click.ui.utils.MapRenderData // pragma: allowlist secret
+import compose.project.click.click.ui.utils.buildMapPins // pragma: allowlist secret
 import compose.project.click.click.ui.utils.calculateZoomForBounds // pragma: allowlist secret
 import compose.project.click.click.ui.utils.findMapPinStack // pragma: allowlist secret
 import compose.project.click.click.ui.utils.haversineDistance // pragma: allowlist secret
@@ -29,7 +28,6 @@ import compose.project.click.click.utils.LocationResult // pragma: allowlist sec
 import compose.project.click.click.utils.resolveHubGatekeeperLocation // pragma: allowlist secret
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 import kotlinx.serialization.json.add // pragma: allowlist secret
@@ -186,38 +184,22 @@ internal fun MapViewModel.onOverlappingPinChosenImpl(pin: MapPin) {
     openResolvedMapPin(pin)
 }
 
-internal fun MapViewModel.currentVisibleMapPins(): List<MapPin> {
-    val places =
-        MapPlacesLayer.visiblePlaces(
-            _mapPlaces.value,
-            _selectedLayerFilters.value,
-            FeatureFlags.isEnabled(FeatureFlag.CLICK_PLACES),
-        )
-    val hubs = _communityHubs.value.map { MapPin.fromCommunityHub(it) } + places.map { MapPin.fromPlace(it) }
-    val currentUserId = AppDataManager.currentUser.value?.id
-    val connectedUsers = AppDataManager.connectedUsers.value
-    val coreConnectionIds = AppDataManager.coreConnectionIds.value
-    return when (val state = _renderData.value) {
-        is MapRenderData.IndividualPins -> {
-            val connections =
-                state.points.map { point ->
-                    val peerId = point.connection.user_ids.firstOrNull { it != currentUserId }
-                    val peer = peerId?.let { connectedUsers[it] }
-                    MapPin.fromConnectionPoint(
-                        point,
-                        imageUrl = peer?.image,
-                        avatarSeed = peerId ?: point.connection.id,
-                        isCore = point.connection.id in coreConnectionIds,
-                    )
-                }
-            val beacons = MapPlacesLayer.beaconsOutsidePlaces(state.beacons, places).map { MapPin.fromBeacon(it) }
-            connections + beacons + hubs
-        }
-        is MapRenderData.Clusters -> {
-            MapPlacesLayer.beaconsOutsidePlaces(state.standaloneBeacons, places).map { MapPin.fromBeacon(it) } + hubs
-        }
-    }
+/** Hubs the map draws right now (same rule as [MapViewModel.discoveryFeedHubs]). */
+internal fun MapViewModel.currentVisibleCommunityHubs(): List<CommunityHubPin> {
+    val layers = _selectedLayerFilters.value
+    return if (MapLayerFilter.ALL in layers || MapLayerFilter.COMMUNITY_HUBS in layers) _communityHubs.value else emptyList()
 }
+
+/** The pins the map draws, built the same way as `MapContent` (same Places, same dedupe). */
+internal fun MapViewModel.currentVisibleMapPins(): List<MapPin> =
+    buildMapPins(
+        renderData = _renderData.value,
+        communityHubs = currentVisibleCommunityHubs(),
+        places = currentVisibleMapPlaces(),
+        currentUserId = AppDataManager.currentUser.value?.id,
+        connectedUsers = AppDataManager.connectedUsers.value,
+        coreConnectionIds = AppDataManager.coreConnectionIds.value,
+    )
 
 internal fun MapViewModel.openResolvedMapPin(pin: MapPin) {
     if (pin.kind == MapPinKind.PLACE) {

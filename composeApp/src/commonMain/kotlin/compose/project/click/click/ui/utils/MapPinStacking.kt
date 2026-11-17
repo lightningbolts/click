@@ -3,7 +3,9 @@ package compose.project.click.click.ui.utils // pragma: allowlist secret
 import compose.project.click.click.data.models.MapBeaconKind // pragma: allowlist secret
 import compose.project.click.click.ui.components.MapPin // pragma: allowlist secret
 import compose.project.click.click.ui.components.MapPinKind // pragma: allowlist secret
+import compose.project.click.click.ui.screens.foldForSearch // pragma: allowlist secret
 import compose.project.click.click.ui.screens.naturalCompare // pragma: allowlist secret
+import compose.project.click.click.ui.screens.naturalCompareFolded // pragma: allowlist secret
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.floor
@@ -104,7 +106,17 @@ fun stackMapPins(
     nowEpochMs: Long,
 ): List<MapPinStack> {
     if (pins.isEmpty()) return emptyList()
-    val ordered = pins.distinctBy { it.id }.sortedWith(mapPinStackComparator(nowEpochMs))
+    // Same order as [mapPinStackComparator], with rank and folded title computed once per pin.
+    val ordered =
+        pins
+            .distinctBy { it.id }
+            .map { Triple(it, mapPinStackRank(it, nowEpochMs), foldForSearch(it.title)) }
+            .sortedWith(
+                compareBy<Triple<MapPin, Int, String>> { it.second }
+                    .thenBy { it.first.eventStartEpochMs ?: Long.MAX_VALUE }
+                    .then { a, b -> naturalCompareFolded(a.third, b.third) }
+                    .thenBy { it.first.id },
+            ).map { it.first }
     val points = ordered.map { mercatorPointDp(it.latitude, it.longitude, zoom) }
     val d = MapPinStacking.STACK_DISTANCE_DP
 

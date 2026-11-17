@@ -224,9 +224,18 @@ class ConnectionViewModel : ViewModel() {
         _multiTapGroupState.asStateFlow()
     internal var multiTapGroupJob: Job? = null
 
+    /** The latest group setup's inputs, for "Try again" on the result. */
+    internal var multiTapGroupArgs: MultiTapGroupArgs? = null
+
     init {
         // G4-7: the follow-up is confirmed or cancelled as each flow settles.
-        viewModelScope.launch { _connectionState.collect { syncFollowUpWith(it) } }
+        // P2-19: a group result starts its group chat setup as soon as it is shown (iOS `PostConnectView`).
+        viewModelScope.launch {
+            _connectionState.collect {
+                syncFollowUpWith(it)
+                startGroupSetupForShownResult(it)
+            }
+        }
     }
 
     override fun onCleared() {
@@ -467,9 +476,15 @@ class ConnectionViewModel : ViewModel() {
         groupWatchJob = null
         // Ignored once the flow confirmed its connections, so closing the result never drops a reading.
         cancelEncounterFollowUp()
+        // GPS and the barometer never outlive the flow (iOS stops capture when the screen goes).
+        stopConnectionCapture()
         lastTapProximityStartedAtMs = 0L
         lastProximityEncounterLoggedAggregate = true
         lastProximityHardwareVibe = null
+        // A later QR / tap never reuses this flow's coordinates.
+        lastProximityLat = null
+        lastProximityLng = null
+        lastProximityAltitudeMeters = null
         _connectionState.value = ConnectionState.Idle
     }
 

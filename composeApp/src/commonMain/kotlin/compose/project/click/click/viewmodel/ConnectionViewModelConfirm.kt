@@ -237,6 +237,14 @@ internal fun ConnectionViewModel.confirmProximityConnectionImpl(
                     ConnectionState.TaggingContext(
                         newConnections = created,
                         targetUsers = profiles,
+                        // 2+ peers is a group Click: its result starts the group chat setup.
+                        isGroup = profiles.size >= 2,
+                        memberUserIds =
+                            if (profiles.size >= 2) {
+                                (listOf(currentUserId) + profiles.map { it.id }).distinct().sorted()
+                            } else {
+                                emptyList()
+                            },
                         isNewConnection = isNewAggregate,
                     )
             }
@@ -449,6 +457,13 @@ internal fun ConnectionViewModel.confirmHostProximitySelectionImpl(
                         peers = profiles.filter { it.id in selected }.ifEmpty { profiles },
                     )
                 }
+                // G4-5: someone who joins a moment later can still grow this group on the server
+                // (iOS `watchForGroup` after confirm).
+                startGroupWatch(
+                    pendingHandshakeId = outcome.pendingHandshakeId ?: pendingId,
+                    shownConnectionId = created.first().id,
+                    currentUserId = currentUserId,
+                )
                 // Tags already sent with confirm when present; skip second tagging sheet.
                 if (!contextTagIds.isNullOrEmpty()) {
                     val primary = created.first()
@@ -502,12 +517,8 @@ internal fun ConnectionViewModel.confirmHostProximitySelectionImpl(
                 tagging.selectableUsers.size.takeIf { it > 0 }
                     ?: tagging.targetUsers.size,
         )
-        // P2-19: find or create the group chat (prefilled sheet only if that fails).
-        startMultiTapGroupPreparation(
-            currentUserId = currentUserId,
-            groupMemberIds = emptyList(),
-            peers = peerUsers.map { it.toUserProfile() },
-        )
+        // P2-19: the group chat is set up once confirmProximityConnection has created the 1:1
+        // connections and shows the group result (startGroupSetupForShownResult).
     }
     confirmProximityConnection(
         peerUsers = peerUsers,
@@ -622,15 +633,8 @@ internal fun ConnectionViewModel.saveContextTagsImpl(
             if (!connections.any { it.isPendingSync() }) {
                 AppDataManager.refresh(force = true)
             }
-            // P2-19: a group Click's chat is found or created in the background (once per member
-            // set; a no-op when it already started at confirm time).
-            if (selfId != null && tagging.isGroup) {
-                startMultiTapGroupPreparation(
-                    currentUserId = selfId,
-                    groupMemberIds = tagging.memberUserIds,
-                    peers = targetProfiles,
-                )
-            }
+            // P2-19: a group Click's chat setup already started when its result was shown
+            // (startGroupSetupForShownResult), so a tag-save failure never skips it.
             val primary = connections.first()
             val summaryUser = syntheticUserForProximitySuccess(targetProfiles)
             val stillTagging = _connectionState.value as? ConnectionState.TaggingContext
@@ -719,9 +723,17 @@ internal fun ConnectionViewModel.connectWithUserImpl(
             qrScanMomentMs = null
             if (connectionMethod == "qr") stopConnectionCapture()
             val capturedFix = captured?.fix
-            val locLat = capturedFix?.latitude ?: latitude ?: lastProximityLat
-            val locLng = capturedFix?.longitude ?: longitude ?: lastProximityLng
-            val locAlt = altitudeMeters ?: lastProximityAltitudeMeters
+            // QR / link: only this scan's own fix (iOS sends `captured.fix` alone); never a
+            // caller-resolved or earlier tap's coordinate, so Location snap off sends none.
+            val isQr = connectionMethod == "qr"
+            val locLat = if (isQr) capturedFix?.latitude else latitude ?: lastProximityLat
+            val locLng = if (isQr) capturedFix?.longitude else longitude ?: lastProximityLng
+            val locAlt =
+                if (isQr) {
+                    altitudeMeters.takeIf { capturedFix != null }
+                } else {
+                    altitudeMeters ?: lastProximityAltitudeMeters
+                }
             val qrHardwareVibe =
                 when (connectionMethod) {
                     "qr" ->

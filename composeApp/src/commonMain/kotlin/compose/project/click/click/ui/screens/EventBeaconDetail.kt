@@ -385,24 +385,28 @@ internal fun EventBeaconDetail(
     var joinDecisionNotice by remember(beacon.id) { mutableStateOf<String?>(null) }
     var showClickPass by remember(beacon.id) { mutableStateOf(false) }
     var showPassScanner by remember(beacon.id) { mutableStateOf(false) }
-    // Ticketing (P2-16, iOS `BeaconDetailView`): when the server sends `beacon.ticketing`, a ticket replaces the RSVP.
+    // Ticketing (P2-16, iOS `BeaconDetailView`): when the server sends `beacon.ticketing` on
+    // `GET /api/beacons/{id}`, a ticket replaces the RSVP. Like iOS this isn't gated on the client's
+    // `ticket_sales` flag: the server decides whether `ticketing` is sent. Until it's known (loading, or
+    // the load failed) neither the RSVP nor the ticket button shows, so a paid event never offers a free
+    // RSVP (#6).
     val featureFlags by FeatureFlags.state.collectAsState()
-    val ticketSalesOn = featureFlags.isEnabled(FeatureFlag.TICKET_SALES)
     val ticketingClient = remember { ApiTicketingClient() }
     var ticketing by remember(beacon.id) { mutableStateOf<EventTicketing?>(null) }
+    var ticketingKnown by remember(beacon.id) { mutableStateOf(false) }
+    var ticketingFailed by remember(beacon.id) { mutableStateOf(false) }
     var ticketingEpoch by remember(beacon.id) { mutableIntStateOf(0) }
     var showTicketPicker by remember(beacon.id) { mutableStateOf(false) }
-    LaunchedEffect(displayBeacon.id, ticketSalesOn, ticketingEpoch) {
-        if (!ticketSalesOn) {
-            ticketing = null
-            return@LaunchedEffect
-        }
+    LaunchedEffect(displayBeacon.id, ticketingEpoch) {
+        ticketingFailed = false
         try {
             ticketing = ticketingClient.eventTicketing(displayBeacon.id)
+            ticketingKnown = true
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (_: Exception) {
-            // Keep what we had; the RSVP path stays until ticketing is known.
+            // A refresh that fails keeps what we knew; a first load that fails offers Retry.
+            if (!ticketingKnown) ticketingFailed = true
         }
     }
     val ticketed = ticketing != null
@@ -854,7 +858,11 @@ internal fun EventBeaconDetail(
 
         EventDirectionsAndCalendarRow(
             beacon = displayBeacon,
-            openUri = { uriHandler.openUri(it) },
+            // No browser / maps app (kiosk, work profile): AndroidUriHandler throws; say so instead of crashing (#2).
+            openUri = { uri ->
+                runCatching { uriHandler.openUri(uri) }
+                    .onFailure { joinDecisionNotice = "No app on this device can open this link." }
+            },
             onNotice = { joinDecisionNotice = it },
         )
 
@@ -922,7 +930,9 @@ internal fun EventBeaconDetail(
         }
 
         val currentTicketing = ticketing
-        if (!ended && currentTicketing != null) {
+        if (!ended && !ticketingKnown) {
+            EventTicketingPendingRow(failed = ticketingFailed, onRetry = { ticketingEpoch++ })
+        } else if (!ended && currentTicketing != null) {
             EventTicketButton(ticketing = currentTicketing, onClick = { showTicketPicker = true })
         } else if (!ended) {
             if (currentUserSignedUp || pendingOrWaitlisted) {
@@ -1013,6 +1023,46 @@ internal fun EventBeaconDetail(
     }
 }
 
+/**
+ * Stands in for the RSVP / ticket button until the event's ticketing is known: a spinner while it loads, and
+ * Retry when the load failed (#6).
+ */
+@Composable
+private fun EventTicketingPendingRow(
+    failed: Boolean,
+    onRetry: () -> Unit,
+) {
+    if (failed) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            Text(
+                text = "Couldn't load how to join this event.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            ClickButton(
+                onClick = onRetry,
+                modifier = Modifier.fillMaxWidth(),
+                variant = ClickButtonVariant.Secondary,
+            ) {
+                Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(20.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Retry", fontWeight = FontWeight.SemiBold)
+            }
+        }
+    } else {
+        Box(modifier = Modifier.fillMaxWidth().height(48.dp), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(22.dp),
+                strokeWidth = 2.dp,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+    }
+}
+
+/** One client for every event page's weather line (each `ApiClient()` opens its own HTTP client, #58). */
+private val eventWeatherApi by lazy { ApiClient() }
+
 /** "64° Cloudy now · 58° Rain at 7:00 PM" under the location (iOS event page weather, #63). */
 @Composable
 private fun EventWeatherLine(
@@ -1035,7 +1085,7 @@ private fun EventWeatherLine(
         val atIso = forecastStart?.let { Instant.fromEpochMilliseconds(it).toString() }
         val fetched =
             withContext(Dispatchers.Default) {
-                ApiClient().getPlaceWeather(latitude, longitude, atIso).getOrNull()?.let(PlaceWeather::parse)
+                eventWeatherApi.getPlaceWeather(latitude, longitude, atIso).getOrNull()?.let(PlaceWeather::parse)
             } ?: return@LaunchedEffect
         PlaceWeatherCache.put(key, fetched, now)
         weather = fetched

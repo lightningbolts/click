@@ -11,7 +11,7 @@ import kotlin.test.assertTrue
 
 class TicketCheckoutTest {
     @AfterTest
-    fun reset() = TicketCheckoutReturns.clear()
+    fun reset() = TicketCheckoutReturns.resetForTest()
 
     // region Return URL
 
@@ -70,6 +70,7 @@ class TicketCheckoutTest {
 
     @Test
     fun returnRouterHoldsPerEvent() {
+        TicketCheckoutReturns.beginAwaiting("b1")
         assertFalse(TicketCheckoutReturns.handleIncomingUrl("https://joinclick.co/e/b1"))
         assertTrue(TicketCheckoutReturns.handleIncomingUrl("https://joinclick.co/e/b1/tickets/return?order=o1"))
         assertNull(TicketCheckoutReturns.consume("other"))
@@ -78,9 +79,25 @@ class TicketCheckoutTest {
     }
 
     @Test
+    fun returnWithNoWaitingPickerFallsThroughToEventLink() {
+        // Nothing waiting (process death, picker dismissed, receipt email): left for the event deep link router.
+        assertFalse(TicketCheckoutReturns.handleIncomingUrl("https://joinclick.co/e/b1/tickets/return?order=o1"))
+        assertNull(TicketCheckoutReturns.pending.value)
+        // A picker waiting on another event doesn't swallow this one.
+        TicketCheckoutReturns.beginAwaiting("b2")
+        assertFalse(TicketCheckoutReturns.handleIncomingUrl("https://joinclick.co/e/b1/tickets/return?order=o1"))
+        // Once the picker stops waiting, its own return falls through too.
+        TicketCheckoutReturns.stopAwaiting("b2")
+        assertFalse(TicketCheckoutReturns.handleIncomingUrl("https://joinclick.co/e/b2/tickets/return?order=o2"))
+    }
+
+    @Test
     fun checkoutBodyHasOnlyTiersAndQuantities() {
         val body = checkoutRequestBody(listOf(TicketLine("t1", 2), TicketLine("t2", 0)))
-        assertEquals(Json.parseToJsonElement("""{"items":[{"ticket_tier_id":"t1","quantity":2}]}"""), body)
+        assertEquals(
+            Json.parseToJsonElement("""{"items":[{"ticket_tier_id":"t1","quantity":2}],"client":"android"}"""),
+            body,
+        )
     }
 
     // endregion

@@ -1,5 +1,6 @@
 package compose.project.click.click.viewmodel
 
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -104,5 +105,43 @@ class HostSelectionExclusionSyncTest {
             sync.reset()
             advanceUntilIdle()
             assertEquals(0, calls)
+        }
+
+    @Test
+    fun leaveWaitsForTheSaveInFlightAndLandsLast() =
+        runTest {
+            val gate = CompletableDeferred<Unit>()
+            val landed = mutableListOf<List<String>>()
+            val sync =
+                HostSelectionExclusionSync(this, debounceMs = 300) { _, ex ->
+                    if (ex == listOf("u3")) gate.await()
+                    landed += ex
+                    Result.success(Unit)
+                }
+            sync.submit("ph", listOf("u3"))
+            advanceTimeBy(301)
+            runCurrent()
+            sync.leave("ph", listOf("u4", "u3"))
+            runCurrent()
+            assertEquals(emptyList(), landed)
+            gate.complete(Unit)
+            advanceUntilIdle()
+            assertEquals(listOf(listOf("u3"), listOf("u3", "u4")), landed)
+        }
+
+    @Test
+    fun leaveDropsAQueuedSave() =
+        runTest {
+            val sent = mutableListOf<List<String>>()
+            val sync =
+                HostSelectionExclusionSync(this, debounceMs = 300) { _, ex ->
+                    sent += ex
+                    Result.success(Unit)
+                }
+            sync.submit("ph", listOf("u3"))
+            runCurrent()
+            sync.leave("ph", listOf("u3", "u4"))
+            advanceUntilIdle()
+            assertEquals(listOf(listOf("u3", "u4")), sent)
         }
 }

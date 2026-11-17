@@ -116,6 +116,13 @@ class EventsTelemetrySink(
             }
         }
 
+    /**
+     * Sign-out: queued events belong to the account that made them and must not be flushed with
+     * the next user's JWT (iOS `AppEnvironment.clearSessionCaches`). The install flag and last
+     * open day are per device and stay.
+     */
+    suspend fun clearQueue() = mutex.withLock { writeQueueLocked(emptyList()) }
+
     internal fun pendingForTest(): List<ProductEventBody> = readQueueLocked()
 
     private fun body(event: String) =

@@ -128,6 +128,27 @@ class EventsTelemetrySinkTest {
         }
 
     @Test
+    fun clearQueueDropsQueuedEventsButKeepsDeviceKeys() =
+        runTest {
+            val h = Harness(now = morning, status = 401)
+            val sink = h.sink()
+            sink.installedIfNeeded()
+            sink.appOpened()
+            sink.flush()
+            assertEquals(2, sink.pendingForTest().size)
+            sink.clearQueue()
+            assertTrue(sink.pendingForTest().isEmpty())
+            assertNull(h.storage.get(EventsTelemetrySink.KEY_QUEUE))
+            assertEquals("1", h.storage.get(EventsTelemetrySink.KEY_INSTALL_SENT))
+            // Same day: the next account's sign-in does not re-queue anything for the previous one.
+            h.status = 202
+            sink.installedIfNeeded()
+            sink.appOpened()
+            sink.flush()
+            assertTrue(h.posted.isEmpty())
+        }
+
+    @Test
     fun retryableStatuses() {
         listOf(401, 408, 429, 500, 503).forEach { assertTrue(EventsTelemetrySink.isRetryable(it), "$it") }
         listOf(200, 202, 400, 403, 404, 413).forEach { assertFalse(EventsTelemetrySink.isRetryable(it), "$it") }

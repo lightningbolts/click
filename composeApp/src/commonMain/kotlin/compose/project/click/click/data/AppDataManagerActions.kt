@@ -14,17 +14,23 @@ import compose.project.click.click.data.models.User // pragma: allowlist secret
 import compose.project.click.click.data.models.UserAvailability // pragma: allowlist secret
 import compose.project.click.click.data.models.isOneToOnePairEdge // pragma: allowlist secret
 import compose.project.click.click.data.models.isResolvedDisplayName // pragma: allowlist secret
+import compose.project.click.click.data.places.PlacesMapCache // pragma: allowlist secret
 import compose.project.click.click.data.realtime.LiveUpdates // pragma: allowlist secret
 import compose.project.click.click.data.realtime.RealtimeCoordinator // pragma: allowlist secret
 import compose.project.click.click.data.repository.NotificationPreferences // pragma: allowlist secret
 import compose.project.click.click.data.repository.SupabaseRepository // pragma: allowlist secret
+import compose.project.click.click.deeplink.SharedDropOpenRequests // pragma: allowlist secret
 import compose.project.click.click.events.EventReminders // pragma: allowlist secret
+import compose.project.click.click.telemetry.ProductTelemetry // pragma: allowlist secret
 import compose.project.click.click.ui.utils.CommunityHubPin // pragma: allowlist secret
 import compose.project.click.click.ui.utils.mergeCommunityHubLists // pragma: allowlist secret
 import compose.project.click.click.util.ViewerAvailabilityBubblesCache // pragma: allowlist secret
 import compose.project.click.click.util.redactedRestMessage // pragma: allowlist secret
+import compose.project.click.click.util.wipeChatMediaVault // pragma: allowlist secret
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.IO
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 
 /** Local SSOT merge for community hubs; persisted in [CachedAppSnapshot] for offline cold start. */
@@ -85,6 +91,11 @@ internal suspend fun AppDataManager.clearDataImpl() {
     // Unsent drafts and on-device history never carry over to another account.
     runCatching { PendingSendStore.clear(tokenStorage) }
     runCatching { LocalMessageStore.wipeAll() }
+    // Queued product events must not be flushed with the next account's JWT (iOS telemetryQueue.removeAll()).
+    ProductTelemetry.onSignedOut()
+    // Places rows carry this viewer's `has_history`; a pushed shared drop is this account's (iOS places.clearCache(), pendingSharedDropID).
+    PlacesMapCache.clear()
+    SharedDropOpenRequests.clear()
     loadAllDataJob?.cancel()
     loadAllDataJob = null
     chatPrefetchJob?.cancel()
@@ -94,6 +105,7 @@ internal suspend fun AppDataManager.clearDataImpl() {
     realtimeCoordinatorJob?.cancel()
     realtimeCoordinatorJob = null
     RealtimeCoordinator.stop()
+    cancelLiveUpdatesStart()
     runCatching { LiveUpdates.stop() }
     beaconPrefetchedThisSession = false
     discoveryPrefetchEmptyRetryUsed = false
@@ -119,6 +131,9 @@ internal suspend fun AppDataManager.clearDataImpl() {
     // next signed-in user of the same device.
     runCatching { chatRepository.clearSessionCaches() }
         .onFailure { e -> println("AppDataManager: chat session cache clear failed: ${e.redactedRestMessage()}") }
+    // After the chat jobs stop: decrypted media, drop previews/originals and shared-drop strips
+    // never carry over to the next account (iOS wipes ChatMediaVault).
+    runCatching { withContext(Dispatchers.IO) { wipeChatMediaVault() } }
     presenceHeartbeatJob?.cancel()
     presenceHeartbeatJob = null
     _currentUser.value = null

@@ -6,6 +6,7 @@ import compose.project.click.click.crypto.PlatformCrypto // pragma: allowlist se
 import compose.project.click.click.data.api.ClickWebChatDeviceDto // pragma: allowlist secret
 import compose.project.click.click.data.api.ClickWebHubEpochWriteEnvelope // pragma: allowlist secret
 import compose.project.click.click.data.models.Message // pragma: allowlist secret
+import compose.project.click.click.data.repository.E2eeIdentityEvents
 import compose.project.click.click.data.repository.registerE2eeDeviceRekeyingIfRevoked
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
@@ -20,9 +21,14 @@ internal data class HubE2eeV2Session(
     val identity: compose.project.click.click.crypto.DeviceIdentity,
     val membershipFingerprint: String,
     val replayGuard: MessageCryptoV2.ReplayGuard = MessageCryptoV2.ReplayGuard(),
+    /** [E2eeIdentityEvents.generation] when [identity] was registered. */
+    val identityGeneration: Long = E2eeIdentityEvents.generation,
 ) {
     val epochKey: ByteArray
         get() = epochKeys[epoch] ?: error("Current hub E2EE v2 key is unavailable")
+
+    /** False once any path replaced this device's identity after this session was built. */
+    fun isCurrentIdentity(): Boolean = identityGeneration == E2eeIdentityEvents.generation
 
     fun keyForEpoch(value: Int): ByteArray? = epochKeys[value]
 
@@ -60,12 +66,13 @@ internal suspend fun HubChatViewModel.ensureHubE2eeV2Session(
                 loadIdentity = MessageCryptoV2::loadOrCreateDeviceIdentity,
                 infoOf = { it.info },
                 discardIdentity = DeviceIdentityStorage::discard,
-                onIdentityReplaced = { hubE2eeV2Session = null },
+                onIdentityReplaced = { clearHubE2eeV2Session() },
                 register = { info -> chatApi.registerE2eeV2Device(info.deviceId, info.publicKeySpkiBase64, token) },
             )
         }.getOrElse { throw IllegalStateException("E2EE v2 device identity is unavailable") }
     if (registration.revoked) throw IllegalStateException("This device was removed from your account")
     val identity = registration.identity
+    val identityGeneration = E2eeIdentityEvents.generation
     var devices = chatApi.discoverHubE2eeV2Devices(hubId, token).getOrElse { throw it }
     val own =
         devices.firstOrNull { it.deviceId == identity.info.deviceId }
@@ -137,6 +144,7 @@ internal suspend fun HubChatViewModel.ensureHubE2eeV2Session(
         senderDeviceId = identity.info.deviceId,
         identity = identity,
         membershipFingerprint = state.membershipFingerprint ?: membershipFingerprintForHubDevices(devices),
+        identityGeneration = identityGeneration,
     ).also { replaceHubE2eeV2Session(if (forSend) it.copyWithIndependentKeys() else it) }
 }
 

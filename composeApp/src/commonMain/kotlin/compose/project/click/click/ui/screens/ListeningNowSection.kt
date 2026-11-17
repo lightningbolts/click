@@ -18,7 +18,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -76,12 +75,7 @@ internal fun ListeningNowSection(
             api.startListening(beaconId).onSuccess { state = it }
         }
     }
-    // Leaving the screen stops right away instead of waiting for the heartbeat to lapse.
-    DisposableEffect(beaconId) {
-        onDispose {
-            if (state?.isListening == true) scope.launch { api.stopListening(beaconId) }
-        }
-    }
+    // Leaving the screen sends nothing: presence lapses on the server once heartbeats stop (iOS).
     if (hidden || state == null) return
     Row(
         modifier = Modifier.fillMaxWidth(),

@@ -126,7 +126,22 @@ class NearbyListModelTest {
                 beacon("3", "Sooner", 800.0, kind = MapBeaconKind.EVENT, startAt = "2027-01-01T10:00:00Z", endAt = "2027-01-01T12:00:00Z"),
                 beacon("4", "Vibe near", 5.0),
             )
-        assertEquals(listOf("Sooner", "Later", "Vibe near", "Vibe far"), ids(sortNearbyItems(items, NearbySort.Relevance, now)))
+        // Only events are sorted; other beacons keep the server's (arrival) order like iOS.
+        assertEquals(listOf("Sooner", "Later", "Vibe far", "Vibe near"), ids(sortNearbyItems(items, NearbySort.Relevance, now)))
+    }
+
+    @Test
+    fun relevance_hubsAndAlertsKeepArrivalOrder() {
+        val items =
+            listOf(
+                hub("Far hub", 900.0),
+                beacon("1", "Far hazard", 800.0, kind = MapBeaconKind.HAZARD),
+                hub("Near hub", 5.0),
+                beacon("2", "Near hazard", 1.0, kind = MapBeaconKind.HAZARD),
+            )
+        val sorted = ids(sortNearbyItems(items, NearbySort.Relevance, now))
+        assertEquals(listOf("Far hub", "Near hub"), sorted.filter { it.endsWith("hub") })
+        assertEquals(listOf("Far hazard", "Near hazard"), sorted.filter { it.endsWith("hazard") })
     }
 
     @Test

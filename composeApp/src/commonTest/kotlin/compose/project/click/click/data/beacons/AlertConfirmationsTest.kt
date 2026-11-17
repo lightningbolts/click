@@ -1,5 +1,6 @@
 package compose.project.click.click.data.beacons
 
+import compose.project.click.click.utils.LocationResult
 import kotlinx.datetime.Instant
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -63,6 +64,22 @@ class AlertConfirmationsTest {
         assertEquals(AlertVoteRejection.ENDED, AlertVoteRejection.fromStatus(410))
         assertEquals(AlertVoteRejection.NEEDS_LOCATION, AlertVoteRejection.fromStatus(400))
         assertNull(AlertVoteRejection.fromStatus(500))
+    }
+
+    @Test
+    fun voteFixMustBeFreshAndWithin100m() {
+        val good = LocationResult(1.0, 2.0, accuracyMeters = 35.0)
+        assertEquals(good, acceptableAlertVoteFix(good, fixAgeMs = 3_000L))
+        assertNull(acceptableAlertVoteFix(null, fixAgeMs = 0L))
+        assertNull(acceptableAlertVoteFix(good.copy(accuracyMeters = 150.0), fixAgeMs = 0L))
+        assertNull(acceptableAlertVoteFix(good.copy(accuracyMeters = null), fixAgeMs = 0L))
+        assertNull(acceptableAlertVoteFix(good, fixAgeMs = 121_000L))
+    }
+
+    @Test
+    fun lastSeenUsesTheSharedLabelPastTwoWeeks() {
+        val seen = now - 300L * 24 * 60 * 60_000L
+        assertEquals("Last seen 42 weeks ago.", parse("""{"state":"active"}""").copy(lastStillHereAtMs = seen).caption(now))
     }
 
     @Test

@@ -12,7 +12,7 @@ import kotlin.math.pow
 /**
  * How Nearby orders the rows in each section. Mirrors iOS `NearbySort`
  * (click-ios `Click/Features/Map/MapFeatureModel.swift`): Relevance is the curated order (events
- * by start, so live ones lead, everything else nearest first).
+ * by start, so live ones lead; people nearest first; everything else in the server's order).
  */
 internal enum class NearbySort(
     val label: String,
@@ -93,9 +93,13 @@ internal fun nearbyRisingScore(
 internal fun naturalCompare(
     a: String,
     b: String,
+): Int = naturalCompareFolded(foldForSearch(a), foldForSearch(b))
+
+/** [naturalCompare] for titles already passed through [foldForSearch] (fold once, sort many). */
+internal fun naturalCompareFolded(
+    x: String,
+    y: String,
 ): Int {
-    val x = foldForSearch(a)
-    val y = foldForSearch(b)
     var i = 0
     var j = 0
     while (i < x.length && j < y.length) {
@@ -158,10 +162,27 @@ internal fun sortNearbyItems(
     val alphabetical = Comparator<Keyed> { a, b -> naturalCompare(a.title, b.title) }
     val nearest = compareBy<Keyed> { it.distance }.then(alphabetical)
     val newest = compareByDescending<Keyed> { it.created }.then(nearest)
+
+    // Relevance: events, then people, then the rest; the sort is stable, so ties keep arrival order.
+    fun Keyed.relevanceGroup(): Int =
+        when {
+            item is DiscoveryFeedItem.Beacon && item.beacon.kind == MapBeaconKind.EVENT -> 0
+            item is DiscoveryFeedItem.Connection -> 1
+            else -> 2
+        }
+    val soonest = compareBy<Keyed> { it.eventStart }.then(nearest)
     val comparator: Comparator<Keyed> =
         when (sort) {
-            // Events by start (a live one started earliest), then everything else nearest first.
-            NearbySort.Relevance -> compareBy<Keyed> { it.eventStart }.then(nearest)
+            // iOS `relevanceSections`: events by start (a live one started earliest), people nearest
+            // first; hubs, beacons and Places keep the server's order (Places get Pulse order later).
+            NearbySort.Relevance ->
+                compareBy<Keyed> { it.relevanceGroup() }.then { a, b ->
+                    when (a.relevanceGroup()) {
+                        0 -> soonest.compare(a, b)
+                        1 -> nearest.compare(a, b)
+                        else -> 0
+                    }
+                }
             NearbySort.Distance -> nearest
             NearbySort.Alphabetical -> alphabetical.then(compareBy { it.distance })
             NearbySort.New -> newest

@@ -3,6 +3,7 @@ package compose.project.click.click.viewmodel
 import compose.project.click.click.collaboration.ClickDropDevelopBook
 import compose.project.click.click.collaboration.ClickDropRevealRef
 import compose.project.click.click.collaboration.parseInstantOrNull
+import compose.project.click.click.data.api.DROP_DEVELOP_MAX_PER_REQUEST
 import compose.project.click.click.data.api.DropDevelopResultDto
 import compose.project.click.click.data.flags.FeatureFlag
 import compose.project.click.click.data.flags.FeatureFlags
@@ -71,8 +72,6 @@ internal const val CLICK_DROP_DEVELOP_FAILED = "Couldn't develop right now. Try 
 class ChatDropDevelopController(
     private val scope: CoroutineScope,
     private val service: ChatDropDevelopService,
-    /** True when this device already holds the drop's original (developed here before). */
-    private val hasLocalOriginal: (String) -> Boolean,
     private val onDeveloped: (id: String, signedUrl: String?) -> Unit,
     private val onError: (String) -> Unit,
     private val now: () -> Instant = { Clock.System.now() },
@@ -83,19 +82,14 @@ class ChatDropDevelopController(
     private val checksInFlight = mutableSetOf<String>()
 
     /**
-     * Learns which revealed drops this viewer already developed: from the vault first, then one
-     * `GET /api/drops/views` for the rest. Each drop is asked about once.
+     * Learns which revealed drops this viewer already developed with one `GET /api/drops/views`.
+     * Each drop is asked about once. Always the server's answer (iOS `refreshDropStates`): an
+     * original in the vault (the sender's own, say) only skips the download later.
      */
     fun check(drops: List<ClickDropRevealRef>) {
-        val at = now()
-        val unknown = _book.value.needingCheck(drops, at).filter { it.id !in checksInFlight }
+        val unknown = _book.value.needingCheck(drops, now()).filter { it.id !in checksInFlight }
         if (unknown.isEmpty()) return
-        val (local, remote) = unknown.partition { hasLocalOriginal(it.id) }
-        if (local.isNotEmpty()) {
-            _book.update { book -> local.fold(book) { b, drop -> b.markDevelopedLocally(drop.id, drop.revealAt ?: at) } }
-        }
-        if (remote.isEmpty()) return
-        val ids = remote.map { it.id }
+        val ids = unknown.map { it.id }
         checksInFlight += ids
         scope.launch {
             try {
@@ -115,28 +109,38 @@ class ChatDropDevelopController(
         }
     }
 
-    /** Tap to develop, or "Develop all". Pending and already-developed drops are left alone. */
+    /**
+     * Tap to develop, or "Develop all". Pending and already-developed drops are left alone. Sent
+     * [DROP_DEVELOP_MAX_PER_REQUEST] at a time; each batch's answer applies on its own, so a failed
+     * batch only puts its own drops back to ready.
+     */
     fun develop(drops: List<ClickDropRevealRef>) {
         val ready = _book.value.ready(drops, now())
         if (ready.isEmpty()) return
         val ids = ready.map { it.id }
         _book.update { it.startDeveloping(ids) }
         scope.launch {
+            val settled = mutableSetOf<String>()
+            var failed = false
             try {
-                service
-                    .develop(ids)
-                    .onSuccess { results ->
-                        _book.update { it.applyDevelopResults(ids, results, now()) }
-                        results
-                            .filter { it.id in ids && it.status == ClickDropDevelopBook.DEVELOP_STATUS_DEVELOPED }
-                            .forEach { onDeveloped(it.id, it.url) }
-                    }.onFailure { error ->
-                        if (error is CancellationException) throw error
-                        _book.update { it.failDeveloping(ids) }
-                        onError(CLICK_DROP_DEVELOP_FAILED)
-                    }
+                for (batch in ids.chunked(DROP_DEVELOP_MAX_PER_REQUEST)) {
+                    service
+                        .develop(batch)
+                        .onSuccess { results ->
+                            _book.update { it.applyDevelopResults(batch, results, now()) }
+                            results
+                                .filter { it.id in batch && it.status == ClickDropDevelopBook.DEVELOP_STATUS_DEVELOPED }
+                                .forEach { onDeveloped(it.id, it.url) }
+                        }.onFailure { error ->
+                            if (error is CancellationException) throw error
+                            _book.update { it.failDeveloping(batch) }
+                            failed = true
+                        }
+                    settled += batch
+                }
+                if (failed) onError(CLICK_DROP_DEVELOP_FAILED)
             } catch (e: CancellationException) {
-                _book.update { it.failDeveloping(ids) }
+                _book.update { it.failDeveloping(ids.filter { id -> id !in settled }) }
                 throw e
             }
         }

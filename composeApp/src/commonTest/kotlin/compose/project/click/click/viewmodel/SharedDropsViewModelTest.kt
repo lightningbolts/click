@@ -118,12 +118,12 @@ private class FakeReplies : SharedDropReplySender {
 private class FakeDisk : SharedDropsDisk {
     val files = mutableMapOf<String, ByteArray>()
 
-    override fun read(
+    override suspend fun read(
         key: String,
         extension: String,
     ) = files["$key.$extension"]
 
-    override fun write(
+    override suspend fun write(
         key: String,
         bytes: ByteArray,
         extension: String,
@@ -257,6 +257,8 @@ class SharedDropsViewModelTest {
                     other.state.value.drops
                         .isEmpty(),
                 )
+                // Home draws the strip only for the account it was loaded for.
+                assertEquals("someone-else", other.state.value.loadedForUser)
             } finally {
                 Dispatchers.resetMain()
             }

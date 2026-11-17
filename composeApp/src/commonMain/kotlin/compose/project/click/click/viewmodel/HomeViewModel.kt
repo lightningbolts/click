@@ -113,8 +113,12 @@ class HomeViewModel(
     val myEvents: StateFlow<List<MineEventDto>> = _myEvents.asStateFlow()
 
     private suspend fun loadMyEvents() {
-        // Failures keep what's shown; Upcoming still lists saved events.
-        ApiClient().getMyEvents().onSuccess { _myEvents.value = it }
+        val userId = AppDataManager.currentUser.value?.id ?: return
+        // Failures keep what's shown; Upcoming still lists saved events. A response that lands
+        // after a sign-out or account switch belongs to the previous user and is dropped.
+        apiClient.getMyEvents().onSuccess { events ->
+            if (AppDataManager.currentUser.value?.id == userId) _myEvents.value = events
+        }
     }
 
     // Recap: explicit Loading / Loaded / Failed so a slow or failed request never renders zeros.
@@ -417,6 +421,7 @@ class HomeViewModel(
                     _connectedUsers.value = emptyMap()
                     _homeAvailabilityIntents.value = emptyList()
                     _homeAvailabilityOverlapMessages.value = emptyList()
+                    _myEvents.value = emptyList()
                     recapController.reset()
                     homeNudges = emptyList()
                     resolvedNudgeIds.clear()

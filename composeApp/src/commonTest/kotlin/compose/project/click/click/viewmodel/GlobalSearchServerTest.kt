@@ -12,7 +12,9 @@ import compose.project.click.click.data.models.GeoLocation
 import compose.project.click.click.data.models.MapBeacon
 import compose.project.click.click.data.models.MapBeaconKind
 import compose.project.click.click.data.models.MapBeaconMetadata
+import compose.project.click.click.data.models.Message
 import compose.project.click.click.data.models.User
+import compose.project.click.click.data.repository.ConversationSearchHit
 import kotlinx.datetime.TimeZone
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -58,6 +60,37 @@ class GlobalSearchServerTest {
         assertEquals("h1", target.hubId)
         assertEquals("sports", target.hubCategory)
         assertEquals("general", hubs[1].toChatOpenTarget()!!.hubCategory)
+    }
+
+    @Test
+    fun serverMessageHitsAreMergedOnceAndLocalCopiesWin() {
+        val localHit =
+            SearchResult.MessageHit(
+                result =
+                    MessageSearchResult(
+                        message = Message(id = "m1", user_id = "u1", content = "hello there", timeCreated = 5L),
+                        chatId = "chat-c1",
+                        chatName = "Ann",
+                        connectionId = "c1",
+                        snippet = "hello there",
+                    ),
+                categories = setOf(SearchResultCategory.Active),
+            )
+        val server =
+            GlobalSearchPayload(
+                hits =
+                    listOf(
+                        hit("m1", "c1"),
+                        hit("m2", "c2"),
+                        hit("m2", "c2"),
+                        hit("m3", "c3"),
+                    ),
+            )
+        val merged = mergeServerResults(listOf(localHit), server, archivedConnectionIds = setOf("c3"))
+        val hits = merged.filterIsInstance<SearchResult.MessageHit>()
+        assertEquals(listOf("m1", "m2", "m3"), hits.map { it.result.message.id })
+        assertSame(localHit, hits[0])
+        assertEquals(setOf(SearchResultCategory.Archived), hits[2].categories)
     }
 
     @Test
@@ -145,6 +178,20 @@ class GlobalSearchServerTest {
         otherUser = User(id = peer, name = name),
         lastMessage = null,
         unreadCount = 0,
+    )
+
+    private fun hit(
+        messageId: String,
+        connectionId: String,
+    ) = ConversationSearchHit(
+        messageId = messageId,
+        chatId = "chat-$connectionId",
+        conversationId = connectionId,
+        connectionId = connectionId,
+        senderId = "u",
+        timestamp = 1L,
+        snippet = "hello again",
+        chatName = "Chat",
     )
 
     private fun beacon(id: String) =

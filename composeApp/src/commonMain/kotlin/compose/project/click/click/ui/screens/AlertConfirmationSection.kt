@@ -36,12 +36,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import compose.project.click.click.data.api.ApiClient // pragma: allowlist secret
 import compose.project.click.click.data.api.ClickWebRequestException // pragma: allowlist secret
+import compose.project.click.click.data.beacons.ALERT_VOTE_FIX_TIMEOUT_MS
 import compose.project.click.click.data.beacons.AlertConfirmationState
 import compose.project.click.click.data.beacons.AlertPhase
 import compose.project.click.click.data.beacons.AlertVote
 import compose.project.click.click.data.beacons.AlertVoteRejectedException
 import compose.project.click.click.data.beacons.AlertVoteRejection
 import compose.project.click.click.data.beacons.BEACON_REPORT_REASONS
+import compose.project.click.click.data.beacons.acceptableAlertVoteFix
 import compose.project.click.click.data.beacons.confirmAlert
 import compose.project.click.click.data.beacons.getAlertConfirmation
 import compose.project.click.click.data.beacons.reportBeacon
@@ -112,9 +114,17 @@ internal fun AlertConfirmationSection(
                                     scope.launch {
                                         // The creator clears from anywhere; everyone else is checked
                                         // against the pin server-side, with a location only if allowed.
+                                        // Only a fresh fix (live capture, ≤120 s old, ≤100 m): a cached
+                                        // one could extend an alert the voter passed long ago.
                                         val needsFix = !(state.isCreator && vote == AlertVote.CLEARED)
                                         val fix =
-                                            if (needsFix && location.hasLocationPermission()) location.getCurrentLocation() else null
+                                            if (needsFix && location.hasLocationPermission()) {
+                                                val startedAt = Clock.System.now().toEpochMilliseconds()
+                                                val live = location.getTelemetryLocation(timeoutMs = ALERT_VOTE_FIX_TIMEOUT_MS)
+                                                acceptableAlertVoteFix(live, Clock.System.now().toEpochMilliseconds() - startedAt)
+                                            } else {
+                                                null
+                                            }
                                         if (needsFix && fix == null) {
                                             message = AlertVoteRejection.NEEDS_LOCATION.message
                                             pending = null

@@ -43,7 +43,22 @@ import compose.project.click.click.ui.components.toClusterPin // pragma: allowli
 import compose.project.click.click.ui.theme.* // pragma: allowlist secret
 import compose.project.click.click.ui.utils.* // pragma: allowlist secret
 import compose.project.click.click.ui.utils.CommunityHubPin // pragma: allowlist secret
-import compose.project.click.click.util.oneToOnePeerPairKey // pragma: allowlist secret
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+
+/** Stacks [rawPins] at [zoomStep] and returns each stack's lead with its count, highest z first. */
+private fun stackedRenderedPins(
+    rawPins: List<MapPin>,
+    zoomStep: Double,
+): List<MapPin> {
+    val now =
+        kotlinx.datetime.Clock.System
+            .now()
+            .toEpochMilliseconds()
+    return stackMapPins(rawPins, zoomStep, now)
+        .map { it.toRenderedPin() }
+        .sortedByDescending { it.zIndex }
+}
 
 @Composable
 internal fun MapContent(
@@ -70,52 +85,30 @@ internal fun MapContent(
 ) {
     val connectedUsers by AppDataManager.connectedUsers.collectAsState()
     val coreConnectionIds by AppDataManager.coreConnectionIds.collectAsState()
-    val hubPins =
-        remember(communityHubs, places) {
-            communityHubs.map { MapPin.fromCommunityHub(it) } + places.map { MapPin.fromPlace(it) }
-        }
+    // Same builder as the tap handler (`MapViewModel.currentVisibleMapPins`), so badges and lists agree.
     val rawPins =
-        remember(renderData, connectedUsers, coreConnectionIds, currentUserId, hubPins, places) {
-            when (renderData) {
-                is MapRenderData.IndividualPins -> {
-                    val conn =
-                        renderData.points
-                            .distinctBy { oneToOnePeerPairKey(it.connection.user_ids) ?: it.connection.id }
-                            .map { point ->
-                                val peerId = point.connection.user_ids.firstOrNull { it != currentUserId }
-                                val peer = peerId?.let { connectedUsers[it] }
-                                MapPin.fromConnectionPoint(
-                                    point,
-                                    imageUrl = peer?.image,
-                                    avatarSeed = peerId ?: point.connection.id,
-                                    isCore = point.connection.id in coreConnectionIds,
-                                )
-                            }
-                    // An event at a Place on the map rides in the Place's pin (iOS `mergingPlaceEvents`).
-                    val bc = MapPlacesLayer.beaconsOutsidePlaces(renderData.beacons, places).map { MapPin.fromBeacon(it) }
-                    (conn + bc + hubPins).sortedByDescending { it.zIndex }
-                }
-                is MapRenderData.Clusters -> {
-                    val standalone =
-                        MapPlacesLayer.beaconsOutsidePlaces(renderData.standaloneBeacons, places).map { MapPin.fromBeacon(it) }
-                    (standalone + hubPins).sortedByDescending { it.zIndex }
-                }
-            }
+        remember(renderData, connectedUsers, coreConnectionIds, currentUserId, communityHubs, places) {
+            buildMapPins(
+                renderData = renderData,
+                communityHubs = communityHubs,
+                places = places,
+                currentUserId = currentUserId,
+                connectedUsers = connectedUsers,
+                coreConnectionIds = coreConnectionIds,
+            )
         }
 
     // Overlapping pins draw as one stack led by the most important pin, with a count badge
-    // (iOS `MapFeatureModel.clusters`). Rebuilt only when the pins or the quarter zoom step change.
+    // (iOS `MapFeatureModel.clusters`). Rebuilt only when the pins or the quarter zoom step change;
+    // [stackZoom] is the settled camera zoom, and the stacking runs off the main thread.
     val stackZoomStep = MapPinStacking.zoomStep(stackZoom)
-    val pins =
-        remember(rawPins, stackZoomStep) {
-            val now =
-                kotlinx.datetime.Clock.System
-                    .now()
-                    .toEpochMilliseconds()
-            stackMapPins(rawPins, stackZoomStep, now)
-                .map { it.toRenderedPin() }
-                .sortedByDescending { it.zIndex }
-        }
+    val pins by produceState(
+        initialValue = remember { stackedRenderedPins(rawPins, stackZoomStep) },
+        rawPins,
+        stackZoomStep,
+    ) {
+        value = withContext(Dispatchers.Default) { stackedRenderedPins(rawPins, stackZoomStep) }
+    }
 
     val clusters =
         remember(renderData) {

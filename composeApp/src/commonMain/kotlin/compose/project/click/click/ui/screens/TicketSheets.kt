@@ -37,6 +37,7 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -161,6 +162,8 @@ internal fun TicketPickerSheet(
     val pendingReturn by TicketCheckoutReturns.pending.collectAsState()
 
     LaunchedEffect(beaconId) { model.load() }
+    // Stripe's return link is captured only while this picker waits on it; afterwards it opens the event (#30).
+    DisposableEffect(beaconId) { onDispose { TicketCheckoutReturns.stopAwaiting(beaconId) } }
 
     LaunchedEffect(awaitingOrderId, foregroundTick, pendingReturn) {
         val orderId = awaitingOrderId ?: return@LaunchedEffect
@@ -172,6 +175,7 @@ internal fun TicketPickerSheet(
             returned = TicketCheckoutReturns.consume(beaconId)
         }
         awaitingOrderId = null
+        TicketCheckoutReturns.stopAwaiting(beaconId)
         scope.launch {
             when (val next = resolveCheckoutReturn(orderId, returned, client)) {
                 is AfterCheckout.Confirm -> confirmation = ConfirmationRequest.Poll(next.orderId)
@@ -188,9 +192,11 @@ internal fun TicketPickerSheet(
                 is CheckoutStart.Checkout -> {
                     TicketCheckoutReturns.clear()
                     launchTick = foregroundTick
+                    TicketCheckoutReturns.beginAwaiting(beaconId)
                     if (isOpenableCheckoutUrl(start.url) && launcher.open(start.url)) {
                         awaitingOrderId = start.orderId
                     } else {
+                        TicketCheckoutReturns.stopAwaiting(beaconId)
                         runCatching { client.releaseOrder(start.orderId) }
                         model.report("Couldn’t open checkout. Try again.")
                     }

@@ -110,9 +110,8 @@ internal fun ConnectionViewModel.leaveReview(tagging: ConnectionState.TaggingCon
     val pendingId = tagging.pendingHandshakeId?.trim()?.takeIf { it.isNotEmpty() } ?: return
     val everyone = tagging.selectableUsers.ifEmpty { tagging.targetUsers }.map { it.id }
     if (everyone.isEmpty()) return
-    viewModelScope.launch {
-        repository.recordProximitySelectionExclusions(pendingId, everyone.distinct().sorted())
-    }
+    // After any removal save already in flight, so a partial list can't land last (iOS `saveExclusions`).
+    hostSelectionSync.leave(pendingId, everyone)
 }
 
 /** Another phone's confirm finished the tap: show its result, naming anyone removed who is still in it. */

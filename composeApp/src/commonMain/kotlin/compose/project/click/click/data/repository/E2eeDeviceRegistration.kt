@@ -3,6 +3,7 @@ package compose.project.click.click.data.repository
 import compose.project.click.click.crypto.DeviceIdentityInfo
 import compose.project.click.click.data.api.ChatDeviceRevokedException
 import compose.project.click.click.data.api.isChatDeviceRegistered
+import kotlin.concurrent.Volatile
 
 /** Result of registering this device's E2EE v2 identity. */
 internal data class E2eeDeviceRegistration<I>(
@@ -12,6 +13,23 @@ internal data class E2eeDeviceRegistration<I>(
     /** The server turned away a brand-new key too; this device can't take part in E2EE v2 now. */
     val revoked: Boolean = false,
 )
+
+/**
+ * One place that hears "this device's identity was replaced" (iOS `ChatRepository.swift` clears
+ * every cache together). Whichever path re-keys, the repository's chat sessions are cleared here,
+ * and hub view models compare [generation] before using a session they cached earlier.
+ */
+internal object E2eeIdentityEvents {
+    /** Bumped on every re-key. A lost concurrent increment still moves it, which is all callers need. */
+    @Volatile
+    var generation: Long = 0L
+        private set
+
+    fun identityReplaced() {
+        generation++
+        clearE2eeV2SessionCache()
+    }
+}
 
 /**
  * Registers this device (`POST /api/chat/devices`). If the server says the key was removed from the
@@ -36,6 +54,7 @@ internal suspend fun <I> registerE2eeDeviceRekeyingIfRevoked(
     if (infoOf(replacement).deviceId == revokedId) {
         return E2eeDeviceRegistration(identity, registered = false, revoked = true)
     }
+    E2eeIdentityEvents.identityReplaced()
     onIdentityReplaced()
     val second = register(infoOf(replacement))
     return E2eeDeviceRegistration(

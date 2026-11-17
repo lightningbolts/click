@@ -12,6 +12,8 @@ import androidx.compose.runtime.setValue
 import compose.project.click.click.chat.attachments.AttachmentCrypto // pragma: allowlist secret
 import compose.project.click.click.chat.attachments.ChatAttachmentValidator // pragma: allowlist secret
 import compose.project.click.click.data.api.ConnectionTabMessage // pragma: allowlist secret
+import compose.project.click.click.data.flags.FeatureFlag // pragma: allowlist secret
+import compose.project.click.click.data.flags.FeatureFlags // pragma: allowlist secret
 import compose.project.click.click.data.models.Message // pragma: allowlist secret
 import compose.project.click.click.data.models.isEncryptedMedia // pragma: allowlist secret
 import compose.project.click.click.data.repository.ConnectionRepository // pragma: allowlist secret
@@ -22,6 +24,7 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
@@ -141,6 +144,7 @@ internal fun ProfileSheetLocalMessage.toProfileSheetMedia(): ProfileSheetMedia? 
                 ?: meta["duration"]?.jsonPrimitive?.intOrNull,
         isDisposableRoll = isDisposableRoll,
         collaborationTtlIso = collaborationTtlIso,
+        isGatedDrop = meta.isGatedDropMetadata(),
     )
 }
 
@@ -197,6 +201,7 @@ internal fun ConnectionTabMessage.toProfileSheetMediaFromTab(): ProfileSheetMedi
             },
         isDisposableRoll = isDisposableRoll,
         collaborationTtlIso = collaborationTtlIso,
+        isGatedDrop = meta?.isGatedDropMetadata() == true,
     )
 }
 
@@ -324,27 +329,49 @@ internal val METADATA_PATH_KEYS =
 
 internal fun JsonObject.disposableRollMetadata(): Pair<Boolean, String?> {
     val isRoll = this["disposable_roll"]?.jsonPrimitive?.booleanOrNull == true
+    // `reveal_at` first (gated drops), as `Message.disposableRollRevealAtIso`.
     val ttl =
-        this["collaboration_ttl"]
-            ?.jsonPrimitive
+        (this["reveal_at"] as? JsonPrimitive)
             ?.contentOrNull
             ?.trim()
             ?.takeIf { it.isNotEmpty() }
+            ?: this["collaboration_ttl"]
+                ?.jsonPrimitive
+                ?.contentOrNull
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
     return isRoll to ttl
 }
 
+internal fun JsonObject.isGatedDropMetadata(): Boolean = (this["drop_gated"] as? JsonPrimitive)?.booleanOrNull == true
+
+/**
+ * A Click Drop photo that only unlocks through the chat's develop flow: a gated drop (its media is
+ * the pixelated preview; the original comes from `/api/drops/develop`), or a legacy drop when
+ * `drops_develop` is on (developing writes `drop_views`). The profile tab can't develop, so these
+ * stay locked here, with no preview, save or share (as `canExportMessageMedia` in chat).
+ */
+internal fun ProfileSheetMedia.unlocksOnlyInChat(developFlowEnabled: Boolean = FeatureFlags.isEnabled(FeatureFlag.DROPS_DEVELOP)): Boolean =
+    isDisposableRoll && mediaType == ProfileSheetMediaType.Image && (isGatedDrop || developFlowEnabled)
+
 internal fun ProfileSheetMedia.isDisposableRollLocked(now: Instant = Clock.System.now()): Boolean {
     if (!isDisposableRoll) return false
+    if (unlocksOnlyInChat()) return true
     val ttlIso = collaborationTtlIso ?: return true
     val ttl = runCatching { Instant.parse(ttlIso) }.getOrNull() ?: return true
     return now < ttl
 }
 
+/** Past reveal, a develop-flow drop in the profile tab points to the chat. */
+internal const val PROFILE_DROP_DEVELOP_IN_CHAT_LABEL = "Develop in chat"
+
 internal fun ProfileSheetMedia.disposableRollCountdownLabel(): String? {
     if (!isDisposableRollLocked()) return null
-    val ttlIso = collaborationTtlIso ?: return "Locked"
+    val developInChat = unlocksOnlyInChat()
+    val ttlIso = collaborationTtlIso ?: return if (developInChat) PROFILE_DROP_DEVELOP_IN_CHAT_LABEL else "Locked"
     val ttl = runCatching { Instant.parse(ttlIso) }.getOrNull() ?: return "Locked"
     val remainMs = (ttl.toEpochMilliseconds() - Clock.System.now().toEpochMilliseconds()).coerceAtLeast(0L)
+    if (remainMs == 0L && developInChat) return PROFILE_DROP_DEVELOP_IN_CHAT_LABEL
     val totalMin = remainMs / 60_000L
     val hours = totalMin / 60L
     val mins = totalMin % 60L
@@ -498,6 +525,7 @@ internal fun mergeProfileMedia(items: List<ProfileSheetMedia>): List<ProfileShee
                 durationSeconds = media.durationSeconds ?: prev.durationSeconds,
                 isDisposableRoll = media.isDisposableRoll || prev.isDisposableRoll,
                 collaborationTtlIso = media.collaborationTtlIso ?: prev.collaborationTtlIso,
+                isGatedDrop = media.isGatedDrop || prev.isGatedDrop,
             )
     }
     return merged.values

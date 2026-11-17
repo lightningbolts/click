@@ -30,6 +30,7 @@ import compose.project.click.click.data.storage.createTokenStorage // pragma: al
 import compose.project.click.click.hapticSmallCommit
 import compose.project.click.click.hapticTapConnected
 import compose.project.click.click.hapticTapDetected
+import compose.project.click.click.notifications.ChatDeepLinkManager // pragma: allowlist secret
 import compose.project.click.click.platform.rememberReduceMotionEnabled // pragma: allowlist secret
 import compose.project.click.click.proximity.MockProximityManager // pragma: allowlist secret
 import compose.project.click.click.proximity.ProximityManager // pragma: allowlist secret
@@ -47,6 +48,7 @@ import compose.project.click.click.ui.components.ConnectionContextSheet // pragm
 import compose.project.click.click.ui.components.EncounterDetailsCard // pragma: allowlist secret
 import compose.project.click.click.ui.components.HeaderBackIconButton // pragma: allowlist secret
 import compose.project.click.click.ui.components.HeaderChromeIconButton // pragma: allowlist secret
+import compose.project.click.click.ui.components.MultiTapGroupStatus // pragma: allowlist secret
 import compose.project.click.click.ui.components.PageHeader // pragma: allowlist secret
 import compose.project.click.click.ui.components.bottomChromePadding // pragma: allowlist secret
 import compose.project.click.click.ui.theme.* // pragma: allowlist secret
@@ -56,6 +58,9 @@ import compose.project.click.click.ui.utils.rememberProximityHardwarePermissionR
 import compose.project.click.click.utils.LocationService // pragma: allowlist secret
 import compose.project.click.click.viewmodel.ConnectionState // pragma: allowlist secret
 import compose.project.click.click.viewmodel.ConnectionViewModel // pragma: allowlist secret
+import compose.project.click.click.viewmodel.groupSetupStateFor // pragma: allowlist secret
+import compose.project.click.click.viewmodel.openMultiTapGroupChat // pragma: allowlist secret
+import compose.project.click.click.viewmodel.retryMultiTapGroupPreparation // pragma: allowlist secret
 import compose.project.click.click.viewmodel.stopConnectionCapture // pragma: allowlist secret
 import compose.project.click.click.viewmodel.warmUpConnectionCapture // pragma: allowlist secret
 import io.ktor.client.HttpClient
@@ -407,6 +412,7 @@ fun NfcScreen(
                     val supabaseRepo = remember { SupabaseRepository() }
                     val lastVerification by connectionViewModel.lastVerification.collectAsState()
                     val followUpAccuracy by connectionViewModel.followUpAccuracyMeters.collectAsState()
+                    val multiTapGroupState by connectionViewModel.multiTapGroupState.collectAsState()
                     val reconnectConnectionId = tagging.newConnections.firstOrNull()?.id
                     val reconnectPeerId =
                         tagging.targetUsers.firstOrNull { it.id != userId }?.id
@@ -514,6 +520,17 @@ fun NfcScreen(
                                         verification = lastVerification,
                                         isQr = false,
                                         refinedAccuracyMeters = followUpAccuracy,
+                                    )
+                                    // P2-19: the group chat being set up (iOS `PostConnectView.groupActions`).
+                                    MultiTapGroupStatus(
+                                        state = groupSetupStateFor(multiTapGroupState, tagging, userId),
+                                        onOpenGroupChat = {
+                                            connectionViewModel.openMultiTapGroupChat { chatId ->
+                                                finishWithoutTags()
+                                                ChatDeepLinkManager.setPendingChat(chatId)
+                                            }
+                                        },
+                                        onRetry = { connectionViewModel.retryMultiTapGroupPreparation() },
                                     )
                                 }
                             } else {

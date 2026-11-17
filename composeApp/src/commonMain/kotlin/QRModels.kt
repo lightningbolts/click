@@ -153,10 +153,10 @@ private val UNIVERSAL_LINK_C_UUID =
         """/c/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})""",
         RegexOption.IGNORE_CASE,
     )
-private val TOKEN_QUERY_PARAM = Regex("""(?:[?&])(?:token|qr_token|qt)=([^&#]+)""", RegexOption.IGNORE_CASE)
+private val TOKEN_QUERY_PARAM = Regex("""(?:[?&])(?:token|qr_token|qt|t)=([^&#]+)""", RegexOption.IGNORE_CASE)
 private val EXP_QUERY_PARAM = Regex("""(?:[?&])(?:exp|expires_at)=([0-9]+)""", RegexOption.IGNORE_CASE)
 private val ISSUED_AT_QUERY_PARAM = Regex("""(?:[?&])(?:iat|issued_at)=([0-9]+)""", RegexOption.IGNORE_CASE)
-private val VENUE_QUERY_PARAM = Regex("""(?:[?&])venue_id=([^&#]+)""", RegexOption.IGNORE_CASE)
+private val VENUE_QUERY_PARAM = Regex("""(?:[?&])(?:venue_id|venue)=([^&#]+)""", RegexOption.IGNORE_CASE)
 
 private fun String.queryValue(pattern: Regex): String? =
     pattern
@@ -166,6 +166,15 @@ private fun String.queryValue(pattern: Regex): String? =
         ?.takeIf { it.isNotBlank() }
 
 private fun String.hasTokenQueryParam(): Boolean = queryValue(TOKEN_QUERY_PARAM) != null
+
+/** Raw `token`/`qr_token`/`qt`/`t` query value from a Click link, if any. */
+fun String.clickLinkTokenQueryValue(): String? = trim().queryValue(TOKEN_QUERY_PARAM)
+
+/** Raw `exp`/`expires_at` query value from a Click link, if any. */
+fun String.clickLinkExpQueryValue(): Long? = trim().queryValue(EXP_QUERY_PARAM)?.toLongOrNull()
+
+/** Raw `venue_id`/`venue` query value from a Click link, if any. */
+fun String.clickLinkVenueQueryValue(): String? = trim().queryValue(VENUE_QUERY_PARAM)
 
 /**
  * Token-bearing Universal/App Clip link.

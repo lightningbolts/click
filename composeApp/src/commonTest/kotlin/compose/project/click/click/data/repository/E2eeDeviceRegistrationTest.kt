@@ -98,4 +98,25 @@ class E2eeDeviceRegistrationTest {
             assertEquals(1, calls)
             assertTrue(result.revoked)
         }
+
+    @Test
+    fun aReKeyOnAnyPathAdvancesTheSharedIdentityGeneration() =
+        runTest {
+            val keys = Keys()
+            val before = E2eeIdentityEvents.generation
+            registerE2eeDeviceRekeyingIfRevoked(keys::load, { it }, keys::discard, {}) {
+                Result.failure<Unit>(ChatDeviceAlreadyRegisteredException())
+            }
+            assertEquals(before, E2eeIdentityEvents.generation)
+
+            var generationSeenByCallback = before
+            registerE2eeDeviceRekeyingIfRevoked(keys::load, { it }, keys::discard, {
+                generationSeenByCallback = E2eeIdentityEvents.generation
+            }) { info ->
+                if (info.deviceId == "device-1") Result.failure<Unit>(ChatDeviceRevokedException()) else Result.success(Unit)
+            }
+            assertTrue(E2eeIdentityEvents.generation != before)
+            // The shared caches are already invalid when the caller's own hook runs.
+            assertEquals(E2eeIdentityEvents.generation, generationSeenByCallback)
+        }
 }

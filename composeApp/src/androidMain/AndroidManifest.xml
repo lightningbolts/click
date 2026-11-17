@@ -211,7 +211,7 @@
                     android:path="/search"/>
             </intent-filter>
 
-            <!-- Legacy connect deep link -->
+            <!-- Connection deep links: click://c/{uuid} (canonical) and legacy click://connect/{uuid} -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW"/>
                 <category android:name="android.intent.category.DEFAULT"/>
@@ -219,6 +219,9 @@
                 <data
                     android:scheme="click"
                     android:host="connect"/>
+                <data
+                    android:scheme="click"
+                    android:host="c"/>
             </intent-filter>
         </activity>
 

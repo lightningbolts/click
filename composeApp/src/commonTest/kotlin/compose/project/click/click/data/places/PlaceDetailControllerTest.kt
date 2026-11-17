@@ -238,6 +238,22 @@ class PlaceDetailControllerTest {
         }
 
     @Test
+    fun rejectedWouldReturnEndsThePrompt() =
+        runTest {
+            val repo = FakeRepo(Result.success(detail(checkIn = PlaceCheckInDto(active = true, checkInId = "ci1"))))
+            val c = PlaceDetailController("cafe", null, repo) { fix }
+            c.load()
+            c.checkOut()
+            // The "Come back?" window passed: 403 not_present (or 429) must not loop the prompt.
+            repo.pulseResult = Result.failure(PlaceApiException(PlaceError.NotPresent))
+            c.answerWouldReturn(1)
+            assertFalse(c.state.value.showWouldReturn)
+            repo.pulseResult = Result.failure(PlaceApiException(PlaceError.Cooldown(null)))
+            c.answerWouldReturn(1)
+            assertFalse(c.state.value.showWouldReturn)
+        }
+
+    @Test
     fun followUpNetworkFailureOffersItAgainButRejectionDoesNot() =
         runTest {
             val repo = FakeRepo(Result.success(detail()))

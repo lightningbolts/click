@@ -392,12 +392,12 @@ fun SettingsScreen(
 
     LaunchedEffect(settingsPage, devicesEpoch, online) {
         if (settingsPage != SettingsPage.Devices) return@LaunchedEffect
-        if (thisDeviceId == null) {
-            thisDeviceId =
-                withContext(Dispatchers.Default) {
-                    runCatching { MessageCryptoV2.loadOrCreateDeviceIdentity().info.deviceId }.getOrNull()
-                }
-        }
+        // Re-read on every load: a background re-key (409 DEVICE_REVOKED) replaces this device's id,
+        // and a stale id would list the current device as "other" with a Remove button.
+        thisDeviceId =
+            withContext(Dispatchers.Default) {
+                runCatching { MessageCryptoV2.loadOrCreateDeviceIdentity().info.deviceId }.getOrNull()
+            } ?: thisDeviceId
         if (devicesLoad !is PageLoad.Loaded) devicesLoad = PageLoad.Loading
         chatDevicesApi.getMyChatDevicesImpl().fold(
             onSuccess = { devicesLoad = PageLoad.Loaded(it) },

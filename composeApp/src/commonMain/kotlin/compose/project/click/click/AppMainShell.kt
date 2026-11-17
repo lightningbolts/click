@@ -405,7 +405,7 @@ internal fun AppMainShell(
 
     val pendingCommunityHubId by ChatDeepLinkManager.pendingCommunityHubId.collectAsState()
 
-    val pendingConnectionUserId by ConnectionDeepLinkRouter.pendingConnectionUserId.collectAsState()
+    val pendingConnection by ConnectionDeepLinkRouter.pendingConnection.collectAsState()
     val pendingEventDeepLinkBeaconId by EventDeepLinkRouter.pendingBeaconId.collectAsState()
 
     // Unified toast for connection success/error feedback
@@ -618,8 +618,9 @@ internal fun AppMainShell(
         launchCommunityHubJoin(hid)
     }
 
-    LaunchedEffect(pendingConnectionUserId, currentUser.id) {
-        val scannedUserId = pendingConnectionUserId ?: return@LaunchedEffect
+    LaunchedEffect(pendingConnection, currentUser.id) {
+        val invocation = pendingConnection ?: return@LaunchedEffect
+        val scannedUserId = invocation.userId
         if (scannedUserId.isBlank() || currentUser.id.isBlank()) return@LaunchedEffect
         if (scannedUserId == currentUser.id) {
             ConnectionDeepLinkRouter.consume()
@@ -631,8 +632,8 @@ internal fun AppMainShell(
         showNfcScreen = false
         connectionViewModel.presentQrContextSheetFromScan(
             scannedUserId = scannedUserId,
-            qrToken = null,
-            venueId = null,
+            qrToken = invocation.token?.takeIf { it.isNotBlank() },
+            venueId = invocation.venueId?.takeIf { it.isNotBlank() },
         )
     }
 

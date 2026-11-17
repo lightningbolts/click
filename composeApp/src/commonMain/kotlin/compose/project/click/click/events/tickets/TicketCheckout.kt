@@ -78,14 +78,35 @@ fun interface CheckoutLauncher {
     }
 }
 
-/** Holds the latest return from Stripe until the picker that started checkout consumes it. */
+/**
+ * Holds the latest return from Stripe until the picker that started checkout consumes it. A return is only captured
+ * while a picker is waiting on that event's checkout ([beginAwaiting]); otherwise (process death while the Custom Tab
+ * was open, the picker was dismissed, a link from Stripe's receipt email) it falls through to the event deep link.
+ */
 object TicketCheckoutReturns {
     private val _pending = MutableStateFlow<TicketCheckoutCallback?>(null)
     val pending: StateFlow<TicketCheckoutCallback?> = _pending.asStateFlow()
 
-    /** Called for incoming App Links. True when [url] was a ticket return (so it isn't routed as a plain event link). */
+    /** The event whose picker has Stripe's page open, if any. */
+    private val awaitingCheckoutBeaconId = MutableStateFlow<String?>(null)
+
+    /** The picker for [beaconId] opened checkout and is waiting for Stripe's return. */
+    fun beginAwaiting(beaconId: String) {
+        awaitingCheckoutBeaconId.value = beaconId
+    }
+
+    /** The picker for [beaconId] stopped waiting (return handled, or the picker went away). */
+    fun stopAwaiting(beaconId: String) {
+        if (awaitingCheckoutBeaconId.value == beaconId) awaitingCheckoutBeaconId.value = null
+    }
+
+    /**
+     * Called for incoming App Links. True when [url] was a ticket return for the event whose picker is waiting (so it
+     * isn't routed as a plain event link). Any other return link is left for the event deep link router.
+     */
     fun handleIncomingUrl(url: String): Boolean {
         val callback = parseTicketCheckoutCallback(url) ?: return false
+        if (callback.beaconId != awaitingCheckoutBeaconId.value) return false
         _pending.value = callback
         return true
     }
@@ -98,8 +119,14 @@ object TicketCheckoutReturns {
         return current.result
     }
 
+    /** Drops any held return. Doesn't change which picker is waiting. */
     fun clear() {
         _pending.value = null
+    }
+
+    internal fun resetForTest() {
+        _pending.value = null
+        awaitingCheckoutBeaconId.value = null
     }
 }
 

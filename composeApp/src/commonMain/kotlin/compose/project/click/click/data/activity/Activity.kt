@@ -164,60 +164,96 @@ data class ActivityState(
     val loading: Boolean = false,
     val failed: Boolean = false,
     val loadedOnce: Boolean = false,
+    /** Bumped by [ActivityStore.clear]; a response started under an older value is dropped. */
+    internal val generation: Int = 0,
 ) {
     val unseenCount: Int get() = unseenActivityCount(items, seenAt)
 }
+
+/** The later of two seen marks (null when both are): the dot never moves back. */
+internal fun laterSeenAt(
+    local: String?,
+    server: String?,
+): String? =
+    when {
+        local == null -> server
+        server == null -> local
+        seenMs(server) > seenMs(local) -> server
+        else -> local
+    }
+
+/** First page: replaces the list and the pending set (iOS `loadFirstPage`); keeps the later seen mark. */
+internal fun ActivityState.withFirstPage(page: ActivityPageDto): ActivityState =
+    copy(
+        items = mergeActivityPages(emptyList(), page.items),
+        // `markSeen` may have stored a newer mark while this GET was in flight (iOS `ActivityStore.swift`).
+        seenAt = laterSeenAt(seenAt, page.seenAt),
+        nextBefore = page.nextBefore,
+        pendingRequests = page.pendingRequests.toSet(),
+        loading = false,
+        failed = false,
+        loadedOnce = true,
+    )
 
 /** The viewer's activity, shared by the Home bell and the Activity sheet. Cleared at sign-out. */
 object ActivityStore {
     private val _state = MutableStateFlow(ActivityState())
     val state: StateFlow<ActivityState> = _state.asStateFlow()
     private val mutex = Mutex()
+    private val defaultApi by lazy { ApiClient() }
 
-    suspend fun refresh(api: ApiClient = ApiClient()) =
+    suspend fun refresh(api: ApiClient = defaultApi) =
         mutex.withLock {
-            _state.update { it.copy(loading = true, failed = false) }
+            val generation = _state.value.generation
+            _state.update { if (it.generation != generation) it else it.copy(loading = true, failed = false) }
             api.getActivity().fold(
                 onSuccess = { page ->
-                    _state.update {
-                        it.copy(
-                            items = mergeActivityPages(it.items, page.items),
-                            seenAt = page.seenAt,
-                            nextBefore = if (it.loadedOnce) it.nextBefore else page.nextBefore,
-                            pendingRequests = it.pendingRequests + page.pendingRequests,
-                            loading = false,
-                            loadedOnce = true,
-                        )
-                    }
+                    // Checked inside the CAS: a sign-out (clear) between the GET and here wins.
+                    _state.update { if (it.generation != generation) it else it.withFirstPage(page) }
                 },
-                onFailure = { _state.update { it.copy(loading = false, failed = !it.loadedOnce) } },
+                onFailure = {
+                    _state.update { if (it.generation != generation) it else it.copy(loading = false, failed = !it.loadedOnce) }
+                },
             )
         }
 
-    suspend fun loadMore(api: ApiClient = ApiClient()) =
+    suspend fun loadMore(api: ApiClient = defaultApi) =
         mutex.withLock {
-            val before = _state.value.nextBefore ?: return@withLock
-            _state.update { it.copy(loading = true) }
+            val start = _state.value
+            val before = start.nextBefore ?: return@withLock
+            val generation = start.generation
+            _state.update { if (it.generation != generation) it else it.copy(loading = true) }
             api.getActivity(before).fold(
                 onSuccess = { page ->
                     _state.update {
-                        it.copy(
-                            items = mergeActivityPages(it.items, page.items),
-                            nextBefore = page.nextBefore,
-                            pendingRequests = it.pendingRequests + page.pendingRequests,
-                            loading = false,
-                        )
+                        if (it.generation != generation) {
+                            it
+                        } else {
+                            it.copy(
+                                items = mergeActivityPages(it.items, page.items),
+                                nextBefore = page.nextBefore,
+                                pendingRequests = it.pendingRequests + page.pendingRequests,
+                                loading = false,
+                            )
+                        }
                     }
                 },
-                onFailure = { _state.update { it.copy(loading = false) } },
+                onFailure = { _state.update { if (it.generation != generation) it else it.copy(loading = false) } },
             )
         }
 
     /** Clears the dot up to the newest item shown. */
-    suspend fun markSeen(api: ApiClient = ApiClient()) {
-        val newest = _state.value.items.maxByOrNull { it.createdAtMs ?: 0L } ?: return
-        if (unseenActivityCount(listOf(newest), _state.value.seenAt) == 0) return
-        _state.update { it.copy(seenAt = newest.createdAt) }
+    suspend fun markSeen(api: ApiClient = defaultApi) {
+        val start = _state.value
+        val newest = start.items.maxByOrNull { it.createdAtMs ?: 0L } ?: return
+        if (unseenActivityCount(listOf(newest), start.seenAt) == 0) return
+        var applied = false
+        _state.update {
+            applied = it.generation == start.generation
+            if (applied) it.copy(seenAt = laterSeenAt(it.seenAt, newest.createdAt)) else it
+        }
+        // Signed out meanwhile: never post the previous account's mark.
+        if (!applied) return
         api.markActivitySeen(newest.createdAt)
     }
 
@@ -226,7 +262,8 @@ object ActivityStore {
         _state.update { it.copy(pendingRequests = it.pendingRequests - connectionId) }
     }
 
+    /** Sign-out. Bumps the generation so an in-flight refresh can't write the previous account's page. */
     fun clear() {
-        _state.value = ActivityState()
+        _state.update { ActivityState(generation = it.generation + 1) }
     }
 }

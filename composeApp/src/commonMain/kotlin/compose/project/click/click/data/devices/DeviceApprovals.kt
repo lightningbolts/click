@@ -156,6 +156,12 @@ object DeviceApprovalStore {
     /** A direct server answer (e.g. after "Ask again"); supersedes any refresh in flight. */
     fun set(approvals: DeviceApprovals) = _state.update { approvals.copy(generation = it.generation + 1) }
 
+    /**
+     * "Ask again" answers `{status, own}` only (web `history-requests/route.ts`), so it replaces
+     * this device's own request and leaves [DeviceApprovals.incoming] (and any open sheet) alone.
+     */
+    fun setOwn(own: DeviceApproval?) = _state.update { it.copy(own = own, generation = it.generation + 1) }
+
     fun defer(id: String) = _deferred.update { it + id }
 
     /** Drops a decided request at once; a refresh already in flight can't bring it back. */

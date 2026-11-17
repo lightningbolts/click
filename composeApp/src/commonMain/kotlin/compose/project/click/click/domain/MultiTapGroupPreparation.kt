@@ -42,6 +42,9 @@ object MultiTapGroupPreparation {
 
     const val MIN_MEMBERS: Int = 3
 
+    /** Pause before the single retry of a failed create. */
+    const val CREATE_RETRY_DELAY_MS: Long = 1_500L
+
     /** iOS `PostConnectView` failure copy, before the error detail. */
     const val CREATE_FAILED_PREFIX: String = "Couldn't set up the group chat."
 
@@ -99,6 +102,30 @@ object MultiTapGroupPreparation {
             MultiTapGroupState.Idle, is MultiTapGroupState.Failed -> true
         }
 
+    /** [current] when it belongs to the group of exactly [memberIds]; otherwise Idle (another Click's setup). */
+    fun stateFor(
+        current: MultiTapGroupState,
+        memberIds: List<String>,
+    ): MultiTapGroupState {
+        val members =
+            when (current) {
+                MultiTapGroupState.Idle -> return current
+                is MultiTapGroupState.Preparing -> current.memberUserIds
+                is MultiTapGroupState.Ready -> current.memberUserIds
+                is MultiTapGroupState.Failed -> current.memberUserIds
+            }
+        return if (members == memberIds) current else MultiTapGroupState.Idle
+    }
+
+    /**
+     * True when showing a group result should start setup on its own: like [shouldStart], but a
+     * failure for the same members waits for the person's "Try again" instead of looping.
+     */
+    fun shouldAutoStart(
+        current: MultiTapGroupState,
+        memberIds: List<String>,
+    ): Boolean = shouldStart(current, memberIds) && !(current is MultiTapGroupState.Failed && current.memberUserIds == memberIds)
+
     /**
      * Runs the find-or-create flow and returns the final state ([MultiTapGroupState.Idle] when
      * this isn't a group Click of 3+ people).
@@ -140,7 +167,8 @@ object MultiTapGroupPreparation {
                 existing()?.let { return ready(it.groupId, createdHere = false) }
             }
         }
-        val created =
+
+        suspend fun attemptCreate(): Result<String> =
             try {
                 create()
             } catch (e: CancellationException) {
@@ -148,8 +176,16 @@ object MultiTapGroupPreparation {
             } catch (e: Exception) {
                 Result.failure(e)
             }
+
+        var created = attemptCreate()
         created.getOrNull()?.takeIf { it.isNotBlank() }?.let { return ready(it, createdHere = true) }
         // Another member's phone may have created it between our check and our create.
+        existing()?.let { return ready(it.groupId, createdHere = false) }
+        // One retry: the 1:1 connections the server just made may not have been readable yet.
+        wait(CREATE_RETRY_DELAY_MS)
+        existing()?.let { return ready(it.groupId, createdHere = false) }
+        created = attemptCreate()
+        created.getOrNull()?.takeIf { it.isNotBlank() }?.let { return ready(it, createdHere = true) }
         existing()?.let { return ready(it.groupId, createdHere = false) }
         return MultiTapGroupState.Failed(members, failureMessage(created.exceptionOrNull()))
     }

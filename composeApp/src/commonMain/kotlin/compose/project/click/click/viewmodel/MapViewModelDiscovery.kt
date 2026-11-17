@@ -115,7 +115,8 @@ internal fun MapViewModel.markDiscoveryProximityFetchCompleted() {
  * User-initiated discovery feed reload (pull-to-refresh or header button).
  */
 internal fun MapViewModel.refreshDiscoveryFeedImpl() {
-    prefetchDiscoveryProximityData(showPulse = true, markInitialComplete = true)
+    // Pull-to-refresh skips the Places throttle (a failed or stale fetch would otherwise stick).
+    prefetchDiscoveryProximityDataImpl(showPulse = true, markInitialComplete = true, forcePlaces = true)
 }
 
 /**
@@ -144,6 +145,7 @@ internal fun MapViewModel.ensureDiscoveryFeedLoaded() {
 internal fun MapViewModel.prefetchDiscoveryProximityDataImpl(
     showPulse: Boolean = false,
     markInitialComplete: Boolean = true,
+    forcePlaces: Boolean = false,
 ) {
     if (AppDataManager.currentUser.value == null) {
         if (markInitialComplete) markDiscoveryProximityFetchCompleted()
@@ -168,7 +170,7 @@ internal fun MapViewModel.prefetchDiscoveryProximityDataImpl(
                 if (centers.isEmpty()) return@launch
                 if (seq != discoveryFetchSeq) return@launch
 
-                centers.firstOrNull()?.let { (lat, lon) -> refreshMapPlacesAround(lat, lon) }
+                centers.firstOrNull()?.let { (lat, lon) -> refreshMapPlacesAround(lat, lon, force = forcePlaces) }
                 val layers = _selectedLayerFilters.value
                 val wantHubs = layersWantHubFetch(layers)
                 val wantBeacons = layersWantBeaconFetch(layers)
