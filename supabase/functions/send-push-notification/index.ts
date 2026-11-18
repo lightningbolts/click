@@ -141,11 +141,13 @@ async function sendAndroidPush(
     Object.entries(requestBody.data ?? {}).map(([key, value]) => [key, String(value)])
   );
 
-  if (category === "chat_message") {
+  if (category === "chat_message" && isChatMessagePushType(data.type)) {
     // Data-only: Android client decrypts when possible; preview_text is always safe to show if decrypt fails.
     delete data.title;
     delete data.body;
   } else {
+    // Every other alert (event reminders, waves, drop releases, …) shows the server's text on
+    // Android (`PushRoutes.serverTextTypes`), so title and body must ride along in `data`.
     if (requestBody.title && !data.title) data.title = requestBody.title;
     if (requestBody.body && !data.body) data.body = requestBody.body;
   }
@@ -247,6 +249,12 @@ async function sendIosPush(
   if (!response.ok) {
     throw new Error(`APNs send failed: ${response.status} ${responseText}`);
   }
+}
+
+/** Encrypted chat pushes the Android client renders itself; a missing type is a legacy chat push. */
+function isChatMessagePushType(type: unknown): boolean {
+  return type == null || type === "" || type === "chat_message" || type === "new_message" ||
+    type === "hub_message";
 }
 
 function getPushCategory(requestBody: PushRequestBody): PushCategory {
@@ -558,35 +566,40 @@ async function resolveChatMessageRequest(
   };
 }
 
-function serviceRoleOrCronSecret(): string | undefined {
-  return (
-    Deno.env.get("CRON_SECRET") ??
-    Deno.env.get("ARCHIVE_WARNING_PUSH_SECRET") ??
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ??
-    Deno.env.get("SUPABASE_SERVICE_KEY") ??
-    Deno.env.get("SUPABASE_KEY")
-  );
+/**
+ * Server secrets a trusted caller may present. Callers differ: click-web sends the service-role
+ * key (or CRON_SECRET), expire-connections sends ARCHIVE_WARNING_PUSH_SECRET in its own header, so
+ * any configured one is accepted. SUPABASE_KEY is only a last resort: it can be the anon key.
+ */
+function serviceSecrets(): string[] {
+  const secrets = [
+    Deno.env.get("CRON_SECRET"),
+    Deno.env.get("ARCHIVE_WARNING_PUSH_SECRET"),
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"),
+    Deno.env.get("SUPABASE_SERVICE_KEY"),
+  ].map((s) => s?.trim()).filter((s): s is string => !!s);
+  if (secrets.length > 0) return secrets;
+  const fallback = Deno.env.get("SUPABASE_KEY")?.trim();
+  return fallback ? [fallback] : [];
+}
+
+function isServiceSecret(provided: string | null | undefined): boolean {
+  const value = provided?.trim();
+  return !!value && serviceSecrets().includes(value);
 }
 
 function isServiceSecretRequest(req: Request): boolean {
-  const bearer = getBearerToken(req)?.trim();
-  const expected = serviceRoleOrCronSecret();
-  return !!bearer && !!expected && bearer === expected;
+  return isServiceSecret(getBearerToken(req)) || isServiceSecret(req.headers.get("x-archive-warning-secret"));
 }
 
 function isArchiveWarningServiceRequest(req: Request, requestBody: PushRequestBody): boolean {
   if (requestBody.data?.type !== "archive_warning") return false;
-  const provided = req.headers.get("x-archive-warning-secret");
-  const expected = serviceRoleOrCronSecret();
-  return !!provided && !!expected && provided === expected;
+  return isServiceSecret(req.headers.get("x-archive-warning-secret"));
 }
 
 function isDisposableRevealServiceRequest(req: Request, requestBody: PushRequestBody): boolean {
   if (requestBody.data?.type !== "disposable_reveal") return false;
-  const authHeader = req.headers.get("authorization");
-  const provided = authHeader?.replace(/^Bearer\s+/i, "").trim();
-  const expected = serviceRoleOrCronSecret();
-  return !!provided && !!expected && provided === expected;
+  return isServiceSecret(getBearerToken(req));
 }
 
 /** Service pushes that carry their own recipient, title and body (no lookups needed). */
@@ -619,6 +632,56 @@ async function resolvePushRequest(
   }
 
   return resolveChatMessageRequest(req, supabase, requestBody);
+}
+
+/**
+ * Alert pushes that also land in the recipient's in-app activity inbox (`activity_items`), whether
+ * or not push reaches them. Messages, calls and device approvals have their own surfaces; pending
+ * prior-connection requests are shown live from the inbox, not as history.
+ */
+const ACTIVITY_TYPES = new Set([
+  "event_reminder",
+  "event_recap",
+  "event_teaser",
+  "event_drop_recap",
+  "shared_upcoming_event",
+  "availability_match",
+  "reconnect_nudge",
+  "reconnect_lull",
+  "reconnect_nearby",
+  "anniversary",
+  "memory_prompt",
+  "group_revival",
+  "wave",
+  "hangout_confirm",
+  "shared_drop_released",
+  "disposable_reveal",
+  "archive_warning",
+  "prior_connection_accepted",
+]);
+
+/** Records an alert in the activity inbox. Service callers only (they own title and body). */
+async function recordActivity(
+  req: Request,
+  supabase: ReturnType<typeof createClient>,
+  requestBody: ResolvedPushRequestBody,
+): Promise<void> {
+  const data = requestBody.data ?? {};
+  const type = asNonEmptyString(data.type);
+  if (!type || !ACTIVITY_TYPES.has(type) || !isServiceSecretRequest(req)) return;
+  const actorId = asNonEmptyString(data.peer_user_id) ?? asNonEmptyString(data.sender_user_id) ??
+    asNonEmptyString(data.poster_id);
+  const { error } = await supabase.rpc("record_activity", {
+    p_user_id: requestBody.recipient_user_id,
+    p_type: type,
+    p_title: requestBody.title,
+    p_body: requestBody.body,
+    p_data: Object.fromEntries(Object.entries(data).map(([key, value]) => [key, String(value)])),
+    p_actor_id: actorId && actorId !== requestBody.recipient_user_id ? actorId : null,
+    p_group_key: null,
+  });
+  // Never fails the push: the inbox is best effort next to delivery.
+  if (error) console.error("Failed to record activity", { type, error: error.message });
 }
 
 /** True while the recipient has muted this conversation (message pushes only). */
@@ -691,11 +754,15 @@ Deno.serve(async (req: Request) => {
 
     const resolvedRequestBody = await resolvePushRequest(req, supabase, requestBody);
 
-    // Mute, preferences and tokens are independent reads of the recipient: fetch together.
+    // Mute, preferences and tokens are independent reads of the recipient: fetch together. The
+    // activity record rides along (before the push gates, so it lands even with push off).
     const [muted, allowed, { data: tokens, error }] = await Promise.all([
       isConversationMuted(supabase, resolvedRequestBody),
       preferencesAllowPush(supabase, resolvedRequestBody),
       supabase.from("push_tokens").select("*").eq("user_id", resolvedRequestBody.recipient_user_id),
+      recordActivity(req, supabase, resolvedRequestBody).catch((activityError) =>
+        console.error("Failed to record activity", String(activityError))
+      ),
     ]);
 
     if (muted || !allowed) {
