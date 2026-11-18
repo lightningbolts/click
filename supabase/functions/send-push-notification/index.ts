@@ -141,11 +141,13 @@ async function sendAndroidPush(
     Object.entries(requestBody.data ?? {}).map(([key, value]) => [key, String(value)])
   );
 
-  if (category === "chat_message") {
+  if (category === "chat_message" && isChatMessagePushType(data.type)) {
     // Data-only: Android client decrypts when possible; preview_text is always safe to show if decrypt fails.
     delete data.title;
     delete data.body;
   } else {
+    // Every other alert (event reminders, waves, drop releases, …) shows the server's text on
+    // Android (`PushRoutes.serverTextTypes`), so title and body must ride along in `data`.
     if (requestBody.title && !data.title) data.title = requestBody.title;
     if (requestBody.body && !data.body) data.body = requestBody.body;
   }
@@ -247,6 +249,12 @@ async function sendIosPush(
   if (!response.ok) {
     throw new Error(`APNs send failed: ${response.status} ${responseText}`);
   }
+}
+
+/** Encrypted chat pushes the Android client renders itself; a missing type is a legacy chat push. */
+function isChatMessagePushType(type: unknown): boolean {
+  return type == null || type === "" || type === "chat_message" || type === "new_message" ||
+    type === "hub_message";
 }
 
 function getPushCategory(requestBody: PushRequestBody): PushCategory {
