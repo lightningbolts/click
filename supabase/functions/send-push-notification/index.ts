@@ -566,35 +566,40 @@ async function resolveChatMessageRequest(
   };
 }
 
-function serviceRoleOrCronSecret(): string | undefined {
-  return (
-    Deno.env.get("CRON_SECRET") ??
-    Deno.env.get("ARCHIVE_WARNING_PUSH_SECRET") ??
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ??
-    Deno.env.get("SUPABASE_SERVICE_KEY") ??
-    Deno.env.get("SUPABASE_KEY")
-  );
+/**
+ * Server secrets a trusted caller may present. Callers differ: click-web sends the service-role
+ * key (or CRON_SECRET), expire-connections sends ARCHIVE_WARNING_PUSH_SECRET in its own header, so
+ * any configured one is accepted. SUPABASE_KEY is only a last resort: it can be the anon key.
+ */
+function serviceSecrets(): string[] {
+  const secrets = [
+    Deno.env.get("CRON_SECRET"),
+    Deno.env.get("ARCHIVE_WARNING_PUSH_SECRET"),
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"),
+    Deno.env.get("SUPABASE_SERVICE_KEY"),
+  ].map((s) => s?.trim()).filter((s): s is string => !!s);
+  if (secrets.length > 0) return secrets;
+  const fallback = Deno.env.get("SUPABASE_KEY")?.trim();
+  return fallback ? [fallback] : [];
+}
+
+function isServiceSecret(provided: string | null | undefined): boolean {
+  const value = provided?.trim();
+  return !!value && serviceSecrets().includes(value);
 }
 
 function isServiceSecretRequest(req: Request): boolean {
-  const bearer = getBearerToken(req)?.trim();
-  const expected = serviceRoleOrCronSecret();
-  return !!bearer && !!expected && bearer === expected;
+  return isServiceSecret(getBearerToken(req)) || isServiceSecret(req.headers.get("x-archive-warning-secret"));
 }
 
 function isArchiveWarningServiceRequest(req: Request, requestBody: PushRequestBody): boolean {
   if (requestBody.data?.type !== "archive_warning") return false;
-  const provided = req.headers.get("x-archive-warning-secret");
-  const expected = serviceRoleOrCronSecret();
-  return !!provided && !!expected && provided === expected;
+  return isServiceSecret(req.headers.get("x-archive-warning-secret"));
 }
 
 function isDisposableRevealServiceRequest(req: Request, requestBody: PushRequestBody): boolean {
   if (requestBody.data?.type !== "disposable_reveal") return false;
-  const authHeader = req.headers.get("authorization");
-  const provided = authHeader?.replace(/^Bearer\s+/i, "").trim();
-  const expected = serviceRoleOrCronSecret();
-  return !!provided && !!expected && provided === expected;
+  return isServiceSecret(getBearerToken(req));
 }
 
 /** Service pushes that carry their own recipient, title and body (no lookups needed). */
